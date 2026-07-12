@@ -66,6 +66,36 @@ async function loadHomework(
   return data ? payload(data as Record<string, unknown>) : null;
 }
 
+// Resolves the authenticated account for the staff member who assigned the
+// homework. Older staff rows did not always persist linked_type, so linked_id
+// is the stable relationship; the ID lookup also covers legacy imports where
+// the staff and user IDs are the same.
+async function teacherUserIdForStaff(
+  svc: SupabaseClient,
+  school: string,
+  staffId: string,
+) {
+  if (!staffId) return "";
+  const { data: linked } = await svc.from("users").select("id")
+    .eq("school_id", school).eq("linked_id", staffId).limit(1).maybeSingle();
+  if (text(linked?.id)) return text(linked?.id);
+  const { data: direct } = await svc.from("users").select("id")
+    .eq("school_id", school).eq("id", staffId).limit(1).maybeSingle();
+  return text(direct?.id);
+}
+
+async function studentNameForId(
+  svc: SupabaseClient,
+  school: string,
+  studentId: string,
+) {
+  if (!studentId) return "Student";
+  const { data } = await svc.from("students").select("first_name, last_name")
+    .eq("school_id", school).eq("id", studentId).maybeSingle();
+  const name = `${text(data?.first_name)} ${text(data?.last_name)}`.trim();
+  return name || "Student";
+}
+
 function submissionPayload(row: Record<string, unknown>) {
   const urls = Array.isArray(row.file_urls) ? row.file_urls : [];
   return {
@@ -221,13 +251,17 @@ export async function handleHomework(
                 reference_type: "homework",
                 reference_id: id,
                 action: "assignment",
+                route: "/parent-homework-screen/submit",
               }));
               // Insert in-app notification logs
               await svc.from("notification_logs").insert(notifications);
               // Also insert notification_events so the processor sends an FCM push to each parent
               try {
                 const hwTitle = text(body.title, "Assignment");
-                const subjectLabel = text(body.subject_id, "your child's class");
+                const subjectLabel = text(
+                  body.subject_id,
+                  "your child's class",
+                );
                 const eventRows = parentIds.map((pid: string) => ({
                   school_id: school,
                   user_id: pid,
@@ -239,6 +273,7 @@ export async function handleHomework(
                     reference_type: "homework",
                     reference_id: id,
                     action: "assignment",
+                    route: "/parent-homework-screen/submit",
                   },
                 }));
                 const { data: events, error: eventError } = await svc
@@ -251,7 +286,9 @@ export async function handleHomework(
                   ).filter(Boolean);
                   if (eventIds.length > 0) triggerPushProcessing(eventIds);
                 }
-              } catch (_) { /* best-effort push — notification_logs already saved */ }
+              } catch (_) {
+                /* best-effort push — notification_logs already saved */
+              }
             }
           }
         }
@@ -380,19 +417,12 @@ export async function handleHomework(
       const staffId = text(hw.staff_id ?? hw.teacher_id);
       const hwTitle = text(hw.title, "Homework");
       const hasAttachment = fileUrls.length > 0;
-      const notifBody = `${text(body.student_name ?? studentId)} submitted${
+      const studentName = await studentNameForId(svc, school, studentId);
+      const notifBody = `${studentName} submitted${
         hasAttachment ? " (with attachment)" : ""
       }: ${hwTitle}`;
 
-      // Lookup teacher user_id from staff record
-      const { data: userRow } = await svc.from("users")
-        .select("id")
-        .eq("linked_id", staffId)
-        .eq("linked_type", "staff")
-        .eq("school_id", school)
-        .limit(1)
-        .maybeSingle();
-      const teacherUserId = text(userRow?.id);
+      const teacherUserId = await teacherUserIdForStaff(svc, school, staffId);
 
       const notifBase = {
         school_id: school,
@@ -406,6 +436,9 @@ export async function handleHomework(
         reference_type: "homework",
         reference_id: homeworkId,
         action: "submission",
+        route: "/teacher-homework-screen/submissions",
+        student_id: studentId,
+        teacher_id: staffId,
       };
       if (teacherUserId) {
         await svc.from("notification_logs").insert({
@@ -421,15 +454,18 @@ export async function handleHomework(
               event_type: "homework_submitted",
               event_data: {
                 homework_id: homeworkId,
+                title: `Homework Submitted: ${hwTitle}`,
                 message: notifBody,
                 reference_type: "homework",
+                reference_id: homeworkId,
+                action: "submission",
+                route: "/teacher-homework-screen/submissions",
+                student_id: studentId,
+                teacher_id: staffId,
               },
             }).select("id").maybeSingle();
           if (eventRow?.id) triggerPushProcessing(eventRow.id);
         } catch (_) { /* best-effort */ }
-      } else if (staffId) {
-        // Fallback: broadcast to all teachers in the school
-        await svc.from("notification_logs").insert(notifBase);
       }
     }
 

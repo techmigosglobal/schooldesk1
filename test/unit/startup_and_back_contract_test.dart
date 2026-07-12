@@ -42,9 +42,9 @@ void main() {
 
     final runAppIndex = main.indexOf('runApp(');
     final deferIndex = main.indexOf('_deferStartupServices();');
-    final roleInitIndex = main.indexOf('await RoleAccessService.initialize()');
+    final roleInitIndex = main.indexOf('RoleAccessService.initialize');
     final pushInitIndex = main.indexOf(
-      'await PushNotificationService.instance.initialize()',
+      'PushNotificationService.instance.initialize',
     );
     expect(runAppIndex, lessThan(deferIndex));
     expect(deferIndex, lessThan(roleInitIndex));
@@ -75,8 +75,9 @@ void main() {
     expect(dashboard, contains('PopScope('));
     expect(dashboard, contains('canPop: false'));
     expect(dashboard, contains('SystemNavigator.pop()'));
-    expect(dashboard, contains('Press back again to exit Arish Ville'));
-    expect(routeFrame, contains('Press back again to exit Arish Ville'));
+    expect(dashboard, contains('Press back again to exit'));
+    expect(routeFrame, contains('Press back again to exit'));
+    expect(routeFrame, contains('AppConstants.appName'));
     expect(routeFrame, contains('_isPortalHomeRoute'));
     expect(routeFrame, contains('_returnToPortalHome'));
     expect(routeFrame, contains("case '/teacher-dashboard-screen':"));

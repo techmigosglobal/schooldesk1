@@ -44,7 +44,8 @@ void main() {
           currentRole: 'super_admin',
         ),
         AppRoutes.superAdminDashboard,
-        reason: 'App startup for super admin must navigate to SuperAdminDashboard',
+        reason:
+            'App startup for super admin must navigate to SuperAdminDashboard',
       );
     });
 
@@ -116,10 +117,10 @@ void main() {
       );
     });
 
-    test('super admin can access superAdminErrorReporting', () {
+    test('super admin can access superAdminAccess', () {
       expect(
         RouteAccessGuard.isRoleAllowedFor(
-          routeName: AppRoutes.superAdminErrorReporting,
+          routeName: AppRoutes.superAdminAccess,
           role: 'super_admin',
         ),
         isTrue,
@@ -141,7 +142,8 @@ void main() {
             currentRole: 'super_admin',
           ),
           isNull,
-          reason: '$route should be accessible to super_admin as a shared route',
+          reason:
+              '$route should be accessible to super_admin as a shared route',
         );
       }
     });
@@ -222,9 +224,9 @@ void main() {
       );
     });
 
-    test('superAdminErrorReporting is only for super_admin', () {
+    test('superAdminAccess is only for super_admin', () {
       expect(
-        RouteAccessGuard.allowedRolesFor(AppRoutes.superAdminErrorReporting),
+        RouteAccessGuard.allowedRolesFor(AppRoutes.superAdminAccess),
         contains('super_admin'),
       );
     });
@@ -284,13 +286,16 @@ void main() {
   });
 
   group('Super Admin Redirect For — LoginLoadingScreen Flow', () {
-    test('LoginLoadingScreen would route super_admin to superAdminDashboard', () {
-      // Simulates the logic in LoginLoadingScreen._initialize()
-      final role = 'super_admin';
-      final route =
-          RouteAccessGuard.dashboardForRole(role) ?? '/landing-page-screen';
-      expect(route, AppRoutes.superAdminDashboard);
-    });
+    test(
+      'LoginLoadingScreen would route super_admin to superAdminDashboard',
+      () {
+        // Simulates the logic in LoginLoadingScreen._initialize()
+        final role = 'super_admin';
+        final route =
+            RouteAccessGuard.dashboardForRole(role) ?? '/landing-page-screen';
+        expect(route, AppRoutes.superAdminDashboard);
+      },
+    );
 
     test('LoginLoadingScreen would route principal to principalDashboard', () {
       final role = 'principal';

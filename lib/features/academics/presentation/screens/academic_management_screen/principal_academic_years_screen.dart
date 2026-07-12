@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
@@ -2107,16 +2108,28 @@ Future<void> _downloadExportArtifact(
   if (bytes.isEmpty) {
     throw StateError('Export file was empty');
   }
-  await const ShareExportService().shareBytes(
-    bytes: bytes,
-    fileName: _exportFileName(downloadUrl, format, title),
-    mimeType: _exportMimeType(format),
-    title: title,
-    subject: title,
-    text: '$title generated from ${AppConstants.appName}.',
-  );
-  if (context.mounted) {
-    _snack(context, '$title downloaded');
+
+  if (format.toLowerCase().trim() == 'pdf') {
+    await Printing.layoutPdf(
+      onLayout: (_) async => bytes,
+      name: _exportFileName(downloadUrl, format, title),
+    );
+    if (context.mounted) {
+      _snack(context, '$title generated successfully');
+    }
+  } else {
+    await const ShareExportService().shareBytes(
+      bytes: bytes,
+      fileName: _exportFileName(downloadUrl, format, title),
+      mimeType: _exportMimeType(format),
+      title: title,
+      subject: title,
+      text: '$title generated from ${AppConstants.appName}.',
+      context: context,
+    );
+    if (context.mounted) {
+      _snack(context, '$title downloaded');
+    }
   }
 }
 

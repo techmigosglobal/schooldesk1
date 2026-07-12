@@ -6,7 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -28,6 +30,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   int _totalStudents = 0;
   int _totalStaff = 0;
   int _totalClasses = 0;
+
+  String _firstName(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    return parts.isNotEmpty ? parts.first : fullName;
+  }
 
   @override
   void initState() {
@@ -114,121 +121,128 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF3F7FC),
+        backgroundColor: Colors.transparent,
         drawer: SuperAdminDrawer(
           selectedIndex: 0,
           onDestinationSelected: (index) {},
         ),
-        body: SafeArea(
-          bottom: false,
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : RefreshIndicator(
-                      onRefresh: _loadData,
-                      child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
-                        children: [
-                          _buildHeader(context),
-                          const SizedBox(height: 18),
-                          _buildStatusCard(context),
-                          const SizedBox(height: 18),
-                          _buildStatsRow(context),
-                          const SizedBox(height: 22),
-                          _buildSectionTitle('System Management'),
-                          const SizedBox(height: 12),
-                          _buildGrid([
-                            const _ModuleCard(
-                              label: 'Audit Logs',
-                              route: AppRoutes.superAdminAuditLogs,
-                              icon: Icons.history_rounded,
-                              accent: Color(0xFF5B35F5),
-                              cardColor: Color(0xFFF0EDFF),
+        body: AppBackground(
+          accent: const Color(0xFF5B35F5),
+          child: SafeArea(
+            bottom: false,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : RefreshIndicator(
+                        onRefresh: _loadData,
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
+                          children: [
+                            StaggeredFadeIn(
+                              children: [
+                                _buildHeader(context),
+                                const SizedBox(height: 18),
+                                _buildStatusCard(context),
+                                const SizedBox(height: 18),
+                                _buildStatsRow(context),
+                                const SizedBox(height: 22),
+                                _buildSectionTitle('System Management'),
+                                const SizedBox(height: 12),
+                                _buildGrid([
+                                  const _ModuleCard(
+                                    label: 'Audit Logs',
+                                    route: AppRoutes.superAdminAuditLogs,
+                                    icon: Icons.history_rounded,
+                                    accent: Color(0xFF5B35F5),
+                                    cardColor: Color(0xFFF0EDFF),
+                                  ),
+                                  _ModuleCard(
+                                    label: 'System Monitor',
+                                    route: AppRoutes.superAdminSystemMonitor,
+                                    icon: Icons.monitor_heart_rounded,
+                                    accent: const Color(0xFF0EA5E9),
+                                    cardColor: const Color(0xFFE8F7FF),
+                                    badge: _errorEventsCount > 0
+                                        ? _errorEventsCount
+                                        : null,
+                                  ),
+                                  const _ModuleCard(
+                                    label: 'Issue Management',
+                                    route: AppRoutes.superAdminIssues,
+                                    icon: Icons.support_agent_rounded,
+                                    accent: Color(0xFFEA580C),
+                                    cardColor: Color(0xFFFFEDD5),
+                                  ),
+                                  _ModuleCard(
+                                    label: 'Backup Database',
+                                    onTap: _backupDb,
+                                    icon: Icons.backup_rounded,
+                                    accent: const Color(0xFF10B981),
+                                    cardColor: const Color(0xFFECFDF5),
+                                  ),
+                                ]),
+                                const SizedBox(height: 22),
+                                _buildSectionTitle('School Oversight'),
+                                const SizedBox(height: 12),
+                                _buildGrid([
+                                  const _ModuleCard(
+                                    label: 'School Profile',
+                                    route: AppRoutes.principalSchoolProfile,
+                                    icon: Icons.apartment_rounded,
+                                    accent: Color(0xFF7C3AED),
+                                    cardColor: Color(0xFFF3ECFF),
+                                  ),
+                                  const _ModuleCard(
+                                    label: 'Access & Permissions',
+                                    route: AppRoutes.superAdminAccess,
+                                    icon: Icons.manage_accounts_rounded,
+                                    accent: Color(0xFFF59E0B),
+                                    cardColor: Color(0xFFFEF3C7),
+                                  ),
+                                  const _ModuleCard(
+                                    label: 'Staff oversight',
+                                    route: AppRoutes.staffManagement,
+                                    icon: Icons.people_rounded,
+                                    accent: Color(0xFF2563EB),
+                                    cardColor: Color(0xFFEAF4FF),
+                                  ),
+                                  const _ModuleCard(
+                                    label: 'Students list',
+                                    route: AppRoutes.studentOversight,
+                                    icon: Icons.school_rounded,
+                                    accent: Color(0xFF0E9384),
+                                    cardColor: Color(0xFFE7FAF6),
+                                  ),
+                                ]),
+                                const SizedBox(height: 22),
+                                _buildSectionTitle('Quick Actions'),
+                                const SizedBox(height: 12),
+                                _buildGrid([
+                                  const _ModuleCard(
+                                    label: 'Help & Docs',
+                                    route: AppRoutes.help,
+                                    icon: Icons.help_outline_rounded,
+                                    accent: Color(0xFF6366F1),
+                                    cardColor: Color(0xFFEEF2FF),
+                                  ),
+                                  const _ModuleCard(
+                                    label: 'ID Cards',
+                                    route: AppRoutes.idCardGeneration,
+                                    icon: Icons.badge_rounded,
+                                    accent: Color(0xFF0891B2),
+                                    cardColor: Color(0xFFECFEFF),
+                                  ),
+                                ]),
+                              ],
                             ),
-                            _ModuleCard(
-                              label: 'System Monitor',
-                              route: AppRoutes.superAdminSystemMonitor,
-                              icon: Icons.monitor_heart_rounded,
-                              accent: const Color(0xFF0EA5E9),
-                              cardColor: const Color(0xFFE8F7FF),
-                              badge: _errorEventsCount > 0
-                                  ? _errorEventsCount
-                                  : null,
-                            ),
-                            const _ModuleCard(
-                              label: 'Error Logs',
-                              route: AppRoutes.superAdminErrorReporting,
-                              icon: Icons.error_rounded,
-                              accent: Color(0xFFEF4444),
-                              cardColor: Color(0xFFFEE2E2),
-                            ),
-                            _ModuleCard(
-                              label: 'Backup Database',
-                              onTap: _backupDb,
-                              icon: Icons.backup_rounded,
-                              accent: const Color(0xFF10B981),
-                              cardColor: const Color(0xFFECFDF5),
-                            ),
-                          ]),
-                          const SizedBox(height: 22),
-                          _buildSectionTitle('School Oversight'),
-                          const SizedBox(height: 12),
-                          _buildGrid([
-                            const _ModuleCard(
-                              label: 'School Profile',
-                              route: AppRoutes.principalSchoolProfile,
-                              icon: Icons.apartment_rounded,
-                              accent: Color(0xFF7C3AED),
-                              cardColor: Color(0xFFF3ECFF),
-                            ),
-                            const _ModuleCard(
-                              label: 'Permissions',
-                              route: AppRoutes.principalUserManagement,
-                              icon: Icons.manage_accounts_rounded,
-                              accent: Color(0xFFF59E0B),
-                              cardColor: Color(0xFFFEF3C7),
-                            ),
-                            const _ModuleCard(
-                              label: 'Staff oversight',
-                              route: AppRoutes.staffManagement,
-                              icon: Icons.people_rounded,
-                              accent: Color(0xFF2563EB),
-                              cardColor: Color(0xFFEAF4FF),
-                            ),
-                            const _ModuleCard(
-                              label: 'Students list',
-                              route: AppRoutes.studentOversight,
-                              icon: Icons.school_rounded,
-                              accent: Color(0xFF0E9384),
-                              cardColor: Color(0xFFE7FAF6),
-                            ),
-                          ]),
-                          const SizedBox(height: 22),
-                          _buildSectionTitle('Quick Actions'),
-                          const SizedBox(height: 12),
-                          _buildGrid([
-                            const _ModuleCard(
-                              label: 'Help & Docs',
-                              route: AppRoutes.help,
-                              icon: Icons.help_outline_rounded,
-                              accent: Color(0xFF6366F1),
-                              cardColor: Color(0xFFEEF2FF),
-                            ),
-                            const _ModuleCard(
-                              label: 'ID Cards',
-                              route: AppRoutes.idCardGeneration,
-                              icon: Icons.badge_rounded,
-                              accent: Color(0xFF0891B2),
-                              cardColor: Color(0xFFECFEFF),
-                            ),
-                          ]),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+              ),
             ),
           ),
         ),
@@ -289,7 +303,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Hello, $_adminName',
+            'Hello, ${_firstName(_adminName)}',
             style: GoogleFonts.dmSans(
               fontSize: 22,
               fontWeight: FontWeight.w800,

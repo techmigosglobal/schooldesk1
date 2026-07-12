@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -21,7 +22,6 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     with SingleTickerProviderStateMixin {
   int _selectedNavIndex = ParentNav.attendance;
   int _activeChildIndex = 0;
-  static const _headerColor = Color(0xFF1A6B4A);
 
   // Scoped to only this parent's children
   List<Map<String, dynamic>> _childRows = [];
@@ -96,9 +96,16 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     }
 
     try {
-      final attendanceSummary = await _safeAttendanceSummary(studentId);
-      final attendanceRecords = await _safeAttendanceRecords(studentId);
-      final leaveRequests = await _safeLeaveRequests(studentId);
+      // These three requests are independent of one another, so fetch them
+      // concurrently instead of one-at-a-time to cut this screen's load time.
+      final results = await Future.wait([
+        _safeAttendanceSummary(studentId),
+        _safeAttendanceRecords(studentId),
+        _safeLeaveRequests(studentId),
+      ]);
+      final attendanceSummary = results[0] as Map<String, dynamic>;
+      final attendanceRecords = results[1] as List<Map<String, dynamic>>;
+      final leaveRequests = results[2] as List<Map<String, dynamic>>;
       final periodRows = _periodRowsFromSources(
         summary: attendanceSummary,
         records: attendanceRecords,
@@ -185,14 +192,6 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   String _childId(Map<String, dynamic> child) =>
       '${child['id'] ?? child['student_id'] ?? ''}'.trim();
 
-  String _childShortLabel(Map<String, dynamic> child) {
-    final first = (child['first_name'] ?? '').toString().trim();
-    final fallback = (child['name'] ?? child['full_name'] ?? 'Student')
-        .toString()
-        .trim();
-    return first.isNotEmpty ? first : fallback.split(' ').first;
-  }
-
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
@@ -254,70 +253,18 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         ),
       );
     }
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(_childRows.length, (i) {
-          final isActive = i == _activeChildIndex;
-          return GestureDetector(
-            onTap: () {
-              if (i == _activeChildIndex && !_loading) return;
-              setState(() {
-                _activeChildIndex = i;
-                _loading = true;
-              });
-              ParentChildSelectionService.saveIndex(_childRows, i);
-              _loadChildAttendance(i);
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isActive ? _headerColor : context.appTheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: isActive
-                    ? null
-                    : Border.all(color: context.appTheme.outlineVariant),
-                boxShadow: isActive
-                    ? [
-                        BoxShadow(
-                          color: _headerColor.withAlpha(40),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isActive)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(right: 6),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  Text(
-                    _childShortLabel(_childRows[i]),
-                    style: GoogleFonts.dmSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isActive
-                          ? Colors.white
-                          : context.appTheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ),
+    return ParentChildSelector(
+      children: _childRows,
+      selectedIndex: _activeChildIndex,
+      isLoading: _loading,
+      onSelected: (index) {
+        setState(() {
+          _activeChildIndex = index;
+          _loading = true;
+        });
+        ParentChildSelectionService.saveIndex(_childRows, index);
+        _loadChildAttendance(index);
+      },
     );
   }
 

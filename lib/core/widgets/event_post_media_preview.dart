@@ -283,12 +283,35 @@ class EventPostPdfPreview extends StatelessWidget {
   }
 }
 
+/// Small bounded in-memory cache so the same attachment isn't re-downloaded
+/// on every rebuild (e.g. dashboard carousels/auto-refresh) or every time a
+/// user revisits a screen in the same session.
+class _MediaByteCache {
+  static const int _maxEntries = 40;
+  static final Map<String, Uint8List> _bytes = {};
+
+  static Uint8List? get(String url) => _bytes[url];
+
+  static void put(String url, Uint8List bytes) {
+    if (_bytes.length >= _maxEntries && !_bytes.containsKey(url)) {
+      _bytes.remove(_bytes.keys.first);
+    }
+    _bytes[url] = bytes;
+  }
+}
+
 Future<Uint8List> _downloadMediaBytes(String url) async {
+  final cached = _MediaByteCache.get(url);
+  if (cached != null) return cached;
   final response = await BackendApiClient.instance.dio.get<List<int>>(
     url,
     options: Options(responseType: ResponseType.bytes),
   );
-  return Uint8List.fromList(response.data ?? const []);
+  final bytes = Uint8List.fromList(response.data ?? const []);
+  if (bytes.isNotEmpty) {
+    _MediaByteCache.put(url, bytes);
+  }
+  return bytes;
 }
 
 class EventPostVideoPreview extends StatefulWidget {

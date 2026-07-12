@@ -454,9 +454,24 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                 if (_attachmentUrl.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      'attachment_url: $_attachmentUrl',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    child: Builder(
+                      builder: (context) {
+                        final rawItem = EventPostMediaItem.fromUrl(
+                          _attachmentUrl,
+                        );
+                        final item = _attachmentName.isNotEmpty
+                            ? EventPostMediaItem(
+                                url: rawItem.url,
+                                name: _attachmentName,
+                                kind: rawItem.kind,
+                              )
+                            : rawItem;
+                        return EventPostMediaPreview(
+                          item: item,
+                          height: 140,
+                          compact: true,
+                        );
+                      },
                     ),
                   ),
                 if (_error != null) ...[

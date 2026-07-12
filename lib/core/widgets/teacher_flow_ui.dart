@@ -1,8 +1,13 @@
+import 'dart:math';
+import 'dart:ui';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -43,30 +48,29 @@ class TeacherFlowScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SchoolDeskModuleScaffold(
-      title: title,
-      subtitle: subtitle,
-      drawer: TeacherDrawer(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: (_) {},
-      ),
-      actions: [
-        ...actions,
-        if (onRefresh != null)
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: loading ? null : () => onRefresh!(),
-          ),
-      ],
-      mobileBottomActions: mobileBottomActions ?? teacherFlowBottomActions,
-      floatingActionButton: floatingActionButton,
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      showBackButton: false,
-      bodyIsScrollable: false,
-      body: Container(
-        color: teacherFlowBackground,
-        child: AnimatedSwitcher(
+    return TeacherFlowBackgroundDecorator(
+      child: SchoolDeskModuleScaffold(
+        title: title,
+        subtitle: subtitle,
+        drawer: TeacherDrawer(
+          selectedIndex: selectedIndex,
+          onDestinationSelected: (_) {},
+        ),
+        actions: [
+          ...actions,
+          if (onRefresh != null)
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: loading ? null : () => onRefresh!(),
+            ),
+        ],
+        mobileBottomActions: mobileBottomActions ?? teacherFlowBottomActions,
+        floatingActionButton: floatingActionButton,
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        showBackButton: false,
+        bodyIsScrollable: false,
+        body: AnimatedSwitcher(
           duration: const Duration(milliseconds: 220),
           child: loading
               ? const TeacherFlowLoading()
@@ -129,6 +133,7 @@ class TeacherCurrentClassCard extends StatelessWidget {
   final String? subject;
   final String? timeLabel;
   final List<TeacherFlowAction> actions;
+  final String? avatar;
 
   const TeacherCurrentClassCard({
     super.key,
@@ -137,24 +142,29 @@ class TeacherCurrentClassCard extends StatelessWidget {
     this.subject,
     this.timeLabel,
     this.actions = const [],
+    this.avatar,
   });
 
   @override
   Widget build(BuildContext context) {
-    final teacherColor = Theme.of(
-      context,
-    ).schoolDesk.roleColor(SchoolDeskRole.teacher);
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: teacherColor.withAlpha(48)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            teacherFlowInk.withOpacity(0.95),
+            const Color(0xFF0F5A51),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: teacherColor.withAlpha(28),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF0A2E2A).withOpacity(0.25),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -162,22 +172,27 @@ class TeacherCurrentClassCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: teacherColor.withAlpha(24),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.auto_stories_rounded,
-                  color: teacherColor,
-                  size: 26,
-                ),
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: Colors.white.withOpacity(0.12),
+                backgroundImage: avatar != null && avatar!.isNotEmpty
+                    ? NetworkImage(
+                        avatar!.startsWith('http')
+                            ? avatar!
+                            : '${EnvConfig.apiOrigin}$avatar',
+                      )
+                    : null,
+                child: avatar == null || avatar!.isEmpty
+                    ? const Icon(
+                        Icons.person_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      )
+                    : null,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,8 +202,10 @@ class TeacherCurrentClassCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
-                        color: teacherFlowMuted,
-                        fontWeight: FontWeight.w800,
+                        color: Colors.white.withOpacity(0.85),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 22,
+                        letterSpacing: -0.3,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -197,9 +214,43 @@ class TeacherCurrentClassCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
-                        color: teacherFlowInk,
-                        fontSize: 22,
+                        color: Colors.white,
+                        fontSize: 24,
                         fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Glowing active badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.15)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF10B981),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'ACTIVE',
+                      style: GoogleFonts.dmSans(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
@@ -208,7 +259,7 @@ class TeacherCurrentClassCard extends StatelessWidget {
             ],
           ),
           if (actions.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             TeacherFlowActionWrap(actions: actions),
           ],
         ],
@@ -523,26 +574,85 @@ class TeacherFlowActionWrap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final filledActions = actions.where((a) => a.filled).toList();
+    final outlinedActions = actions.where((a) => !a.filled).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < actions.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          Semantics(
-            button: true,
-            label: actions[i].label,
-            enabled: actions[i].onTap != null,
-            child: actions[i].filled
-                ? FilledButton.icon(
-                    onPressed: actions[i].onTap,
-                    icon: Icon(actions[i].icon, size: 18),
-                    label: Text(actions[i].label),
-                  )
-                : OutlinedButton.icon(
-                    onPressed: actions[i].onTap,
-                    icon: Icon(actions[i].icon, size: 18),
-                    label: Text(actions[i].label),
+        if (filledActions.isNotEmpty) ...[
+          for (var i = 0; i < filledActions.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            Semantics(
+              button: true,
+              label: filledActions[i].label,
+              enabled: filledActions[i].onTap != null,
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: filledActions[i].onTap,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF0F5A51),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: GoogleFonts.dmSans(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
                   ),
+                  icon: Icon(filledActions[i].icon, size: 18),
+                  label: Text(filledActions[i].label),
+                ),
+              ),
+            ),
+          ],
+        ],
+        if (filledActions.isNotEmpty && outlinedActions.isNotEmpty)
+          const SizedBox(height: 10),
+        if (outlinedActions.isNotEmpty) ...[
+          Row(
+            children: [
+              for (var i = 0; i < outlinedActions.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label: outlinedActions[i].label,
+                    enabled: outlinedActions[i].onTap != null,
+                    child: SizedBox(
+                      height: 44,
+                      child: OutlinedButton.icon(
+                        onPressed: outlinedActions[i].onTap,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.white.withOpacity(0.06),
+                          side: BorderSide(
+                            color: Colors.white.withOpacity(0.18),
+                            width: 1.2,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          textStyle: GoogleFonts.dmSans(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        icon: Icon(outlinedActions[i].icon, size: 16),
+                        label: Text(
+                          outlinedActions[i].label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ],
@@ -740,13 +850,182 @@ List<Map<String, dynamic>> teacherFlowList(Object? value) {
 }
 
 String teacherFlowGreeting() {
-  final hour = DateTime.now().hour;
-  if (hour < 12) return 'Good Morning';
-  if (hour < 17) return 'Good Afternoon';
-  return 'Good Evening';
+  return 'Hello';
 }
 
 String teacherCurrentClassLabel() {
   final label = RoleAccessService.teacherClassName;
   return label.trim().isEmpty ? 'No class assigned' : label;
+}
+
+class TeacherFlowBackgroundDecorator extends StatefulWidget {
+  final Widget child;
+  const TeacherFlowBackgroundDecorator({super.key, required this.child});
+
+  @override
+  State<TeacherFlowBackgroundDecorator> createState() => _TeacherFlowBackgroundDecoratorState();
+}
+
+class _TeacherFlowBackgroundDecoratorState extends State<TeacherFlowBackgroundDecorator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  Offset _mouseOffset = Offset.zero;
+  Offset _smoothMouseOffset = Offset.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 18),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onHover(PointerHoverEvent event) {
+    setState(() {
+      final size = MediaQuery.sizeOf(context);
+      final centerX = size.width / 2;
+      final centerY = size.height / 2;
+      _mouseOffset = Offset(
+        centerX > 0 ? (event.position.dx - centerX) / centerX : 0.0,
+        centerY > 0 ? (event.position.dy - centerY) / centerY : 0.0,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _smoothMouseOffset = Offset.lerp(_smoothMouseOffset, _mouseOffset, 0.05) ?? Offset.zero;
+
+    return MouseRegion(
+      onHover: _onHover,
+      child: Stack(
+        children: [
+          // 1. Base Gradient
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFFEFFBFA),
+                    Color(0xFFF4FAFB),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // 2. Animated / Interactive Blobs
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                final progress = _controller.value * 2 * pi;
+                final size = MediaQuery.sizeOf(context);
+                
+                final blob1X = -50.0 + sin(progress) * 40.0 + (_smoothMouseOffset.dx * 24.0);
+                final blob1Y = -50.0 + cos(progress) * 40.0 + (_smoothMouseOffset.dy * 24.0);
+
+                final blob2X = size.width - 230.0 + cos(progress + pi) * 45.0 + (_smoothMouseOffset.dx * 20.0);
+                final blob2Y = size.height - 230.0 + sin(progress + pi) * 45.0 + (_smoothMouseOffset.dy * 20.0);
+
+                final blob3X = -80.0 + sin(progress * 1.5) * 35.0 + (_smoothMouseOffset.dx * 18.0);
+                final blob3Y = size.height / 2 - 130.0 + cos(progress * 1.5) * 35.0 + (_smoothMouseOffset.dy * 18.0);
+
+                return Stack(
+                  children: [
+                    Positioned(
+                      left: blob1X,
+                      top: blob1Y,
+                      child: Container(
+                        width: 320,
+                        height: 320,
+                        decoration: BoxDecoration(
+                          color: teacherFlowAccent.withOpacity(0.08),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: blob2X,
+                      top: blob2Y,
+                      child: Container(
+                        width: 280,
+                        height: 280,
+                        decoration: BoxDecoration(
+                          color: teacherFlowWarm.withOpacity(0.06),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: blob3X,
+                      top: blob3Y,
+                      child: Container(
+                        width: 260,
+                        height: 260,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3B82F6).withOpacity(0.05),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          // 3. Blur layer
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 70.0, sigmaY: 70.0),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          // 4. Graph overlay
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _TeacherGridPainter(
+                color: teacherFlowInk.withOpacity(0.012),
+              ),
+            ),
+          ),
+          // 5. Child content
+          Positioned.fill(
+            child: widget.child,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeacherGridPainter extends CustomPainter {
+  final Color color;
+  const _TeacherGridPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.0;
+
+    const step = 34.0;
+    for (double x = 0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TeacherGridPainter oldDelegate) => false;
 }

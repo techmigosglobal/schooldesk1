@@ -213,11 +213,8 @@ void main() {
           ? source.substring(start, end)
           : source;
 
-      expect(section, contains('await svc.from('));
-      expect(section, contains('"payments"'));
-      expect(section, contains(').insert({'));
-      expect(section, contains('"fee_receipts"'));
-      expect(source, contains('applyInvoiceAllocationUpdate('));
+      expect(section, contains('svc.rpc("record_fee_payment"'));
+      expect(source, contains('record_fee_payment'));
       expect(section, contains('admin_remarks: body.admin_remarks'));
       expect(section, isNot(contains('remarks: body.remarks')));
     },
@@ -250,7 +247,7 @@ void main() {
   );
 
   test(
-    'tuition selection validation enforces continuous unpaid months and one-time book kit',
+    'tuition selection validation enforces the June–March cycle and one-time fees',
     () {
       final source = File(
         'supabase/functions/api/handlers/fees.ts',
@@ -261,15 +258,19 @@ void main() {
           ? source.substring(start, end)
           : source;
 
-      expect(section, contains('Book & Kit Fee is one-time only'));
-      expect(section, contains('Select at least one continuous tuition month'));
       expect(
         section,
-        contains(
-          'Tuition months must be paid in continuous order without skipping',
-        ),
+        contains('This fee is one-time only and cannot be split'),
       );
-      expect(section, contains('selected_months cannot exceed 12'));
+      expect(section, contains('Select at least one monthly installment'));
+      expect(
+        section,
+        contains('Monthly installments must be paid in order without skipping'),
+      );
+      expect(
+        section,
+        contains('selected_months cannot exceed the June–March cycle of 10'),
+      );
       expect(
         section,
         contains('selected_terms cannot exceed configured academic terms'),
@@ -281,18 +282,19 @@ void main() {
     final datasource = File(
       'lib/features/finance/data/datasources/parent_fees_remote_datasource.dart',
     ).readAsStringSync();
-    final history = File(
-      'lib/features/finance/presentation/screens/parent_payment_screens/parent_payment_history_screen.dart',
+    final hub = File(
+      'lib/features/finance/presentation/screens/parent_hub/parent_fee_hub.dart',
     ).readAsStringSync();
 
     expect(datasource, contains("'receipt_id'"));
     expect(datasource, contains("'receipt_no'"));
     expect(datasource, contains("'invoice_number'"));
     expect(datasource, contains("'fee_type'"));
-    expect(history, contains("payment['selected_month_names']"));
-    expect(history, contains("payment['reference_number']"));
-    expect(history, contains("normalizedStatus == 'completed'"));
-    expect(history, isNot(contains('value.toDouble() / 100')));
+    expect(hub, contains("invoice['invoice_number']"));
+    expect(hub, contains("payment['receipt_number']"));
+    expect(hub, contains("payment['amount_paid']"));
+    expect(hub, contains("payment['payment_date']"));
+    expect(hub, contains("payment['payment_mode']"));
   });
 
   // ── Orphaned invoice cleanup contract tests ──────────────────────────────
@@ -392,7 +394,7 @@ void main() {
 
   test('orphaned fee cleanup migration covers all affected tables', () {
     final migration = File(
-      'supabase/migrations/0024_orphaned_fee_cleanup.sql',
+      'supabase/migrations/20260706180300_orphaned_fee_cleanup.sql',
     ).readAsStringSync();
 
     // Must target fee_invoices with fee_structure_id IS NULL

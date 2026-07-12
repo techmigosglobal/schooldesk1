@@ -492,7 +492,25 @@ export async function handleTimetable(
   }
 
   if (path === "/timetable/substitutions" && method === "GET") {
-    return ok([]);
+    const date = url.searchParams.get("date");
+    const staffId = url.searchParams.get("staff_id");
+    const sectionId = url.searchParams.get("section_id");
+
+    let query = svc.from("substitutions").select("*, original_staff:staff!substitutions_original_staff_id_fkey(*), substitute_staff:staff!substitutions_substitute_staff_id_fkey(*), section:sections(*)").eq("school_id", school);
+
+    if (date) {
+      query = query.eq("date", date);
+    }
+    if (staffId) {
+      query = query.or(`original_staff_id.eq.${staffId},substitute_staff_id.eq.${staffId}`);
+    }
+    if (sectionId) {
+      query = query.eq("section_id", sectionId);
+    }
+
+    const { data, error } = await query.order("date", { ascending: false }).order("period_number");
+    if (error) return fail(error.message);
+    return ok(data ?? []);
   }
 
   return fail("not found", 404);

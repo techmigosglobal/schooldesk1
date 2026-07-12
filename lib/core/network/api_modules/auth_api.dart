@@ -23,12 +23,16 @@ extension BackendAuthApi on BackendApiClient {
         setAuthToken(resp.token);
         setCurrentRole(resp.user.roleName);
         setCurrentUserId(resp.user.id);
+        _cachedProfile = resp.user;
         await TokenStorageService.saveTokens(
           accessToken: resp.token,
           refreshToken: resp.refreshToken,
           roleName: resp.user.roleName,
         );
         await TokenStorageService.saveUserId(resp.user.id);
+        if (resp.user.schoolId.isNotEmpty) {
+          await TokenStorageService.saveSchoolId(resp.user.schoolId);
+        }
         return resp;
       }
       throw ServerException(message: data['error'] ?? 'Login failed');
@@ -50,6 +54,7 @@ extension BackendAuthApi on BackendApiClient {
         setAuthToken(resp.token);
         setCurrentRole(resp.user.roleName);
         setCurrentUserId(resp.user.id);
+        _cachedProfile = resp.user;
         await TokenStorageService.saveTokens(
           accessToken: resp.token,
           refreshToken: resp.refreshToken,
@@ -159,8 +164,7 @@ extension BackendAuthApi on BackendApiClient {
 
     try {
       final profile = await getProfile();
-      setCurrentRole(profile.roleName);
-      await TokenStorageService.saveRoleName(profile.roleName);
+      _applyRestoredRole(profile.roleName);
       return true;
     } on AuthException {
       final refreshed = await refreshSession();
@@ -171,8 +175,7 @@ extension BackendAuthApi on BackendApiClient {
       }
       try {
         final profile = await getProfile();
-        setCurrentRole(profile.roleName);
-        await TokenStorageService.saveRoleName(profile.roleName);
+        _applyRestoredRole(profile.roleName);
         return true;
       } on Object catch (_) {
         return currentRoleName != null;
@@ -182,12 +185,28 @@ extension BackendAuthApi on BackendApiClient {
     }
   }
 
+  /// Applies a role returned by the profile endpoint, with a guard to prevent
+  /// downgrading a super_admin session due to a stale public.users row.
+  void _applyRestoredRole(String roleName) {
+    final incoming = roleName.trim().toLowerCase();
+    final existing = currentRoleName?.trim().toLowerCase() ?? '';
+    if (existing == 'super_admin' && incoming.isNotEmpty && incoming != 'super_admin') {
+      // The token says super_admin but profile disagrees — trust the token;
+      // the profile row is stale.  Do not save either.
+      return;
+    }
+    setCurrentRole(roleName);
+    TokenStorageService.saveRoleName(roleName);
+  }
+
   Future<UserResponse> getProfile() async {
     try {
       final response = await _dio.get('/auth/profile');
       final data = _asMap(response.data);
       if (data['success'] == true) {
-        return UserResponse.fromJson(_profilePayloadFromEnvelope(data));
+        final profile = UserResponse.fromJson(_profilePayloadFromEnvelope(data));
+        _cachedProfile = profile;
+        return profile;
       }
       throw ServerException(message: data['error'] ?? 'Failed to get profile');
     } on DioException catch (e) {
@@ -200,7 +219,9 @@ extension BackendAuthApi on BackendApiClient {
       final response = await _dio.patch('/auth/profile', data: payload);
       final data = _asMap(response.data);
       if (data['success'] == true) {
-        return UserResponse.fromJson(_profilePayloadFromEnvelope(data));
+        final profile = UserResponse.fromJson(_profilePayloadFromEnvelope(data));
+        _cachedProfile = profile;
+        return profile;
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to update profile',

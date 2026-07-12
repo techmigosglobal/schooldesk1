@@ -73,7 +73,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
   }) async {
     try {
       final response = await _dio.post(
-        '/fees/payments/intent',
+        '/fees/payments/request',
         data: {
           'invoice_id': invoiceId.trim(),
           'payment_method': paymentMethod.trim(),

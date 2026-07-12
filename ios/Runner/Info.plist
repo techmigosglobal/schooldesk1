@@ -28,6 +28,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is used to scan the daily staff attendance QR code.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access lets you attach school documents, homework, and event media.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Photo library access lets you save school documents and generated media.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

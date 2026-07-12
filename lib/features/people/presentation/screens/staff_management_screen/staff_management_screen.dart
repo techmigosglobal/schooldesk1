@@ -2418,6 +2418,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
     );
   }
 
+  // ignore: unused_element
   Widget _assignmentCard() {
     return _FormCard(
       title: 'Teaching Assignment',

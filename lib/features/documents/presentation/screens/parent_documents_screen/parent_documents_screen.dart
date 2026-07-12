@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:printing/printing.dart';
 import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
+
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -9,6 +11,9 @@ import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentDocumentsScreen extends StatefulWidget {
@@ -21,7 +26,6 @@ class ParentDocumentsScreen extends StatefulWidget {
 class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
   int _selectedNavIndex = ParentNav.documents;
   int _activeChildIndex = 0;
-  static const _headerColor = Color(0xFF1A6B4A);
   bool _generatingPdf = false;
   String? _generatingDocName;
 
@@ -68,7 +72,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
             .map(
               (row) => {
                 'id': row['id'],
-                'name': row['doc_type'] ?? 'Document',
+                'name': row['title'] ?? row['doc_type'] ?? 'Document',
                 'type': row['doc_type'] ?? 'Document',
                 'icon': Icons.description_rounded,
                 'color': context.appTheme.primary,
@@ -114,19 +118,25 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
     });
 
     try {
+      final fileUrl = '${doc['fileUrl'] ?? ''}'.trim();
       if (docType == 'fee_receipt') {
         await _generateFeeReceiptPdf(doc);
-      } else {
-        // For ID cards and other docs, show a snackbar
+      } else if (fileUrl.isNotEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${doc['name']} downloaded successfully!'),
-              backgroundColor: context.appTheme.success,
-              behavior: SnackBarBehavior.floating,
-            ),
+          final item = EventPostMediaItem.fromUrl(
+            fileUrl,
+            name: '${doc['name'] ?? 'Document'}',
           );
+          await openEventPostMediaPreview(context, item);
         }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${doc['name']} is not available to preview yet.'),
+            backgroundColor: context.appTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } on Object {
       if (mounted) {
@@ -180,6 +190,159 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
     );
   }
 
+  Future<void> _deleteStudentDoc(String studentId, String docId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Document'),
+        content: const Text('Are you sure you want to delete this document?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await BackendApiClient.instance.deleteRaw('/student-documents/$docId');
+      _loadData();
+    } on Object catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete document: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadStudentDocDialog(String studentId) async {
+    final titleCtrl = TextEditingController();
+    String docType = 'Aadhar Card';
+    PlatformFile? selectedFile;
+    bool uploading = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Upload Student Document'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(labelText: 'Document Title'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: docType,
+                decoration: const InputDecoration(labelText: 'Document Type'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'Aadhar Card',
+                    child: Text('Aadhar Card'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Birth Certificate',
+                    child: Text('Birth Certificate'),
+                  ),
+                  DropdownMenuItem(value: 'other', child: Text('Other')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    setDialogState(() {
+                      docType = val;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              if (selectedFile != null)
+                Text(
+                  'Selected: ${selectedFile!.name}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: uploading
+                    ? null
+                    : () async {
+                        final result = await FilePicker.pickFiles(
+                          type: FileType.custom,
+                          allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+                        );
+                        if (result != null && result.files.isNotEmpty) {
+                          setDialogState(() {
+                            selectedFile = result.files.first;
+                          });
+                        }
+                      },
+                icon: const Icon(Icons.attach_file),
+                label: const Text('Select File'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: (uploading || selectedFile == null)
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        uploading = true;
+                      });
+                      try {
+                        final fileUrl = await BackendApiClient.instance
+                            .uploadFile(
+                              selectedFile!.path!,
+                              filename: selectedFile!.name,
+                            );
+                        await BackendApiClient.instance
+                            .createRaw('/student-documents', {
+                              'student_id': studentId,
+                              'doc_type': docType,
+                              'title': titleCtrl.text.trim().isEmpty
+                                  ? docType
+                                  : titleCtrl.text.trim(),
+                              'file_url': fileUrl,
+                            });
+                        Navigator.pop(context);
+                        _loadData();
+                      } on Object catch (e) {
+                        setDialogState(() {
+                          uploading = false;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Upload failed: $e')),
+                        );
+                      }
+                    },
+              child: uploading
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Upload'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
@@ -193,6 +356,14 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+      actions: [
+        if (_activeStudentId != null)
+          IconButton(
+            tooltip: 'Upload student document',
+            icon: const Icon(Icons.upload_file_rounded),
+            onPressed: () => _uploadStudentDocDialog(_activeStudentId!),
+          ),
+      ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -250,36 +421,13 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
     return Container(
       color: context.appTheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: List.generate(_children.length, (i) {
-          final isActive = i == _activeChildIndex;
-          return GestureDetector(
-            onTap: () {
-              setState(() => _activeChildIndex = i);
-              ParentChildSelectionService.saveIndex(_children, i);
-            },
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? _headerColor
-                    : context.appTheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                '${_children[i]['name'] ?? _children[i]['first_name'] ?? 'Student'}'
-                    .split(' ')
-                    .first,
-                style: GoogleFonts.dmSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : context.appTheme.onSurface,
-                ),
-              ),
-            ),
-          );
-        }),
+      child: ParentChildSelector(
+        children: _children,
+        selectedIndex: _activeChildIndex,
+        onSelected: (index) {
+          setState(() => _activeChildIndex = index);
+          ParentChildSelectionService.saveIndex(_children, index);
+        },
       ),
     );
   }
@@ -300,7 +448,10 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
         final isGenerating =
             _generatingPdf && _generatingDocName == doc['name'];
         final isFeeReceipt = doc['docType'] == 'fee_receipt';
+        final hasFile = '${doc['fileUrl'] ?? ''}'.trim().isNotEmpty;
         final canGenerate = isFeeReceipt;
+        final canPreview = hasFile && !isFeeReceipt;
+        final canDelete = !isFeeReceipt;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
@@ -396,58 +547,80 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
                         height: 36,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Material(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
-                          onTap: _generatingPdf
-                              ? null
-                              : () => _downloadDocument(doc),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (canDelete)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              onPressed: () => _deleteStudentDoc(
+                                _activeStudentId!,
+                                doc['id'] as String,
+                              ),
                             ),
-                            decoration: BoxDecoration(
-                              gradient: _generatingPdf
-                                  ? null
-                                  : const LinearGradient(
-                                      colors: [
-                                        Color(0xFF0F766E),
-                                        Color(0xFF1A6B4A),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                              color: _generatingPdf
-                                  ? context.appTheme.surfaceVariant
-                                  : null,
+                          Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            child: InkWell(
                               borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  canGenerate
-                                      ? Icons.picture_as_pdf_rounded
-                                      : Icons.download_rounded,
-                                  size: 14,
-                                  color: Colors.white,
+                              onTap: _generatingPdf
+                                  ? null
+                                  : () => _downloadDocument(doc),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  canGenerate ? 'PDF' : 'Download',
-                                  style: GoogleFonts.dmSans(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
+                                decoration: BoxDecoration(
+                                  gradient: _generatingPdf
+                                      ? null
+                                      : const LinearGradient(
+                                          colors: [
+                                            Color(0xFF0F766E),
+                                            Color(0xFF1A6B4A),
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                  color: _generatingPdf
+                                      ? context.appTheme.surfaceVariant
+                                      : null,
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      canGenerate
+                                          ? Icons.picture_as_pdf_rounded
+                                          : (canPreview
+                                                ? Icons.visibility_rounded
+                                                : Icons.download_rounded),
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      canGenerate
+                                          ? 'PDF'
+                                          : (canPreview
+                                                ? 'Preview'
+                                                : 'Download'),
+                                      style: GoogleFonts.dmSans(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
               ],
             ),

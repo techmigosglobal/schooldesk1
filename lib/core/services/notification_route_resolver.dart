@@ -106,9 +106,14 @@ class NotificationRouteResolver {
         .toString()
         .toLowerCase()
         .trim();
-    final referenceId = (data['reference_id'] ?? data['referenceId'] ?? '')
-        .toString()
-        .trim();
+    final referenceId =
+        (data['reference_id'] ??
+                data['referenceId'] ??
+                data['homework_id'] ??
+                data['homeworkId'] ??
+                '')
+            .toString()
+            .trim();
     if (referenceId.isEmpty) return null;
     if (route == AppRoutes.principalEventApprovals &&
         (referenceType == 'event_post' || referenceType == 'event')) {

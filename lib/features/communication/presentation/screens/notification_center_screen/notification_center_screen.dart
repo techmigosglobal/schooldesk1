@@ -547,11 +547,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             showPushDiagnostics:
                 widget.role.trim().toLowerCase() == 'principal',
             diagnosticsInFlight: _runningPushDiagnostic,
-            onRetryPush: () async {
-              await PushNotificationService.instance
-                  .registerDeviceTokenIfPossible();
-              if (context.mounted) setState(() {});
-            },
             onRunPushDiagnostics: _runPushDiagnostics,
           ),
           if (_error != null) ...[
@@ -900,7 +895,6 @@ class _NotificationSummaryPanel extends StatelessWidget {
   final String categoryLabel;
   final bool hasBackendIssue;
   final PushNotificationRuntimeStatus runtimeStatus;
-  final Future<void> Function() onRetryPush;
   final Future<void> Function()? onRunPushDiagnostics;
   final bool showPushDiagnostics;
   final bool diagnosticsInFlight;
@@ -912,7 +906,6 @@ class _NotificationSummaryPanel extends StatelessWidget {
     required this.categoryLabel,
     required this.hasBackendIssue,
     required this.runtimeStatus,
-    required this.onRetryPush,
     this.onRunPushDiagnostics,
     this.showPushDiagnostics = false,
     this.diagnosticsInFlight = false,
@@ -962,21 +955,15 @@ class _NotificationSummaryPanel extends StatelessWidget {
                 ? context.appTheme.error
                 : context.appTheme.success,
           ),
-          OutlinedButton.icon(
-            onPressed: runtimeStatus.deviceRegistrationSucceeded
-                ? null
-                : onRetryPush,
-            icon: Icon(
-              runtimeStatus.deviceRegistrationSucceeded
-                  ? Icons.notifications_active_rounded
-                  : Icons.notifications_off_rounded,
-              size: 16,
-            ),
-            label: Text(
-              runtimeStatus.deviceRegistrationSucceeded
-                  ? 'Push Ready'
-                  : 'Enable Push',
-            ),
+          _NotificationMetricPill(
+            label: 'Push',
+            value: runtimeStatus.deviceRegistrationSucceeded ? 1 : 0,
+            icon: runtimeStatus.deviceRegistrationSucceeded
+                ? Icons.notifications_active_rounded
+                : Icons.notifications_off_rounded,
+            color: runtimeStatus.deviceRegistrationSucceeded
+                ? context.appTheme.success
+                : context.appTheme.warning,
           ),
           if (showPushDiagnostics)
             FilledButton.icon(

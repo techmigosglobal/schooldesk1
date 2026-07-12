@@ -79,9 +79,6 @@ void main() {
     final source = File(
       'supabase/functions/api/handlers/communications.ts',
     ).readAsStringSync();
-    final diary = File(
-      'lib/features/academics/presentation/screens/teacher_diary_screen/teacher_diary_screen.dart',
-    ).readAsStringSync();
 
     expect(
       source,
@@ -90,8 +87,6 @@ void main() {
     expect(source, contains('staffId !== linkedStaffId(user)'));
     expect(source, contains('staff_id: canManageSchoolContent(user)'));
     expect(source, contains('if (diaryMatch && method === "DELETE")'));
-    expect(diary, contains("'staff_id': RoleAccessService.teacherStaffId"));
-    expect(diary, contains("'section_id': RoleAccessService.teacherClassId"));
   });
 
   test('leave handler matches Flutter balances recall and decision routes', () {

@@ -1,10 +1,54 @@
 // handlers/approvals.ts
 // NOTE: 'exam' module is permanently excluded — no exam approval entries
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { ok, fail } from "../index.ts";
+import { fail, ok, triggerPushProcessing } from "../index.ts";
 function sid(u: User) { return (u.app_metadata?.school_id as string) ?? ""; }
 
 const REMOVED_MODULES = ["exam", "exams", "exam_schedule", "result", "results"];
+
+/**
+ * Notify a single user of an approval decision via the same
+ * notification_events + notification_logs pipeline used by leave.ts.
+ * Best-effort: never allow a notification failure to break the approval flow.
+ */
+async function notifyApprovalDecision(
+  svc: SupabaseClient,
+  school: string,
+  targetUserId: string,
+  eventType: string,
+  title: string,
+  message: string,
+  entityType: string,
+  entityId: string,
+  targetRole: string | null,
+): Promise<void> {
+  if (!targetUserId) return;
+  try {
+    const { data: eventRow } = await svc.from("notification_events").insert({
+      school_id: school,
+      user_id: targetUserId,
+      event_type: eventType,
+      event_data: {
+        message,
+        reference_type: entityType,
+      },
+    }).select("id").maybeSingle();
+    if (eventRow?.id) triggerPushProcessing(eventRow.id);
+    await svc.from("notification_logs").insert({
+      school_id: school,
+      user_id: targetUserId,
+      target_role: targetRole,
+      title,
+      body: message,
+      type: entityType,
+      entity_type: entityType,
+      entity_id: entityId,
+      is_read: false,
+    });
+  } catch (notifErr) {
+    console.error(`Failed to create ${entityType} notification: ${notifErr}`);
+  }
+}
 
 export async function handleApprovals(req: Request, path: string, method: string, url: URL, _client: SupabaseClient, svc: SupabaseClient, user: User): Promise<Response> {
   const school = sid(user);
@@ -32,6 +76,22 @@ export async function handleApprovals(req: Request, path: string, method: string
       if (error) return fail(error.message);
       // Activate/deactivate user if account approval
       if (data?.user_id) await svc.from("users").update({ is_active: action === "approve" }).eq("id", data.user_id);
+      if (data?.user_id) {
+        const approved = action === "approve";
+        await notifyApprovalDecision(
+          svc,
+          school,
+          `${data.user_id}`,
+          approved ? "account_approved" : "account_rejected",
+          approved ? "Account Approved ✅" : "Account Rejected",
+          approved
+            ? "Your account has been approved. You can now sign in."
+            : `Your account request was rejected.${body.reason ? ` Reason: ${body.reason}` : ""}`,
+          "account_approval",
+          id,
+          data.role ? `${data.role}` : null,
+        );
+      }
       return ok(data);
     }
   }
@@ -66,6 +126,23 @@ export async function handleApprovals(req: Request, path: string, method: string
         const status = action === "approve" ? "approved" : action === "reject" ? "rejected" : "under_review";
         const { data, error } = await svc.from("approval_requests").update({ status, reviewed_by: user.id, review_note: body.note ?? null, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id).eq("school_id", school).select().single();
         if (error) return fail(error.message);
+        if (data?.requested_by && status !== "under_review") {
+          const approved = status === "approved";
+          const moduleLabel = `${data.module ?? "request"}`;
+          await notifyApprovalDecision(
+            svc,
+            school,
+            `${data.requested_by}`,
+            approved ? "approval_request_approved" : "approval_request_rejected",
+            approved ? "Request Approved ✅" : "Request Rejected",
+            approved
+              ? `Your ${moduleLabel} request has been approved.`
+              : `Your ${moduleLabel} request has been rejected.${body.note ? ` Reason: ${body.note}` : ""}`,
+            "approval_request",
+            id,
+            null,
+          );
+        }
         return ok(data);
       }
     }

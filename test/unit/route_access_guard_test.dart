@@ -131,7 +131,6 @@ void main() {
         AppRoutes.teacherParentInteraction,
         AppRoutes.teacherLeave,
         AppRoutes.teacherLeaveRequestForm,
-        AppRoutes.teacherDiary,
         AppRoutes.teacherEventPosts,
         AppRoutes.teacherLessonPlanner,
         AppRoutes.teacherStudentNotes,

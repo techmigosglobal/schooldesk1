@@ -304,15 +304,19 @@ class _LessonPlannerCard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   for (final attachment in attachments)
-                    OutlinedButton.icon(
-                      onPressed: () => _openAttachment(
-                        context,
-                        _text(attachment['url']),
-                        name: _text(attachment['name']),
-                      ),
-                      icon: const Icon(Icons.attach_file_rounded, size: 18),
-                      label: Text(
-                        _text(attachment['name'], fallback: 'Open attachment'),
+                    SizedBox(
+                      width: 132,
+                      child: EventPostMediaPreview(
+                        item: EventPostMediaItem(
+                          url: _text(attachment['url']),
+                          name: _text(attachment['name']),
+                          mimeType: _text(attachment['mime_type']),
+                          kind: EventPostMediaItem.fromUrl(
+                            _text(attachment['url']),
+                          ).kind,
+                        ),
+                        height: 92,
+                        compact: true,
                       ),
                     ),
                 ],
@@ -322,18 +326,6 @@ class _LessonPlannerCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  void _openAttachment(
-    BuildContext context,
-    String attachmentUrl, {
-    String name = '',
-  }) {
-    final item = EventPostMediaItem.fromUrl(attachmentUrl);
-    final namedItem = name.isNotEmpty && item.displayName.isEmpty
-        ? EventPostMediaItem(url: item.url, name: name, kind: item.kind)
-        : item;
-    openEventPostMediaPreview(context, namedItem);
   }
 }
 

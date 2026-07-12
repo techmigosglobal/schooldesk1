@@ -5,6 +5,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -218,63 +219,17 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
 
   Widget _buildChildSelector() {
     if (_children.isEmpty) return const SizedBox.shrink();
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(_children.length, (i) {
-          final isActive = i == _activeChildIndex;
-          final c = _children[i];
-          final first = (c['first_name'] ?? '').toString();
-          final last = (c['last_name'] ?? '').toString();
-          final name = [
-            first,
-            last,
-          ].where((e) => e.isNotEmpty).join(' ').trim();
-          final grade = (c['grade_name'] ?? '').toString();
-          final section = (c['section_name'] ?? '').toString();
-          final classLabel = [
-            grade,
-            section,
-          ].where((e) => e.isNotEmpty).join('-');
-          final label = classLabel.isEmpty ? name : '$name ($classLabel)';
-
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                _activeChildIndex = i;
-              });
-              ParentChildSelectionService.saveIndex(
-                _children
-                    .whereType<Map>()
-                    .map((child) => Map<String, dynamic>.from(child))
-                    .toList(),
-                i,
-              );
-            },
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: isActive ? _headerColor : context.appTheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isActive
-                      ? _headerColor
-                      : context.appTheme.outlineVariant,
-                ),
-              ),
-              child: Text(
-                label.split(' ').first,
-                style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : context.appTheme.onSurface,
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
+    final children = _children
+        .whereType<Map>()
+        .map((child) => Map<String, dynamic>.from(child))
+        .toList();
+    return ParentChildSelector(
+      children: children,
+      selectedIndex: _activeChildIndex,
+      onSelected: (index) {
+        setState(() => _activeChildIndex = index);
+        ParentChildSelectionService.saveIndex(children, index);
+      },
     );
   }
 

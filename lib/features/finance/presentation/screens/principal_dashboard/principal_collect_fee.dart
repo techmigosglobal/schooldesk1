@@ -42,15 +42,8 @@ class _FeeTypeBadge {
 }
 
 _FeeTypeBadge _feeTypeBadge(Map<String, dynamic> inv) {
-  final raw = textValue(inv['fee_type']).toLowerCase();
-  if (raw.contains('tuition') || raw.contains('monthly')) {
-    return const _FeeTypeBadge(
-      label: 'Tuition Fee',
-      color: Color(0xFF1A6B4A),
-      bg: Color(0xFFDCFCE7),
-      icon: Icons.school_rounded,
-    );
-  }
+  final raw = '${textValue(inv['fee_item_name'])} ${textValue(inv['fee_type'])}'
+      .toLowerCase();
   if (raw.contains('book')) {
     return const _FeeTypeBadge(
       label: 'Books Fee',
@@ -65,6 +58,14 @@ _FeeTypeBadge _feeTypeBadge(Map<String, dynamic> inv) {
       color: Color(0xFF92400E),
       bg: Color(0xFFFEF3C7),
       icon: Icons.backpack_rounded,
+    );
+  }
+  if (raw.contains('tuition') || raw.contains('monthly')) {
+    return const _FeeTypeBadge(
+      label: 'Tuition Fee',
+      color: Color(0xFF1A6B4A),
+      bg: Color(0xFFDCFCE7),
+      icon: Icons.school_rounded,
     );
   }
   return const _FeeTypeBadge(
@@ -125,9 +126,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
       seen.add(label);
       result.add({'label': label});
     }
-    result.sort(
-      (a, b) => '${a['label']}'.compareTo('${b['label']}'),
-    );
+    result.sort((a, b) => '${a['label']}'.compareTo('${b['label']}'));
     return result;
   }
 
@@ -175,8 +174,9 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
     final students = _sectionStudents;
     if (_query.isEmpty) return students;
     return students
-        .where((s) =>
-            '${s['name']}'.toLowerCase().contains(_query.toLowerCase()))
+        .where(
+          (s) => '${s['name']}'.toLowerCase().contains(_query.toLowerCase()),
+        )
         .toList();
   }
 
@@ -280,7 +280,8 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
   void _selectMonthsFromAmount() {
     final inv = _selectedInvoice;
     if (!_isTuition || inv == null) return;
-    final amount = double.tryParse(
+    final amount =
+        double.tryParse(
           _amountController.text.replaceAll(RegExp(r'[^\d.]'), ''),
         ) ??
         0.0;
@@ -407,8 +408,8 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
             color: isCompleted
                 ? const Color(0xFF1A6B4A)
                 : isActive
-                    ? const Color(0xFF1A6B4A).withOpacity(0.15)
-                    : Colors.grey.shade100,
+                ? const Color(0xFF1A6B4A).withOpacity(0.15)
+                : Colors.grey.shade100,
             border: Border.all(
               color: isActive || isCompleted
                   ? const Color(0xFF1A6B4A)
@@ -424,9 +425,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: isActive
-                          ? const Color(0xFF1A6B4A)
-                          : Colors.grey,
+                      color: isActive ? const Color(0xFF1A6B4A) : Colors.grey,
                     ),
                   ),
                 ),
@@ -469,8 +468,11 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded,
-                size: 48, color: Colors.red),
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: Colors.red,
+            ),
             const SizedBox(height: 12),
             Text(
               'Something went wrong',
@@ -848,8 +850,10 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFD1FAE5)),
             ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
           ),
           onChanged: (v) => setState(() => _query = v),
         ),
@@ -879,8 +883,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
               ),
             ),
           ),
-        for (final student in _filteredStudents)
-          _buildStudentCard(student),
+        for (final student in _filteredStudents) _buildStudentCard(student),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
@@ -1144,8 +1147,11 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
     final isPartial = paid > 0 && balance > 0;
 
     // Determine fee type category for display
-    final feeTypeRaw = textValue(inv['fee_type']).toLowerCase();
-    final isBooksKit = feeTypeRaw.contains('book') ||
+    final feeTypeRaw =
+        '${textValue(inv['fee_item_name'])} ${textValue(inv['fee_type'])}'
+            .toLowerCase();
+    final isBooksKit =
+        feeTypeRaw.contains('book') ||
         feeTypeRaw.contains('kit') ||
         feeTypeRaw.contains('uniform');
     final isFullyPaid = balance <= 0;
@@ -1197,8 +1203,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
                   children: [
                     CircleAvatar(
                       backgroundColor: badge.bg,
-                      child:
-                          Icon(badge.icon, color: badge.color, size: 20),
+                      child: Icon(badge.icon, color: badge.color, size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1315,8 +1320,8 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
                             isPartial
                                 ? 'Partially paid · ₹${paid.toStringAsFixed(0)} paid · Select to pay ₹${balance.toStringAsFixed(0)} balance'
                                 : isTuitionInvoice(inv)
-                                    ? 'Monthly tuition · Select to choose months and pay'
-                                    : 'Select to record payment of ${money(balance)}',
+                                ? 'Monthly tuition · Select to choose months and pay'
+                                : 'Select to record payment of ${money(balance)}',
                             style: GoogleFonts.ibmPlexSans(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -1474,7 +1479,8 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
         if (_isTuition && _unpaidMonths.isNotEmpty) ...[
           _sectionHeader(
             'Select Months to Pay',
-            subtitle: 'Monthly tuition — ₹${numValue(inv['monthly_amount']).toStringAsFixed(0)}/month',
+            subtitle:
+                'Monthly tuition — ₹${numValue(inv['monthly_amount']).toStringAsFixed(0)}/month',
             icon: Icons.calendar_month_rounded,
             color: const Color(0xFF1A6B4A),
           ),
@@ -1503,10 +1509,11 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
                     final isPaid = paidInvoiceMonths(inv).contains(month);
                     final isSelected = _selectedMonths.contains(month);
                     final nextIdx = _selectedMonths.length;
-                    final canAdd = !isPaid &&
-                        (isSelected ||
-                            _unpaidMonths.indexOf(month) == nextIdx);
-                    final canRemove = isSelected &&
+                    final canAdd =
+                        !isPaid &&
+                        (isSelected || _unpaidMonths.indexOf(month) == nextIdx);
+                    final canRemove =
+                        isSelected &&
                         _selectedMonths.length > 1 &&
                         _selectedMonths.last == month;
 
@@ -1643,8 +1650,11 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
                             ? 0
                             : double.tryParse(
                                     _amountController.text.replaceAll(
-                                        RegExp(r'[^\d.]'), '')) ??
-                                0,
+                                      RegExp(r'[^\d.]'),
+                                      '',
+                                    ),
+                                  ) ??
+                                  0,
                       ),
                       style: GoogleFonts.ibmPlexSans(
                         fontWeight: FontWeight.bold,
@@ -1669,19 +1679,16 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
         const SizedBox(height: 10),
         TextFormField(
           controller: _amountController,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
-            FilteringTextInputFormatter.allow(
-                RegExp(r'^\d*\.?\d{0,2}')),
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
           ],
           decoration: InputDecoration(
             labelText: 'Amount to Record',
             prefixText: '₹ ',
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFD1FAE5)),
@@ -1710,26 +1717,21 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
               child: Padding(
                 padding: const EdgeInsets.only(right: 10),
                 child: GestureDetector(
-                  onTap: () =>
-                      setState(() => _paymentMode = mode),
+                  onTap: () => setState(() => _paymentMode = mode),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
                       color: selected ? mode.color : Colors.white,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: selected
-                            ? mode.color
-                            : const Color(0xFFE5E7EB),
+                        color: selected ? mode.color : const Color(0xFFE5E7EB),
                         width: selected ? 2 : 1,
                       ),
                       boxShadow: selected
                           ? [
                               BoxShadow(
-                                color: mode.color
-                                    .withOpacity(0.25),
+                                color: mode.color.withOpacity(0.25),
                                 blurRadius: 8,
                               ),
                             ]
@@ -1740,9 +1742,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
                         Icon(
                           mode.icon,
                           size: 22,
-                          color: selected
-                              ? Colors.white
-                              : mode.color,
+                          color: selected ? Colors.white : mode.color,
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -1750,9 +1750,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
                           style: GoogleFonts.ibmPlexSans(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: selected
-                                ? Colors.white
-                                : mode.color,
+                            color: selected ? Colors.white : mode.color,
                           ),
                         ),
                       ],
@@ -1774,8 +1772,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
             prefixIcon: const Icon(Icons.tag_rounded),
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFD1FAE5)),
@@ -1791,8 +1788,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
           child: InputDecorator(
             decoration: InputDecoration(
               labelText: 'Payment Date',
-              prefixIcon:
-                  const Icon(Icons.calendar_month_rounded),
+              prefixIcon: const Icon(Icons.calendar_month_rounded),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(
@@ -1800,18 +1796,15 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    const BorderSide(color: Color(0xFFD1FAE5)),
+                borderSide: const BorderSide(color: Color(0xFFD1FAE5)),
               ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  DateFormat('dd MMM yyyy')
-                      .format(_paymentDate),
-                  style: GoogleFonts.ibmPlexSans(
-                      fontWeight: FontWeight.w600),
+                  DateFormat('dd MMM yyyy').format(_paymentDate),
+                  style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w600),
                 ),
                 const Icon(Icons.arrow_drop_down_rounded),
               ],
@@ -1828,8 +1821,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
             prefixIcon: const Icon(Icons.notes_rounded),
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFD1FAE5)),
@@ -1886,8 +1878,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
             ),
             child: Text(
               'Back to Fee Types',
-              style:
-                  GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w600),
+              style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w600),
             ),
           ),
         ),
@@ -1951,8 +1942,8 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
     final color = isDanger
         ? Colors.orange.shade700
         : isSuccess
-            ? const Color(0xFF1A6B4A)
-            : context.appTheme.onSurface;
+        ? const Color(0xFF1A6B4A)
+        : context.appTheme.onSurface;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1988,15 +1979,15 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
   Future<void> _confirmPayment() async {
     final inv = _selectedInvoice;
     if (inv == null) return;
-    final amount = double.tryParse(
+    final amount =
+        double.tryParse(
           _amountController.text.replaceAll(RegExp(r'[^\d.]'), ''),
         ) ??
         0.0;
     if (amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text('Please enter a valid positive payment amount.'),
+          content: Text('Please enter a valid positive payment amount.'),
         ),
       );
       return;
@@ -2005,7 +1996,9 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
     if (_isTuition && _selectedMonths.isEmpty && amount > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select at least one month for tuition payment.'),
+          content: Text(
+            'Please select at least one month for tuition payment.',
+          ),
         ),
       );
       setState(() => _saving = false);
@@ -2020,18 +2013,13 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
           receiptNumber:
               'RCP-${DateFormat('yyyyMMddHHmmss').format(DateTime.now())}',
           amountPaid: amount,
-          paymentDate:
-              DateFormat('yyyy-MM-dd').format(_paymentDate),
+          paymentDate: DateFormat('yyyy-MM-dd').format(_paymentDate),
           paymentMode: _paymentMode.label.toLowerCase(),
-          transactionId: _transactionController.text
-                  .trim()
-                  .isEmpty
+          transactionId: _transactionController.text.trim().isEmpty
               ? null
               : _transactionController.text.trim(),
           selectedMonthNames: _isTuition
-              ? _unpaidMonths
-                  .where(_selectedMonths.contains)
-                  .toList()
+              ? _unpaidMonths.where(_selectedMonths.contains).toList()
               : const [],
           selectedMonths: _isTuition ? _selectedMonths.length : 0,
         ),
@@ -2046,8 +2034,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
           ),
           title: const Row(
             children: [
-              Icon(Icons.check_circle_rounded,
-                  color: Color(0xFF1A6B4A)),
+              Icon(Icons.check_circle_rounded, color: Color(0xFF1A6B4A)),
               SizedBox(width: 8),
               Text('Payment Recorded'),
             ],

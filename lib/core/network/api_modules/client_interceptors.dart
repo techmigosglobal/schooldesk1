@@ -71,6 +71,11 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
         clean.contains('/timetable') ||
         clean.contains('/homework') ||
         clean.contains('/lesson-planners') ||
+        // Parent attendance screens hit this endpoint on every visit; it
+        // was previously missing from the cacheable list entirely (unlike
+        // `/students/:id/attendance`, which is covered above), so it always
+        // went to the network with no offline/error fallback.
+        clean.contains('/attendance/summary') ||
         clean.contains('/fees/invoices') ||
         clean.contains('/fees/structures') ||
         clean.contains('/fees/categories');

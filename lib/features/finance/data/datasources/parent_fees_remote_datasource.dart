@@ -20,14 +20,22 @@ class ParentFeesRemoteDataSourceImpl implements ParentFeesRemoteDataSource {
   @override
   Future<List<Map<String, dynamic>>> getPaymentHistory() async {
     final children = await BackendApiClient.instance.getMyStudents();
+    final studentIds = children
+        .map((child) => '${child['id'] ?? child['student_id'] ?? ''}'.trim())
+        .where((studentId) => studentId.isNotEmpty)
+        .toList();
+    // Fetch each child's payment history concurrently instead of
+    // sequentially, one request at a time.
+    final responses = await Future.wait(
+      studentIds.map(
+        (studentId) => BackendApiClient.instance.dio.get(
+          '/fees/payments',
+          queryParameters: {'student_id': studentId},
+        ),
+      ),
+    );
     final rows = <Map<String, dynamic>>[];
-    for (final child in children) {
-      final studentId = '${child['id'] ?? child['student_id'] ?? ''}'.trim();
-      if (studentId.isEmpty) continue;
-      final response = await BackendApiClient.instance.dio.get(
-        '/fees/payments',
-        queryParameters: {'student_id': studentId},
-      );
+    for (final response in responses) {
       final data = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : const <String, dynamic>{};

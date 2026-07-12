@@ -782,6 +782,75 @@ async function appendNotification(
   } catch (_) { /* best-effort */ }
 }
 
+/**
+ * Fan out a push + in-app notification to every active user in a school
+ * whose role matches `audience` (or everyone, when audience is "all").
+ * Best-effort: the announcement itself is already persisted by the caller,
+ * so a notification failure here must never fail the request.
+ */
+async function notifyAnnouncementAudience(
+  svc: SupabaseClient,
+  school: string,
+  audience: string,
+  title: string,
+  message: string,
+  announcementId: string,
+): Promise<void> {
+  try {
+    const normalized = `${audience || "all"}`.trim().toLowerCase();
+    let query = svc.from("users").select("id").eq("school_id", school).eq(
+      "is_active",
+      true,
+    );
+    if (normalized && normalized !== "all" && normalized !== "everyone") {
+      query = query.eq("role_name", normalized);
+    }
+    const { data: recipients, error } = await query;
+    if (error || !recipients || recipients.length === 0) return;
+    const rows = recipients
+      .map((row: Record<string, unknown>) => `${row.id ?? ""}`.trim())
+      .filter(Boolean)
+      .map((userId) => ({
+        school_id: school,
+        user_id: userId,
+        target_role: normalized,
+        title,
+        body: message,
+        type: "announcement",
+        entity_type: "announcement",
+        entity_id: announcementId,
+        route: "/notification-center-screen",
+        priority: "medium",
+        is_read: false,
+      }));
+    if (rows.length === 0) return;
+    await svc.from("notification_logs").insert(rows);
+    const { data: events, error: eventError } = await svc
+      .from("notification_events")
+      .insert(
+        rows.map((row) => ({
+          school_id: row.school_id,
+          user_id: row.user_id,
+          event_type: "announcement",
+          event_data: {
+            title: row.title,
+            message: row.body,
+            announcement_id: announcementId,
+            reference_type: "announcement",
+          },
+        })),
+      )
+      .select("id");
+    if (eventError) return;
+    const eventIds = (events ?? [])
+      .map((row: { id: string }) => `${row.id ?? ""}`.trim())
+      .filter(Boolean);
+    if (eventIds.length > 0) triggerPushProcessing(eventIds);
+  } catch (_) {
+    // Best-effort: announcement is already saved even if notification fan-out fails.
+  }
+}
+
 function normalizeAnnouncementPayload(
   school: string,
   user: User,
@@ -1332,16 +1401,13 @@ export async function handleCommunications(
     if (!await canReadChatConversation(svc, school, conversation, user)) {
       return fail("forbidden", 403);
     }
-    const { data, error } = await svc.from("messages").select("*")
-      .eq("school_id", school).eq("conversation_id", conversationId);
+    // Single bulk UPDATE instead of an N+1 per-message loop.
+    const { error } = await svc.rpc("mark_conversation_read", {
+      p_conversation_id: conversationId,
+      p_school_id: school,
+      p_user_id: user.id,
+    });
     if (error) return fail(error.message);
-    for (const message of data ?? []) {
-      const readBy = readByList(message.read_by);
-      if (!readBy.includes(user.id)) {
-        await svc.from("messages").update({ read_by: [...readBy, user.id] })
-          .eq("id", message.id).eq("school_id", school);
-      }
-    }
     return ok({ success: true });
   }
 
@@ -1386,6 +1452,16 @@ export async function handleCommunications(
       const { data, error } = await svc.from("announcements").insert(payload)
         .select().single();
       if (error) return fail(error.message);
+      if (payload.status === "published") {
+        await notifyAnnouncementAudience(
+          svc,
+          school,
+          payload.audience,
+          payload.title || "New Announcement",
+          payload.body,
+          `${data?.id ?? ""}`,
+        );
+      }
       return ok(data);
     }
     if (seg && method === "PATCH") {
@@ -1445,6 +1521,16 @@ export async function handleCommunications(
       const { data, error } = await svc.from("announcements").insert(payload)
         .select().single();
       if (error) return fail(error.message);
+      if (payload.status === "published") {
+        await notifyAnnouncementAudience(
+          svc,
+          school,
+          `${payload.audience}`,
+          `${payload.title || "New Announcement"}`,
+          `${payload.body}`,
+          `${data?.id ?? ""}`,
+        );
+      }
       return ok(data);
     }
   }

@@ -47,7 +47,11 @@ function getServiceAccount(): ServiceAccount | null {
   }
 }
 
-function maskValue(value: string, visiblePrefix = 3, visibleSuffix = 2): string {
+function maskValue(
+  value: string,
+  visiblePrefix = 3,
+  visibleSuffix = 2,
+): string {
   if (!value) return "<missing>";
   if (value.length <= visiblePrefix + visibleSuffix) return "***";
   return `${value.slice(0, visiblePrefix)}***${value.slice(-visibleSuffix)}`;
@@ -172,7 +176,10 @@ async function runHealthCheck(): Promise<HealthCheckResult> {
     const missing = !serviceAccount
       ? "FIREBASE_SERVICE_ACCOUNT_JSON not set"
       : "FIREBASE_PROJECT_ID is not set";
-    console.error("[notification-processor] healthcheck oauth skipped", missing);
+    console.error(
+      "[notification-processor] healthcheck oauth skipped",
+      missing,
+    );
     return {
       ok: false,
       environment,
@@ -232,7 +239,10 @@ async function runHealthCheck(): Promise<HealthCheckResult> {
       },
     };
   } catch (error) {
-    console.error("[notification-processor] healthcheck oauth exception", error);
+    console.error(
+      "[notification-processor] healthcheck oauth exception",
+      error,
+    );
     return {
       ok: false,
       environment,
@@ -372,7 +382,9 @@ function getNotificationTemplate(
         title: "Attendance Update",
         body: String(
           eventData.message ||
-            `Your child was marked ${eventData.status || "absent"} on ${eventData.date || "today"}.`,
+            `Your child was marked ${eventData.status || "absent"} on ${
+              eventData.date || "today"
+            }.`,
         ),
         data: {
           event_type: "attendance_marked",
@@ -387,7 +399,9 @@ function getNotificationTemplate(
         title: "💰 Fee Payment Due",
         body: String(
           eventData.message ||
-            `A fee payment of ${eventData.amount || ""} is due. Please pay before the due date to avoid late charges.`,
+            `A fee payment of ${
+              eventData.amount || ""
+            } is due. Please pay before the due date to avoid late charges.`,
         ),
         data: {
           event_type: "fee_due",
@@ -401,7 +415,8 @@ function getNotificationTemplate(
       return {
         title: "📅 PTM Slot Booked",
         body: String(
-          eventData.message || "A parent has booked a PTM meeting slot with you.",
+          eventData.message ||
+            "A parent has booked a PTM meeting slot with you.",
         ),
         data: {
           event_type: "ptm_booked",
@@ -430,7 +445,7 @@ function getNotificationTemplate(
 
     case "homework_submitted":
       return {
-        title: "Homework Submitted",
+        title: String(eventData.title || "Homework Submitted"),
         body: String(
           eventData.message || "A homework submission was received.",
         ),
@@ -438,6 +453,10 @@ function getNotificationTemplate(
           event_type: "homework_submitted",
           reference_type: "homework",
           homework_id: String(eventData.homework_id || ""),
+          reference_id: String(
+            eventData.reference_id || eventData.homework_id || "",
+          ),
+          action: "submission",
         },
       };
 
@@ -451,6 +470,10 @@ function getNotificationTemplate(
           event_type: "homework_feedback",
           reference_type: "homework",
           homework_id: String(eventData.homework_id || ""),
+          reference_id: String(
+            eventData.reference_id || eventData.homework_id || "",
+          ),
+          action: String(eventData.action || "feedback"),
         },
       };
 
@@ -469,8 +492,12 @@ function getNotificationTemplate(
 
     case "birthday":
     case "birthday_wish": {
-      const students = (eventData.students || []) as Array<{ id: string; name: string; photo_url: string }>;
-      const image = students.length > 0 ? (students[0].photo_url || undefined) : undefined;
+      const students = (eventData.students || []) as Array<
+        { id: string; name: string; photo_url: string }
+      >;
+      const image = students.length > 0
+        ? (students[0].photo_url || undefined)
+        : undefined;
       const data: Record<string, string> = {
         event_type: eventType,
         reference_type: "birthday",
@@ -521,6 +548,9 @@ function getNotificationTemplate(
           event_type: "homework_assigned",
           reference_type: "homework",
           homework_id: String(eventData.homework_id || ""),
+          reference_id: String(
+            eventData.reference_id || eventData.homework_id || "",
+          ),
           action: "assignment",
         },
       };
@@ -852,7 +882,8 @@ async function processNotificationEvent(
     for (const device of devices) {
       const result = await sendFcmNotification(device.token, template);
       tokenResults.push({
-        token_preview: device.token.slice(0, 10) + "..." + device.token.slice(-10),
+        token_preview: device.token.slice(0, 10) + "..." +
+          device.token.slice(-10),
         sent: result.sent,
         invalidToken: result.invalidToken,
         error: result.error,
@@ -970,7 +1001,9 @@ Deno.serve(async (req: Request) => {
     let sentCount = 0;
     let invalidTokenCount = 0;
     let transientFailureCount = 0;
-    const failures: Array<{ event_id: string; reason: string; debug_info?: any }> = [];
+    const failures: Array<
+      { event_id: string; reason: string; debug_info?: any }
+    > = [];
     const debug_details: any[] = [];
     for (const event of events as NotificationEvent[]) {
       const result = await processNotificationEvent(event);

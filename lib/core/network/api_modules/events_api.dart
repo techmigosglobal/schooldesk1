@@ -185,6 +185,29 @@ extension BackendEventsApi on BackendApiClient {
     }
   }
 
+  /// Fetches approved SCHOOL_LANDING posts for the public pre-login carousel.
+  /// No auth token required — the backend serves this without authentication.
+  Future<List<Map<String, dynamic>>> getLandingEventPosts({
+    required String schoolId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/event-posts/landing',
+        queryParameters: {'school_id': schoolId},
+      );
+      final data = response.data;
+      final rows = data is List
+          ? data
+          : (data is Map ? data['data'] as List? ?? const [] : const []);
+      return rows
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+    } on Object catch (_) {
+      return const [];
+    }
+  }
+
   Future<void> approveEventPost(String id) async {
     try {
       await _dio.post('/event-posts/$id/approve');

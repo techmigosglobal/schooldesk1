@@ -14,6 +14,11 @@ analyzer:
     - test/**
     - integration_test/**
     - build/**
+    # Xcode/SwiftPM output can vendor full Flutter plugin source trees under
+    # ios/build. Those third-party tests are not part of this application and
+    # produce false analyzer errors (for example, their undeclared mockito
+    # test dependency).
+    - ios/build/**
     - Parent_Module_UI/**
     - third_party/**
     - '**/__MACOSX/**'

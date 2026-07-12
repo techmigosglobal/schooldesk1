@@ -14,6 +14,7 @@ import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 
 class ParentHomeworkScreen extends StatefulWidget {
   const ParentHomeworkScreen({super.key});
@@ -27,7 +28,6 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   int _selectedNavIndex = ParentNav.homework;
   late TabController _tabController;
   int _activeChildIndex = 0;
-  static const _headerColor = Color(0xFF1A6B4A);
 
   List<Map<String, dynamic>> _children = [];
 
@@ -69,21 +69,30 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     });
     try {
       final children = await BackendApiClient.instance.getMyStudents();
-      final rows = <Map<String, dynamic>>[];
-      for (final child in children) {
-        final studentId = (child['id'] ?? '').toString();
-        if (studentId.isEmpty) continue;
-        final childRows = await BackendApiClient.instance.getHomework(
-          studentId: studentId,
-        );
-        for (final row in childRows) {
-          final mapped = await _attachSubmissionState({
-            ...row,
-            'student_id': studentId,
-          });
-          rows.add(mapped);
+      final studentIds = children
+          .map((child) => (child['id'] ?? '').toString())
+          .where((studentId) => studentId.isNotEmpty)
+          .toList();
+      // Fetch each child's homework list in parallel instead of sequentially
+      // awaiting one child at a time, which previously serialized N network
+      // round-trips (one per child).
+      final childHomeworkLists = await Future.wait(
+        studentIds.map(
+          (studentId) =>
+              BackendApiClient.instance.getHomework(studentId: studentId),
+        ),
+      );
+      final flatRows = <Map<String, dynamic>>[];
+      for (var i = 0; i < studentIds.length; i++) {
+        for (final row in childHomeworkLists[i]) {
+          flatRows.add({...row, 'student_id': studentIds[i]});
         }
       }
+      // Likewise, resolve submission state for every homework row in
+      // parallel rather than one request at a time - this was the biggest
+      // source of latency on this screen since it previously issued one
+      // sequential request per homework item.
+      final rows = await Future.wait(flatRows.map(_attachSubmissionState));
       final selectedIndex = await ParentChildSelectionService.indexFor(
         children,
         fallback: _activeChildIndex,
@@ -259,72 +268,13 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
         ),
         vertical: 10,
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: List.generate(_children.length, (i) {
-            final isActive = i == _activeChildIndex;
-            return GestureDetector(
-              onTap: () {
-                setState(() => _activeChildIndex = i);
-                ParentChildSelectionService.saveIndex(_children, i);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? _headerColor
-                      : context.appTheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(20),
-                  border: isActive
-                      ? null
-                      : Border.all(color: context.appTheme.outlineVariant),
-                  boxShadow: isActive
-                      ? [
-                          BoxShadow(
-                            color: _headerColor.withAlpha(40),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isActive)
-                      Container(
-                        width: 6,
-                        height: 6,
-                        margin: const EdgeInsets.only(right: 6),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    Text(
-                      '${_children[i]['name'] ?? _children[i]['first_name'] ?? 'Student'}'
-                          .split(' ')
-                          .first,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isActive
-                            ? Colors.white
-                            : context.appTheme.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-        ),
+      child: ParentChildSelector(
+        children: _children,
+        selectedIndex: _activeChildIndex,
+        onSelected: (index) {
+          setState(() => _activeChildIndex = index);
+          ParentChildSelectionService.saveIndex(_children, index);
+        },
       ),
     );
   }

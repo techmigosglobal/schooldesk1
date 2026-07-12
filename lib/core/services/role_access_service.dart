@@ -26,7 +26,16 @@ class RoleAccessService {
 
     final profile = await _try(() => api.getProfile());
     final profileRole = profile?.roleName.trim().toLowerCase();
-    api.setCurrentRole(profile?.roleName);
+    // Only overwrite the role if the profile returned a non-empty value.
+    // A null profile (network failure) or empty roleName must not wipe the
+    // role that was already set correctly by the login response.
+    if (profile != null && profileRole != null && profileRole.isNotEmpty) {
+      final loginRole = api.currentRoleName?.trim().toLowerCase() ?? '';
+      // Never downgrade super_admin based on a stale public.users row.
+      if (loginRole != 'super_admin' || profileRole == 'super_admin') {
+        api.setCurrentRole(profile.roleName);
+      }
+    }
     final teacherDashboard = profileRole == 'teacher'
         ? await _try(() => api.getDashboard('teacher'))
         : null;
@@ -47,33 +56,46 @@ class RoleAccessService {
     );
     final teacherSectionId = _sectionId(classTeacherRow);
 
-    final students = await _try(
-      () => api.getStudents(
-        sectionId: teacherSectionId.isEmpty ? null : teacherSectionId,
-        page: 1,
-        pageSize: 100,
-      ),
-    );
-    final staff = profileRole == 'teacher'
+    // Parents only ever consume `parentChildren` (their linked kids), so
+    // skip the school-wide students/staff/timetable/invoices fetches below
+    // entirely for that role - they were previously always fetched (even
+    // though no parent screen reads `_students`, `_teachers`,
+    // `_teacherTimetable`/`_todayTimetable`, or `_invoices`), adding several
+    // unnecessary sequential network round-trips to every parent login and
+    // app resume.
+    final isParent = profileRole == 'parent';
+    final students = isParent
+        ? null
+        : await _try(
+            () => api.getStudents(
+              sectionId: teacherSectionId.isEmpty ? null : teacherSectionId,
+              page: 1,
+              pageSize: 100,
+            ),
+          );
+    final staff = (profileRole == 'teacher' || isParent)
         ? null
         : await _try(() => api.getStaff(page: 1, pageSize: 100));
-    final parentChildren = profileRole == 'parent'
+    final parentChildren = isParent
         ? await _try(() => api.getMyStudents())
         : <Map<String, dynamic>>[];
-    var timetable = await _try(
-      () => api.getTimetableSlots(
-        staffId: teacherStaffId.isEmpty ? null : teacherStaffId,
-      ),
-    );
+    var timetable = isParent
+        ? <Map<String, dynamic>>[]
+        : await _try(
+            () => api.getTimetableSlots(
+              staffId: teacherStaffId.isEmpty ? null : teacherStaffId,
+            ),
+          );
     // If no staff-scoped timetable found, try section-scoped timetable as a
     // fallback (some backends store timetables by section rather than staff).
-    if ((timetable == null || timetable.isEmpty) &&
+    if (!isParent &&
+        (timetable == null || timetable.isEmpty) &&
         teacherSectionId.isNotEmpty) {
       timetable = await _try(
         () => api.getTimetableSlots(sectionId: teacherSectionId),
       );
     }
-    final invoices = profileRole == 'teacher'
+    final invoices = (profileRole == 'teacher' || isParent)
         ? <Map<String, dynamic>>[]
         : await _try(() => api.getInvoices());
 
@@ -138,6 +160,7 @@ class RoleAccessService {
         'email': profile?.email ?? '',
         'phone': profile?.phone ?? '',
         'status': profile?.isActive == false ? 'inactive' : 'active',
+        'avatar': profile?.avatar ?? '',
       };
     } else if (_teachers.isNotEmpty) {
       _activeTeacher = _teachers.first;
@@ -217,6 +240,11 @@ class RoleAccessService {
     _ensureInitialized();
     final name = _activeTeacher['name']?.toString().trim();
     return (name == null || name.isEmpty) ? 'Teacher' : name;
+  }
+
+  static String get teacherAvatarUrl {
+    _ensureInitialized();
+    return _text(_activeTeacher['avatar']);
   }
 
   static int get teacherLeaveBalance {
@@ -414,6 +442,11 @@ class RoleAccessService {
 
   static List<Map<String, dynamic>> get principalAllTeachers =>
       adminAllTeachers;
+
+  static List<Map<String, dynamic>> get allStudents {
+    _ensureInitialized();
+    return List.unmodifiable(_students);
+  }
 
   static int get principalTotalStudents {
     _ensureInitialized();

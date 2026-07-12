@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
@@ -12,6 +13,7 @@ import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
@@ -315,11 +317,10 @@ class _ParentFeedView extends StatelessWidget {
             _SchoolFeedCarousel(eventPosts: eventPosts),
             SizedBox(height: tokens.spacing.lg),
             // ── Child selector ───────────────────────────────────────────
-            _ParentChildPillSelector(
+            ParentChildSelector(
               children: children,
-              activeIndex: activeChildIndex,
-              onChanged: onChildSelected,
-              color: parentColor,
+              selectedIndex: activeChildIndex,
+              onSelected: onChildSelected,
             ),
             SizedBox(height: tokens.spacing.lg),
             // ── Summary stats ────────────────────────────────────────────
@@ -459,7 +460,7 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
     return Column(
       children: [
         SizedBox(
-          height: 380,
+          height: MediaQuery.sizeOf(context).width >= 700 ? 500 : 440,
           child: PageView.builder(
             controller: _pageController,
             itemCount: widget.eventPosts.length,
@@ -744,146 +745,143 @@ void _showPostDetailsBottomSheet(
   Map<String, dynamic> post,
   List<Color> gradient,
 ) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) {
-      final title = _text(post['title']).isEmpty
-          ? 'School Post'
-          : _text(post['title']);
-      final description = _text(post['description']);
-      final author = _text(post['author']);
-      final category = _text(post['category']);
-      final rawDate = _text(post['date']);
-      final formattedDate = _formatPostDate(rawDate);
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (context) {
+        final title = _text(post['title']).isEmpty
+            ? 'School Post'
+            : _text(post['title']);
+        final description = _text(post['description']);
+        final author = _text(post['author']);
+        final category = _text(post['category']);
+        final rawDate = _text(post['date']);
+        final formattedDate = _formatPostDate(rawDate);
 
-      final mediaItems = EventPostMediaItem.parseList(
-        post['media'] ??
-            post['media_urls'] ??
-            post['mediaUrls'] ??
-            post['media_url'] ??
-            post['mediaUrl'] ??
-            post['attachments'],
-      );
+        final mediaItems = EventPostMediaItem.parseList(
+          post['media'] ??
+              post['media_urls'] ??
+              post['mediaUrls'] ??
+              post['media_url'] ??
+              post['mediaUrl'] ??
+              post['attachments'],
+        );
 
-      return Container(
-        height: MediaQuery.sizeOf(context).height * 0.82,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            Center(
-              child: Container(
-                width: 38,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(999),
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Feed Detail'),
+            actions: [
+              IconButton(
+                tooltip: 'Share post',
+                icon: const Icon(Icons.share_outlined),
+                onPressed: () => Share.share(
+                  [
+                    title,
+                    description,
+                  ].where((value) => value.isNotEmpty).join('\n\n'),
+                  subject: title,
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
-                children: [
-                  Row(
-                    children: [
-                      if (category.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: gradient[0].withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            category.toUpperCase(),
-                            style: GoogleFonts.dmSans(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                              color: gradient[0],
+            ],
+          ),
+          body: Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+                  children: [
+                    Row(
+                      children: [
+                        if (category.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: gradient[0].withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              category.toUpperCase(),
+                              style: GoogleFonts.dmSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: gradient[0],
+                              ),
                             ),
                           ),
+                        const Spacer(),
+                        Text(
+                          formattedDate,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      const Spacer(),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      title,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF1E293B),
+                      ),
+                    ),
+                    if (author.isNotEmpty) ...[
+                      const SizedBox(height: 6),
                       Text(
-                        formattedDate,
+                        'Posted by $author',
                         style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    title,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF1E293B),
-                    ),
-                  ),
-                  if (author.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'Posted by $author',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  if (mediaItems.isNotEmpty) ...[
-                    SizedBox(
-                      height: 240,
-                      child: PageView.builder(
-                        itemCount: mediaItems.length,
-                        itemBuilder: (context, idx) {
-                          final item = mediaItems[idx];
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 12),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: EventPostMediaPreview(
-                                item: item,
-                                height: 240,
-                                onImageTap: () =>
-                                    openEventPostMediaPreview(context, item),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
                     const SizedBox(height: 20),
-                  ],
-                  Text(
-                    description,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 15,
-                      height: 1.6,
-                      color: const Color(0xFF334155),
+                    if (mediaItems.isNotEmpty) ...[
+                      SizedBox(
+                        height: 240,
+                        child: PageView.builder(
+                          itemCount: mediaItems.length,
+                          itemBuilder: (context, idx) {
+                            final item = mediaItems[idx];
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: EventPostMediaPreview(
+                                  item: item,
+                                  height: 240,
+                                  onImageTap: () =>
+                                      openEventPostMediaPreview(context, item),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                    Text(
+                      description,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 15,
+                        height: 1.6,
+                        color: const Color(0xFF334155),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-      );
-    },
+            ],
+          ),
+        );
+      },
+    ),
   );
 }
 
@@ -1157,26 +1155,21 @@ class _ParentSummaryGrid extends StatelessWidget {
     final metrics = dashboard['metrics'] is Map
         ? Map<String, dynamic>.from(dashboard['metrics'] as Map)
         : const <String, dynamic>{};
-    final attendance = dashboard['attendance'] is Map
-        ? Map<String, dynamic>.from(dashboard['attendance'] as Map)
-        : const <String, dynamic>{};
-
     return SchoolDeskResponsiveGrid(
-      minTileWidth: 160,
+      minTileWidth: 140,
       spacing: 12,
       children: [
         _StatCard(
           icon: Icons.how_to_reg_rounded,
           label: 'Attendance',
-          value:
-              '${_number(child['attendance_pct'] ?? attendance['attendance_pct'])}%',
+          value: _percentage(child['attendance_pct']),
           gradientColors: const [Color(0xFF0F766E), Color(0xFF14B8A6)],
           route: AppRoutes.parentAttendance,
         ),
         _StatCard(
           icon: Icons.assignment_turned_in_rounded,
           label: 'Homework Due',
-          value: _number(child['homework_due'] ?? metrics['open_homework']),
+          value: _metricNumber(child['homework_due']),
           gradientColors: const [Color(0xFF7C3AED), Color(0xFFA78BFA)],
           route: AppRoutes.parentHomework,
         ),
@@ -1191,8 +1184,8 @@ class _ParentSummaryGrid extends StatelessWidget {
         ),
         _StatCard(
           icon: Icons.chat_bubble_rounded,
-          label: 'Messages',
-          value: _number(metrics['unread_messages']),
+          label: 'Unread Messages',
+          value: _metricNumber(metrics['unread_messages']),
           gradientColors: const [Color(0xFF1D4ED8), Color(0xFF60A5FA)],
           route: AppRoutes.parentTeacherChat,
         ),
@@ -1228,6 +1221,7 @@ class _StatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: () => Navigator.pushNamed(context, route),
         child: Container(
+          constraints: const BoxConstraints(minHeight: 124, maxHeight: 132),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -1295,48 +1289,56 @@ class _ParentQuickAccessRow extends StatelessWidget {
     _QuickAction(
       label: 'Attendance',
       icon: Icons.how_to_reg_rounded,
+      asset: SchoolDeskUiIllustrations.attendance,
       route: AppRoutes.parentAttendance,
       color: Color(0xFF0F766E),
     ),
     _QuickAction(
       label: 'Homework',
       icon: Icons.assignment_rounded,
+      asset: SchoolDeskUiIllustrations.homework,
       route: AppRoutes.parentHomework,
       color: Color(0xFF7C3AED),
     ),
     _QuickAction(
       label: 'Fees',
       icon: Icons.receipt_long_rounded,
+      asset: SchoolDeskUiIllustrations.fees,
       route: AppRoutes.parentFees,
       color: Color(0xFFEA580C),
     ),
     _QuickAction(
       label: 'Leave',
       icon: Icons.event_busy_rounded,
+      asset: SchoolDeskUiIllustrations.calendar,
       route: AppRoutes.parentLeave,
       color: Color(0xFFDC2626),
     ),
     _QuickAction(
       label: 'Messages',
       icon: Icons.chat_bubble_rounded,
+      asset: SchoolDeskUiIllustrations.chat,
       route: AppRoutes.parentTeacherChat,
       color: Color(0xFF1D4ED8),
     ),
     _QuickAction(
       label: 'Calendar',
       icon: Icons.calendar_month_rounded,
+      asset: SchoolDeskUiIllustrations.principalEvents,
       route: AppRoutes.parentCalendar,
       color: Color(0xFF0284C7),
     ),
     _QuickAction(
       label: 'Documents',
       icon: Icons.description_rounded,
+      asset: SchoolDeskUiIllustrations.resources,
       route: AppRoutes.parentDocuments,
       color: Color(0xFF15803D),
     ),
     _QuickAction(
       label: 'Timetable',
       icon: Icons.calendar_view_week_rounded,
+      asset: SchoolDeskUiIllustrations.classRoutine,
       route: AppRoutes.parentTimetable,
       color: Color(0xFFB45309),
     ),
@@ -1361,12 +1363,14 @@ class _ParentQuickAccessRow extends StatelessWidget {
 class _QuickAction {
   final String label;
   final IconData icon;
+  final String asset;
   final String route;
   final Color color;
 
   const _QuickAction({
     required this.label,
     required this.icon,
+    required this.asset,
     required this.route,
     required this.color,
   });
@@ -1412,7 +1416,11 @@ class _QuickAccessCard extends StatelessWidget {
                   color: action.color.withAlpha(tokens.isDark ? 40 : 22),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(action.icon, color: action.color, size: 20),
+                child: SchoolDeskIllustration(
+                  asset: action.asset,
+                  size: 34,
+                  semanticLabel: '${action.label} illustration',
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -1435,142 +1443,8 @@ class _QuickAccessCard extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Child selector pill (unchanged functionality, improved style)
-// ---------------------------------------------------------------------------
-
-class _ParentChildPillSelector extends StatelessWidget {
-  final List<Map<String, dynamic>> children;
-  final int activeIndex;
-  final ValueChanged<int> onChanged;
-  final Color color;
-
-  const _ParentChildPillSelector({
-    required this.children,
-    required this.activeIndex,
-    required this.onChanged,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-    final activeChild = children[activeIndex];
-
-    final pillContent = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color, Color.alphaBlend(Colors.white.withAlpha(30), color)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(tokens.radius.pill),
-        boxShadow: [
-          BoxShadow(
-            color: color.withAlpha(80),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(40),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.child_care_rounded,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Flexible(
-            child: SchoolDeskAdaptiveText(
-              _childSelectorLabel(activeChild),
-              maxLines: 1,
-              minFontSize: 11,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          if (children.length > 1) ...[
-            const SizedBox(width: 6),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-          ],
-        ],
-      ),
-    );
-
-    if (children.length <= 1) return pillContent;
-
-    return PopupMenuButton<int>(
-      tooltip: 'Select child',
-      onSelected: onChanged,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      itemBuilder: (context) => [
-        for (var i = 0; i < children.length; i++)
-          PopupMenuItem(
-            value: i,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.person_rounded,
-                  size: 16,
-                  color: i == activeIndex ? color : theme.colorScheme.onSurface,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _childSelectorLabel(children[i]),
-                  style: TextStyle(
-                    fontWeight: i == activeIndex
-                        ? FontWeight.w700
-                        : FontWeight.w500,
-                    color: i == activeIndex ? color : null,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-      child: pillContent,
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Pure helper functions
 // ---------------------------------------------------------------------------
-
-String _childSelectorLabel(Map<String, dynamic> child) {
-  final name = _name(child, fallback: 'Student');
-  final grade = _firstText(child, ['class', 'class_name', 'grade_name']);
-  return grade.isEmpty ? name : '$name ($grade)';
-}
-
-String _name(Map<String, dynamic> row, {required String fallback}) {
-  for (final key in ['name', 'full_name', 'student_name']) {
-    final name = _text(row[key]);
-    if (name.isNotEmpty) return name;
-  }
-  final combined = [
-    _text(row['first_name']),
-    _text(row['last_name']),
-  ].where((part) => part.isNotEmpty).join(' ');
-  return combined.isEmpty ? fallback : combined;
-}
 
 String _text(dynamic value) => value?.toString().trim() ?? '';
 
@@ -1589,6 +1463,16 @@ String _number(dynamic value) {
       : parsed.toStringAsFixed(1);
 }
 
+String _metricNumber(dynamic value) {
+  if (value == null || _text(value).isEmpty) return '—';
+  return _number(value);
+}
+
+String _percentage(dynamic value) {
+  if (value == null || _text(value).isEmpty) return 'Not marked';
+  return '${_number(value)}%';
+}
+
 String _money(dynamic value) {
   final parsed = value is num
       ? value.toDouble()
@@ -1597,12 +1481,4 @@ String _money(dynamic value) {
   if (amount >= 100000) return '₹${(amount / 100000).toStringAsFixed(1)}L';
   if (amount >= 1000) return '₹${(amount / 1000).toStringAsFixed(1)}K';
   return '₹${amount.toStringAsFixed(0)}';
-}
-
-String _firstText(Map<String, dynamic> row, List<String> keys) {
-  for (final key in keys) {
-    final text = _text(row[key]);
-    if (text.isNotEmpty) return text;
-  }
-  return '';
 }

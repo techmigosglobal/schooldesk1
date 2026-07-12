@@ -5,6 +5,10 @@ function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
 }
 
+function isSuperAdmin(user: User): boolean {
+  return user.app_metadata?.role_name === "super_admin";
+}
+
 function parseEventId(path: string): string | null {
   const match = path.match(/^\/monitoring\/error-events\/([^/]+)$/);
   return match?.[1] ?? null;
@@ -97,10 +101,10 @@ export async function handleMonitoring(
         "students", "guardians", "student_guardians", "medical_records",
         "student_documents", "attendance_sessions", "student_attendances",
         "attendance_summaries", "fee_categories", "fee_structures",
-        "fee_invoices", "fee_invoice_items", "parent_payment_requests",
-        "school_payment_settings", "leave_types", "leave_balances",
-        "student_leave_applications", "announcements", "events",
-        "parent_teacher_meetings", "timetable_slots", "frontend_records"
+        "fee_invoices", "fee_invoice_items", "payments", "fee_receipts",
+        "parent_payment_requests", "school_payment_settings", "leave_types",
+        "leave_balances", "student_leave_applications", "announcements",
+        "events", "parent_teacher_meetings", "timetable_slots", "frontend_records"
       ];
       const backup: Record<string, unknown[]> = {};
       for (const table of tables) {
@@ -130,7 +134,19 @@ export async function handleMonitoring(
     }
     try {
       const body = await req.json().catch(() => ({})) as Record<string, unknown[]>;
-      for (const [table, rows] of Object.entries(body)) {
+      const restoreOrder = [
+        "academic_years", "terms", "grades", "rooms", "subjects", "staff",
+        "staff_qualifications", "staff_subjects", "sections", "grade_subjects",
+        "students", "guardians", "student_guardians", "medical_records",
+        "student_documents", "attendance_sessions", "student_attendances",
+        "attendance_summaries", "fee_categories", "fee_structures",
+        "fee_invoices", "fee_invoice_items", "payments", "fee_receipts",
+        "parent_payment_requests", "school_payment_settings", "leave_types",
+        "leave_balances", "student_leave_applications", "announcements",
+        "events", "parent_teacher_meetings", "timetable_slots", "frontend_records"
+      ];
+      for (const table of restoreOrder) {
+        const rows = body[table];
         if (!Array.isArray(rows) || rows.length === 0) continue;
         const { error } = await svc.from(table).upsert(rows);
         if (error) {
@@ -151,6 +167,8 @@ export async function handleMonitoring(
     try {
       // Wipe in reverse dependency order to prevent foreign key errors
       const tablesToClean = [
+        "fee_receipts",
+        "payments",
         "student_attendances",
         "attendance_summaries",
         "attendance_sessions",
@@ -232,34 +250,32 @@ export async function handleMonitoring(
   }
 
   if (path === "/monitoring/error-events" && method === "GET") {
-    const page = parseInt(url.searchParams.get("page") ?? "1");
-    const size = parseInt(url.searchParams.get("page_size") ?? "20");
-    const { data, error } = await svc.from("error_events").select("*").eq(
-      "school_id",
-      school,
-    ).order("created_at", { ascending: false });
-    if (error) return fail(error.message);
+    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const size = Math.min(Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1), 100);
 
     const requestId = text(url.searchParams.get("request_id"));
     const status = text(url.searchParams.get("status"));
     const severity = text(url.searchParams.get("severity"));
     const source = text(url.searchParams.get("source"));
-
-    const filtered = (data ?? []).map((row) =>
-      responseRow(row as Record<string, unknown>)
-    ).filter((row) => {
-      if (requestId.length > 0 && row.request_id != requestId) return false;
-      if (status.length > 0 && row.status != status) return false;
-      if (severity.length > 0 && row.severity != severity) return false;
-      if (source.length > 0 && row.source != source) return false;
-      return true;
-    });
-    const start = Math.max((page - 1) * size, 0);
-    const paged = filtered.slice(start, start + size);
+    const from = text(url.searchParams.get("from"));
+    const to = text(url.searchParams.get("to"));
+    let query = svc.from("error_events").select("*", { count: "exact" })
+      .eq("school_id", school);
+    if (status) query = query.contains("context", { status });
+    if (severity) query = query.contains("context", { severity });
+    if (source) query = query.contains("context", { source });
+    if (requestId) query = query.contains("context", { request_id: requestId });
+    if (from) query = query.gte("created_at", from);
+    if (to) query = query.lte("created_at", to);
+    const { data, error, count } = await query.order("created_at", {
+      ascending: false,
+    }).range((page - 1) * size, page * size - 1);
+    if (error) return fail(error.message);
     return cors({
       success: true,
-      data: paged,
-      total: filtered.length,
+      data: (data ?? []).map((row) => responseRow(row as Record<string, unknown>)),
+      total: count ?? 0,
       page,
       page_size: size,
     });
@@ -267,6 +283,7 @@ export async function handleMonitoring(
 
   const eventId = parseEventId(path);
   if (eventId && method === "GET") {
+    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
     const { data, error } = await svc.from("error_events").select("*").eq(
       "school_id",
       school,
@@ -278,6 +295,7 @@ export async function handleMonitoring(
 
   const resolveId = parseResolveId(path);
   if (resolveId && method === "PATCH") {
+    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const { data, error } = await svc.from("error_events").select("*").eq(
       "school_id",

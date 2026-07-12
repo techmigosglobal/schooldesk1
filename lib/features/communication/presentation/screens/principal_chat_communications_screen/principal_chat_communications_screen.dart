@@ -28,8 +28,9 @@ class _PrincipalChatCommunicationsScreenState
   final _messageController = TextEditingController();
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
-  Timer? _pollingTimer;
+
   RealtimeChannel? _realtimeChannel;
+  String _realtimeConversationId = '';
 
   bool _loading = true;
   bool _sending = false;
@@ -44,37 +45,55 @@ class _PrincipalChatCommunicationsScreenState
   List<Map<String, dynamic>> _directConversations = const [];
   List<Map<String, dynamic>> _monitorMessages = const [];
   List<Map<String, dynamic>> _directMessages = const [];
+  final List<Map<String, dynamic>> _pendingMessages = [];
   Map<String, dynamic>? _selectedMonitorConversation;
   Map<String, dynamic>? _selectedDirectConversation;
+  DateTime? _messagesCursor;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _load();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-      if (mounted && !_sending) _load(background: true);
-    });
-    _realtimeChannel = ChatRealtimeService.instance.subscribe(
-      channelName: 'principal-chat-channel',
-      onUpdate: () {
-        if (mounted && !_sending) _load(background: true);
-      },
-    );
+    _subscribeRealtime();
   }
 
   @override
   void dispose() {
-    _pollingTimer?.cancel();
-    if (_realtimeChannel != null) {
-      Supabase.instance.client.removeChannel(_realtimeChannel!);
-    }
+    _removeRealtimeChannel();
     _tabController.dispose();
     _messageController.dispose();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
+
+  // ── Realtime ──────────────────────────────────────────────────────────────
+
+  void _subscribeRealtime({String conversationId = ''}) {
+    if (_realtimeConversationId == conversationId && _realtimeChannel != null) {
+      return;
+    }
+    _removeRealtimeChannel();
+    _realtimeConversationId = conversationId;
+    _realtimeChannel = ChatRealtimeService.instance.subscribe(
+      channelName: 'principal-chat-$conversationId',
+      conversationId: conversationId,
+      onUpdate: () {
+        if (mounted && !_sending) _loadIncremental();
+      },
+    );
+  }
+
+  void _removeRealtimeChannel() {
+    final ch = _realtimeChannel;
+    if (ch != null) {
+      Supabase.instance.client.removeChannel(ch);
+      _realtimeChannel = null;
+    }
+  }
+
+  // ── Data loading ──────────────────────────────────────────────────────────
 
   Future<void> _load({bool background = false}) async {
     if (!background) {
@@ -85,8 +104,6 @@ class _PrincipalChatCommunicationsScreenState
     }
     try {
       final api = BackendApiClient.instance;
-      // Fire all independent network calls in parallel to avoid
-      // sequential await chains that block the main thread.
       final results = await Future.wait<Object>([
         api.getProfile(),
         _safeChatRows(
@@ -158,22 +175,31 @@ class _PrincipalChatCommunicationsScreenState
       );
       final monitorMode = _tabController.index == 0;
       final selected = monitorMode ? selectedMonitor : selectedDirect;
-      final messages = selected == null
-          ? <Map<String, dynamic>>[]
-          : _isContactPlaceholder(selected)
-          ? <Map<String, dynamic>>[]
-          : await _safeChatRows(
-              () => api.getUnifiedChatMessages(
-                conversationId: _text(selected['id']),
-              ),
-            );
+      List<Map<String, dynamic>> messages;
+      DateTime? cursor;
+      if (selected != null && !_isContactPlaceholder(selected)) {
+        messages = await _safeChatRows(
+          () => api.getUnifiedChatMessages(
+            conversationId: _text(selected['id']),
+          ),
+        );
+        cursor = messages.isNotEmpty
+            ? _date(messages.last['sent_at'] ?? messages.last['created_at'])
+            : null;
+      } else {
+        messages = [];
+        cursor = null;
+      }
       if (!mounted) return;
+      final newConvId = _text(selected?['id']);
       setState(() {
         _principalUserId = profile.id;
         _monitorConversations = monitor;
         _directConversations = direct;
         _selectedMonitorConversation = selectedMonitor;
         _selectedDirectConversation = selectedDirect;
+        _pendingMessages.clear();
+        _messagesCursor = cursor;
         if (monitorMode) {
           _monitorMessages = messages;
         } else {
@@ -182,6 +208,7 @@ class _PrincipalChatCommunicationsScreenState
         _loading = false;
       });
       _scrollToBottom();
+      _subscribeRealtime(conversationId: newConvId);
       if (selected != null &&
           _canSendIn(selected) &&
           !_isContactPlaceholder(selected)) {
@@ -193,6 +220,120 @@ class _PrincipalChatCommunicationsScreenState
         _loading = false;
         if (!background) _error = error.toString();
       });
+    }
+  }
+
+  Future<void> _loadIncremental() async {
+    final monitorMode = _tabController.index == 0;
+    final selected = _selectedFor(monitorMode);
+    if (selected == null || _isContactPlaceholder(selected)) {
+      await _load(background: true);
+      return;
+    }
+    try {
+      final api = BackendApiClient.instance;
+      final convId = _text(selected['id']);
+      // Refresh conversation lists for unread count updates.
+      final results = await Future.wait<Object>([
+        _safeChatRows(
+          () => api.getUnifiedChatConversations(
+            type: 'parent_teacher',
+            monitor: true,
+          ),
+        ),
+        _safeChatRows(
+          () => api.getUnifiedChatConversations(
+            type: 'principal_teacher',
+            monitor: true,
+          ),
+        ),
+        _safeChatRows(
+          () => api.getUnifiedChatConversations(
+            type: 'principal_parent',
+            monitor: true,
+          ),
+        ),
+        _safeChatRows(() => api.getUnifiedChatContacts(role: 'principal')),
+      ]);
+      final monitor = results[0] as List<Map<String, dynamic>>;
+      final directTeacher = results[1] as List<Map<String, dynamic>>;
+      final directParent = results[2] as List<Map<String, dynamic>>;
+      final contacts = results[3] as List<Map<String, dynamic>>;
+      List<dynamic> teacherContacts = contacts
+          .where((row) => _text(row['role']).toLowerCase() == 'teacher')
+          .toList();
+      List<dynamic> parentContacts = contacts
+          .where((row) => _text(row['role']).toLowerCase() == 'parent')
+          .toList();
+      if (teacherContacts.isEmpty) {
+        teacherContacts = await _safeModelRows(
+          () async => (await api.getStaff(page: 1, pageSize: 200)).data,
+        );
+      }
+      if (parentContacts.isEmpty) {
+        parentContacts = await _safeModelRows(
+          () async =>
+              (await api.getUsers(role: 'Parent', page: 1, pageSize: 200)).data,
+        );
+      }
+      final direct = _mergeDirectConversationsWithContacts(
+        directTeacher: directTeacher,
+        directParent: directParent,
+        teacherContacts: teacherContacts,
+        parentContacts: parentContacts,
+      );
+      monitor.sort((a, b) => _sortTime(b).compareTo(_sortTime(a)));
+      final newMessages = await _safeChatRows(
+        () => api.getUnifiedChatMessages(
+          conversationId: convId,
+          sentAfter: _messagesCursor,
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _monitorConversations = monitor;
+        _directConversations = direct;
+        _selectedMonitorConversation = _selectRetainedConversation(
+          _selectedMonitorConversation,
+          _filteredMonitor(monitor),
+        );
+        _selectedDirectConversation = _selectRetainedConversation(
+          _selectedDirectConversation,
+          direct,
+        );
+        if (newMessages.isNotEmpty) {
+          final confirmedBodies = newMessages
+              .map((m) => _text(m['body'] ?? m['message']))
+              .toSet();
+          _pendingMessages.removeWhere(
+            (p) => p['_pending'] == true &&
+                confirmedBodies.contains(_text(p['body'] ?? p['message'])),
+          );
+          final current = _messagesFor(monitorMode);
+          final updated = [...current, ...newMessages];
+          if (monitorMode) {
+            _monitorMessages = updated;
+          } else {
+            _directMessages = updated;
+          }
+          _messagesCursor =
+              _date(
+                newMessages.last['sent_at'] ??
+                    newMessages.last['created_at'],
+              ) ??
+              _messagesCursor;
+        }
+      });
+      if (newMessages.isNotEmpty) {
+        _scrollToBottom();
+        if (_canSendIn(selected)) {
+          unawaited(
+            BackendApiClient.instance.markUnifiedChatConversationRead(convId),
+          );
+        }
+      }
+    } on Object catch (_) {
+      // Silent — next Realtime event retries.
     }
   }
 
@@ -248,6 +389,8 @@ class _PrincipalChatCommunicationsScreenState
     } else {
       _directMessages = const [];
     }
+    _pendingMessages.clear();
+    _messagesCursor = null;
   }
 
   void _zeroUnreadFor(bool monitorMode, String conversationId) {
@@ -294,7 +437,7 @@ class _PrincipalChatCommunicationsScreenState
         conversationId,
       );
     } on Object catch (_) {
-      // Keep the UI responsive; the next refresh can retry the backend state.
+      // Keep the UI responsive; the next refresh can retry.
     }
     if (!mounted) return;
     setState(() => _zeroUnreadFor(monitorMode, conversationId));
@@ -349,13 +492,34 @@ class _PrincipalChatCommunicationsScreenState
     }).toList();
   }
 
+  // ── Send with optimistic UI ────────────────────────────────────────────────
+
   Future<void> _send() async {
-    final conversation = _selectedFor(_tabController.index == 0);
+    final monitorMode = _tabController.index == 0;
+    final conversation = _selectedFor(monitorMode);
     final body = _messageController.text.trim();
     if (conversation == null || body.isEmpty || !_canSendIn(conversation)) {
       return;
     }
-    setState(() => _sending = true);
+
+    final optimistic = <String, dynamic>{
+      'id': 'pending-${DateTime.now().millisecondsSinceEpoch}',
+      'body': body,
+      'message': body,
+      'sender_user_id': _principalUserId,
+      'sender_id': _principalUserId,
+      'sent_at': DateTime.now().toUtc().toIso8601String(),
+      'is_read': false,
+      '_pending': true,
+    };
+
+    setState(() {
+      _sending = true;
+      _pendingMessages.add(optimistic);
+    });
+    _messageController.clear();
+    _scrollToBottom();
+
     try {
       var conversationId = _text(conversation['id']);
       if (_isContactPlaceholder(conversation)) {
@@ -373,8 +537,19 @@ class _PrincipalChatCommunicationsScreenState
         conversationId: conversationId,
         body: body,
       );
-      _messageController.clear();
-      await _load();
+      await _load(background: true);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _pendingMessages.removeWhere((m) => m == optimistic);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send message: $error'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -398,9 +573,13 @@ class _PrincipalChatCommunicationsScreenState
       _tabController.index = 1;
       _selectedDirectConversation = created;
       _directMessages = const [];
+      _pendingMessages.clear();
+      _messagesCursor = null;
     });
     await _load();
   }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -747,6 +926,7 @@ class _PrincipalChatCommunicationsScreenState
               _zeroUnreadFor(monitorMode, conversationId);
               _clearMessagesFor(monitorMode);
             });
+            _subscribeRealtime(conversationId: conversationId);
             if (!_isContactPlaceholder(row)) {
               await _markConversationRead(row, monitorMode);
               await _load(background: true);
@@ -759,11 +939,14 @@ class _PrincipalChatCommunicationsScreenState
 
   Widget _chatPane({required bool monitorMode, required bool showBackButton}) {
     final conversation = _selectedFor(monitorMode);
-    final messages = _messagesFor(monitorMode);
     if (conversation == null) {
       return const Center(child: Text('Select a conversation.'));
     }
     final canSend = _canSendIn(conversation);
+    final baseMessages = _messagesFor(monitorMode);
+    final displayed = canSend
+        ? [...baseMessages, ..._pendingMessages]
+        : baseMessages;
     return Column(
       children: [
         ListTile(
@@ -774,6 +957,7 @@ class _PrincipalChatCommunicationsScreenState
                   onPressed: () => setState(() {
                     _selectFor(monitorMode, null);
                     _clearMessagesFor(monitorMode);
+                    _subscribeRealtime();
                   }),
                 )
               : CircleAvatar(
@@ -828,24 +1012,32 @@ class _PrincipalChatCommunicationsScreenState
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(vertical: 12),
-              itemCount: messages.length,
+              itemCount: displayed.length,
               itemBuilder: (context, index) {
-                final message = messages[index];
+                final message = displayed[index];
+                final isPending = message['_pending'] == true;
                 final senderRole = _messageRole(message, conversation);
                 final senderName = _messageSenderName(message, conversation);
                 final mine =
                     !monitorMode &&
                     _text(message['sender_user_id'] ?? message['sender_id']) ==
                         _principalUserId;
-                return ChatBubbleWidget(
-                  messageText: _text(message['body'] ?? message['message']),
-                  time: _time(
-                    _date(message['sent_at'] ?? message['created_at']),
+                return Opacity(
+                  opacity: isPending ? 0.6 : 1.0,
+                  child: ChatBubbleWidget(
+                    messageText: _text(message['body'] ?? message['message']),
+                    time: isPending
+                        ? '...'
+                        : _time(
+                            _date(
+                              message['sent_at'] ?? message['created_at'],
+                            ),
+                          ),
+                    isMe: monitorMode ? senderRole == 'teacher' : mine,
+                    isRead: message['is_read'] == true,
+                    senderLabel: monitorMode ? senderName : '',
+                    senderRoleLabel: monitorMode ? _roleTitle(senderRole) : '',
                   ),
-                  isMe: monitorMode ? senderRole == 'teacher' : mine,
-                  isRead: message['is_read'] == true,
-                  senderLabel: monitorMode ? senderName : '',
-                  senderRoleLabel: monitorMode ? _roleTitle(senderRole) : '',
                 );
               },
             ),
@@ -1055,7 +1247,11 @@ class _PrincipalChatCommunicationsScreenState
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
     });
   }
 }

@@ -4,6 +4,9 @@
     "strict": false,
     "noImplicitAny": false
   },
+  "workspace": [
+    "./supabase/functions/api"
+  ],
   "lint": {
     "include": ["scripts/**/*.ts"],
     "exclude": ["build/**", "android/**", "ios/**", "supabase/**"]

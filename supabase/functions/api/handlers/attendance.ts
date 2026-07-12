@@ -1,6 +1,7 @@
 // handlers/attendance.ts — sessions, mark, summary, staff, QR, corrections
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
+import { queueReportExport } from "./uploads.ts";
 
 /** Notify parents of absent students via FCM push notification. Best-effort; never throws. */
 async function notifyParentsOfAbsence(
@@ -19,18 +20,26 @@ async function notifyParentsOfAbsence(
     if (!links || links.length === 0) return;
 
     // Build per-parent events: deduplicate if parent has multiple absent children
-    const parentEventMap = new Map<string, { studentIds: string[]; parentUserId: string }>();
+    const parentEventMap = new Map<
+      string,
+      { studentIds: string[]; parentUserId: string }
+    >();
     for (const link of links) {
       const parentId = `${link.parent_user_id ?? ""}`.trim();
       const studentId = `${link.student_id ?? ""}`.trim();
       if (!parentId || !studentId) continue;
       if (!parentEventMap.has(parentId)) {
-        parentEventMap.set(parentId, { parentUserId: parentId, studentIds: [] });
+        parentEventMap.set(parentId, {
+          parentUserId: parentId,
+          studentIds: [],
+        });
       }
       parentEventMap.get(parentId)!.studentIds.push(studentId);
     }
 
-    const eventRows = Array.from(parentEventMap.values()).map(({ parentUserId, studentIds }) => ({
+    const eventRows = Array.from(parentEventMap.values()).map((
+      { parentUserId, studentIds },
+    ) => ({
       school_id: school,
       user_id: parentUserId,
       event_type: "attendance_marked",
@@ -38,7 +47,8 @@ async function notifyParentsOfAbsence(
         student_ids: studentIds,
         status: "absent",
         date: attendanceDate,
-        message: `Your child was marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`,
+        message:
+          `Your child was marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`,
         reference_type: "attendance",
       },
     }));
@@ -48,7 +58,9 @@ async function notifyParentsOfAbsence(
       .insert(eventRows)
       .select("id");
     if (!eventError) {
-      const eventIds = (events ?? []).map((row: { id: string }) => `${row.id ?? ""}`.trim()).filter(Boolean);
+      const eventIds = (events ?? []).map((row: { id: string }) =>
+        `${row.id ?? ""}`.trim()
+      ).filter(Boolean);
       if (eventIds.length > 0) triggerPushProcessing(eventIds);
     }
   } catch (_) { /* best-effort — attendance was already saved */ }
@@ -68,6 +80,55 @@ function canScanStaffQr(roleName: string) {
 }
 function canManageAttendance(roleName: string) {
   return ["admin", "principal", "super_admin"].includes(roleName);
+}
+
+async function parentCanAccessStudent(
+  svc: SupabaseClient,
+  user: User,
+  school: string,
+  studentId: string,
+) {
+  if (role(user) !== "parent") return true;
+  if (!studentId) return false;
+  const { data, error } = await svc.from("parent_student_links")
+    .select("student_id").eq("school_id", school)
+    .eq("parent_user_id", user.id).eq("student_id", studentId).maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+function attendanceSummaryFromRows(rows: Array<Record<string, unknown>>) {
+  const counts = {
+    present_days: 0,
+    absent_days: 0,
+    late_count: 0,
+    leave_days: 0,
+    half_day_count: 0,
+  };
+  for (const row of rows) {
+    const status = `${row.status ?? ""}`.trim().toLowerCase().replaceAll(
+      "-",
+      "_",
+    );
+    if (status === "present" || status === "p") counts.present_days++;
+    else if (status === "absent" || status === "a") counts.absent_days++;
+    else if (status === "late" || status === "l") counts.late_count++;
+    else if (status === "leave") counts.leave_days++;
+    else if (status === "half_day") counts.half_day_count++;
+  }
+  const marked = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  const presentEquivalent = counts.present_days + counts.late_count +
+    counts.half_day_count * 0.5;
+  const attendance_pct = marked > 0
+    ? Number((presentEquivalent * 100 / marked).toFixed(2))
+    : 0;
+  return {
+    ...counts,
+    late_days: counts.late_count,
+    attendance_pct,
+    attendance_percentage: attendance_pct,
+    percentage: attendance_pct,
+  };
 }
 const staffQRRefreshSeconds = 7;
 const staffQRScanGraceSeconds = 10;
@@ -179,7 +240,10 @@ async function teacherCanUseSection(
   sectionId: string,
 ) {
   if (!staffId || !sectionId) return false;
-  const section = await svc.from("sections").select("id").eq("school_id", school)
+  const section = await svc.from("sections").select("id").eq(
+    "school_id",
+    school,
+  )
     .eq("id", sectionId)
     .or(`class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`)
     .maybeSingle();
@@ -239,28 +303,22 @@ export async function handleAttendance(
   const roleName = role(user);
 
   if (path === "/attendance/reports/exports" && method === "POST") {
-    const id = crypto.randomUUID();
-    const payload = {
-      id,
-      report_title: `${body.report_title ?? body.report ?? "Attendance report"}`
-        .trim(),
-      report_type: `${body.report_type ?? "attendance"}`.trim(),
-      format: `${body.format ?? "pdf"}`.trim().toLowerCase(),
-      scope: `${body.scope ?? "principal_attendance"}`.trim(),
-      parameters: body.parameters ?? body,
-      status: "queued",
-      requested_by: user.id,
-      created_at: new Date().toISOString(),
-      download_url: "",
-    };
-    const { data, error } = await svc.from("frontend_records").insert({
-      school_id: school,
-      table_name: "attendance_report_exports",
-      record_id: id,
-      data: payload,
-    }).select().single();
-    if (error) return fail(error.message);
-    return ok(data?.data ?? payload);
+    try {
+      const data = await queueReportExport(
+        svc,
+        school,
+        user,
+        "attendance_report_exports",
+        body,
+      );
+      return ok(data);
+    } catch (error) {
+      return fail(
+        error instanceof Error
+          ? error.message
+          : "failed to queue attendance report export",
+      );
+    }
   }
 
   // ── Sessions ───────────────────────────────────────────────
@@ -270,7 +328,10 @@ export async function handleAttendance(
     ).eq("school_id", school);
     const sectionId = url.searchParams.get("section_id") ?? "";
     if (!canManageAttendance(roleName) && linkedStaffId) {
-      if (sectionId && !await teacherCanUseSection(svc, school, linkedStaffId, sectionId)) {
+      if (
+        sectionId &&
+        !await teacherCanUseSection(svc, school, linkedStaffId, sectionId)
+      ) {
         return fail("forbidden", 403);
       }
       q = q.eq("staff_id", linkedStaffId);
@@ -356,11 +417,21 @@ export async function handleAttendance(
     try {
       session = await loadAttendanceSession(svc, school, sessionId);
       if (!session) return fail("session not found", 404);
-      if (!await canUseAttendanceSession(svc, school, roleName, linkedStaffId, session)) {
+      if (
+        !await canUseAttendanceSession(
+          svc,
+          school,
+          roleName,
+          linkedStaffId,
+          session,
+        )
+      ) {
         return fail("forbidden", 403);
       }
     } catch (error) {
-      return fail(error instanceof Error ? error.message : "failed to load session");
+      return fail(
+        error instanceof Error ? error.message : "failed to load session",
+      );
     }
     if (session.is_finalized === true) {
       return fail("attendance session is finalized", 409);
@@ -403,9 +474,13 @@ export async function handleAttendance(
     }
     // Notify parents of absent students via FCM push
     const absentIds = (data ?? []).filter(
-      (r: Record<string, unknown>) => `${r.status ?? ""}`.toLowerCase() === "absent",
-    ).map((r: Record<string, unknown>) => `${r.student_id ?? ""}`.trim()).filter(Boolean);
-    const attendanceDate = `${session.date ?? new Date().toISOString().split("T")[0]}`;
+      (r: Record<string, unknown>) =>
+        `${r.status ?? ""}`.toLowerCase() === "absent",
+    ).map((r: Record<string, unknown>) => `${r.student_id ?? ""}`.trim())
+      .filter(Boolean);
+    const attendanceDate = `${
+      session.date ?? new Date().toISOString().split("T")[0]
+    }`;
     await notifyParentsOfAbsence(svc, school, absentIds, attendanceDate);
     return ok({ marked: data?.length ?? 0, attendances: data ?? [] });
   }
@@ -423,11 +498,21 @@ export async function handleAttendance(
     try {
       session = await loadAttendanceSession(svc, school, sessionId);
       if (!session) return fail("session not found", 404);
-      if (!await canUseAttendanceSession(svc, school, roleName, linkedStaffId, session)) {
+      if (
+        !await canUseAttendanceSession(
+          svc,
+          school,
+          roleName,
+          linkedStaffId,
+          session,
+        )
+      ) {
         return fail("forbidden", 403);
       }
     } catch (error) {
-      return fail(error instanceof Error ? error.message : "failed to load session");
+      return fail(
+        error instanceof Error ? error.message : "failed to load session",
+      );
     }
     if (session.is_finalized === true) {
       return fail("attendance session is finalized", 409);
@@ -456,9 +541,13 @@ export async function handleAttendance(
     }).eq("id", sessionId).eq("school_id", school);
     // Notify parents of absent students via FCM push (legacy bulk mark path)
     const absentIdsLegacy = (data ?? []).filter(
-      (r: Record<string, unknown>) => `${r.status ?? ""}`.toLowerCase() === "absent",
-    ).map((r: Record<string, unknown>) => `${r.student_id ?? ""}`.trim()).filter(Boolean);
-    const legacyDate = `${session.date ?? new Date().toISOString().split("T")[0]}`;
+      (r: Record<string, unknown>) =>
+        `${r.status ?? ""}`.toLowerCase() === "absent",
+    ).map((r: Record<string, unknown>) => `${r.student_id ?? ""}`.trim())
+      .filter(Boolean);
+    const legacyDate = `${
+      session.date ?? new Date().toISOString().split("T")[0]
+    }`;
     await notifyParentsOfAbsence(svc, school, absentIdsLegacy, legacyDate);
     return ok({ marked: data?.length ?? 0, attendances: data ?? [] });
   }
@@ -472,11 +561,21 @@ export async function handleAttendance(
     try {
       session = await loadAttendanceSession(svc, school, correctionMatch[1]);
       if (!session) return fail("session not found", 404);
-      if (!await canUseAttendanceSession(svc, school, roleName, linkedStaffId, session)) {
+      if (
+        !await canUseAttendanceSession(
+          svc,
+          school,
+          roleName,
+          linkedStaffId,
+          session,
+        )
+      ) {
         return fail("forbidden", 403);
       }
     } catch (error) {
-      return fail(error instanceof Error ? error.message : "failed to load session");
+      return fail(
+        error instanceof Error ? error.message : "failed to load session",
+      );
     }
     const { data, error } = await svc.from("attendance_sessions").update({
       correction_request: body.reason ?? "",
@@ -507,6 +606,17 @@ export async function handleAttendance(
 
   // ── Summary ───────────────────────────────────────────────
   if (path === "/attendance/summary" && method === "GET") {
+    const requestedStudentId = url.searchParams.get("student_id") ?? "";
+    if (
+      requestedStudentId && !(await parentCanAccessStudent(
+        svc,
+        user,
+        school,
+        requestedStudentId,
+      ))
+    ) {
+      return fail("student not linked to parent", 403);
+    }
     let q = svc.from("attendance_summaries").select("*, student:students(*)")
       .eq("school_id", school);
     if (url.searchParams.get("academic_year_id")) {
@@ -518,17 +628,55 @@ export async function handleAttendance(
     const { data, error } = await q;
     if (error) return fail(error.message);
     const rows = data ?? [];
-    if (url.searchParams.get("student_id")) {
-      const row = (rows[0] as Record<string, unknown> | undefined) ?? {
-        student_id: url.searchParams.get("student_id"),
-        percentage: 0,
-        present_days: 0,
-        absent_days: 0,
-        late_days: 0,
-      };
+    if (requestedStudentId) {
+      const { data: attendanceRows, error: attendanceError } = await svc
+        .from("student_attendances")
+        .select(
+          "id, status, reason, marked_at, session:attendance_sessions!inner(id, date, period_number, staff:staff(first_name, last_name))",
+        )
+        .eq("student_id", requestedStudentId)
+        .eq("session.school_id", school)
+        .order("marked_at", { ascending: false });
+      if (attendanceError) return fail(attendanceError.message);
+      const records = (attendanceRows ?? []) as Array<Record<string, unknown>>;
+      const stored = (rows[0] as Record<string, unknown> | undefined) ?? {};
+      const computed = attendanceSummaryFromRows(records);
+      const periodRows = records.map((row) => {
+        const session = row.session && typeof row.session === "object"
+          ? row.session as Record<string, unknown>
+          : {};
+        return {
+          id: row.id,
+          session_id: session.id,
+          date: session.date ?? row.marked_at,
+          period_number: session.period_number ?? "—",
+          status: row.status,
+          reason: row.reason ?? "",
+        };
+      });
       return ok({
-        ...row,
-        attendance_percentage: row["percentage"] ?? 0,
+        ...stored,
+        student_id: requestedStudentId,
+        ...(records.length > 0 ? computed : {
+          present_days: Number(stored.present_days ?? 0),
+          absent_days: Number(stored.absent_days ?? 0),
+          late_count: Number(stored.late_count ?? stored.late_days ?? 0),
+          leave_days: Number(stored.leave_days ?? 0),
+          half_day_count: Number(stored.half_day_count ?? 0),
+          attendance_pct: Number(
+            stored.attendance_pct ?? stored.attendance_percentage ??
+              stored.percentage ?? 0,
+          ),
+          attendance_percentage: Number(
+            stored.attendance_pct ?? stored.attendance_percentage ??
+              stored.percentage ?? 0,
+          ),
+          percentage: Number(
+            stored.attendance_pct ?? stored.attendance_percentage ??
+              stored.percentage ?? 0,
+          ),
+        }),
+        period_rows: periodRows,
       });
     }
     return ok(rows);
@@ -700,6 +848,16 @@ export async function handleAttendance(
     /^\/attendance\/students\/([^/]+)$/,
   );
   if (studentAttendanceMatch && method === "GET") {
+    if (
+      !(await parentCanAccessStudent(
+        svc,
+        user,
+        school,
+        studentAttendanceMatch[1],
+      ))
+    ) {
+      return fail("student not linked to parent", 403);
+    }
     let q = svc.from("student_attendances").select(
       "*, session:attendance_sessions!inner(*)",
     ).eq("student_id", studentAttendanceMatch[1]).eq(
@@ -711,7 +869,7 @@ export async function handleAttendance(
     if (year && month) {
       const from = `${year}-${month}-01`;
       const to = `${year}-${month}-31`;
-      q = q.gte("created_at", from).lte("created_at", to);
+      q = q.gte("session.date", from).lte("session.date", to);
     }
     const { data, error } = await q.order("created_at", { ascending: false });
     if (error) return fail(error.message);

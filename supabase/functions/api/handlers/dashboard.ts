@@ -16,6 +16,29 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function number(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : Number.parseFloat(text(value)) || 0;
+}
+
+function homeworkRow(row: Record<string, unknown>): Record<string, unknown> {
+  const data = asRecord(row.data) ?? row;
+  return {
+    ...data,
+    homework_id: text(data.homework_id ?? data.id ?? row.record_id ?? row.id),
+  };
+}
+
+function studentName(student: Record<string, unknown>) {
+  const direct = text(
+    student.name ?? student.full_name ?? student.student_name,
+  );
+  if (direct) return direct;
+  return [text(student.first_name), text(student.last_name)].filter(Boolean)
+    .join(" ");
+}
+
 function buildTeacherAssignments(
   subjectRows: Array<Record<string, unknown>>,
   classTeacherSections: Array<Record<string, unknown>>,
@@ -42,7 +65,9 @@ function buildTeacherAssignments(
         grade_id: text(section?.grade_id ?? fallback.grade_id),
         grade_name: text(grade?.grade_name ?? fallback.grade_name),
         section_name: text(section?.section_name ?? fallback.section_name),
-        academic_year_id: text(section?.academic_year_id ?? fallback.academic_year_id),
+        academic_year_id: text(
+          section?.academic_year_id ?? fallback.academic_year_id,
+        ),
         subject_id: "",
         subject_name: "",
         teacher_role: role,
@@ -56,10 +81,14 @@ function buildTeacherAssignments(
         existing.grade_name = text(grade?.grade_name ?? fallback.grade_name);
       }
       if (!text(existing.section_name)) {
-        existing.section_name = text(section?.section_name ?? fallback.section_name);
+        existing.section_name = text(
+          section?.section_name ?? fallback.section_name,
+        );
       }
       if (!text(existing.academic_year_id)) {
-        existing.academic_year_id = text(section?.academic_year_id ?? fallback.academic_year_id);
+        existing.academic_year_id = text(
+          section?.academic_year_id ?? fallback.academic_year_id,
+        );
       }
     }
     return existing;
@@ -128,7 +157,8 @@ function buildTeacherAssignments(
     const matchingGradeSubjects = gradeSubjects.filter((gs) => {
       const gsSectionId = text(gs.section_id);
       const gsGradeId = text(gs.grade_id);
-      return gsSectionId === sectionId || (gradeId !== "" && gsGradeId === gradeId);
+      return gsSectionId === sectionId ||
+        (gradeId !== "" && gsGradeId === gradeId);
     });
 
     for (const gs of matchingGradeSubjects) {
@@ -169,54 +199,69 @@ export async function handleDashboard(
 
   if (path === "/dashboard" || path.startsWith("/dashboard")) {
     const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+    const todayStart = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    ).toISOString();
 
-    const [students, staff, invoices, paidInvoices, announcements, sections, pendingLeave, attendanceSessions, todayAttendances, parentPaymentRequests, approvalRequests] =
-      await Promise.all([
-        svc.from("students").select("id, status", {
-          count: "exact",
-          head: true,
-        }).eq("school_id", school),
-        svc.from("staff").select("id", { count: "exact", head: true }).eq(
-          "school_id",
-          school,
-        ),
-        svc.from("fee_invoices").select("balance, status").eq(
-          "school_id",
-          school,
-        ).eq("status", "pending"),
-        svc.from("fee_invoices").select("paid_amount").eq(
-          "school_id",
-          school,
-        ).eq("status", "paid"),
-        svc.from("announcements").select("id, title, published_at, priority")
-          .eq("school_id", school).order("published_at", { ascending: false })
-          .limit(5),
-        svc.from("sections").select("id", { count: "exact", head: true }).eq(
-          "school_id",
-          school,
-        ),
-        svc.from("leave_applications").select("id", {
-          count: "exact",
-          head: true,
-        }).eq("school_id", school).eq("status", "pending"),
-        svc.from("student_attendances").select("id, status", {
-          count: "exact",
-          head: true,
-        }).eq("school_id", school),
-        svc.from("student_attendances").select("id, status").eq(
-          "school_id",
-          school,
-        ).gte("created_at", todayStart),
-        svc.from("parent_payment_requests").select("id, status").eq(
-          "school_id",
-          school,
-        ).eq("status", "pending"),
-        svc.from("approval_requests").select("id, status").eq(
-          "school_id",
-          school,
-        ).eq("status", "pending"),
-      ]);
+    const [
+      students,
+      staff,
+      invoices,
+      paidInvoices,
+      announcements,
+      sections,
+      pendingLeave,
+      attendanceSessions,
+      todayAttendances,
+      parentPaymentRequests,
+      approvalRequests,
+    ] = await Promise.all([
+      svc.from("students").select("id, status", {
+        count: "exact",
+        head: true,
+      }).eq("school_id", school),
+      svc.from("staff").select("id", { count: "exact", head: true }).eq(
+        "school_id",
+        school,
+      ),
+      svc.from("fee_invoices").select("balance, status").eq(
+        "school_id",
+        school,
+      ).eq("status", "pending"),
+      svc.from("fee_invoices").select("paid_amount").eq(
+        "school_id",
+        school,
+      ).eq("status", "paid"),
+      svc.from("announcements").select("id, title, published_at, priority")
+        .eq("school_id", school).order("published_at", { ascending: false })
+        .limit(5),
+      svc.from("sections").select("id", { count: "exact", head: true }).eq(
+        "school_id",
+        school,
+      ),
+      svc.from("leave_applications").select("id", {
+        count: "exact",
+        head: true,
+      }).eq("school_id", school).eq("status", "pending"),
+      svc.from("student_attendances").select("id, status", {
+        count: "exact",
+        head: true,
+      }).eq("school_id", school),
+      svc.from("student_attendances").select("id, status").eq(
+        "school_id",
+        school,
+      ).gte("created_at", todayStart),
+      svc.from("parent_payment_requests").select("id, status").eq(
+        "school_id",
+        school,
+      ).eq("status", "pending"),
+      svc.from("approval_requests").select("id, status").eq(
+        "school_id",
+        school,
+      ).eq("status", "pending"),
+    ]);
 
     const totalOutstanding = (invoices.data ?? []).reduce(
       (s: number, i: Record<string, number>) => s + (i.balance ?? 0),
@@ -227,13 +272,19 @@ export async function handleDashboard(
       0,
     );
     const totalDue = totalOutstanding;
-    const collectionPct = totalDue > 0 ? Math.round((totalPaid / (totalPaid + totalDue)) * 100) : 100;
+    const collectionPct = totalDue > 0
+      ? Math.round((totalPaid / (totalPaid + totalDue)) * 100)
+      : 100;
 
     // Calculate today's attendance percentage
     const todayRows = todayAttendances.data ?? [];
     const todayMarked = todayRows.length;
-    const todayPresent = todayRows.filter((r: Record<string, unknown>) => r.status === "present").length;
-    const attendancePct = todayMarked > 0 ? Math.round((todayPresent / todayMarked) * 100) : 0;
+    const todayPresent = todayRows.filter((r: Record<string, unknown>) =>
+      r.status === "present"
+    ).length;
+    const attendancePct = todayMarked > 0
+      ? Math.round((todayPresent / todayMarked) * 100)
+      : 0;
 
     const base = {
       total_students: students.count ?? 0,
@@ -323,12 +374,172 @@ export async function handleDashboard(
     }
 
     if (dashRole === "parent") {
-      const { data: links } = await svc.from("parent_student_links").select(
+      const { data: links, error: linksError } = await svc.from(
+        "parent_student_links",
+      ).select(
         "student:students(*, section:sections(*, grade:grades(*)))",
       ).eq("parent_user_id", user.id);
+      if (linksError) return fail(linksError.message);
+
+      const linkedStudents = (links ?? []).map((
+        link: Record<string, unknown>,
+      ) => asRecord(link.student)).filter((
+        student,
+      ): student is Record<string, unknown> => student !== null);
+      const studentIds = linkedStudents.map((student) => text(student.id))
+        .filter(
+          Boolean,
+        );
+      if (studentIds.length === 0) {
+        return ok({
+          ...base,
+          metrics: { ...base.metrics, unread_messages: 0 },
+          children: [],
+        });
+      }
+
+      const [
+        attendanceResult,
+        invoiceResult,
+        homeworkResult,
+        submissionResult,
+        conversationResult,
+      ] = await Promise.all([
+        svc.from("attendance_summaries").select(
+          "student_id, percentage, updated_at",
+        ).eq("school_id", school).in("student_id", studentIds).order(
+          "updated_at",
+          { ascending: false },
+        ),
+        svc.from("fee_invoices").select(
+          "student_id, balance, net_amount, paid_amount",
+        )
+          .eq("school_id", school).in("student_id", studentIds),
+        svc.from("frontend_records").select("id, record_id, data")
+          .eq("school_id", school).eq("table_name", "homework"),
+        svc.from("homework_submissions").select(
+          "homework_id, student_id, status, updated_at",
+        ).eq("school_id", school).in("student_id", studentIds).order(
+          "updated_at",
+          { ascending: false },
+        ),
+        svc.from("message_conversations").select("id").eq(
+          "school_id",
+          school,
+        ).eq("parent_id", user.id),
+      ]);
+      for (
+        const result of [
+          attendanceResult,
+          invoiceResult,
+          homeworkResult,
+          submissionResult,
+          conversationResult,
+        ]
+      ) {
+        if (result.error) return fail(result.error.message);
+      }
+
+      const conversationIds = (conversationResult.data ?? []).map((row) =>
+        text(row.id)
+      ).filter(Boolean);
+      const messageResult = conversationIds.length === 0
+        ? { data: [], error: null }
+        : await svc.from("messages").select("sender_id, read_by").eq(
+          "school_id",
+          school,
+        ).in("conversation_id", conversationIds);
+      if (messageResult.error) return fail(messageResult.error.message);
+
+      const attendanceByStudent = new Map<string, number>();
+      for (const row of attendanceResult.data ?? []) {
+        const id = text(row.student_id);
+        if (id && !attendanceByStudent.has(id)) {
+          attendanceByStudent.set(id, number(row.percentage));
+        }
+      }
+      const feeBalanceByStudent = new Map<string, number>();
+      for (const row of invoiceResult.data ?? []) {
+        const id = text(row.student_id);
+        const balance = Math.max(
+          0,
+          number(row.balance) ||
+            (number(row.net_amount) - number(row.paid_amount)),
+        );
+        feeBalanceByStudent.set(
+          id,
+          (feeBalanceByStudent.get(id) ?? 0) + balance,
+        );
+      }
+      const newestSubmissionByHomeworkAndStudent = new Map<string, string>();
+      for (const row of submissionResult.data ?? []) {
+        const key = `${text(row.homework_id)}:${text(row.student_id)}`;
+        if (key !== ":" && !newestSubmissionByHomeworkAndStudent.has(key)) {
+          newestSubmissionByHomeworkAndStudent.set(key, text(row.status));
+        }
+      }
+      const homeworkDueByStudent = new Map<string, number>();
+      for (const rawRow of homeworkResult.data ?? []) {
+        const row = homeworkRow(rawRow as Record<string, unknown>);
+        const homeworkId = text(row.homework_id);
+        const targetStudentId = text(row.student_id);
+        const targetSectionId = text(row.section_id);
+        for (const student of linkedStudents) {
+          const studentId = text(student.id);
+          const sectionId = text(
+            student.current_section_id ?? asRecord(student.section)?.id,
+          );
+          if (
+            !studentId || (targetStudentId !== studentId &&
+              (targetStudentId || !targetSectionId ||
+                targetSectionId !== sectionId))
+          ) {
+            continue;
+          }
+          const submissionStatus = newestSubmissionByHomeworkAndStudent.get(
+            `${homeworkId}:${studentId}`,
+          );
+          const isSubmitted = submissionStatus &&
+            submissionStatus !== "needs_revision";
+          if (!isSubmitted) {
+            homeworkDueByStudent.set(
+              studentId,
+              (homeworkDueByStudent.get(studentId) ?? 0) + 1,
+            );
+          }
+        }
+      }
+
+      let unreadMessages = 0;
+      for (const row of messageResult.data ?? []) {
+        if (text(row.sender_id) === user.id) continue;
+        const readBy = Array.isArray(row.read_by) ? row.read_by : [];
+        if (!readBy.map((value) => text(value)).includes(user.id)) {
+          unreadMessages++;
+        }
+      }
+
       return ok({
         ...base,
-        children: (links ?? []).map((l: Record<string, unknown>) => l.student),
+        metrics: { ...base.metrics, unread_messages: unreadMessages },
+        children: linkedStudents.map((student) => {
+          const section = asRecord(student.section);
+          const grade = asRecord(section?.grade);
+          const studentId = text(student.id);
+          const attendancePct = attendanceByStudent.get(studentId);
+          return {
+            ...student,
+            name: studentName(student),
+            class: text(grade?.grade_name),
+            section: text(section?.section_name),
+            photo_url: text(
+              student.photo_url ?? student.photo ?? student.avatar,
+            ),
+            attendance_pct: attendancePct ?? null,
+            homework_due: homeworkDueByStudent.get(studentId) ?? 0,
+            pending_fee_balance: feeBalanceByStudent.get(studentId) ?? 0,
+          };
+        }),
       });
     }
 
@@ -336,7 +547,7 @@ export async function handleDashboard(
       // Super admin dashboard: system-level metrics + base school data.
       const [errorEvents, auditLogs] = await Promise.all([
         svc.from("error_events").select("id", { count: "exact", head: true })
-          .eq("school_id", school).eq("status", "open"),
+          .eq("school_id", school).contains("context", { status: "open" }),
         svc.from("audit_logs").select("id", { count: "exact", head: true })
           .eq("school_id", school),
       ]);

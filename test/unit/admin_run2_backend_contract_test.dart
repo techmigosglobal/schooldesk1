@@ -79,7 +79,7 @@ void main() {
 
     expect(adminFees, contains('AppRoutes.principalPaymentRequests'));
     expect(routes, contains('principalPaymentRequests'));
-    expect(routes, contains('AdminPaymentRequestsScreen'));
+    expect(routes, contains('PrincipalPaymentRequests'));
     expect(routes, contains('AdminPaymentRequestDecisionScreen'));
     expect(
       guard,
@@ -137,7 +137,7 @@ void main() {
     expect(routes, contains('principalFeeStructureForm'));
     expect(routes, contains('AdminFeeStructureFormScreen'));
     expect(routes, contains('principalInvoiceGenerationForm'));
-    expect(routes, contains('AdminInvoiceGenerationFormScreen'));
+    expect(routes, contains('PrincipalInvoiceGenerate'));
     expect(routes, contains('principalPaymentRecordForm'));
     expect(routes, contains('AdminPaymentRecordFormScreen'));
     expect(
@@ -151,10 +151,10 @@ void main() {
 
   test('parent payment requests use routed input screen without popup form', () {
     final parentFees = File(
-      'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',
+      'lib/features/finance/presentation/screens/parent_hub/parent_fee_hub.dart',
     ).readAsStringSync();
     final paymentForm = File(
-      'lib/features/finance/presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart',
+      'lib/features/finance/presentation/screens/parent_hub/parent_payment_flow.dart',
     ).readAsStringSync();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
@@ -162,23 +162,23 @@ void main() {
       'lib/routes/schooldesk_screen_registry.dart',
     ).readAsStringSync();
 
-    expect(parentFees, contains('AppRoutes.parentPaymentSelection'));
+    expect(parentFees, contains("'/parent/payment-flow'"));
     expect(parentFees, contains('SingleChildScrollView('));
-    expect(parentFees, contains('scrollDirection: Axis.horizontal'));
+    expect(parentFees, contains('ParentChildSelector('));
     expect(parentFees, isNot(contains('_showPaymentDialog')));
     expect(parentFees, isNot(contains('showDialog(')));
-    expect(paymentForm, contains('class ParentPaymentRequestFormScreen'));
+    expect(paymentForm, contains('class ParentPaymentFlow'));
     expect(paymentForm, contains('createFeePaymentIntent'));
     expect(paymentForm, contains('submitFeePaymentProof'));
     expect(paymentForm, contains('resubmitFeePaymentProof'));
-    expect(paymentForm, contains('Confirm Payment'));
-    expect(paymentForm, contains('Submit Payment'));
+    expect(paymentForm, contains('Confirm'));
+    expect(paymentForm, contains('Submit Verification Request'));
     // Pay Now label replaced with Submit Payment for Verification in current UX
     expect(paymentForm, isNot(contains('showDialog(')));
     expect(routes, contains('parentPaymentRequestForm'));
     expect(routes, contains('parentPaymentSelection'));
     expect(routes, isNot(contains('parentPaymentProcessing')));
-    expect(routes, contains('ParentPaymentRequestFormScreen'));
+    expect(routes, contains('ParentPaymentFlow'));
     expect(guard, contains('AppRoutes.parentPaymentRequestForm: {\'parent\'}'));
     expect(registry, contains('/parent-fees-screen/payment'));
     expect(registry, contains('/parent-fees-screen/payment-selection'));

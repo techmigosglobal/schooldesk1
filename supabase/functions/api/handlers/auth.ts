@@ -17,8 +17,12 @@ function profileText(value: unknown, fallback = ""): string {
 
 function normalizeProfileResponse(
   profile: Record<string, unknown> | null | undefined,
-  authUser: { id?: string; email?: string | null },
+  authUser: { id?: string; email?: string | null; app_metadata?: Record<string, unknown> },
 ): Record<string, unknown> {
+  // Prefer app_metadata.role_name (set at login, always authoritative) over
+  // public.users.role_name which can be stale after role changes.
+  const appMetaRole = profileText(authUser.app_metadata?.role_name);
+  const publicRole = profileText(profile?.role_name);
   return {
     id: profileText(authUser.id ?? profile?.id),
     username: profileText(profile?.username),
@@ -28,7 +32,7 @@ function normalizeProfileResponse(
     avatar: profileText(profile?.avatar),
     school_id: profileText(profile?.school_id),
     role_id: profileText(profile?.role_id),
-    role_name: profileText(profile?.role_name),
+    role_name: appMetaRole || publicRole,
     linked_type: profileText(profile?.linked_type),
     linked_id: profileText(profile?.linked_id),
     is_active: profile?.is_active ?? true,
@@ -95,6 +99,13 @@ export async function handleAuth(
       return fail("invalid username or password", 401);
     }
 
+    // Safety check: if the login succeeded but the email we resolved belongs
+    // to a different user than what the alias pointed at, abort.  This guards
+    // against a stale / cross-school alias pointing to the wrong account.
+    if (username?.trim() && session.user.email !== resolvedEmail) {
+      return fail("invalid username or password", 401);
+    }
+
     const { access_token, refresh_token, expires_at } = session.session;
     const authUser = session.user;
 
@@ -108,6 +119,15 @@ export async function handleAuth(
     // Update last_login
     await svc().from("users").update({ last_login: new Date().toISOString() })
       .eq("id", authUser.id);
+
+    // app_metadata.role_name is set by the admin at user-creation time and is
+    // the authoritative source.  public.users.role_name can lag if the row was
+    // created before the role was assigned, so we prefer app_metadata and fall
+    // back to the profile row only when app_metadata has nothing.
+    const appMetaRole = profileText(
+      (authUser.app_metadata as Record<string, unknown> | undefined)?.role_name,
+    );
+    const resolvedRole = appMetaRole || profileText(profile?.role_name);
 
     return ok({
       // Flutter reads token OR access_token
@@ -124,13 +144,13 @@ export async function handleAuth(
         avatar: profile?.avatar ?? "",
         school_id: profile?.school_id ?? "",
         role_id: profile?.role_id ?? "",
-        role_name: profile?.role_name ?? "",
+        role_name: resolvedRole,
         linked_type: profile?.linked_type ?? "",
         linked_id: profile?.linked_id ?? "",
         is_active: profile?.is_active ?? true,
         is_verified: profile?.is_verified ?? false,
       },
-      profile: profile ?? {},
+      profile: { ...(profile ?? {}), role_name: resolvedRole },
       school: profile?.school ?? {},
     });
   }

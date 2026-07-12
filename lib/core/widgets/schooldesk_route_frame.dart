@@ -26,6 +26,7 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
   bool get _isPortalHomeRoute {
     switch (widget.metadata.route) {
       case '/principal-dashboard-screen':
+      case '/super-admin-dashboard-screen':
       case '/teacher-dashboard-screen':
       case '/parent-dashboard-screen':
       case '/kiosk-qr-attendance-screen':
@@ -77,6 +78,8 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
     switch (widget.metadata.portal) {
       case 'principal':
         return '/principal-dashboard-screen';
+      case 'super_admin':
+        return '/super-admin-dashboard-screen';
       case 'teacher':
         return '/teacher-dashboard-screen';
       case 'parent':

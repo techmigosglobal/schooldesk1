@@ -5,6 +5,17 @@ function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
 
+const tutorialMimeTypes = new Set(["video/mp4", "video/webm", "video/quicktime"]);
+const maxTutorialBytes = 250 * 1024 * 1024;
+
+function roleOf(profile: Record<string, unknown> | null, user: User): string {
+  return `${profile?.role_name ?? user.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
+}
+
+function safeFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "tutorial.mp4";
+}
+
 export async function handleHelp(
   req: Request,
   path: string,
@@ -22,14 +33,59 @@ export async function handleHelp(
     .select("role_name")
     .eq("id", user.id)
     .maybeSingle();
-  const isSuperAdmin = profile?.role_name === "super_admin";
+  const currentRole = roleOf(profile as Record<string, unknown> | null, user);
+  const isSuperAdmin = currentRole === "super_admin";
+
+  if (path === "/help/videos" && method === "POST") {
+    if (!isSuperAdmin) return fail("forbidden: only super_admin can upload tutorials", 403);
+    const form = await req.formData().catch(() => null);
+    const file = form?.get("file");
+    const targetRole = `${form?.get("role_name") ?? ""}`.trim().toLowerCase();
+    if (!(file instanceof File) || !["principal", "teacher", "parent"].includes(targetRole)) {
+      return fail("a video file and supported role_name are required", 420);
+    }
+    if (!tutorialMimeTypes.has(file.type) || file.size > maxTutorialBytes) {
+      return fail("Tutorial must be MP4, WebM, or MOV and no larger than 250 MB", 420);
+    }
+    const pathValue = `${school}/${targetRole}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+    const { error } = await svc.storage.from("help-tutorial-videos").upload(
+      pathValue,
+      file,
+      { contentType: file.type, upsert: false },
+    );
+    if (error) return fail(error.message);
+    return ok({
+      video_path: pathValue,
+      video_file_name: file.name,
+      video_mime_type: file.type,
+      video_size: file.size,
+    });
+  }
+
+  const videoMatch = path.match(/^\/help\/([^/]+)\/video$/);
+  if (videoMatch && method === "GET") {
+    const { data, error } = await svc.from("help_contents").select(
+      "id, school_id, role_name, video_path, video_url",
+    ).eq("id", videoMatch[1]).eq("school_id", school).maybeSingle();
+    if (error) return fail(error.message);
+    if (!data) return fail("Help tutorial not found", 404);
+    if (!isSuperAdmin && data.role_name !== currentRole) return fail("forbidden", 403);
+    if (data.video_path) {
+      const { data: signed, error: signedError } = await svc.storage
+        .from("help-tutorial-videos").createSignedUrl(data.video_path, 60 * 10);
+      if (signedError || !signed?.signedUrl) return fail(signedError?.message ?? "Unable to prepare video");
+      return ok({ url: signed.signedUrl, expires_in: 600 });
+    }
+    if (data.video_url) return ok({ url: data.video_url, legacy: true });
+    return fail("No tutorial video is attached", 404);
+  }
 
   if (method === "GET") {
     // Standard role users can request their own help contents.
     // If they ask for another role, and they are not super admin, we force their role.
     let targetRole = url.searchParams.get("role")?.trim().toLowerCase();
     if (!isSuperAdmin || !targetRole) {
-      targetRole = profile?.role_name?.trim().toLowerCase() || "parent";
+      targetRole = currentRole || "parent";
     }
 
     let query = svc
@@ -70,6 +126,10 @@ export async function handleHelp(
       question,
       answer,
       video_url: videoUrl,
+      video_path: body.video_path ? `${body.video_path}`.trim() : null,
+      video_file_name: body.video_file_name ? `${body.video_file_name}`.trim() : null,
+      video_mime_type: body.video_mime_type ? `${body.video_mime_type}`.trim() : null,
+      video_size: body.video_size ?? null,
     }).select().single();
 
     if (error) return fail(error.message);
@@ -95,6 +155,9 @@ export async function handleHelp(
     }
     if (body.video_url !== undefined) {
       updates.video_url = body.video_url ? `${body.video_url}`.trim() : null;
+    }
+    for (const key of ["video_path", "video_file_name", "video_mime_type", "video_size"]) {
+      if (body[key] !== undefined) updates[key] = body[key] || null;
     }
 
     const { data, error } = await svc

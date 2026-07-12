@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
+import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
 
 class PrincipalFeeDashboard extends StatefulWidget {
   const PrincipalFeeDashboard({super.key});
@@ -122,6 +123,38 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
     }
   }
 
+  Future<void> _openInvoiceGenerator() async {
+    try {
+      final api = BackendApiClient.instance;
+      final results = await Future.wait([
+        api.getAcademicYears(),
+        api.getGrades(),
+        api.getSections(),
+        api.getStudents(page: 1, pageSize: 1000),
+        api.getFeeStructures(),
+      ]);
+      if (!mounted) return;
+      await Navigator.pushNamed(
+        context,
+        '/principal/invoice-generate',
+        arguments: AdminInvoiceGenerationFormArgs(
+          academicYears: results[0] as List<AcademicYearModel>,
+          grades: results[1] as List<GradeModel>,
+          sections: results[2] as List<SectionModel>,
+          students: (results[3] as PaginatedList<StudentModel>).data,
+          feeStructures: results[4] as List<Map<String, dynamic>>,
+          ownerRole: 'principal',
+        ),
+      );
+      _loadData();
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to load invoice references: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final drawer = PrincipalDrawer(
@@ -186,48 +219,57 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
           icon: const Icon(Icons.refresh_rounded),
         ),
       ],
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildKpiGrid(),
-            const SizedBox(height: 16),
-            if (_pendingRequestsCount > 0) ...[
-              _buildNeedsAttentionCard(),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF6FAFF), Color(0xFFFFF8F1)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: RefreshIndicator(
+          onRefresh: _loadData,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildKpiGrid(),
               const SizedBox(height: 16),
+              if (_pendingRequestsCount > 0) ...[
+                _buildNeedsAttentionCard(),
+                const SizedBox(height: 16),
+              ],
+              Text(
+                'Quick Actions',
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildQuickActionsGrid(),
+              const SizedBox(height: 20),
+              Text(
+                'Collection Progress',
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildPieChartCard(progressVal, totalTarget),
+              const SizedBox(height: 20),
+              Text(
+                'Outstanding Aging Analysis',
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildAgingBucketsCard(),
+              const SizedBox(height: 32),
             ],
-            Text(
-              'Quick Actions',
-              style: GoogleFonts.ibmPlexSans(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _buildQuickActionsGrid(),
-            const SizedBox(height: 20),
-            Text(
-              'Collection Progress',
-              style: GoogleFonts.ibmPlexSans(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _buildPieChartCard(progressVal, totalTarget),
-            const SizedBox(height: 20),
-            Text(
-              'Outstanding Aging Analysis',
-              style: GoogleFonts.ibmPlexSans(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _buildAgingBucketsCard(),
-            const SizedBox(height: 32),
-          ],
+          ),
         ),
       ),
     );
@@ -481,11 +523,17 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
 
   Widget _actionButton(String label, IconData icon, String route, Color color) {
     return InkWell(
-      onTap: () => Navigator.pushNamed(context, route),
+      onTap: route == '/principal/invoice-generate'
+          ? _openInvoiceGenerator
+          : () => Navigator.pushNamed(context, route),
       borderRadius: BorderRadius.circular(12),
       child: Ink(
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          gradient: LinearGradient(
+            colors: [color.withOpacity(0.18), color.withOpacity(0.06)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withOpacity(0.2)),
         ),

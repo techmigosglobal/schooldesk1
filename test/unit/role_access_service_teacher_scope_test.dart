@@ -12,12 +12,15 @@ import 'package:schooldesk1/core/services/role_access_service.dart';
 void main() {
   late _FakeBackendAdapter adapter;
 
-  setUp(() {
+  setUp(() async {
     GoogleFonts.config.allowRuntimeFetching = false;
     RoleAccessService.clear();
+    RoleAccessService.resetSignOutGuard();
     adapter = _FakeBackendAdapter();
     BackendApiClient.instance.dio.httpClientAdapter = adapter;
     BackendApiClient.instance.setAuthToken('test-token');
+    BackendApiClient.instance.setCurrentRole(null);
+    await BackendApiClient.instance.invalidateCachedReads();
   });
 
   tearDown(() {
@@ -95,7 +98,7 @@ void main() {
 
       expect(RoleAccessService.teacherStaffId, 'staff-1');
       expect(RoleAccessService.teacherClassId, 'section-1');
-      expect(RoleAccessService.teacherClassName, 'Grade 2 A');
+      expect(RoleAccessService.teacherClassName, 'Grade 2 - A');
       expect(RoleAccessService.teacherClassStudents, hasLength(1));
       expect(RoleAccessService.teacherSubject, 'Robotics');
     },
@@ -200,7 +203,7 @@ void main() {
       await RoleAccessService.initialize();
 
       expect(RoleAccessService.teacherClassId, 'section-1');
-      expect(RoleAccessService.teacherClassName, 'Grade 2 A');
+      expect(RoleAccessService.teacherClassName, 'Grade 2 - A');
       expect(RoleAccessService.teacherSubject, 'Robotics');
       expect(RoleAccessService.teacherClassStudents, hasLength(1));
       expect(
@@ -261,7 +264,7 @@ void main() {
 
       expect(RoleAccessService.hasAssignedClasses, isTrue);
       expect(RoleAccessService.teacherClassId, 'section-1');
-      expect(RoleAccessService.teacherClassName, 'Grade 4 B');
+      expect(RoleAccessService.teacherClassName, 'Grade 4 - B');
       expect(RoleAccessService.teacherClassTeacherClasses, hasLength(1));
       expect(RoleAccessService.teacherClassStudents, hasLength(1));
     },
@@ -298,10 +301,11 @@ void main() {
       });
 
       await tester.pumpWidget(const MaterialApp(home: TeacherClassesScreen()));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(tester.takeException(), isNull);
-      expect(find.textContaining('Grade 2 A'), findsWidgets);
+      expect(find.textContaining('Grade 2 - A'), findsWidgets);
       expect(find.textContaining('Linked Student'), findsOneWidget);
       expect(find.textContaining('Not assigned'), findsNothing);
     },

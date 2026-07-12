@@ -273,6 +273,8 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                         students: _int(_summary['total_students']),
                         attendance: _num(_summary['average_attendance']),
                         issues: _int(_summary['classes_with_issues']),
+                        onClassesTap: () => setState(() => _capacityFilter = 'All'),
+                        onIssuesTap: () => setState(() => _capacityFilter = 'Issues'),
                       ),
                       const SizedBox(height: 16),
                       _ClassesTodayCard(
@@ -905,7 +907,11 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     final isRead = '${notification['is_read'] ?? notification['read'] ?? ''}'
         .trim()
         .toLowerCase();
-    return readAt.isEmpty && isRead != 'true' && isRead != '1';
+    if (readAt.isNotEmpty || isRead == 'true' || isRead == '1') return false;
+    final role = '${notification['role'] ?? notification['target_role'] ?? 'all'}'
+        .trim()
+        .toLowerCase();
+    return role == 'all' || role == 'principal';
   }
 
   static DateTime? _dateFromEvent(Map<String, dynamic> event) {
@@ -1204,12 +1210,16 @@ class _ClassesDirectoryMetricStrip extends StatelessWidget {
   final int students;
   final double attendance;
   final int issues;
+  final VoidCallback? onClassesTap;
+  final VoidCallback? onIssuesTap;
 
   const _ClassesDirectoryMetricStrip({
     required this.classes,
     required this.students,
     required this.attendance,
     required this.issues,
+    this.onClassesTap,
+    this.onIssuesTap,
   });
 
   @override
@@ -1239,6 +1249,7 @@ class _ClassesDirectoryMetricStrip extends StatelessWidget {
                   label: 'Classes',
                   color: _classesDirectoryBlue,
                   tone: const Color(0xFFEAF3FF),
+                  onTap: onClassesTap,
                 ),
               ),
               SizedBox(
@@ -1249,6 +1260,7 @@ class _ClassesDirectoryMetricStrip extends StatelessWidget {
                   label: 'Students',
                   color: const Color(0xFF25B65A),
                   tone: const Color(0xFFEAFBF0),
+                  onTap: onClassesTap,
                 ),
               ),
               SizedBox(
@@ -1269,6 +1281,7 @@ class _ClassesDirectoryMetricStrip extends StatelessWidget {
                   label: 'Issues',
                   color: const Color(0xFFF97316),
                   tone: const Color(0xFFFFF1E6),
+                  onTap: onIssuesTap,
                 ),
               ),
             ],
@@ -1285,6 +1298,7 @@ class _ClassesMetricTile extends StatelessWidget {
   final String label;
   final Color color;
   final Color tone;
+  final VoidCallback? onTap;
 
   const _ClassesMetricTile({
     required this.icon,
@@ -1292,75 +1306,87 @@ class _ClassesMetricTile extends StatelessWidget {
     required this.label,
     required this.color,
     required this.tone,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final compact = _classesCompact(context);
-    return Container(
-      constraints: BoxConstraints(minHeight: compact ? 82 : 86),
-      padding: EdgeInsets.fromLTRB(
-        compact ? 9 : 12,
-        compact ? 9 : 12,
-        compact ? 8 : 10,
-        compact ? 9 : 12,
-      ),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(35)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withAlpha(12),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            width: compact ? 36 : 42,
-            height: compact ? 36 : 42,
-            decoration: BoxDecoration(
-              color: tone,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: compact ? 20 : 22),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                  color: _classesDirectoryInk,
-                  fontSize: compact ? 18 : 20,
-                  fontWeight: FontWeight.w900,
-                  height: 1,
-                  letterSpacing: 0,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                  color: _classesDirectoryInk,
-                  fontSize: compact ? 11 : 12,
-                  fontWeight: FontWeight.w800,
-                  height: 1.1,
-                  letterSpacing: 0,
-                ),
+        splashColor: color.withAlpha(20),
+        highlightColor: color.withAlpha(10),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: context.appTheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withAlpha(35)),
+            boxShadow: [
+              BoxShadow(
+                color: color.withAlpha(12),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
-        ],
+          child: Container(
+            constraints: BoxConstraints(minHeight: compact ? 82 : 86),
+            padding: EdgeInsets.fromLTRB(
+              compact ? 9 : 12,
+              compact ? 9 : 12,
+              compact ? 8 : 10,
+              compact ? 9 : 12,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: compact ? 36 : 42,
+                  height: compact ? 36 : 42,
+                  decoration: BoxDecoration(
+                    color: tone,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: compact ? 20 : 22),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: _classesDirectoryInk,
+                        fontSize: compact ? 18 : 20,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: _classesDirectoryInk,
+                        fontSize: compact ? 11 : 12,
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1616,7 +1642,6 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final students = _classInt(row['total_students']);
     final capacity = _classInt(row['capacity']);
-    final issues = _classInt(row['pending_issues']);
     final dueFees = _classNum(row['fees_due_amount']);
     final compact = _classesCompact(context);
     return Material(
@@ -1739,8 +1764,9 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                       _ClassesClassMetric(
                         icon: Icons.check_circle_outline_rounded,
                         color: const Color(0xFF22B85F),
-                        value:
-                            '${_classNum(row['today_attendance_pct']).toStringAsFixed(0)}%',
+                        value: row['today_attendance_pct'] == null
+                            ? '—'
+                            : '${_classNum(row['today_attendance_pct']).toStringAsFixed(0)}%',
                         label: 'Attendance',
                       ),
                       _ClassesClassMetric(
@@ -1776,59 +1802,6 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                       ],
                     );
                   },
-                ),
-              ),
-              const SizedBox(height: 13),
-              Container(
-                constraints: const BoxConstraints(minHeight: 50),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 15,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF6FDFA),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFDCEFE9)),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: compact ? 14 : 15,
-                      backgroundColor: issues > 0
-                          ? const Color(0xFFFFE8D8)
-                          : const Color(0xFFD8F6E6),
-                      child: Icon(
-                        issues > 0
-                            ? Icons.priority_high_rounded
-                            : Icons.check_rounded,
-                        color: issues > 0
-                            ? const Color(0xFFF97316)
-                            : const Color(0xFF22B85F),
-                        size: compact ? 18 : 19,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        issues == 0
-                            ? 'No pending actions'
-                            : '$issues pending action${issues == 1 ? '' : 's'}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.dmSans(
-                          color: _classesDirectoryInk,
-                          fontSize: compact ? 14 : 15,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: Color(0xFF5B6475),
-                      size: 28,
-                    ),
-                  ],
                 ),
               ),
             ],
@@ -2805,13 +2778,49 @@ class _ClassMetricTile extends StatelessWidget {
 }
 
 List<_ClassIssueItem> _classIssueBreakdown(Map<String, dynamic> row) {
-  final practicePending = _classInt(row['homework_pending']);
+  final teacherPending = _classText(row['class_teacher_id']).isEmpty;
+  final studentsCount = _classInt(row['student_count'] ?? row['total_students']);
+  final capacity = _classInt(row['capacity']);
   final feeDueStudents = _classInt(row['fees_due_students']);
-  final disciplineNotes = _classInt(row['discipline_issues']);
-  final openComplaints = _classInt(row['complaints_open']);
   final feeDueAmount = _classNum(row['fees_due_amount']);
 
+  final practicePending = _classInt(row['homework_pending']);
+  final disciplineNotes = _classInt(row['discipline_issues']);
+  final openComplaints = _classInt(row['complaints_open']);
+
   return [
+    if (teacherPending)
+      const _ClassIssueItem(
+        icon: Icons.person_off_outlined,
+        label: 'Teacher pending',
+        value: 'Missing',
+        note: 'Class teacher not assigned',
+        color: Color(0xFFF59E0B),
+      ),
+    if (studentsCount == 0)
+      const _ClassIssueItem(
+        icon: Icons.group_off_outlined,
+        label: 'No students',
+        value: 'Empty',
+        note: 'No students enrolled',
+        color: Color(0xFFDC2626),
+      ),
+    if (capacity > 0 && studentsCount > capacity)
+      _ClassIssueItem(
+        icon: Icons.error_outline_rounded,
+        label: 'Over capacity',
+        value: '$studentsCount/$capacity',
+        note: 'Students exceed capacity',
+        color: const Color(0xFFDC2626),
+      ),
+    if (feeDueStudents > 0 || feeDueAmount > 0)
+      _ClassIssueItem(
+        icon: Icons.account_balance_wallet_outlined,
+        label: 'Total Dues',
+        value: _formatCurrencyCompact(feeDueAmount),
+        note: '$feeDueStudents student${feeDueStudents == 1 ? '' : 's'}',
+        color: const Color(0xFFDC2626),
+      ),
     if (practicePending > 0)
       _ClassIssueItem(
         icon: Icons.assignment_late_outlined,
@@ -2819,14 +2828,6 @@ List<_ClassIssueItem> _classIssueBreakdown(Map<String, dynamic> row) {
         value: '$practicePending',
         note: 'Diary follow-up needed',
         color: const Color(0xFFF59E0B),
-      ),
-    if (feeDueStudents > 0)
-      _ClassIssueItem(
-        icon: Icons.account_balance_wallet_outlined,
-        label: 'Total Dues',
-        value: _formatCurrencyCompact(feeDueAmount),
-        note: '$feeDueStudents student${feeDueStudents == 1 ? '' : 's'}',
-        color: const Color(0xFFDC2626),
       ),
     if (disciplineNotes > 0)
       _ClassIssueItem(

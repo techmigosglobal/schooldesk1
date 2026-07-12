@@ -1,6 +1,44 @@
 part of '../backend_api_client.dart';
 
 extension HelpApi on BackendApiClient {
+  Future<Map<String, dynamic>> uploadHelpTutorialVideo(
+    String filePath, {
+    required String filename,
+    required String roleName,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/help/videos',
+        data: FormData.fromMap({
+          'role_name': roleName,
+          'file': await MultipartFile.fromFile(filePath, filename: filename),
+        }),
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['message'] ?? data['error'] ?? 'Tutorial upload failed',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<String> getHelpTutorialPlaybackUrl(String helpContentId) async {
+    try {
+      final response = await _dio.get('/help/$helpContentId/video');
+      final data = _asMap(response.data);
+      final payload = _asMap(data['data']);
+      final url = '${payload['url'] ?? ''}'.trim();
+      if (data['success'] == true && url.isNotEmpty) return url;
+      throw ServerException(
+        message: data['message'] ?? data['error'] ?? 'Tutorial is unavailable',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getHelpContent(String role) async {
     try {
       final response = await _dio.get('/help', queryParameters: {'role': role});

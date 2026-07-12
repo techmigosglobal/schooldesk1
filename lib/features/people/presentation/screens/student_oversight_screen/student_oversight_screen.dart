@@ -903,6 +903,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         subject: 'Student Directory CSV',
         text:
             'Student directory export generated from ${AppConstants.appName}.',
+        context: context,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

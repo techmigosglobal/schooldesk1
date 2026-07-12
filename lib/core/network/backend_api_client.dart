@@ -40,6 +40,7 @@ part 'api_modules/approval_requests_api.dart';
 part 'api_modules/monitoring_api.dart';
 part 'api_modules/notifications_api.dart';
 part 'api_modules/help_api.dart';
+part 'api_modules/issues_api.dart';
 
 typedef ApiErrorReporter = void Function(DioException error);
 
@@ -98,7 +99,9 @@ class BackendApiClient {
   String? _authToken;
   String? _currentRoleName;
   String? _currentUserId;
+  UserResponse? _cachedProfile;
 
+  UserResponse? get cachedProfile => _cachedProfile;
   String? get currentRoleName => _currentRoleName;
   String? get currentUserId => _currentUserId;
 
@@ -124,6 +127,7 @@ class BackendApiClient {
     _authToken = null;
     _currentRoleName = null;
     _currentUserId = null;
+    _cachedProfile = null;
   }
 
   bool get isAuthenticated => _authToken != null;

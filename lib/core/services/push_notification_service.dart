@@ -125,7 +125,11 @@ class PushNotificationService {
         await Firebase.initializeApp(options: options);
       }
       return true;
-    } on Object catch (_) {
+    } on Object catch (error) {
+      developer.log(
+        'Firebase initialization failed: $error',
+        name: 'PushNotificationService',
+      );
       return false;
     }
   }
@@ -198,6 +202,10 @@ class PushNotificationService {
     } on Object catch (error) {
       _deviceRegistrationSucceeded = false;
       _lastRegistrationError = error.toString();
+      developer.log(
+        'Failed to register device token with backend: $error',
+        name: 'PushNotificationService',
+      );
       // Push registration is best-effort and should never block app startup/login.
     }
   }
@@ -250,6 +258,10 @@ class PushNotificationService {
     } on Object catch (error) {
       _permissionStatus = 'unavailable';
       _lastRegistrationError = error.toString();
+      developer.log(
+        'Failed to request notification permission at startup: $error',
+        name: 'PushNotificationService',
+      );
       // Keep the app usable if the platform cannot show a permission prompt.
     }
   }
@@ -286,8 +298,12 @@ class PushNotificationService {
       final androidNotificationsAllowed =
           await _requestAndroidNotificationPermission(androidPlugin);
       _localNotificationsReady = androidNotificationsAllowed != false;
-    } on Object catch (_) {
+    } on Object catch (error) {
       _localNotificationsReady = false;
+      developer.log(
+        'Failed to initialize local notifications: $error',
+        name: 'PushNotificationService',
+      );
     }
   }
 
@@ -335,6 +351,10 @@ class PushNotificationService {
     } on Object catch (error) {
       _currentToken = null;
       _lastRegistrationError = error.toString();
+      developer.log(
+        'Failed to refresh FCM token: $error',
+        name: 'PushNotificationService',
+      );
     }
   }
 

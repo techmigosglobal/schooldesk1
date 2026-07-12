@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/services/feature_availability_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/text_utils.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 
 class TeacherDrawer extends StatefulWidget {
   final int? selectedIndex;
@@ -30,12 +31,15 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
   int _unreadCount = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Teacher workspace';
+  String _schoolLogo = '';
+  String _userName = 'Teacher';
+  String _userAvatar = '';
 
   @override
   void initState() {
     super.initState();
     _loadNotifications();
-    _loadSchoolIdentity();
+    _loadIdentity();
   }
 
   Future<void> _loadNotifications() async {
@@ -48,10 +52,16 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
     svc.addListener(_onNotifChanged);
   }
 
-  Future<void> _loadSchoolIdentity() async {
+  Future<void> _loadIdentity() async {
+    final api = BackendApiClient.instance;
     try {
-      final school = await BackendApiClient.instance.getCurrentSchool();
+      final results = await Future.wait([
+        api.getCurrentSchool(),
+        api.getProfile(),
+      ]);
       if (!mounted) return;
+      final school = results[0] as Map<String, dynamic>;
+      final profile = results[1] as UserResponse;
       setState(() {
         _schoolName = safeText(school['name'], fallback: 'School');
         _schoolSubtitle = safeText(
@@ -61,9 +71,14 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
             fallback: 'Teacher workspace',
           ),
         );
+        _schoolLogo = safeText(school['logo_url'], fallback: '');
+        _userName = profile.name.trim().isEmpty
+            ? safeText(profile.username, fallback: 'Teacher')
+            : profile.name.trim();
+        _userAvatar = safeText(profile.avatar, fallback: '');
       });
     } on Object catch (_) {
-      // Keep neutral labels if the backend is temporarily unavailable.
+      // Keep defaults
     }
   }
 
@@ -82,16 +97,33 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final teacherName = RoleAccessService.teacherName;
+    final name = _userName == 'Teacher'
+        ? RoleAccessService.teacherName
+        : _userName;
     final className = RoleAccessService.teacherClassName;
     return SchoolDeskNavigationDrawer(
       role: SchoolDeskRole.teacher,
       portalLabel: 'Teacher Portal',
       organizationName: _schoolName,
       organizationSubtitle: _schoolSubtitle,
-      userName: teacherName,
+      organizationLogo: _schoolLogo.isEmpty
+          ? null
+          : Image.network(
+              _assetUrl(_schoolLogo),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) =>
+                  const Icon(Icons.cast_for_education_rounded),
+            ),
+      userName: name,
       userSubtitle: 'Class Teacher - $className',
-      initials: safeInitials(teacherName, fallback: 'TE'),
+      initials: safeInitials(name, fallback: 'TE'),
+      userAvatar: _userAvatar.isEmpty
+          ? null
+          : Image.network(
+              _assetUrl(_userAvatar),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
+            ),
       portalIcon: Icons.cast_for_education_rounded,
       selectedIndex: widget.selectedIndex,
       onDestinationSelected: widget.onDestinationSelected,
@@ -201,6 +233,13 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherCommunication,
               badgeCount: RoleAccessService.teacherUnreadMessages,
             ),
+            const SchoolDeskNavigationItem(
+              index: TeacherNav.complaints,
+              icon: Icons.support_agent_outlined,
+              activeIcon: Icons.support_agent_rounded,
+              label: 'Raise an Issue',
+              route: AppRoutes.teacherComplaints,
+            ),
             // Show PTM only when backend feature is available
             if (FeatureAvailabilityService.stateFor(
               SchoolDeskFeature.teacherParentMeetings,
@@ -270,5 +309,12 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
         ),
       ],
     );
+  }
+
+  String _assetUrl(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    return '${EnvConfig.apiOrigin}$path';
   }
 }

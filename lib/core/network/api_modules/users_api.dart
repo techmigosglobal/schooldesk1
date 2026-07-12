@@ -1,6 +1,20 @@
 part of '../backend_api_client.dart';
 
 extension BackendUsersApi on BackendApiClient {
+  Future<Map<String, dynamic>> getAccessPermissions() async {
+    try {
+      final response = await _dio.get('/access/permissions');
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message:
+            data['message'] ?? data['error'] ?? 'Failed to load permissions',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<PaginatedList<UserAccountModel>> getUsers({
     String? role,
     String? status,

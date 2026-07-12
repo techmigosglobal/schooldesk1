@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -19,6 +20,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
   List<Map<String, dynamic>> _invoices = const [];
   List<Map<String, dynamic>> _payments = const [];
   List<Map<String, dynamic>> _structures = const [];
+  Map<String, dynamic> _school = const {};
 
   static const _serverReports = [
     _ReportDef(
@@ -67,6 +69,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
       final results = await Future.wait<Object>([
         api.getInvoices(pageSize: 1000),
         api.getFeeStructures(),
+        api.getCurrentSchool(),
       ]);
       final rawInvoices = (results[0] as List).cast<Map<String, dynamic>>();
       final allPayments = rawInvoices.expand(normalizePayments).toList();
@@ -78,6 +81,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
             .cast<Map<String, dynamic>>()
             .map(normalizeFeeStructure)
             .toList();
+        _school = Map<String, dynamic>.from(results[2] as Map);
         _loading = false;
       });
     } on Object catch (e) {
@@ -88,6 +92,21 @@ class _PrincipalReportsState extends State<PrincipalReports> {
       });
     }
   }
+
+  Future<Uint8List?> _schoolLogoBytes() async {
+    final url = textValue(_school['logo_url']);
+    if (url.isEmpty) return null;
+    try {
+      return (await NetworkAssetBundle(
+        Uri.parse(url),
+      ).load(url)).buffer.asUint8List();
+    } on Object catch (_) {
+      return null;
+    }
+  }
+
+  String get _schoolName => textValue(_school['name'], fallback: 'School');
+  String get _schoolAddress => textValue(_school['address']);
 
   double get _totalExpected =>
       _invoices.fold<double>(0, (s, i) => s + numValue(i['total']));
@@ -429,6 +448,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
       }
 
       final pdfService = PdfService.getInstance();
+      final schoolLogo = await _schoolLogoBytes();
       final bytes = await pdfService.generateFeeReceipt(
         receiptNo: 'STU-${DateTime.now().millisecondsSinceEpoch}',
         studentName: textValue(inv['name'], fallback: 'Student'),
@@ -441,9 +461,9 @@ class _PrincipalReportsState extends State<PrincipalReports> {
         balance: numValue(inv['balance']),
         paymentMode: 'Fee Statement',
         paymentDate: DateTime.now(),
-        schoolName: 'Individual Fee Report',
-        schoolAddress:
-            'Generated: ${DateTime.now().toString().substring(0, 16)}',
+        schoolName: _schoolName,
+        schoolAddress: _schoolAddress,
+        schoolLogo: schoolLogo,
       );
       if (!mounted) return;
       await pdfService.previewDocument(
@@ -573,6 +593,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
       ];
 
       final pdfService = PdfService.getInstance();
+      final schoolLogo = await _schoolLogoBytes();
       final bytes = await pdfService.generateFeeReceipt(
         receiptNo: 'RPT-${DateTime.now().millisecondsSinceEpoch}',
         studentName: 'All Students',
@@ -585,9 +606,9 @@ class _PrincipalReportsState extends State<PrincipalReports> {
         balance: _totalDue,
         paymentMode: 'Summary Report',
         paymentDate: DateTime.now(),
-        schoolName: 'Fee Collection Report',
-        schoolAddress:
-            'Generated: ${DateTime.now().toString().substring(0, 16)}',
+        schoolName: _schoolName,
+        schoolAddress: _schoolAddress,
+        schoolLogo: schoolLogo,
       );
       if (!mounted) return;
       await pdfService.previewDocument(context, bytes, 'Fee Collection Report');

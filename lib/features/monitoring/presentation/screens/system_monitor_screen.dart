@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'dart:convert';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -415,8 +416,18 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                 _detail('Status', event['status']),
                 _detail('Role', event['role']),
                 _detail('Path', event['path']),
-                _detail('Occurred', event['occurred_at']),
+                _detail('Occurred', _localTime(event['occurred_at'])),
+                _detail('HTTP status', event['status_code']),
+                _detail('App version', event['app_version']),
+                _detail('Device', event['device_info']),
+                _detail('Resolved at', _localTime(event['resolved_at'])),
+                _detail('Resolution note', event['resolution_note']),
                 const SizedBox(height: 12),
+                Text(
+                  'Stack trace',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 6),
                 Text(
                   _text(event['stack_trace'], fallback: 'No stack trace'),
                   style: Theme.of(
@@ -472,6 +483,11 @@ class _ErrorEventTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = _text(event['status'], fallback: 'open');
     final severity = _text(event['severity'], fallback: 'error');
+    final occurred = _localTime(event['occurred_at']);
+    final location = _text(
+      event['screen'],
+      fallback: _text(event['path'], fallback: 'Unknown location'),
+    );
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
@@ -491,9 +507,9 @@ class _ErrorEventTile extends StatelessWidget {
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
-            'Error ID: ${_text(event['error_id'], fallback: '-')}  '
-            'Request ID: ${_text(event['request_id'], fallback: '-')}  '
-            '${_text(event['source'], fallback: 'unknown')} / $severity',
+            '${severity.toUpperCase()} · ${status.toUpperCase()}\n'
+            '${_text(event['source'], fallback: 'unknown')} · $location\n'
+            '$occurred\nError: ${_text(event['error_id'], fallback: '-')} · Request: ${_text(event['request_id'], fallback: '-')}',
           ),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
@@ -501,6 +517,12 @@ class _ErrorEventTile extends StatelessWidget {
       ),
     );
   }
+}
+
+String _localTime(dynamic value) {
+  final parsed = DateTime.tryParse('${value ?? ''}');
+  if (parsed == null) return _text(value, fallback: '-');
+  return DateFormat('d MMM yyyy, h:mm:ss a').format(parsed.toLocal());
 }
 
 class _MessagePanel extends StatelessWidget {

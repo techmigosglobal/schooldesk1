@@ -79,7 +79,8 @@ class RouteAccessGuard {
     AppRoutes.superAdminDashboard: {'super_admin'},
     AppRoutes.superAdminAuditLogs: {'super_admin'},
     AppRoutes.superAdminSystemMonitor: {'super_admin'},
-    AppRoutes.superAdminErrorReporting: {'super_admin'},
+    AppRoutes.superAdminAccess: {'super_admin'},
+    AppRoutes.superAdminIssues: {'super_admin'},
     // Teacher routes
     AppRoutes.teacherDashboard: {'teacher'},
     AppRoutes.teacherClasses: {'teacher'},
@@ -89,6 +90,7 @@ class RouteAccessGuard {
     AppRoutes.teacherAttendanceHistory: {'teacher'},
     AppRoutes.teacherMyAttendance: {'teacher'},
     AppRoutes.teacherCommunication: {'teacher'},
+    AppRoutes.teacherComplaints: {'teacher'},
     AppRoutes.teacherParentInteraction: {'teacher'},
     AppRoutes.teacherLeave: {'teacher'},
     AppRoutes.teacherLeaveRequestForm: {'teacher'},

@@ -10,6 +10,8 @@ extension MonitoringApi on BackendApiClient {
     String? severity,
     String? source,
     String? requestId,
+    DateTime? from,
+    DateTime? to,
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -24,6 +26,8 @@ extension MonitoringApi on BackendApiClient {
           if (source != null && source.isNotEmpty) 'source': source,
           if (requestId != null && requestId.isNotEmpty)
             'request_id': requestId,
+          if (from != null) 'from': from.toUtc().toIso8601String(),
+          if (to != null) 'to': to.toUtc().toIso8601String(),
         },
       );
       final data = _asMap(response.data);

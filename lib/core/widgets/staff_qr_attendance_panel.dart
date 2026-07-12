@@ -156,6 +156,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
         subject: 'Staff QR logs for $date',
         text:
             'Daily staff QR attendance log exported from ${AppConstants.appName}.',
+        context: context,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

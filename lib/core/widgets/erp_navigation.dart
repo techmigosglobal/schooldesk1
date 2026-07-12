@@ -74,6 +74,7 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
   final String initials;
   final IconData portalIcon;
   final Widget? organizationLogo;
+  final Widget? userAvatar;
   final int? selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final List<SchoolDeskNavigationSection> sections;
@@ -94,6 +95,7 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
     required this.onDestinationSelected,
     required this.sections,
     this.organizationLogo,
+    this.userAvatar,
     this.footerActions = const [],
     this.width = 304,
   });
@@ -124,6 +126,7 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
                   initials: initials,
                   portalIcon: portalIcon,
                   organizationLogo: organizationLogo,
+                  userAvatar: userAvatar,
                 ),
                 Expanded(
                   child: ListView(
@@ -169,6 +172,7 @@ class _NavigationHeader extends StatelessWidget {
   final String initials;
   final IconData portalIcon;
   final Widget? organizationLogo;
+  final Widget? userAvatar;
 
   const _NavigationHeader({
     required this.role,
@@ -180,6 +184,7 @@ class _NavigationHeader extends StatelessWidget {
     required this.initials,
     required this.portalIcon,
     this.organizationLogo,
+    this.userAvatar,
   });
 
   @override
@@ -270,16 +275,23 @@ class _NavigationHeader extends StatelessWidget {
             ),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 17,
-                  backgroundColor: onRoleColor.withAlpha(34),
-                  foregroundColor: onRoleColor,
-                  child: Text(
-                    _initials(initials, userName),
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: onRoleColor,
-                      fontWeight: FontWeight.w800,
-                    ),
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: ClipOval(
+                    child:
+                        userAvatar ??
+                        CircleAvatar(
+                          backgroundColor: onRoleColor.withAlpha(34),
+                          foregroundColor: onRoleColor,
+                          child: Text(
+                            _initials(initials, userName),
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: onRoleColor,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
                   ),
                 ),
                 SizedBox(width: tokens.spacing.sm),

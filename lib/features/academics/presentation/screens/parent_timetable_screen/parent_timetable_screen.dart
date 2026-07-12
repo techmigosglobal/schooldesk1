@@ -5,6 +5,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -19,7 +20,6 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
     with SingleTickerProviderStateMixin {
   int _selectedNavIndex = ParentNav.timetable;
   int _activeChildIndex = 0;
-  static const _headerColor = Color(0xFF1A6B4A);
 
   List<String> _children = [];
   List<String> _childIds = [];
@@ -224,49 +224,18 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
 
   Widget _buildChildSelector() {
     if (_children.isEmpty) return const SizedBox.shrink();
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(_children.length, (i) {
-          final isActive = i == _activeChildIndex;
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                _activeChildIndex = i;
-              });
-              ParentChildSelectionService.saveIndex(
-                List.generate(
-                  _childIds.length,
-                  (index) => {'id': _childIds[index]},
-                ),
-                i,
-              );
-              _loadChildTimetable(i);
-            },
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: isActive ? _headerColor : context.appTheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isActive
-                      ? _headerColor
-                      : context.appTheme.outlineVariant,
-                ),
-              ),
-              child: Text(
-                _children[i].split(' ').first,
-                style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : context.appTheme.onSurface,
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
+    final children = List.generate(
+      _children.length,
+      (index) => {'id': _childIds[index], 'name': _children[index]},
+    );
+    return ParentChildSelector(
+      children: children,
+      selectedIndex: _activeChildIndex,
+      onSelected: (index) {
+        setState(() => _activeChildIndex = index);
+        ParentChildSelectionService.saveIndex(children, index);
+        _loadChildTimetable(index);
+      },
     );
   }
 

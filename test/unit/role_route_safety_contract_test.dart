@@ -13,36 +13,49 @@ void main() {
   // app_navigation.dart contains both PrincipalDrawer and SuperAdminDrawer.
   // To prevent cross-contamination, we extract routes from each drawer class
   // separately by splitting the file at the SuperAdminDrawer boundary.
-  final appNavigationSource =
-      File('lib/core/widgets/app_navigation.dart').readAsStringSync();
-  final principalSection = _extractBeforeClass(appNavigationSource, 'SuperAdminDrawer');
-  final superAdminSection = _extractAfterClass(appNavigationSource, 'SuperAdminDrawer');
+  final appNavigationSource = File(
+    'lib/core/widgets/app_navigation.dart',
+  ).readAsStringSync();
+  final principalSection = _extractBeforeClass(
+    appNavigationSource,
+    'SuperAdminDrawer',
+  );
+  final superAdminSection = _extractAfterClass(
+    appNavigationSource,
+    'SuperAdminDrawer',
+  );
 
-  final teacherNavigationSource =
-      File('lib/core/widgets/teacher_navigation.dart').readAsStringSync();
-  final parentNavigationSource =
-      File('lib/core/widgets/parent_navigation.dart').readAsStringSync();
+  final teacherNavigationSource = File(
+    'lib/core/widgets/teacher_navigation.dart',
+  ).readAsStringSync();
+  final parentNavigationSource = File(
+    'lib/core/widgets/parent_navigation.dart',
+  ).readAsStringSync();
 
   final roleSources = {
     'principal': [
       principalSection,
-      File('lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart')
-          .readAsStringSync(),
+      File(
+        'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
+      ).readAsStringSync(),
     ],
     'teacher': [
       teacherNavigationSource,
-      File('lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart')
-          .readAsStringSync(),
+      File(
+        'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
+      ).readAsStringSync(),
     ],
     'parent': [
       parentNavigationSource,
-      File('lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart')
-          .readAsStringSync(),
+      File(
+        'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
+      ).readAsStringSync(),
     ],
     'super_admin': [
       superAdminSection,
-      File('lib/features/dashboard/presentation/screens/super_admin_dashboard_screen/super_admin_dashboard_screen.dart')
-          .readAsStringSync(),
+      File(
+        'lib/features/dashboard/presentation/screens/super_admin_dashboard_screen/super_admin_dashboard_screen.dart',
+      ).readAsStringSync(),
     ],
   };
 
@@ -122,7 +135,7 @@ void main() {
       'superAdminDashboard',
       'superAdminAuditLogs',
       'superAdminSystemMonitor',
-      'superAdminErrorReporting',
+      'superAdminAccess',
     ];
     for (final routeName in superAdminOnlyRoutes) {
       expect(
@@ -201,12 +214,15 @@ void main() {
         reason: 'TeacherPTM is no longer part of Teacher navigation',
       );
       final routes = File('lib/routes/app_routes.dart').readAsStringSync();
-      final guard =
-          File('lib/routes/route_access_guard.dart').readAsStringSync();
-      final registry =
-          File('lib/routes/schooldesk_screen_registry.dart').readAsStringSync();
-      final communicationBarrel =
-          File('lib/features/communication/communication.dart').readAsStringSync();
+      final guard = File(
+        'lib/routes/route_access_guard.dart',
+      ).readAsStringSync();
+      final registry = File(
+        'lib/routes/schooldesk_screen_registry.dart',
+      ).readAsStringSync();
+      final communicationBarrel = File(
+        'lib/features/communication/communication.dart',
+      ).readAsStringSync();
       expect(
         routes,
         isNot(contains('teacherPTM')),
@@ -237,8 +253,7 @@ void main() {
         expect(
           teacherNavigationSource,
           isNot(contains('AppRoutes.$removedRouteName')),
-          reason:
-              '$removedRouteName is no longer part of Teacher navigation',
+          reason: '$removedRouteName is no longer part of Teacher navigation',
         );
       }
     },
@@ -251,7 +266,7 @@ void main() {
       for (final routeName in [
         'superAdminAuditLogs',
         'superAdminSystemMonitor',
-        'superAdminErrorReporting',
+        'superAdminAccess',
         'idCardGeneration',
         'principalSchoolProfile',
         'principalUserManagement',
@@ -268,7 +283,9 @@ void main() {
         if (route == null) continue;
         expect(
           RouteAccessGuard.isRoleAllowedFor(
-              routeName: route, role: 'super_admin'),
+            routeName: route,
+            role: 'super_admin',
+          ),
           isTrue,
           reason: '$routeName ($route) must be accessible for super_admin',
         );
@@ -280,7 +297,7 @@ void main() {
     final superAdminOnlyRoutes = [
       'superAdminAuditLogs',
       'superAdminSystemMonitor',
-      'superAdminErrorReporting',
+      'superAdminAccess',
     ];
     for (final routeName in superAdminOnlyRoutes) {
       final route = routeConstants[routeName];
@@ -289,11 +306,9 @@ void main() {
         // Note: isRoleAllowedFor returns true for super_admin on all routes
         // due to the bypass, so we only check non-super_admin roles.
         expect(
-          RouteAccessGuard.isRoleAllowedFor(
-              routeName: route, role: otherRole),
+          RouteAccessGuard.isRoleAllowedFor(routeName: route, role: otherRole),
           isFalse,
-          reason:
-              '$routeName ($route) must NOT be accessible for $otherRole',
+          reason: '$routeName ($route) must NOT be accessible for $otherRole',
         );
       }
     }

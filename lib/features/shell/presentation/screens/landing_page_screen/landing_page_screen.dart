@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:schooldesk1/core/constants/app_constants.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/token_storage_service.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 class LandingPageScreen extends StatefulWidget {
@@ -32,17 +35,48 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
   bool _autoSlidePausedByTouch = false;
   bool _reduceMotion = false;
 
+  // Network-fetched landing post images (prepend to static assets when loaded)
+  List<String> _networkImageUrls = const [];
+
   @override
   void initState() {
     super.initState();
     _controller = PageController();
+    _fetchLandingPosts();
+  }
+
+  Future<void> _fetchLandingPosts() async {
+    final schoolId = await TokenStorageService.getSchoolId() ?? '';
+    if (schoolId.isEmpty) return;
+    try {
+      final posts = await BackendApiClient.instance.getLandingEventPosts(
+        schoolId: schoolId,
+      );
+      final urls = <String>[];
+      for (final post in posts) {
+        final items = EventPostMediaItem.parseList(post['media_urls']);
+        for (final item in items) {
+          if (item.isImage && item.url.isNotEmpty) {
+            urls.add(item.url);
+          }
+        }
+      }
+      if (urls.isEmpty || !mounted) return;
+      setState(() {
+        _networkImageUrls = urls;
+        // Reset to first slide when new content loads
+        _activeSlide = 0;
+      });
+    } on Object catch (_) {
+      // Silent fail — static assets remain as fallback
+    }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     for (final asset in _slideAssets) {
-      precacheImage(AssetImage(asset), context);
+      precacheImage(AssetImage(asset), context); // static fallback assets
     }
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     if (_reduceMotion == reduceMotion && _autoSlideTimer != null) return;
@@ -66,6 +100,9 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
     _autoSlideTimer = null;
   }
 
+  List<String> get _allSlides =>
+      _networkImageUrls.isNotEmpty ? _networkImageUrls : _slideAssets;
+
   void _restartAutoSlideTimer() {
     _stopAutoSlideTimer();
     if (_reduceMotion || _autoSlidePausedByUser || _autoSlidePausedByTouch) {
@@ -73,7 +110,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
     }
     _autoSlideTimer = Timer.periodic(_autoSlideInterval, (_) {
       if (!mounted || !_controller.hasClients) return;
-      final next = (_activeSlide + 1) % _slideAssets.length;
+      final next = (_activeSlide + 1) % _allSlides.length;
       _goToSlide(next);
     });
   }
@@ -156,18 +193,19 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                           ),
                           child: _LandingCarousel(
                             controller: _controller,
-                            slideAssets: _slideAssets,
+                            slides: _allSlides,
+                            networkSlideCount: _networkImageUrls.length,
                             onPageChanged: (index) =>
                                 setState(() => _activeSlide = index),
                             onScrollStart: _pauseAutoSlide,
                             onScrollEnd: _resumeAutoSlide,
                             onPrevious: () => _goToSlide(
-                              (_activeSlide - 1 + _slideAssets.length) %
-                                  _slideAssets.length,
+                              (_activeSlide - 1 + _allSlides.length) %
+                                  _allSlides.length,
                               manual: true,
                             ),
                             onNext: () => _goToSlide(
-                              (_activeSlide + 1) % _slideAssets.length,
+                              (_activeSlide + 1) % _allSlides.length,
                               manual: true,
                             ),
                           ),
@@ -176,7 +214,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                       SizedBox(height: isSmall ? 2 : 4),
                       _LandingFooter(
                         activeIndex: _activeSlide,
-                        itemCount: _slideAssets.length,
+                        itemCount: _allSlides.length,
                         onToggleAutoSlide: _reduceMotion
                             ? null
                             : _toggleAutoSlide,
@@ -345,7 +383,8 @@ class _SignInButton extends StatelessWidget {
 class _LandingCarousel extends StatelessWidget {
   const _LandingCarousel({
     required this.controller,
-    required this.slideAssets,
+    required this.slides,
+    required this.networkSlideCount,
     required this.onPageChanged,
     required this.onScrollStart,
     required this.onScrollEnd,
@@ -354,7 +393,9 @@ class _LandingCarousel extends StatelessWidget {
   });
 
   final PageController controller;
-  final List<String> slideAssets;
+  // Combined list: network images first (if any), then static asset paths.
+  final List<String> slides;
+  final int networkSlideCount;
   final ValueChanged<int> onPageChanged;
   final VoidCallback onScrollStart;
   final VoidCallback onScrollEnd;
@@ -387,9 +428,12 @@ class _LandingCarousel extends StatelessWidget {
                   child: PageView.builder(
                     controller: controller,
                     onPageChanged: onPageChanged,
-                    itemCount: slideAssets.length,
+                    itemCount: slides.length,
                     itemBuilder: (context, index) {
-                      return _ArtworkSlide(assetPath: slideAssets[index]);
+                      if (index < networkSlideCount) {
+                        return _NetworkImageSlide(url: slides[index]);
+                      }
+                      return _ArtworkSlide(assetPath: slides[index]);
                     },
                   ),
                 ),
@@ -607,6 +651,65 @@ class _SlidePositionIndicator extends StatelessWidget {
           }),
         ),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Network image slide (event post images from backend)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _NetworkImageSlide extends StatelessWidget {
+  const _NetworkImageSlide({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final frame = _posterFrameFor(constraints.biggest);
+
+        return Center(
+          child: Container(
+            width: frame.width,
+            height: frame.height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1565C0).withAlpha(22),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                url,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.high,
+                semanticLabel: 'School event image',
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const ColoredBox(
+                    color: Color(0xFFEBF5FF),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF1565C0),
+                      ),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) =>
+                    const _ArtworkFallback(),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

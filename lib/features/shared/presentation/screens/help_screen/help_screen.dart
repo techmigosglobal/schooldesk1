@@ -1,6 +1,7 @@
-import 'dart:async';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:video_player/video_player.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -15,14 +16,13 @@ class HelpScreen extends StatefulWidget {
 class _HelpScreenState extends State<HelpScreen>
     with SingleTickerProviderStateMixin {
   final _api = BackendApiClient.instance;
-  bool _loading = false;
+  final _roles = const ['principal', 'teacher', 'parent'];
+  List<Map<String, dynamic>> _helpItems = const [];
+  late final String _userRole;
+  late final bool _isSuperAdmin;
+  TabController? _tabs;
+  bool _loading = true;
   String? _error;
-  List<Map<String, dynamic>> _helpItems = [];
-  late String _userRole;
-  bool _isSuperAdmin = false;
-
-  TabController? _tabController;
-  final List<String> _roles = ['principal', 'teacher', 'parent'];
 
   @override
   void initState() {
@@ -30,30 +30,21 @@ class _HelpScreenState extends State<HelpScreen>
     _userRole = _api.currentRoleName?.trim().toLowerCase() ?? 'parent';
     _isSuperAdmin = _userRole == 'super_admin';
     if (_isSuperAdmin) {
-      _tabController = TabController(length: _roles.length, vsync: this);
-      _tabController!.addListener(_handleTabChange);
+      _tabs = TabController(length: _roles.length, vsync: this)
+        ..addListener(() {
+          if (!_tabs!.indexIsChanging) _loadHelpData();
+        });
     }
     _loadHelpData();
   }
 
   @override
   void dispose() {
-    _tabController?.removeListener(_handleTabChange);
-    _tabController?.dispose();
+    _tabs?.dispose();
     super.dispose();
   }
 
-  void _handleTabChange() {
-    if (_tabController!.indexIsChanging) return;
-    _loadHelpData();
-  }
-
-  String get _currentQueryRole {
-    if (_isSuperAdmin) {
-      return _roles[_tabController!.index];
-    }
-    return _userRole;
-  }
+  String get _role => _isSuperAdmin ? _roles[_tabs!.index] : _userRole;
 
   Future<void> _loadHelpData() async {
     setState(() {
@@ -61,169 +52,101 @@ class _HelpScreenState extends State<HelpScreen>
       _error = null;
     });
     try {
-      final items = await _api.getHelpContent(_currentQueryRole);
-      setState(() {
-        _helpItems = items;
-        _loading = false;
-      });
-    } on Object catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      final items = await _api.getHelpContent(_role);
+      if (mounted) setState(() => _helpItems = items);
+    } on Object {
+      if (mounted) _error = 'Help content is unavailable right now.';
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _deleteItem(String id) async {
-    final confirm = await showDialog<bool>(
+  Future<void> _edit({Map<String, dynamic>? item}) async {
+    final payload = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _HelpEditorDialog(item: item, targetRole: _role),
+    );
+    if (payload == null) return;
+    setState(() => _loading = true);
+    try {
+      if (item == null) {
+        await _api.createHelpContent(payload);
+      } else {
+        await _api.updateHelpContent({...payload, 'id': item['id']});
+      }
+      await _loadHelpData();
+    } on Object {
+      if (mounted) {
+        setState(
+          () => _error = 'Unable to save the help tutorial. Please retry.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _delete(String id) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Help Item'),
-        content: const Text(
-          'Are you sure you want to delete this question/tutorial?',
-        ),
+        content: const Text('Delete this question and its tutorial reference?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
-
-    if (confirm != true) return;
-
-    setState(() => _loading = true);
+    if (confirmed != true) return;
     try {
       await _api.deleteHelpContent(id);
       await _loadHelpData();
-    } on Object catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+    } on Object {
+      if (mounted) setState(() => _error = 'Unable to delete the help item.');
     }
   }
 
-  void _openAddEditDialog({Map<String, dynamic>? item}) {
-    final questionCtrl = TextEditingController(text: item?['question'] ?? '');
-    final answerCtrl = TextEditingController(text: item?['answer'] ?? '');
-    final videoUrlCtrl = TextEditingController(text: item?['video_url'] ?? '');
-    final formKey = GlobalKey<FormState>();
-
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          item == null ? 'Add Help & Tutorial' : 'Edit Help & Tutorial',
-        ),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: questionCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Question / Title',
-                  ),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: answerCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Answer / Explanation',
-                  ),
-                  maxLines: 4,
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: videoUrlCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Video Tutorial URL (Optional)',
-                    hintText: 'e.g. https://youtube.com/...',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              Navigator.pop(context);
-              setState(() => _loading = true);
-              try {
-                final payload = {
-                  'role_name': _currentQueryRole,
-                  'question': questionCtrl.text.trim(),
-                  'answer': answerCtrl.text.trim(),
-                  'video_url': videoUrlCtrl.text.trim().isEmpty
-                      ? null
-                      : videoUrlCtrl.text.trim(),
-                  if (item != null) 'id': item['id'],
-                };
-                if (item == null) {
-                  await _api.createHelpContent(payload);
-                } else {
-                  await _api.updateHelpContent(payload);
-                }
-                await _loadHelpData();
-              } on Object catch (e) {
-                setState(() {
-                  _error = e.toString();
-                  _loading = false;
-                });
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _playVideo(String url) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => _MockVideoPlayerDialog(videoUrl: url),
-    );
+  Future<void> _play(Map<String, dynamic> item) async {
+    try {
+      final url = await _api.getHelpTutorialPlaybackUrl('${item['id']}');
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => _TutorialPlayerDialog(url: url),
+      );
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This tutorial video is unavailable.')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-
-    final scaffold = Scaffold(
+    final tokens = Theme.of(context).schoolDesk;
+    return Scaffold(
       backgroundColor: const Color(0xFFF6F8FA),
       appBar: AppBar(
         title: const Text('How to use the application'),
         bottom: _isSuperAdmin
             ? TabBar(
-                controller: _tabController,
+                controller: _tabs,
                 tabs: _roles.map((r) => Tab(text: r.toUpperCase())).toList(),
               )
             : null,
       ),
       floatingActionButton: _isSuperAdmin
           ? FloatingActionButton.extended(
-              onPressed: () => _openAddEditDialog(),
+              onPressed: () => _edit(),
               icon: const Icon(Icons.add_rounded),
               label: const Text('Add Q&A'),
             )
@@ -233,16 +156,15 @@ class _HelpScreenState extends State<HelpScreen>
           : _error != null
           ? Center(
               child: Padding(
-                padding: const EdgeInsets.all(22),
+                padding: const EdgeInsets.all(24),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'Error: $_error',
-                      style: const TextStyle(color: Colors.red),
-                    ),
+                    const Icon(Icons.help_outline_rounded, size: 42),
                     const SizedBox(height: 12),
-                    ElevatedButton(
+                    Text(_error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton(
                       onPressed: _loadHelpData,
                       child: const Text('Retry'),
                     ),
@@ -253,7 +175,7 @@ class _HelpScreenState extends State<HelpScreen>
           : _helpItems.isEmpty
           ? Center(
               child: Text(
-                'No support content available for this role yet.',
+                'No support content is available for this role yet.',
                 style: GoogleFonts.dmSans(color: tokens.textMuted),
               ),
             )
@@ -263,52 +185,29 @@ class _HelpScreenState extends State<HelpScreen>
               itemBuilder: (context, index) {
                 final item = _helpItems[index];
                 final hasVideo =
-                    item['video_url'] != null &&
-                    item['video_url'].toString().trim().isNotEmpty;
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
-                        blurRadius: 6,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
+                    '${item['video_path'] ?? item['video_url'] ?? ''}'
+                        .trim()
+                        .isNotEmpty;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 14),
                   child: ExpansionTile(
-                    shape: const Border(),
                     title: Text(
-                      item['question'] ?? 'No Title',
-                      style: GoogleFonts.dmSans(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: const Color(0xFF1E293B),
-                      ),
+                      '${item['question'] ?? 'Untitled'}',
+                      style: GoogleFonts.dmSans(fontWeight: FontWeight.bold),
                     ),
                     trailing: _isSuperAdmin
                         ? Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                icon: const Icon(
-                                  Icons.edit_rounded,
-                                  color: Colors.blue,
-                                  size: 20,
-                                ),
-                                onPressed: () => _openAddEditDialog(item: item),
+                                tooltip: 'Edit',
+                                onPressed: () => _edit(item: item),
+                                icon: const Icon(Icons.edit_rounded),
                               ),
                               IconButton(
-                                icon: const Icon(
-                                  Icons.delete_rounded,
-                                  color: Colors.red,
-                                  size: 20,
-                                ),
-                                onPressed: () => _deleteItem(item['id']),
+                                tooltip: 'Delete',
+                                onPressed: () => _delete('${item['id']}'),
+                                icon: const Icon(Icons.delete_outline_rounded),
                               ),
                             ],
                           )
@@ -320,58 +219,18 @@ class _HelpScreenState extends State<HelpScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Divider(),
-                            const SizedBox(height: 6),
                             Text(
-                              item['answer'] ?? '',
-                              style: GoogleFonts.dmSans(
-                                fontSize: 14,
-                                height: 1.5,
-                                color: const Color(0xFF475569),
-                              ),
+                              '${item['answer'] ?? ''}',
+                              style: GoogleFonts.dmSans(height: 1.5),
                             ),
                             if (hasVideo) ...[
-                              const SizedBox(height: 14),
-                              InkWell(
-                                onTap: () => _playVideo(item['video_url']),
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFEEF2F6),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: const Color(0xFFCBD5E1),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.play_circle_fill_rounded,
-                                        color: Color(0xFF1565C0),
-                                        size: 24,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          'Watch Video Tutorial',
-                                          style: GoogleFonts.dmSans(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                            color: const Color(0xFF1E293B),
-                                          ),
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.arrow_forward_ios_rounded,
-                                        size: 12,
-                                        color: Color(0xFF64748B),
-                                      ),
-                                    ],
-                                  ),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: () => _play(item),
+                                icon: const Icon(
+                                  Icons.play_circle_fill_rounded,
                                 ),
+                                label: const Text('Watch video tutorial'),
                               ),
                             ],
                           ],
@@ -383,143 +242,284 @@ class _HelpScreenState extends State<HelpScreen>
               },
             ),
     );
-
-    return scaffold;
   }
 }
 
-class _MockVideoPlayerDialog extends StatefulWidget {
-  final String videoUrl;
-  const _MockVideoPlayerDialog({required this.videoUrl});
-
+class _HelpEditorDialog extends StatefulWidget {
+  const _HelpEditorDialog({required this.targetRole, this.item});
+  final String targetRole;
+  final Map<String, dynamic>? item;
   @override
-  State<_MockVideoPlayerDialog> createState() => _MockVideoPlayerDialogState();
+  State<_HelpEditorDialog> createState() => _HelpEditorDialogState();
 }
 
-class _MockVideoPlayerDialogState extends State<_MockVideoPlayerDialog> {
-  double _progress = 0.0;
-  bool _isPlaying = true;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _startTimer();
-  }
+class _HelpEditorDialogState extends State<_HelpEditorDialog> {
+  static const _maxBytes = 250 * 1024 * 1024;
+  final _form = GlobalKey<FormState>();
+  late final _question = TextEditingController(
+    text: '${widget.item?['question'] ?? ''}',
+  );
+  late final _answer = TextEditingController(
+    text: '${widget.item?['answer'] ?? ''}',
+  );
+  PlatformFile? _file;
+  Map<String, dynamic>? _video;
+  bool _removeVideo = false;
+  bool _uploading = false;
+  String? _fileError;
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _question.dispose();
+    _answer.dispose();
     super.dispose();
   }
 
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
-      if (_isPlaying) {
-        setState(() {
-          _progress += 0.01;
-          if (_progress >= 1.0) {
-            _progress = 0.0;
-          }
-        });
+  Future<void> _pick() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.video,
+      withData: false,
+    );
+    final file = result?.files.single;
+    if (file == null) return;
+    final isVideo = const [
+      'mp4',
+      'webm',
+      'mov',
+    ].contains(file.extension?.toLowerCase());
+    setState(() {
+      _file = isVideo && file.size <= _maxBytes ? file : null;
+      _fileError = _file == null
+          ? 'Select an MP4, WebM, or MOV video up to 250 MB.'
+          : null;
+      _video = null;
+      _removeVideo = false;
+    });
+  }
+
+  Future<void> _save() async {
+    if (!_form.currentState!.validate() || _uploading) return;
+    if (_file != null && _video == null) {
+      if (_file!.path == null) {
+        setState(
+          () => _fileError = 'This device did not provide a video path.',
+        );
+        return;
       }
+      setState(() => _uploading = true);
+      try {
+        _video = await BackendApiClient.instance.uploadHelpTutorialVideo(
+          _file!.path!,
+          filename: _file!.name,
+          roleName: widget.targetRole,
+        );
+      } on Object {
+        if (mounted) {
+          setState(() => _fileError = 'Video upload failed. Please retry.');
+        }
+        return;
+      } finally {
+        if (mounted) setState(() => _uploading = false);
+      }
+    }
+    if (!mounted) return;
+    Navigator.pop(context, {
+      'role_name': widget.targetRole,
+      'question': _question.text.trim(),
+      'answer': _answer.text.trim(),
+      'video_url': _removeVideo ? null : widget.item?['video_url'],
+      'video_path': _removeVideo
+          ? null
+          : (_video?['video_path'] ?? widget.item?['video_path']),
+      'video_file_name': _removeVideo
+          ? null
+          : (_video?['video_file_name'] ?? widget.item?['video_file_name']),
+      'video_mime_type': _removeVideo
+          ? null
+          : (_video?['video_mime_type'] ?? widget.item?['video_mime_type']),
+      'video_size': _removeVideo
+          ? null
+          : (_video?['video_size'] ?? widget.item?['video_size']),
     });
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF0F172A),
-      contentPadding: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      content: SizedBox(
-        width: 320,
-        height: 240,
-        child: Stack(
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(
+      widget.item == null ? 'Add Help & Tutorial' : 'Edit Help & Tutorial',
+    ),
+    content: Form(
+      key: _form,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.video_library_rounded,
-                    color: Colors.white24,
-                    size: 48,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Playing Tutorial...',
-                    style: GoogleFonts.dmSans(
-                      color: Colors.white70,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      widget.videoUrl,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        color: Colors.white30,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ),
-                ],
+            TextFormField(
+              controller: _question,
+              decoration: const InputDecoration(labelText: 'Question / Title'),
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _answer,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Answer / Explanation',
+              ),
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Video tutorial (optional)',
+                style: Theme.of(context).textTheme.titleSmall,
               ),
             ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                color: Colors.black54,
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LinearProgressIndicator(
-                      value: _progress,
-                      backgroundColor: Colors.white12,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            _isPlaying
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            setState(() => _isPlaying = !_isPlaying);
-                          },
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text(
-                            'Close',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+            const SizedBox(height: 6),
+            Text(
+              _file?.name ??
+                  '${widget.item?['video_file_name'] ?? 'No video uploaded'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (_fileError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  _fileError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _uploading ? null : _pick,
+              icon: const Icon(Icons.upload_file_rounded),
+              label: Text(
+                _file == null ? 'Choose video file' : 'Replace video',
+              ),
             ),
+            if (_file != null ||
+                '${widget.item?['video_path'] ?? widget.item?['video_url'] ?? ''}'
+                    .isNotEmpty)
+              TextButton.icon(
+                onPressed: _uploading
+                    ? null
+                    : () => setState(() {
+                        _file = null;
+                        _video = null;
+                        _removeVideo = true;
+                      }),
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Remove video'),
+              ),
+            if (_uploading)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: LinearProgressIndicator(),
+              ),
           ],
         ),
       ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _uploading ? null : () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: _uploading ? null : _save,
+        child: Text(_uploading ? 'Uploading…' : 'Save'),
+      ),
+    ],
+  );
+}
+
+class _TutorialPlayerDialog extends StatefulWidget {
+  const _TutorialPlayerDialog({required this.url});
+  final String url;
+  @override
+  State<_TutorialPlayerDialog> createState() => _TutorialPlayerDialogState();
+}
+
+class _TutorialPlayerDialogState extends State<_TutorialPlayerDialog> {
+  late final VideoPlayerController _controller;
+  String? _error;
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize()
+          .then((_) {
+            if (mounted) setState(() {});
+          })
+          .catchError((_) {
+            if (mounted) setState(() => _error = 'Video could not be loaded.');
+          });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.62;
+    return AlertDialog(
+      contentPadding: const EdgeInsets.all(12),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 560, maxHeight: maxHeight),
+        child: _error != null
+            ? SingleChildScrollView(child: Text(_error!))
+            : !_controller.value.isInitialized
+            ? const SizedBox(
+                height: 180,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: AspectRatio(
+                      aspectRatio: _controller.value.aspectRatio,
+                      child: VideoPlayer(_controller),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          _controller.value.isPlaying
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                        ),
+                        onPressed: () => setState(
+                          () => _controller.value.isPlaying
+                              ? _controller.pause()
+                              : _controller.play(),
+                        ),
+                      ),
+                      Expanded(
+                        child: VideoProgressIndicator(
+                          _controller,
+                          allowScrubbing: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }

@@ -179,7 +179,7 @@ void main() {
 
     test('submitLeaveApplication sends POST to /leave/applications', () {
       expect(apiSource, contains("'/leave/applications'"));
-      expect(apiSource, contains('method: "POST"'));
+      expect(apiSource, contains('_dio.post'));
     });
 
     test(
@@ -193,7 +193,7 @@ void main() {
       'decideLeaveApplication sends PUT to /leave/applications/:id/approve',
       () {
         expect(apiSource, contains("'/leave/applications/\$id/approve'"));
-        expect(apiSource, contains('method: "PUT"'));
+        expect(apiSource, contains('_dio.put'));
       },
     );
 

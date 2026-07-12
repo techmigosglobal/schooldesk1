@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentLeaveRequestFormArgs {
@@ -186,26 +187,20 @@ class _ParentLeaveRequestFormScreenState
         style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
       );
     }
-    return DropdownButtonFormField<String>(
-      initialValue: _selectedStudentId,
+    final selectedIndex = widget.args.children.indexWhere(
+      (child) => child['id']?.toString() == _selectedStudentId,
+    );
+    return InputDecorator(
       decoration: const InputDecoration(labelText: 'Student'),
-      items: widget.args.children
-          .map(
-            (child) => DropdownMenuItem(
-              value: child['id']?.toString() ?? '',
-              child: Text(_studentLabel(child), style: GoogleFonts.dmSans()),
-            ),
-          )
-          .toList(),
-      validator: (value) {
-        if ((value ?? '').isEmpty) return 'Select a student';
-        return null;
-      },
-      onChanged: _submitting
-          ? null
-          : (value) {
-              if (value != null) setState(() => _selectedStudentId = value);
-            },
+      child: ParentChildSelector(
+        children: widget.args.children,
+        selectedIndex: selectedIndex < 0 ? 0 : selectedIndex,
+        isLoading: _submitting,
+        onSelected: (index) => setState(
+          () => _selectedStudentId =
+              widget.args.children[index]['id']?.toString() ?? '',
+        ),
+      ),
     );
   }
 
@@ -430,38 +425,6 @@ class _ParentLeaveRequestFormScreenState
       if (value.isNotEmpty) return value;
     }
     return '';
-  }
-
-  String _studentLabel(Map<String, dynamic> row) {
-    final explicit = row['name'] ?? row['full_name'] ?? row['student_name'];
-    final first = row['first_name']?.toString().trim() ?? '';
-    final last = row['last_name']?.toString().trim() ?? '';
-    final name = (explicit?.toString().trim().isNotEmpty ?? false)
-        ? explicit.toString().trim()
-        : [first, last].where((part) => part.isNotEmpty).join(' ');
-
-    String className = '';
-    String sectionName = '';
-    
-    if (row['class'] is Map) {
-      final c = row['class'] as Map;
-      if (c['grade'] is Map) {
-        className = c['grade']['grade_name']?.toString() ?? '';
-      } else {
-        className = c['grade_name']?.toString() ?? '';
-      }
-      sectionName = c['section_name']?.toString() ?? c['section']?.toString() ?? '';
-    } else {
-      className = row['class']?.toString() ?? row['grade_name']?.toString() ?? '';
-      sectionName = row['section']?.toString() ?? row['section_name']?.toString() ?? '';
-    }
-
-    final classLabel = [className, sectionName]
-        .where((part) => part.trim().isNotEmpty)
-        .join(' ');
-
-    if (classLabel.isEmpty) return name.isEmpty ? 'Student' : name;
-    return '${name.isEmpty ? 'Student' : name} - $classLabel';
   }
 
   bool _isIsoDate(String raw) {

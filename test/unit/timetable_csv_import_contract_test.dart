@@ -87,7 +87,7 @@ void main() {
       adminTimetableForms,
       contains("decoration: const InputDecoration(labelText: 'Room')"),
     );
-    expect(adminTimetableForms, contains("'room_id': _roomId"));
+    expect(adminTimetableForms, contains("roomId: _roomId"));
     expect(timetableHandler, contains('timetable_slots'));
     expect(timetableHandler, contains('room_id'));
     expect(timetableHandler, contains('buildClassSubjectAssignments'));

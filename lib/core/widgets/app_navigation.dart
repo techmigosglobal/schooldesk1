@@ -34,6 +34,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
   String _schoolLogo = '';
   String _userName = 'Principal';
   String _userSubtitle = 'Principal';
+  String _userAvatar = '';
 
   @override
   void initState() {
@@ -78,6 +79,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
         _userSubtitle = profile.roleName.trim().isEmpty
             ? 'Principal'
             : profile.roleName.trim();
+        _userAvatar = safeText(profile.avatar, fallback: '');
       });
     } on Object catch (_) {
       // Keep neutral labels if the backend is temporarily unavailable.
@@ -115,6 +117,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
       userName: _userName,
       userSubtitle: _userSubtitle,
       initials: safeInitials(_userName, fallback: 'PR'),
+      userAvatar: _userAvatar.isEmpty
+          ? null
+          : Image.network(
+              _assetUrl(_userAvatar),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
+            ),
       portalIcon: Icons.account_balance_rounded,
       selectedIndex: widget.selectedIndex,
       onDestinationSelected: widget.onDestinationSelected,
@@ -258,7 +267,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               index: PrincipalNav.complaints,
               icon: Icons.support_agent_outlined,
               activeIcon: Icons.support_agent_rounded,
-              label: SchoolDeskGlossary.complaints,
+              label: 'Raise an Issue',
               route: AppRoutes.complaintManagement,
             ),
             SchoolDeskNavigationItem(
@@ -350,11 +359,87 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
   }
 }
 
-class PrincipalShellBottomBar extends StatelessWidget {
+class PrincipalShellBottomBar extends StatefulWidget {
   const PrincipalShellBottomBar({super.key});
 
   @override
+  State<PrincipalShellBottomBar> createState() =>
+      _PrincipalShellBottomBarState();
+}
+
+class _PrincipalShellBottomBarState extends State<PrincipalShellBottomBar> {
+  String _avatarPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvatar();
+  }
+
+  Future<void> _loadAvatar() async {
+    final cached = BackendApiClient.instance.cachedProfile;
+    if (cached != null) {
+      if (mounted) {
+        setState(() {
+          _avatarPath = cached.avatar;
+        });
+      }
+      return;
+    }
+    try {
+      final profile = await BackendApiClient.instance.getProfile();
+      if (mounted) {
+        setState(() {
+          _avatarPath = profile.avatar;
+        });
+      }
+    } on Object catch (_) {}
+  }
+
+  Widget? _buildAvatarIcon(bool selected) {
+    final avatar = _avatarPath.trim();
+    if (avatar.isEmpty) return null;
+    final theme = Theme.of(context);
+    final isSelected = selected;
+    return Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: ClipOval(
+        child: avatar.startsWith('assets/')
+            ? Image.asset(avatar, fit: BoxFit.cover)
+            : Image.network(
+                avatar.startsWith('http')
+                    ? avatar
+                    : '${EnvConfig.apiOrigin}$avatar',
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Icon(
+                  isSelected
+                      ? Icons.account_circle_rounded
+                      : Icons.account_circle_outlined,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.schoolDesk.textMuted,
+                  size: 24,
+                ),
+              ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cached = BackendApiClient.instance.cachedProfile;
+    if (cached != null && cached.avatar != _avatarPath) {
+      _avatarPath = cached.avatar;
+    }
+
     final currentRoute = ModalRoute.of(context)?.settings.name;
     final destinations = const [
       _PrincipalShellDestination(
@@ -388,14 +473,22 @@ class PrincipalShellBottomBar extends StatelessWidget {
 
     return SchoolDeskBottomNavigationBar(
       items: [
-        for (final destination in destinations)
-          SchoolDeskBottomNavItem(
-            label: destination.label,
-            icon: destination.icon,
-            activeIcon: destination.activeIcon,
-            selected: currentRoute == destination.route,
-            onTap: () => _navigate(context, destination),
-          ),
+        for (final destination in destinations) ...[
+          (() {
+            final isProfile =
+                destination.label == SchoolDeskGlossary.profile ||
+                destination.label.toLowerCase() == 'profile';
+            return SchoolDeskBottomNavItem(
+              label: destination.label,
+              icon: destination.icon,
+              activeIcon: destination.activeIcon,
+              selected: currentRoute == destination.route,
+              customIcon: isProfile ? _buildAvatarIcon(false) : null,
+              customActiveIcon: isProfile ? _buildAvatarIcon(true) : null,
+              onTap: () => _navigate(context, destination),
+            );
+          })(),
+        ],
       ],
     );
   }
@@ -452,6 +545,7 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
   String _schoolLogo = '';
   String _userName = 'Super Admin';
   String _userSubtitle = 'Super Administrator';
+  String _userAvatar = '';
 
   @override
   void initState() {
@@ -496,6 +590,7 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
         _userSubtitle = profile.roleName.trim().isEmpty
             ? 'Super Administrator'
             : profile.roleName.trim();
+        _userAvatar = safeText(profile.avatar, fallback: '');
       });
     } on Object catch (_) {
       // Keep neutral labels if the backend is temporarily unavailable.
@@ -532,6 +627,13 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
       userName: _userName,
       userSubtitle: _userSubtitle,
       initials: safeInitials(_userName, fallback: 'SA'),
+      userAvatar: _userAvatar.isEmpty
+          ? null
+          : Image.network(
+              _assetUrl(_userAvatar),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
+            ),
       portalIcon: Icons.security_rounded,
       selectedIndex: widget.selectedIndex,
       onDestinationSelected: widget.onDestinationSelected,
@@ -554,11 +656,11 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
               route: AppRoutes.superAdminSystemMonitor,
             ),
             SchoolDeskNavigationItem(
-              index: SuperAdminNav.errorReporting,
-              icon: Icons.error_outline_rounded,
-              activeIcon: Icons.error_rounded,
-              label: 'Error Reporting',
-              route: AppRoutes.superAdminErrorReporting,
+              index: SuperAdminNav.complaints,
+              icon: Icons.support_agent_outlined,
+              activeIcon: Icons.support_agent_rounded,
+              label: 'Issue Management',
+              route: AppRoutes.superAdminIssues,
             ),
             SchoolDeskNavigationItem(
               index: SuperAdminNav.idCards,
@@ -584,7 +686,7 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
               icon: Icons.manage_accounts_outlined,
               activeIcon: Icons.manage_accounts_rounded,
               label: SchoolDeskGlossary.accessPermissions,
-              route: AppRoutes.principalUserManagement,
+              route: AppRoutes.superAdminAccess,
             ),
             SchoolDeskNavigationItem(
               index: SuperAdminNav.staff,
@@ -661,11 +763,87 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
   }
 }
 
-class SuperAdminShellBottomBar extends StatelessWidget {
+class SuperAdminShellBottomBar extends StatefulWidget {
   const SuperAdminShellBottomBar({super.key});
 
   @override
+  State<SuperAdminShellBottomBar> createState() =>
+      _SuperAdminShellBottomBarState();
+}
+
+class _SuperAdminShellBottomBarState extends State<SuperAdminShellBottomBar> {
+  String _avatarPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvatar();
+  }
+
+  Future<void> _loadAvatar() async {
+    final cached = BackendApiClient.instance.cachedProfile;
+    if (cached != null) {
+      if (mounted) {
+        setState(() {
+          _avatarPath = cached.avatar;
+        });
+      }
+      return;
+    }
+    try {
+      final profile = await BackendApiClient.instance.getProfile();
+      if (mounted) {
+        setState(() {
+          _avatarPath = profile.avatar;
+        });
+      }
+    } on Object catch (_) {}
+  }
+
+  Widget? _buildAvatarIcon(bool selected) {
+    final avatar = _avatarPath.trim();
+    if (avatar.isEmpty) return null;
+    final theme = Theme.of(context);
+    final isSelected = selected;
+    return Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: ClipOval(
+        child: avatar.startsWith('assets/')
+            ? Image.asset(avatar, fit: BoxFit.cover)
+            : Image.network(
+                avatar.startsWith('http')
+                    ? avatar
+                    : '${EnvConfig.apiOrigin}$avatar',
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Icon(
+                  isSelected
+                      ? Icons.account_circle_rounded
+                      : Icons.account_circle_outlined,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.schoolDesk.textMuted,
+                  size: 24,
+                ),
+              ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cached = BackendApiClient.instance.cachedProfile;
+    if (cached != null && cached.avatar != _avatarPath) {
+      _avatarPath = cached.avatar;
+    }
+
     final currentRoute = ModalRoute.of(context)?.settings.name;
     final destinations = const [
       _SuperAdminShellDestination(
@@ -699,14 +877,22 @@ class SuperAdminShellBottomBar extends StatelessWidget {
 
     return SchoolDeskBottomNavigationBar(
       items: [
-        for (final destination in destinations)
-          SchoolDeskBottomNavItem(
-            label: destination.label,
-            icon: destination.icon,
-            activeIcon: destination.activeIcon,
-            selected: currentRoute == destination.route,
-            onTap: () => _navigate(context, destination),
-          ),
+        for (final destination in destinations) ...[
+          (() {
+            final isProfile =
+                destination.label == SchoolDeskGlossary.profile ||
+                destination.label.toLowerCase() == 'profile';
+            return SchoolDeskBottomNavItem(
+              label: destination.label,
+              icon: destination.icon,
+              activeIcon: destination.activeIcon,
+              selected: currentRoute == destination.route,
+              customIcon: isProfile ? _buildAvatarIcon(false) : null,
+              customActiveIcon: isProfile ? _buildAvatarIcon(true) : null,
+              onTap: () => _navigate(context, destination),
+            );
+          })(),
+        ],
       ],
     );
   }

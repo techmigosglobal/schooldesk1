@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class ProfileManagementScreen extends StatefulWidget {
   final String role;
@@ -40,6 +41,22 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
 
   bool get _isPrincipal => widget.role.toLowerCase() == 'principal';
   bool get _isTeacher => widget.role.toLowerCase() == 'teacher';
+
+  SchoolDeskRole get _roleEnum {
+    switch (widget.role.trim().toLowerCase()) {
+      case 'principal':
+      case 'admin':
+        return SchoolDeskRole.principal;
+      case 'teacher':
+        return SchoolDeskRole.teacher;
+      case 'parent':
+        return SchoolDeskRole.parent;
+      case 'student':
+        return SchoolDeskRole.student;
+      default:
+        return SchoolDeskRole.principal;
+    }
+  }
 
   @override
   void initState() {
@@ -191,6 +208,8 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).schoolDesk;
+    final roleColor = tokens.roleColor(_roleEnum);
     final rawBottomPadding = MediaQuery.viewPaddingOf(context).bottom;
     final isCompactAndroid =
         Theme.of(context).platform == TargetPlatform.android &&
@@ -199,9 +218,16 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         ? 128.0
         : rawBottomPadding;
 
-    return Scaffold(
-      backgroundColor: context.appTheme.background,
-      appBar: AppBar(
+    return Theme(
+      data: Theme.of(context).copyWith(
+        primaryColor: roleColor,
+        colorScheme: Theme.of(context).colorScheme.copyWith(
+          primary: roleColor,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: context.appTheme.background,
+        appBar: AppBar(
         title: Text(
           'My Profile',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
@@ -321,6 +347,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
                 ),
               ),
             ),
+      ),
     );
   }
 
@@ -367,10 +394,11 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
     final name = _nameCtrl.text.trim().isNotEmpty
         ? _nameCtrl.text.trim()
         : (_profile?.email ?? 'User');
+    final roleColor = context.appTheme.roleColor(_roleEnum);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: context.appTheme.primary,
+        color: roleColor,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(

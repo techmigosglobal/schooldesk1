@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -146,14 +147,12 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 'invoiceNumber': inv['invoice_number'] ?? '',
                 'component': _text(
                   inv['fee_item_name'],
-                  fallback: feeType == 'book_kit'
-                      ? 'Book & Kit Fee'
-                      : 'Tuition Fee',
+                  fallback: _feeTypeLabel(feeType),
                 ),
                 'fee_type': feeType,
                 'billing_mode': inv['billing_mode'],
                 'priority': inv['priority'],
-                'frequency': feeType == 'book_kit' ? 'One Time' : 'Tuition',
+                'frequency': _billingModeLabel(_text(inv['billing_mode'])),
                 'amount': balance,
                 'paidAmount': paid,
                 'totalAmount': total,
@@ -382,63 +381,18 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   }
 
   Widget _buildChildSelector() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(_childrenData.length, (i) {
-          final isActive = i == _activeChildIndex;
-          return GestureDetector(
-            onTap: () {
-              if (isActive) return;
-              setState(() {
-                _activeChildIndex = i;
-                _loading = true;
-              });
-              ParentChildSelectionService.saveIndex(_childrenData, i);
-              _loadData();
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? _headerColor
-                    : context.appTheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(20),
-                border: isActive
-                    ? null
-                    : Border.all(color: context.appTheme.outlineVariant),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isActive)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(right: 6),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  Text(
-                    _studentName(_childrenData[i]).split(' ').first,
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isActive
-                          ? Colors.white
-                          : context.appTheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ),
+    return ParentChildSelector(
+      children: _childrenData,
+      selectedIndex: _activeChildIndex,
+      isLoading: _loading,
+      onSelected: (index) {
+        setState(() {
+          _activeChildIndex = index;
+          _loading = true;
+        });
+        ParentChildSelectionService.saveIndex(_childrenData, index);
+        _loadData();
+      },
     );
   }
 
@@ -963,6 +917,46 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     final text = '${value ?? ''}'.trim();
     if (text.isEmpty || text == 'null') return '${fallback ?? ''}'.trim();
     return text;
+  }
+
+  String _feeTypeLabel(String feeType) {
+    switch (feeType) {
+      case 'book_kit':
+        return 'Book & Kit Fee';
+      case 'tuition':
+        return 'Tuition Fee';
+      case 'transport':
+        return 'Transport Fee';
+      case 'hostel':
+        return 'Hostel Fee';
+      case 'meals':
+        return 'Meals Fee';
+      case 'lab':
+        return 'Lab Fee';
+      case 'sports':
+        return 'Sports Fee';
+      default:
+        if (feeType.isEmpty) return 'Fee';
+        final label =
+            feeType[0].toUpperCase() +
+            feeType.substring(1).replaceAll('_', ' ');
+        return '$label Fee';
+    }
+  }
+
+  String _billingModeLabel(String mode) {
+    switch (mode) {
+      case 'monthly':
+        return 'Monthly';
+      case 'one_time':
+        return 'One Time';
+      case 'term':
+        return 'Per Term';
+      case 'yearly':
+        return 'Yearly';
+      default:
+        return 'Monthly';
+    }
   }
 
   String _money(double amount) => '₹${amount.toStringAsFixed(0)}';

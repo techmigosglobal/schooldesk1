@@ -4,6 +4,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -163,44 +164,14 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
   }
 
   Widget _buildChildSelector() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(_childrenData.length, (i) {
-          final isActive = i == _activeChildIndex;
-          return GestureDetector(
-            onTap: () {
-              if (isActive) return;
-              setState(() {
-                _activeChildIndex = i;
-              });
-              _loadHistory();
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? const Color(0xFF1A6B4A)
-                    : context.appTheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(20),
-                border: isActive
-                    ? null
-                    : Border.all(color: context.appTheme.outlineVariant),
-              ),
-              child: Text(
-                _studentName(_childrenData[i]).split(' ').first,
-                style: GoogleFonts.ibmPlexSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : context.appTheme.onSurface,
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
+    return ParentChildSelector(
+      children: _childrenData,
+      selectedIndex: _activeChildIndex,
+      isLoading: _loading,
+      onSelected: (index) {
+        setState(() => _activeChildIndex = index);
+        _loadHistory();
+      },
     );
   }
 

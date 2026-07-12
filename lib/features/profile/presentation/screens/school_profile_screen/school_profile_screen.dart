@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class SchoolProfileScreen extends StatefulWidget {
   const SchoolProfileScreen({super.key});
@@ -215,13 +216,21 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SchoolDeskModuleScaffold(
-      title: 'School Profile',
-      subtitle: 'Maintain trusted institution identity, contacts, and branding',
-      drawer: PrincipalDrawer(
-        selectedIndex: PrincipalNav.schoolProfile,
-        onDestinationSelected: (_) {},
+    final principalColor = context.appTheme.roleColor(SchoolDeskRole.principal);
+    return Theme(
+      data: Theme.of(context).copyWith(
+        primaryColor: principalColor,
+        colorScheme: Theme.of(context).colorScheme.copyWith(
+          primary: principalColor,
+        ),
       ),
+      child: SchoolDeskModuleScaffold(
+        title: 'School Profile',
+        subtitle: 'Maintain trusted institution identity, contacts, and branding',
+        drawer: PrincipalDrawer(
+          selectedIndex: PrincipalNav.schoolProfile,
+          onDestinationSelected: (_) {},
+        ),
       actions: [
         if (!_loading && _error == null)
           TextButton.icon(
@@ -277,6 +286,13 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                         Icons.verified_rounded,
                         validator: (value) =>
                             _requiredText(value, 'Affiliation board', max: 80),
+                      ),
+                      _field(
+                        'Established Year',
+                        _establishedCtrl,
+                        Icons.event_available_rounded,
+                        keyboardType: TextInputType.number,
+                        validator: _requiredEstablishedYear,
                       ),
                       _field(
                         'Principal Name',
@@ -353,31 +369,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                         validator: _requiredPostalCode,
                       ),
                     ]),
-                    _section('Registration', [
-                      _field(
-                        'Registration Number',
-                        _registrationCtrl,
-                        Icons.badge_rounded,
-                        validator: (value) => _requiredIdentifier(
-                          value,
-                          'Registration number',
-                          max: 80,
-                        ),
-                      ),
-                      _field(
-                        'UDISE Code',
-                        _udiseCtrl,
-                        Icons.confirmation_number_rounded,
-                        keyboardType: TextInputType.number,
-                        validator: _optionalUdiseCode,
-                      ),
-                      _field(
-                        'Established Year',
-                        _establishedCtrl,
-                        Icons.event_available_rounded,
-                        keyboardType: TextInputType.number,
-                        validator: _requiredEstablishedYear,
-                      ),
+                    _section('Regional Preferences', [
                       _field(
                         'Timezone',
                         _timezoneCtrl,
@@ -396,10 +388,12 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                 ),
               ),
             ),
+      ),
     );
   }
 
   Widget _identityHeader() {
+    final principalColor = context.appTheme.roleColor(SchoolDeskRole.principal);
     final name = _nameCtrl.text.trim().isEmpty
         ? 'School Profile'
         : _nameCtrl.text.trim();
@@ -412,7 +406,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: context.appTheme.primary,
+        color: principalColor,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -469,15 +463,19 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                   ),
                 ],
                 const SizedBox(height: 10),
-                OutlinedButton.icon(
+                ElevatedButton.icon(
                   onPressed: _editing && !_saving ? _pickLogo : null,
                   icon: const Icon(Icons.upload_rounded, size: 18),
                   label: Text(
                     _logoPath.trim().isEmpty ? 'Upload Logo' : 'Replace Logo',
                   ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: BorderSide(color: context.appTheme.surface70),
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: principalColor,
+                    backgroundColor: Colors.white,
+                    disabledForegroundColor: principalColor.withAlpha(128),
+                    disabledBackgroundColor: Colors.white.withAlpha(180),
+                    elevation: 1,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   ),
                 ),
               ],
@@ -607,23 +605,6 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     return null;
   }
 
-  String? _requiredIdentifier(String? value, String field, {int max = 80}) {
-    final requiredError = _requiredText(value, field, max: max);
-    if (requiredError != null) return requiredError;
-    if (!RegExp(r'^[A-Za-z0-9 ./_-]+$').hasMatch(value!.trim())) {
-      return '$field contains unsupported characters.';
-    }
-    return null;
-  }
-
-  String? _optionalUdiseCode(String? value) {
-    final text = value?.trim() ?? '';
-    if (text.isEmpty) return null;
-    if (!RegExp(r'^[0-9]{11}$').hasMatch(text)) {
-      return 'UDISE code must be exactly 11 digits.';
-    }
-    return null;
-  }
 
   String? _requiredEstablishedYear(String? value) {
     final requiredError = _requiredText(value, 'Established year', max: 4);

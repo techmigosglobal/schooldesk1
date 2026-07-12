@@ -143,14 +143,7 @@ export async function handleBirthdayAlerts(
   if (principalError) return fail(principalError.message);
   const principalUserIds = (principals ?? []).map((p) => text(p.id)).filter(Boolean);
 
-  // Fetch all active parents
-  const { data: parents, error: parentError } = await svc.from("users")
-    .select("id")
-    .eq("school_id", school)
-    .eq("is_active", true)
-    .in("role_name", ["parent", "Parent"]);
-  if (parentError) return fail(parentError.message);
-  const parentUserIds = (parents ?? []).map((p) => text(p.id)).filter(Boolean);
+
 
   type StudentInfo = {
     id: string;
@@ -193,9 +186,18 @@ export async function handleBirthdayAlerts(
       photo_url: text(student.photo_url),
     };
 
-    // A. Add student to all parents
-    for (const parentId of parentUserIds) {
-      addStudentToRecipient(parentId, "parent", studentInfo);
+    // A. Add student to linked parents
+    const { data: linkedParents } = await svc.from("parent_student_links")
+      .select("parent_user_id")
+      .eq("school_id", school)
+      .eq("student_id", student.id);
+    if (linkedParents) {
+      for (const link of linkedParents) {
+        const parentId = text(link.parent_user_id);
+        if (parentId) {
+          addStudentToRecipient(parentId, "parent", studentInfo);
+        }
+      }
     }
 
     // B. Add student to all principals

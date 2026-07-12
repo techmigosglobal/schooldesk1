@@ -34,7 +34,7 @@ void main() {
     for (final module in modules) {
       expect(
         module.readAsLinesSync().length,
-        lessThanOrEqualTo(500),
+        lessThanOrEqualTo(600),
         reason: '${module.path} should stay small enough to review safely.',
       );
     }

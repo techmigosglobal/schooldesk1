@@ -186,6 +186,7 @@ Map<String, dynamic> normalizeFeeStructure(Map<String, dynamic> row) {
     'amount': _numValue(row['amount']),
     'frequency': _textValue(row['frequency'], fallback: 'term'),
     'fee_type': _textValue(row['fee_type']),
+    'fee_item_name': _textValue(row['fee_item_name']),
     'billing_mode': _textValue(row['billing_mode']),
     'due_day': row['due_day'] ?? 10,
     'due_date': row['due_date'],
@@ -213,9 +214,7 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
         : classLabel,
     'grade_id': _textValue(grade['id'] ?? row['grade_id']),
     'section_id': _textValue(
-      section['id'] ??
-          student['current_section_id'] ??
-          row['section_id'],
+      section['id'] ?? student['current_section_id'] ?? row['section_id'],
     ),
     'total': _numValue(row['total_amount'] ?? row['net_amount']),
     'paid': _numValue(row['paid_amount']),
@@ -262,8 +261,15 @@ List<String> invoiceMonthList(Map<String, dynamic>? invoice, String key) {
   return raw.map((v) => '$v'.trim()).where((v) => v.isNotEmpty).toList();
 }
 
-bool isTuitionInvoice(Map<String, dynamic>? invoice) =>
-    _textValue(invoice?['fee_type']) == 'tuition';
+bool isTuitionInvoice(Map<String, dynamic>? invoice) {
+  final label = _textValue(invoice?['fee_item_name']).toLowerCase();
+  if (label.contains('book') ||
+      label.contains('kit') ||
+      label.contains('uniform')) {
+    return false;
+  }
+  return _textValue(invoice?['fee_type']) == 'tuition';
+}
 
 List<String> allowedInvoiceMonths(Map<String, dynamic>? invoice) =>
     invoiceMonthList(invoice, 'allowed_month_names');

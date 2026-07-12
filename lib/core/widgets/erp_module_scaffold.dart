@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/constants/schooldesk_glossary.dart';
@@ -6,7 +7,9 @@ import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 
 class SchoolDeskModuleScaffold extends StatefulWidget {
   static const String openNavigationAction = '__schooldesk_open_navigation__';
@@ -138,7 +141,9 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
         explicitChildNodes: true,
         child: Scaffold(
           key: _scaffoldKey,
-          backgroundColor: tokens.pageBackground,
+          backgroundColor: _role == 'teacher'
+              ? Colors.transparent
+              : tokens.pageBackground,
           drawer: showRail || !widget.navigationDrawerEnabled
               ? null
               : widget.drawer,
@@ -161,7 +166,16 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
                 child: Column(
                   children: [
                     Material(
-                      color: tokens.panel,
+                      color: _role == 'teacher'
+                          ? Colors.transparent
+                          : _role == 'parent'
+                          ? Color.alphaBlend(
+                              tokens
+                                  .roleColor(SchoolDeskRole.parent)
+                                  .withAlpha(tokens.isDark ? 38 : 18),
+                              tokens.panel,
+                            )
+                          : tokens.panel,
                       elevation: 0,
                       child: SafeArea(
                         bottom: false,
@@ -185,9 +199,14 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
                       ),
                     ),
                     Expanded(
-                      child: widget.bodyIsScrollable
-                          ? SingleChildScrollView(child: widget.body)
-                          : widget.body,
+                      child: AppBackground(
+                        accent: _role == 'parent'
+                            ? tokens.roleColor(SchoolDeskRole.parent)
+                            : null,
+                        child: widget.bodyIsScrollable
+                            ? SingleChildScrollView(child: widget.body)
+                            : widget.body,
+                      ),
                     ),
                   ],
                 ),
@@ -216,9 +235,8 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
         badgeCount: _unreadCount,
         onPressed: () => _navigateGlobal(AppRoutes.notificationCenter),
       ),
-      _ToolbarIconButton(
+      _ToolbarProfileButton(
         tooltip: SchoolDeskGlossary.profile,
-        icon: Icons.account_circle_outlined,
         onPressed: () => _navigateGlobal(AppRoutes.profileScreen),
       ),
       _ToolbarIconButton(
@@ -230,19 +248,20 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
   }
 
   List<Widget> _compactToolbarActions() {
-    if (widget.actions.isEmpty && _role == 'parent') {
+    if (_role == 'parent') {
       return [
         _ToolbarIconButton(
           tooltip: 'Help',
           icon: Icons.help_outline_rounded,
           onPressed: () => _navigateGlobal(AppRoutes.help),
         ),
-        _ToolbarIconButton(
-          tooltip: SchoolDeskGlossary.notifications,
-          icon: Icons.notifications_none_rounded,
-          badgeCount: _unreadCount,
-          onPressed: () => _navigateGlobal(AppRoutes.notificationCenter),
-        ),
+        if (widget.actions.isEmpty)
+          _ToolbarIconButton(
+            tooltip: SchoolDeskGlossary.notifications,
+            icon: Icons.notifications_none_rounded,
+            badgeCount: _unreadCount,
+            onPressed: () => _navigateGlobal(AppRoutes.notificationCenter),
+          ),
       ];
     }
     if (widget.actions.isEmpty && _role == 'principal') {
@@ -359,14 +378,25 @@ class _ModuleToolbar extends StatelessWidget {
         : 280.0;
     final inlineActionWidth = compactActions ? 132.0 : 320.0;
 
-    return Container(
+    final isTeacher =
+        BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+        'teacher';
+
+    final toolbarWidget = Container(
       constraints: BoxConstraints(minHeight: tokens.sizing.toolbarHeight),
       padding: EdgeInsets.symmetric(
         horizontal: tokens.spacing.md,
         vertical: tokens.spacing.sm,
       ),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: tokens.panelBorder)),
+        color: isTeacher ? const Color(0xFFEFFBFA).withOpacity(0.85) : null,
+        border: Border(
+          bottom: BorderSide(
+            color: isTeacher
+                ? const Color(0xFF0F9F8E).withOpacity(0.15)
+                : tokens.panelBorder,
+          ),
+        ),
       ),
       child: showMenu
           ? Row(
@@ -475,6 +505,16 @@ class _ModuleToolbar extends StatelessWidget {
               ],
             ),
     );
+
+    if (isTeacher) {
+      return ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: toolbarWidget,
+        ),
+      );
+    }
+    return toolbarWidget;
   }
 }
 
@@ -639,7 +679,88 @@ class _ToolbarIconButton extends StatelessWidget {
   }
 }
 
-class _ModuleBottomActionBar extends StatelessWidget {
+class _ToolbarProfileButton extends StatefulWidget {
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _ToolbarProfileButton({required this.tooltip, required this.onPressed});
+
+  @override
+  State<_ToolbarProfileButton> createState() => _ToolbarProfileButtonState();
+}
+
+class _ToolbarProfileButtonState extends State<_ToolbarProfileButton> {
+  String _avatarPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final cached = BackendApiClient.instance.cachedProfile;
+    if (cached != null) {
+      _avatarPath = cached.avatar;
+    } else if (BackendApiClient.instance.isAuthenticated) {
+      _loadAvatar();
+    }
+  }
+
+  Future<void> _loadAvatar() async {
+    try {
+      final profile = await BackendApiClient.instance.getProfile();
+      if (mounted) setState(() => _avatarPath = profile.avatar);
+    } on Object catch (_) {
+      // The profile route remains available even if the avatar cannot load.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cached = BackendApiClient.instance.cachedProfile;
+    if (cached != null && cached.avatar != _avatarPath) {
+      _avatarPath = cached.avatar;
+    }
+    final theme = Theme.of(context);
+    final avatar = _avatarPath.trim();
+    return IconButton(
+      tooltip: widget.tooltip,
+      onPressed: widget.onPressed,
+      constraints: BoxConstraints(
+        minWidth: theme.schoolDesk.sizing.iconContainer,
+        minHeight: theme.schoolDesk.sizing.iconContainer,
+      ),
+      icon: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: theme.colorScheme.primaryContainer,
+          border: Border.all(color: theme.colorScheme.primary.withAlpha(110)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: avatar.isEmpty
+            ? Icon(
+                Icons.account_circle_rounded,
+                color: theme.colorScheme.primary,
+                size: 28,
+              )
+            : avatar.startsWith('assets/')
+            ? Image.asset(avatar, fit: BoxFit.cover)
+            : Image.network(
+                avatar.startsWith('http')
+                    ? avatar
+                    : '${EnvConfig.apiOrigin}$avatar',
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Icon(
+                  Icons.account_circle_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 28,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _ModuleBottomActionBar extends StatefulWidget {
   final String role;
   final int unreadCount;
   final List<SchoolDeskModuleBottomAction>? customActions;
@@ -655,14 +776,92 @@ class _ModuleBottomActionBar extends StatelessWidget {
   });
 
   @override
+  State<_ModuleBottomActionBar> createState() => _ModuleBottomActionBarState();
+}
+
+class _ModuleBottomActionBarState extends State<_ModuleBottomActionBar> {
+  String _avatarPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvatar();
+  }
+
+  Future<void> _loadAvatar() async {
+    final cached = BackendApiClient.instance.cachedProfile;
+    if (cached != null) {
+      if (mounted) {
+        setState(() {
+          _avatarPath = cached.avatar;
+        });
+      }
+      return;
+    }
+    // Guard against firing a network request (and leaving a dangling Dio
+    // timeout timer) when there is no session to fetch a profile for.
+    if (!BackendApiClient.instance.isAuthenticated) return;
+    try {
+      final profile = await BackendApiClient.instance.getProfile();
+      if (mounted) {
+        setState(() {
+          _avatarPath = profile.avatar;
+        });
+      }
+    } on Object catch (_) {}
+  }
+
+  Widget? _buildAvatarIcon(bool selected) {
+    final avatar = _avatarPath.trim();
+    if (avatar.isEmpty) return null;
+    final theme = Theme.of(context);
+    final isSelected = selected;
+    return Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: ClipOval(
+        child: avatar.startsWith('assets/')
+            ? Image.asset(avatar, fit: BoxFit.cover)
+            : Image.network(
+                avatar.startsWith('http')
+                    ? avatar
+                    : '${EnvConfig.apiOrigin}$avatar',
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Icon(
+                  isSelected
+                      ? Icons.account_circle_rounded
+                      : Icons.account_circle_outlined,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.schoolDesk.textMuted,
+                  size: 24,
+                ),
+              ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cached = BackendApiClient.instance.cachedProfile;
+    if (cached != null && cached.avatar != _avatarPath) {
+      _avatarPath = cached.avatar;
+    }
+
     final currentRoute = ModalRoute.of(context)?.settings.name;
     final homeRoute =
-        RouteAccessGuard.dashboardForRole(role) ?? AppRoutes.landingPage;
-    final configuredActions = customActions;
+        RouteAccessGuard.dashboardForRole(widget.role) ?? AppRoutes.landingPage;
+    final configuredActions = widget.customActions;
     final actions = configuredActions == null
         ? _defaultActionsForRole(
-            role: role,
+            role: widget.role,
             currentRoute: currentRoute,
             homeRoute: homeRoute,
           )
@@ -684,22 +883,30 @@ class _ModuleBottomActionBar extends StatelessWidget {
 
     return SchoolDeskBottomNavigationBar(
       items: [
-        for (final action in actions)
-          SchoolDeskBottomNavItem(
-            label: action.label,
-            icon: action.icon,
-            activeIcon: action.activeIcon,
-            selected: action.selected,
-            badgeCount: action.badgeCount,
-            onTap: () {
-              if (action.route ==
-                  SchoolDeskModuleScaffold.openNavigationAction) {
-                onOpenNavigation();
-                return;
-              }
-              onSelected(action.route, arguments: action.arguments);
-            },
-          ),
+        for (final action in actions) ...[
+          (() {
+            final isProfile =
+                action.label == SchoolDeskGlossary.profile ||
+                action.label.toLowerCase() == 'profile';
+            return SchoolDeskBottomNavItem(
+              label: action.label,
+              icon: action.icon,
+              activeIcon: action.activeIcon,
+              selected: action.selected,
+              badgeCount: action.badgeCount,
+              customIcon: isProfile ? _buildAvatarIcon(false) : null,
+              customActiveIcon: isProfile ? _buildAvatarIcon(true) : null,
+              onTap: () {
+                if (action.route ==
+                    SchoolDeskModuleScaffold.openNavigationAction) {
+                  widget.onOpenNavigation();
+                  return;
+                }
+                widget.onSelected(action.route, arguments: action.arguments);
+              },
+            );
+          })(),
+        ],
       ],
     );
   }
@@ -731,7 +938,7 @@ class _ModuleBottomActionBar extends StatelessWidget {
         activeIcon: Icons.notifications_rounded,
         route: notificationsRoute,
         selected: currentRoute == notificationsRoute,
-        badgeCount: unreadCount,
+        badgeCount: widget.unreadCount,
       ),
       _BottomAction(
         label: SchoolDeskGlossary.profile,

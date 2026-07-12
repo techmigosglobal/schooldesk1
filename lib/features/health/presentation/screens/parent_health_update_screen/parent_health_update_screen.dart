@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 
 /// Parent Health Update screen — parents can set pill/medication reminders
 /// for their children. These reminders are visible to teachers and principals
@@ -347,43 +349,15 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
       children: [
         // Child selector
         if (_children.length > 1)
-          SizedBox(
-            height: 56,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: _children.length,
-              itemBuilder: (ctx, i) {
-                final c = _children[i];
-                final name = '${c['first_name'] ?? ''} ${c['last_name'] ?? ''}'
-                    .trim();
-                final isActive = i == _activeChildIndex;
-                final theme = Theme.of(context);
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(name.isEmpty ? 'Student' : name),
-                    selected: isActive,
-                    selectedColor: theme.colorScheme.primary,
-                    backgroundColor: theme.colorScheme.surface,
-                    labelStyle: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isActive
-                          ? Colors.white
-                          : theme.colorScheme.onSurface,
-                    ),
-                    side: BorderSide(
-                      color: isActive
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.outlineVariant,
-                    ),
-                    onSelected: (_) {
-                      setState(() => _activeChildIndex = i);
-                      _loadHealthRecords(c['id'].toString());
-                    },
-                  ),
-                );
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ParentChildSelector(
+              children: _children,
+              selectedIndex: _activeChildIndex,
+              onSelected: (index) {
+                setState(() => _activeChildIndex = index);
+                ParentChildSelectionService.saveIndex(_children, index);
+                _loadHealthRecords(_children[index]['id'].toString());
               },
             ),
           ),

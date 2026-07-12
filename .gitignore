@@ -35,6 +35,7 @@ testsprite_tests/
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
+ios/build/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -54,6 +55,7 @@ env.*.json
 .env
 *.env
 .env.supabase
+ios/Flutter/DartDefines.xcconfig
 
 # Android release signing secrets
 android/key.properties

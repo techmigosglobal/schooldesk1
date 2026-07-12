@@ -5,7 +5,8 @@
     "noImplicitAny": false
   },
   "imports": {
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2",
+    "postgres": "npm:postgres@3.4.5"
   },
   "lint": {
     "rules": {

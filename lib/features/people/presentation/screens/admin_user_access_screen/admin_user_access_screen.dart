@@ -32,9 +32,12 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   final List<Map<String, dynamic>> _users = [];
   final List<Map<String, dynamic>> _activities = [];
 
-  List<String> get _manageableRoles => const ['Teacher', 'Parent'];
+  List<String> get _manageableRoles => _isSuperAdminOwner
+      ? const ['Principal', 'Teacher', 'Parent']
+      : const ['Teacher', 'Parent'];
 
   bool get _isPrincipalOwner => widget.ownerRole == 'principal';
+  bool get _isSuperAdminOwner => widget.ownerRole == 'super_admin';
 
   final Map<String, List<String>> _rolePermissions = {
     'Principal': [
@@ -118,6 +121,9 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           .where((u) => _manageableRoles.contains(u['role']))
           .toList();
       final activityRows = await api.getRawList('/audit-logs');
+      final permissionPayload = _isSuperAdminOwner
+          ? await api.getAccessPermissions()
+          : <String, dynamic>{};
       final activities = activityRows.take(30).map((a) {
         final createdAt = DateTime.tryParse('${a['created_at'] ?? ''}');
         final when = createdAt == null
@@ -139,6 +145,27 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
         _activities
           ..clear()
           ..addAll(activities);
+        if (_isSuperAdminOwner) {
+          final roles = permissionPayload['roles'] as List? ?? const [];
+          final permissions =
+              permissionPayload['permissions'] as List? ?? const [];
+          _rolePermissions.clear();
+          for (final rawRole in roles.whereType<Map>()) {
+            final role = Map<String, dynamic>.from(rawRole);
+            final id = '${role['id'] ?? ''}';
+            final name = _titleCase('${role['role_name'] ?? 'Role'}');
+            _rolePermissions[name] = permissions
+                .whereType<Map>()
+                .where((permission) => '${permission['role_id'] ?? ''}' == id)
+                .map((permission) {
+                  final module = '${permission['module'] ?? ''}'.trim();
+                  final action = '${permission['action'] ?? ''}'.trim();
+                  return action.isEmpty ? module : '$module · $action';
+                })
+                .where((value) => value.isNotEmpty)
+                .toList();
+          }
+        }
       });
     } on Object catch (e) {
       if (!mounted) return;
@@ -162,8 +189,15 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
 
   @override
   Widget build(BuildContext context) {
-    final title = _isPrincipalOwner ? 'Access & Permissions' : 'Access';
-    final drawer = widget.ownerRole == 'principal'
+    final title = (_isPrincipalOwner || _isSuperAdminOwner)
+        ? 'Access & Permissions'
+        : 'Access';
+    final drawer = _isSuperAdminOwner
+        ? SuperAdminDrawer(
+            selectedIndex: SuperAdminNav.access,
+            onDestinationSelected: (_) {},
+          )
+        : widget.ownerRole == 'principal'
         ? PrincipalDrawer(
             selectedIndex: PrincipalNav.access,
             onDestinationSelected: (_) {},
@@ -174,12 +208,16 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           );
     return SchoolDeskModuleScaffold(
       title: title,
-      subtitle: _isPrincipalOwner
+      subtitle: _isSuperAdminOwner
+          ? 'Manage role access boundaries across the school'
+          : _isPrincipalOwner
           ? 'Create school operators and review permission boundaries'
           : 'Provision teacher and parent accounts from backend users',
       drawer: drawer,
       floatingActionButton: DashboardFabWidget(
-        role: _isPrincipalOwner
+        role: _isSuperAdminOwner
+            ? DashboardRole.superAdmin
+            : _isPrincipalOwner
             ? DashboardRole.principal
             : DashboardRole.principal,
       ),

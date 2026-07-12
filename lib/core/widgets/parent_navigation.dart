@@ -11,6 +11,7 @@ import 'package:schooldesk1/core/services/feature_availability_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/text_utils.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 
 class ParentDrawer extends StatefulWidget {
   final int? selectedIndex;
@@ -31,8 +32,10 @@ class _ParentDrawerState extends State<ParentDrawer> {
   int _unreadCount = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Family access';
+  String _schoolLogo = '';
   String _userName = 'Parent';
   String _userSubtitle = 'Parent Portal';
+  String _userAvatar = '';
 
   @override
   void initState() {
@@ -68,6 +71,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
           school['affiliation_board'],
           fallback: safeText(school['school_type'], fallback: 'Family access'),
         );
+        _schoolLogo = safeText(school['logo_url'], fallback: '');
         _userName = safeText(
           profile.name,
           fallback: safeText(profile.username, fallback: 'Parent'),
@@ -75,6 +79,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
         _userSubtitle = childNames.isEmpty
             ? 'Parent Portal'
             : 'Parent - ${childNames.join(', ')}';
+        _userAvatar = safeText(profile.avatar, fallback: '');
       });
     } on Object catch (_) {
       // Keep neutral labels if the backend is temporarily unavailable.
@@ -101,9 +106,24 @@ class _ParentDrawerState extends State<ParentDrawer> {
       portalLabel: 'Parent Portal',
       organizationName: _schoolName,
       organizationSubtitle: _schoolSubtitle,
+      organizationLogo: _schoolLogo.isEmpty
+          ? null
+          : Image.network(
+              _assetUrl(_schoolLogo),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) =>
+                  const Icon(Icons.family_restroom_rounded),
+            ),
       userName: _userName,
       userSubtitle: _userSubtitle,
       initials: safeInitials(_userName, fallback: 'PA'),
+      userAvatar: _userAvatar.isEmpty
+          ? null
+          : Image.network(
+              _assetUrl(_userAvatar),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
+            ),
       portalIcon: Icons.family_restroom_rounded,
       selectedIndex: widget.selectedIndex,
       onDestinationSelected: widget.onDestinationSelected,
@@ -266,5 +286,12 @@ class _ParentDrawerState extends State<ParentDrawer> {
         ),
       ],
     );
+  }
+
+  String _assetUrl(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    return '${EnvConfig.apiOrigin}$path';
   }
 }

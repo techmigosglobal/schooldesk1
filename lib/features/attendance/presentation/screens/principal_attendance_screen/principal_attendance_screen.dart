@@ -1024,6 +1024,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           title: title,
           subject: title,
           text: 'Attendance export generated from ${AppConstants.appName}.',
+          context: context,
         );
       } else {
         final bytes = await PdfService.getInstance().generateAttendanceReport(

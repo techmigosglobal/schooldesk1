@@ -81,8 +81,20 @@ class EventPostMediaItem {
     return fromUrl(_text(value));
   }
 
-  static EventPostMediaItem fromUrl(String url) {
-    return EventPostMediaItem(url: url.trim(), kind: _kindFor(url, '', ''));
+  static EventPostMediaItem fromUrl(
+    String url, {
+    String name = '',
+    String mimeType = '',
+    int? size,
+  }) {
+    final normalizedUrl = url.trim();
+    return EventPostMediaItem(
+      url: normalizedUrl,
+      name: name,
+      mimeType: mimeType,
+      kind: _kindFor(normalizedUrl, mimeType, ''),
+      size: size,
+    );
   }
 
   static EventPostMediaKind _kindFor(

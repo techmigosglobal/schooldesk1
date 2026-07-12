@@ -104,8 +104,14 @@ class SchoolDeskScreenRegistry {
       portal: 'super_admin',
     ),
     SchoolDeskScreenMetadata(
-      route: '/super-admin-error-reporting-screen',
-      title: 'Error Reporting',
+      route: '/super-admin-access-screen',
+      title: 'Access & Permissions',
+      module: 'School Management',
+      portal: 'super_admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/super-admin-issues-screen',
+      title: 'Issues',
       module: 'System Administration',
       portal: 'super_admin',
     ),
@@ -314,7 +320,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/communication-center-screen',
-      title: 'Messages',
+      title: 'Communications',
       module: 'Communication',
       portal: 'principal',
     ),
@@ -332,7 +338,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/events-calendar-screen',
-      title: 'Academic Calendar',
+      title: SchoolDeskGlossary.calendar,
       module: 'Academic Calendar',
       portal: 'principal',
     ),
@@ -517,6 +523,12 @@ class SchoolDeskScreenRegistry {
       route: '/teacher-homework-screen/submissions',
       title: 'Homework Feedback',
       module: 'Classroom',
+      portal: 'teacher',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/teacher-complaints-screen',
+      title: 'Complaints',
+      module: 'Communication',
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
@@ -731,6 +743,54 @@ class SchoolDeskScreenRegistry {
       module: 'Shared Tools',
       portal: 'shared',
       isShared: true,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/login-loading-screen',
+      title: 'Loading',
+      module: 'System',
+      portal: 'shared',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/fee-home-screen',
+      title: 'Fees',
+      module: 'Finance',
+      portal: 'admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/fee-structures-screen',
+      title: 'Fee Structures',
+      module: 'Finance',
+      portal: 'admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/fee-collect-screen',
+      title: 'Collect Fees',
+      module: 'Finance',
+      portal: 'admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/fee-ledger-screen',
+      title: 'Fee Ledger',
+      module: 'Finance',
+      portal: 'admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/fee-reports-screen',
+      title: 'Fee Reports',
+      module: 'Finance',
+      portal: 'admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/fee-payment-config-screen',
+      title: 'Payment Settings',
+      module: 'Finance',
+      portal: 'admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/parent-complaints-screen',
+      title: 'Complaints',
+      module: 'Communication',
+      portal: 'parent',
     ),
   ];
 

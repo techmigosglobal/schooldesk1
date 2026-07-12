@@ -64,6 +64,10 @@ void main() {
             term == 'Staff Management') {
           continue;
         }
+        if (path.endsWith('admin_timetable_screen.dart') &&
+            term == 'Timetable Management') {
+          continue;
+        }
         expect(source, isNot(contains(term)), reason: '$term found in $path');
       }
     }

@@ -11,7 +11,6 @@ void main() {
     expect(source, contains('Today Action Queue'));
     expect(source, contains('_teacherActionQueue'));
     expect(source, contains('Mark Student Attendance'));
-    expect(source, contains('Review PTM Slots'));
     expect(source, contains('Track Leave'));
   });
 

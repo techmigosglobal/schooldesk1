@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 
@@ -68,7 +69,22 @@ void main() {
       expect(media.last.isVideo, isTrue);
     });
 
+    test(
+      'classifies uploaded document images while preserving their title',
+      () {
+        final media = EventPostMediaItem.fromUrl(
+          '/uploads/shared/school/1783834408231-Screenshot_20260712_105028.jpg',
+          name: 'Student ID proof',
+        );
+
+        expect(media.isImage, isTrue);
+        expect(media.displayName, 'Student ID proof');
+      },
+    );
+
     test('resolves backend uploads through the api uploads route', () {
+      BackendApiClient.instance.dio.options.baseUrl =
+          'https://api.schooldesk.local/api/v1';
       final resolved = resolveEventPostMediaUrl(
         '/uploads/shared/school/photo.jpg',
       );

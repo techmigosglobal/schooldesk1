@@ -14,6 +14,7 @@ class TokenStorageService {
   static const _refreshKey = 'auth_refresh_token';
   static const _roleKey = 'auth_role_name';
   static const _userIdKey = 'auth_user_id';
+  static const _schoolIdKey = 'auth_school_id';
 
   // On web, SharedPreferences maps to localStorage which is readable by any
   // JavaScript on the same origin (XSS risk). The short-lived access token is
@@ -50,12 +51,19 @@ class TokenStorageService {
     await _writeAuthValue(_userIdKey, userId.trim());
   }
 
+  static Future<String?> getSchoolId() => _readAuthValue(_schoolIdKey);
+
+  static Future<void> saveSchoolId(String schoolId) async {
+    await _writeAuthValue(_schoolIdKey, schoolId.trim());
+  }
+
   static Future<void> clear() async {
     await Future.wait([
       _deleteAuthValue(_accessKey),
       _deleteAuthValue(_refreshKey),
       _deleteAuthValue(_roleKey),
       _deleteAuthValue(_userIdKey),
+      _deleteAuthValue(_schoolIdKey),
     ]);
   }
 

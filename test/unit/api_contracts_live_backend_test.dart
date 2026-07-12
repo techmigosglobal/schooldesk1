@@ -18,7 +18,6 @@ void main() {
       ).toJson(),
       {
         'username': 'principal',
-        'email': 'principal@schooldesk.local',
         'password': 'secret123',
       },
     );
@@ -92,9 +91,8 @@ void main() {
       {
         'staff_id': 'staff-1',
         'leave_type_id': 'leave-type-1',
-        'from_date': '2026-05-30',
-        'to_date': '2026-05-31',
-        'half_day': false,
+        'start_date': '2026-05-30',
+        'end_date': '2026-05-31',
       },
     );
   });

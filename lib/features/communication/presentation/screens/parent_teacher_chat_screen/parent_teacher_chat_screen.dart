@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
@@ -24,8 +25,9 @@ class ParentTeacherChatScreen extends StatefulWidget {
 class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
-  Timer? _pollingTimer;
+
   RealtimeChannel? _realtimeChannel;
+  String _realtimeConversationId = '';
 
   bool _loading = true;
   bool _sending = false;
@@ -36,32 +38,50 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   List<Map<String, dynamic>> _children = const [];
   List<_TeacherThread> _threads = const [];
   List<Map<String, dynamic>> _messages = const [];
+  final List<Map<String, dynamic>> _pendingMessages = [];
+  DateTime? _messagesCursor;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-      if (mounted && !_sending) _load(background: true);
-    });
-    _realtimeChannel = ChatRealtimeService.instance.subscribe(
-      channelName: 'parent-chat-channel',
-      onUpdate: () {
-        if (mounted && !_sending) _load(background: true);
-      },
-    );
+    _subscribeRealtime();
   }
 
   @override
   void dispose() {
-    _pollingTimer?.cancel();
-    if (_realtimeChannel != null) {
-      Supabase.instance.client.removeChannel(_realtimeChannel!);
-    }
+    _removeRealtimeChannel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
+
+  // ── Realtime ──────────────────────────────────────────────────────────────
+
+  void _subscribeRealtime({String conversationId = ''}) {
+    if (_realtimeConversationId == conversationId && _realtimeChannel != null) {
+      return;
+    }
+    _removeRealtimeChannel();
+    _realtimeConversationId = conversationId;
+    _realtimeChannel = ChatRealtimeService.instance.subscribe(
+      channelName: 'parent-chat-$conversationId',
+      conversationId: conversationId,
+      onUpdate: () {
+        if (mounted && !_sending) _loadIncremental();
+      },
+    );
+  }
+
+  void _removeRealtimeChannel() {
+    final ch = _realtimeChannel;
+    if (ch != null) {
+      Supabase.instance.client.removeChannel(ch);
+      _realtimeChannel = null;
+    }
+  }
+
+  // ── Data loading ──────────────────────────────────────────────────────────
 
   Future<void> _load({bool background = false}) async {
     if (!background) {
@@ -138,12 +158,21 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         principalContacts: principalContacts,
       );
       final selected = _selectRetainedThread(_selectedThread, threads);
-      final messages = selected?.conversationId.isNotEmpty == true
-          ? await api.getUnifiedChatMessages(
-              conversationId: selected!.conversationId,
-            )
-          : <Map<String, dynamic>>[];
+      List<Map<String, dynamic>> messages;
+      DateTime? cursor;
+      if (selected?.conversationId.isNotEmpty == true) {
+        messages = await api.getUnifiedChatMessages(
+          conversationId: selected!.conversationId,
+        );
+        cursor = messages.isNotEmpty
+            ? _date(messages.last['sent_at'] ?? messages.last['created_at'])
+            : null;
+      } else {
+        messages = [];
+        cursor = null;
+      }
       if (!mounted) return;
+      final newConversationId = selected?.conversationId ?? '';
       setState(() {
         _parentUserId = profile.id;
         _children = children;
@@ -151,13 +180,14 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         _threads = threads;
         _selectedThread = selected;
         _messages = messages;
+        _pendingMessages.clear();
+        _messagesCursor = cursor;
         _loading = false;
       });
       _scrollToBottom();
-      if (selected?.conversationId.isNotEmpty == true) {
-        unawaited(
-          api.markUnifiedChatConversationRead(selected!.conversationId),
-        );
+      _subscribeRealtime(conversationId: newConversationId);
+      if (newConversationId.isNotEmpty) {
+        unawaited(api.markUnifiedChatConversationRead(newConversationId));
       }
     } on Object catch (error) {
       if (!mounted) return;
@@ -165,6 +195,105 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         _loading = false;
         if (!background) _error = error.toString();
       });
+    }
+  }
+
+  Future<void> _loadIncremental() async {
+    final thread = _selectedThread;
+    if (thread == null || thread.conversationId.isEmpty) {
+      await _load(background: true);
+      return;
+    }
+    try {
+      final api = BackendApiClient.instance;
+      final convId = thread.conversationId;
+      final selectedStudent = _selectedStudentId;
+      final conversations = await api.getUnifiedChatConversations(
+        type: 'parent_teacher',
+        studentId: selectedStudent,
+      );
+      final principalConversations = await api.getUnifiedChatConversations(
+        type: 'principal_parent',
+      );
+      final contacts = await api.getUnifiedChatContacts(
+        role: 'parent',
+        studentId: selectedStudent,
+      );
+      final teacherRows = contacts
+          .where((c) => _text(c['role']) == 'teacher')
+          .map((c) {
+            final teacherId = _text(c['id']);
+            final studentId = _text(c['student_id'], fallback: selectedStudent);
+            return _TeacherThread(
+              threadKey: _teacherThreadKey(teacherId, studentId),
+              teacherId: teacherId,
+              teacherName: _text(c['name']),
+              subtitle: _contactSubtitle(c),
+              studentId: studentId,
+              studentName: _text(c['student_name']),
+            );
+          })
+          .toList();
+      final principalContacts = contacts
+          .where((c) => _text(c['role']) == 'principal')
+          .map(
+            (c) => UserAccountModel(
+              id: _text(c['id']),
+              name: _text(c['name']),
+              username: '',
+              email: '',
+              phone: '',
+              avatar: '',
+              schoolId: '',
+              roleId: '',
+              roleName: 'principal',
+              linkedType: '',
+              linkedId: '',
+              isActive: true,
+              isVerified: true,
+            ),
+          )
+          .toList();
+      final threads = _mergeThreads(
+        parentUserId: _parentUserId,
+        studentId: selectedStudent,
+        children: _children,
+        teacherRows: teacherRows,
+        conversations: conversations,
+        principalConversations: principalConversations,
+        principalContacts: principalContacts,
+      );
+      final newMessages = await api.getUnifiedChatMessages(
+        conversationId: convId,
+        sentAfter: _messagesCursor,
+      );
+      if (!mounted) return;
+      setState(() {
+        _threads = threads;
+        _selectedThread = _selectRetainedThread(_selectedThread, threads);
+        if (newMessages.isNotEmpty) {
+          final confirmedBodies = newMessages
+              .map((m) => _text(m['body'] ?? m['message']))
+              .toSet();
+          _pendingMessages.removeWhere(
+            (p) =>
+                p['_pending'] == true &&
+                confirmedBodies.contains(_text(p['body'] ?? p['message'])),
+          );
+          _messages = [..._messages, ...newMessages];
+          _messagesCursor =
+              _date(
+                newMessages.last['sent_at'] ?? newMessages.last['created_at'],
+              ) ??
+              _messagesCursor;
+        }
+      });
+      if (newMessages.isNotEmpty) {
+        _scrollToBottom();
+        unawaited(api.markUnifiedChatConversationRead(convId));
+      }
+    } on Object catch (_) {
+      // Silent — next Realtime event retries.
     }
   }
 
@@ -271,13 +400,35 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
 
   void _clearMessages() {
     _messages = const [];
+    _pendingMessages.clear();
+    _messagesCursor = null;
   }
+
+  // ── Send with optimistic UI ────────────────────────────────────────────────
 
   Future<void> _send() async {
     final thread = _selectedThread;
     final body = _messageController.text.trim();
     if (thread == null || body.isEmpty || _sending) return;
-    setState(() => _sending = true);
+
+    final optimistic = <String, dynamic>{
+      'id': 'pending-${DateTime.now().millisecondsSinceEpoch}',
+      'body': body,
+      'message': body,
+      'sender_user_id': _parentUserId,
+      'sender_id': _parentUserId,
+      'sent_at': DateTime.now().toUtc().toIso8601String(),
+      'is_read': false,
+      '_pending': true,
+    };
+
+    setState(() {
+      _sending = true;
+      _pendingMessages.add(optimistic);
+    });
+    _messageController.clear();
+    _scrollToBottom();
+
     try {
       var conversationId = thread.conversationId;
       if (conversationId.isEmpty) {
@@ -297,12 +448,25 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         conversationId: conversationId,
         body: body,
       );
-      _messageController.clear();
-      await _load();
+      await _load(background: true);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _pendingMessages.removeWhere((m) => m == optimistic);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send message: $error'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -356,30 +520,21 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
 
   Widget _childSelector() {
     if (_children.length <= 1) return const SizedBox.shrink();
-    return SizedBox(
-      height: 54,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-        scrollDirection: Axis.horizontal,
-        itemBuilder: (context, index) {
-          final child = _children[index];
-          final id = _text(child['id']);
-          return ChoiceChip(
-            label: Text(_childName(child)),
-            selected: id == _selectedStudentId,
-            onSelected: (_) {
-              setState(() {
-                _selectedStudentId = id;
-                _selectedThread = null;
-                _clearMessages();
-              });
-              _load();
-            },
-          );
-        },
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemCount: _children.length,
-      ),
+    final selectedIndex = _children.indexWhere(
+      (child) => _text(child['id']) == _selectedStudentId,
+    );
+    return ParentChildSelector(
+      children: _children,
+      selectedIndex: selectedIndex < 0 ? 0 : selectedIndex,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+      onSelected: (index) {
+        setState(() {
+          _selectedStudentId = _text(_children[index]['id']);
+          _selectedThread = null;
+          _clearMessages();
+        });
+        _load();
+      },
     );
   }
 
@@ -456,6 +611,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
     if (thread == null) {
       return const Center(child: Text('Select a teacher to start chatting.'));
     }
+    final displayed = [..._messages, ..._pendingMessages];
     return Column(
       children: [
         ListTile(
@@ -466,6 +622,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
                   onPressed: () => setState(() {
                     _selectedThread = null;
                     _clearMessages();
+                    _subscribeRealtime();
                   }),
                 )
               : CircleAvatar(
@@ -491,19 +648,25 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(vertical: 12),
-              itemCount: _messages.length,
+              itemCount: displayed.length,
               itemBuilder: (context, index) {
-                final message = _messages[index];
+                final message = displayed[index];
                 final mine =
                     _text(message['sender_user_id'] ?? message['sender_id']) ==
                     _parentUserId;
-                return ChatBubbleWidget(
-                  messageText: _text(message['body'] ?? message['message']),
-                  time: _time(
-                    _date(message['sent_at'] ?? message['created_at']),
+                final isPending = message['_pending'] == true;
+                return Opacity(
+                  opacity: isPending ? 0.6 : 1.0,
+                  child: ChatBubbleWidget(
+                    messageText: _text(message['body'] ?? message['message']),
+                    time: isPending
+                        ? '...'
+                        : _time(
+                            _date(message['sent_at'] ?? message['created_at']),
+                          ),
+                    isMe: mine,
+                    isRead: message['is_read'] == true,
                   ),
-                  isMe: mine,
-                  isRead: message['is_read'] == true,
                 );
               },
             ),
@@ -522,7 +685,11 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
     });
   }
 }

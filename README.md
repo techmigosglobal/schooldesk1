@@ -15,6 +15,7 @@ The retired backend and mobile-flow automation folders have been removed from th
 
 ```bash
 flutter pub get
+python3 tool/generate_dart_defines.py
 ```
 
 Run the app:
@@ -23,7 +24,13 @@ Run the app:
 flutter run
 ```
 
-Plain `flutter run` attaches to the Supabase Edge backend by default. Release/debug builds should pass the same Supabase values through `--dart-define` or Codemagic variables.
+Plain `flutter run` attaches to the Supabase Edge backend after generating the
+local iOS define file. For Xcode Debug, Release, or Archive builds, run
+`python3 tool/generate_dart_defines.py` after changing `env.supabase.json` and
+before building. Both Runner configurations load that generated file, so an
+installed iPhone build receives the same backend configuration as a run from
+Xcode. Release/debug CI builds should pass the same values through
+`--dart-define` or Codemagic variables.
 
 ## Codemagic APK
 

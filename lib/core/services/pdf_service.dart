@@ -215,6 +215,7 @@ class PdfService {
     required DateTime paymentDate,
     String schoolName = 'Public School',
     String schoolAddress = '123 Education Lane, Knowledge City - 400001',
+    Uint8List? schoolLogo,
   }) async {
     final pdf = await _createDocument();
 
@@ -227,7 +228,7 @@ class PdfService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               // Header
-              _buildReceiptHeader(schoolName, schoolAddress),
+              _buildReceiptHeader(schoolName, schoolAddress, schoolLogo),
               pw.SizedBox(height: 16),
               _buildDivider(),
               pw.SizedBox(height: 8),
@@ -675,7 +676,11 @@ class PdfService {
 
   // ─── Helper builders ─────────────────────────────────────────────────────
 
-  pw.Widget _buildReceiptHeader(String schoolName, String address) {
+  pw.Widget _buildReceiptHeader(
+    String schoolName,
+    String address, [
+    Uint8List? schoolLogo,
+  ]) {
     return pw.Row(
       children: [
         pw.Container(
@@ -685,16 +690,25 @@ class PdfService {
             color: _primaryColor,
             borderRadius: pw.BorderRadius.circular(8),
           ),
-          child: pw.Center(
-            child: pw.Text(
-              'SD',
-              style: pw.TextStyle(
-                fontSize: 18,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
-              ),
-            ),
-          ),
+          child: schoolLogo == null
+              ? pw.Center(
+                  child: pw.Text(
+                    'SD',
+                    style: pw.TextStyle(
+                      fontSize: 18,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white,
+                    ),
+                  ),
+                )
+              : pw.ClipRRect(
+                  horizontalRadius: 8,
+                  verticalRadius: 8,
+                  child: pw.Image(
+                    pw.MemoryImage(schoolLogo),
+                    fit: pw.BoxFit.cover,
+                  ),
+                ),
         ),
         pw.SizedBox(width: 12),
         pw.Column(

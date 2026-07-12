@@ -30,7 +30,12 @@ void main() {
     expect(pubspec, contains('- assets/branding/'));
 
     for (final source in [landing, onboarding]) {
-      expect(source, contains('Arish Ville Preschool'));
+      expect(
+        source.contains('Arish Ville Preschool') ||
+            source.contains('AppConstants.schoolName'),
+        isTrue,
+        reason: 'Should contain Arish Ville Preschool brand name or reference',
+      );
       expect(source, contains('assets/branding/ArishVilleLogo.png'));
       expect(source, contains('assets/branding/techmigos_logo.png'));
       expect(
@@ -49,7 +54,12 @@ void main() {
     expect(onboarding, contains('Powered by Techmigos'));
 
     expect(onboarding, contains('assets/branding/ArishVilleLogo.png'));
-    expect(main, contains("title: 'Arish Ville Preschool'"));
+    expect(
+      main.contains("title: 'Arish Ville Preschool'") ||
+          main.contains("title: AppConstants.schoolName"),
+      isTrue,
+      reason: 'main.dart should set app title to Arish Ville brand name or constant',
+    );
     expect(webIndex, contains('<title>Arish Ville Preschool</title>'));
     expect(webManifest, contains('"name": "Arish Ville Preschool"'));
     expect(webManifest, contains('"short_name": "Arish Ville"'));

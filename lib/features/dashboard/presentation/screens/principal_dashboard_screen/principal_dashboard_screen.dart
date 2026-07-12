@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
@@ -29,7 +30,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   bool _setupLoading = false;
   String? _setupError;
   String? _error;
-  int _selectedTab = 0;
   DateTime? _lastBackPressedAt;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
   final Set<String> _birthdayFiredKeys = {};
@@ -44,7 +44,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           final redirect = RouteAccessGuard.dashboardForRole(role);
-          Navigator.of(context).pushReplacementNamed(redirect ?? AppRoutes.landingPage);
+          Navigator.of(
+            context,
+          ).pushReplacementNamed(redirect ?? AppRoutes.landingPage);
         }
       });
       return;
@@ -196,9 +198,13 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           staffTotal: staff.total,
           studentsTotal: students.total,
           feeStructures: feeStructures,
-          unreadNotifications: notifications
-              .where((row) => row['is_read'] != true)
-              .length,
+          unreadNotifications: notifications.where((row) {
+            if (row['is_read'] == true) return false;
+            final targetRole = '${row['role'] ?? row['target_role'] ?? 'all'}'
+                .trim()
+                .toLowerCase();
+            return targetRole == 'all' || targetRole == 'principal';
+          }).length,
         );
         _setupLoading = false;
       });
@@ -256,24 +262,24 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         if (!didPop) _handleDashboardBack();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF3F7FC),
+        backgroundColor: Colors.transparent,
         drawer: isSuperAdmin
             ? SuperAdminDrawer(selectedIndex: 0, onDestinationSelected: (_) {})
             : PrincipalDrawer(selectedIndex: 0, onDestinationSelected: (_) {}),
-        body: SafeArea(
-          bottom: false,
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: _buildBody(context),
+        body: AppBackground(
+          accent: const Color(0xFF1478F2),
+          child: SafeArea(
+            bottom: false,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: _buildBody(context),
+              ),
             ),
           ),
         ),
-        bottomNavigationBar: _PrincipalBottomBar(
-          selectedIndex: _selectedTab,
-          onSelected: _handleBottomNav,
-        ),
+        bottomNavigationBar: const PrincipalShellBottomBar(),
       ),
     );
   }
@@ -444,14 +450,13 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     accent: Color(0xFF9333EA),
                     cardColor: Color(0xFFF5ECFF),
                   ),
-                  _AcademicModuleItem(
+                  const _AcademicModuleItem(
                     label: 'Messages & Chats',
                     route: AppRoutes.principalChatCommunications,
                     illustration: SchoolDeskUiIllustrations.chat,
                     fallbackIcon: Icons.forum_rounded,
-                    accent: const Color(0xFF7C3AED),
-                    cardColor: const Color(0xFFF3ECFF),
-                    badge: _data.unreadNotifications,
+                    accent: Color(0xFF7C3AED),
+                    cardColor: Color(0xFFF3ECFF),
                   ),
                 ],
                 onTap: (item) => _open(item.route),
@@ -534,25 +539,11 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     );
   }
 
-  void _handleBottomNav(int index) {
-    setState(() => _selectedTab = index);
-    switch (index) {
-      case 0:
-        return;
-      case 1:
-        _open(AppRoutes.globalSearch, arguments: 'principal');
-        return;
-      case 2:
-        _open(AppRoutes.notificationCenter, arguments: 'principal');
-        return;
-      case 3:
-        _open(AppRoutes.profileScreen, arguments: 'principal');
-        return;
+  Future<void> _open(String route, {Object? arguments}) async {
+    await Navigator.pushNamed(context, route, arguments: arguments);
+    if (mounted && route == AppRoutes.notificationCenter) {
+      await _loadDashboard();
     }
-  }
-
-  void _open(String route, {Object? arguments}) {
-    Navigator.pushNamed(context, route, arguments: arguments);
   }
 
   /*
@@ -979,6 +970,11 @@ class _PrincipalAppHeader extends StatelessWidget {
     required this.onNotifications,
   });
 
+  String _firstName(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    return parts.isNotEmpty ? parts.first : fullName;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1038,12 +1034,25 @@ class _PrincipalAppHeader extends StatelessWidget {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Builder(
+                            builder: (ctx) => IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(
+                                Icons.menu_rounded,
+                                color: Colors.white,
+                              ),
+                              tooltip: 'Open menu',
+                              onPressed: () => Scaffold.of(ctx).openDrawer(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Hello, ${data.principalName}',
+                                  'Hello, ${_firstName(data.principalName)}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.titleLarge?.copyWith(
@@ -1070,7 +1079,21 @@ class _PrincipalAppHeader extends StatelessWidget {
                               ],
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 4),
+                          Builder(
+                            builder: (ctx) => IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(
+                                Icons.help_outline_rounded,
+                                color: Colors.white,
+                              ),
+                              tooltip: 'Help',
+                              onPressed: () =>
+                                  Navigator.pushNamed(ctx, AppRoutes.help),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
                           _HeaderNotificationButton(
                             unreadCount: data.unreadNotifications,
                             onTap: onNotifications,
@@ -1593,15 +1616,25 @@ class _AcademicModuleTileState extends State<_AcademicModuleTile> {
                                   ),
                                 ],
                               ),
-                              child: SvgPicture.asset(
-                                item.illustration,
-                                fit: BoxFit.contain,
-                                placeholderBuilder: (_) => Icon(
-                                  item.fallbackIcon,
-                                  color: item.accent,
-                                  size: 34,
-                                ),
-                              ),
+                              child: item.illustration.endsWith('.svg')
+                                  ? SvgPicture.asset(
+                                      item.illustration,
+                                      fit: BoxFit.contain,
+                                      placeholderBuilder: (_) => Icon(
+                                        item.fallbackIcon,
+                                        color: item.accent,
+                                        size: 34,
+                                      ),
+                                    )
+                                  : Image.asset(
+                                      item.illustration,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, _, _) => Icon(
+                                        item.fallbackIcon,
+                                        color: item.accent,
+                                        size: 34,
+                                      ),
+                                    ),
                             ),
                             if (item.badge > 0)
                               Positioned(
@@ -1973,51 +2006,6 @@ class _SetupStepChip extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _PrincipalBottomBar extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onSelected;
-
-  const _PrincipalBottomBar({
-    required this.selectedIndex,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onSelected,
-        height: 66,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const [
-          NavigationDestination(
-            selectedIcon: Icon(Icons.home_rounded),
-            icon: Icon(Icons.home_outlined),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            selectedIcon: Icon(Icons.search_rounded),
-            icon: Icon(Icons.search_rounded),
-            label: 'Search',
-          ),
-          NavigationDestination(
-            selectedIcon: Icon(Icons.notifications_rounded),
-            icon: Icon(Icons.notifications_none_rounded),
-            label: 'Alerts',
-          ),
-          NavigationDestination(
-            selectedIcon: Icon(Icons.person_rounded),
-            icon: Icon(Icons.person_outline_rounded),
-            label: 'Profile',
-          ),
-        ],
       ),
     );
   }

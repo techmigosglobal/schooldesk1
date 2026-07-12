@@ -8,7 +8,7 @@ void main() {
       'lib/core/network/api_modules/students_api.dart',
     ).readAsStringSync();
     final parentFees = File(
-      'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',
+      'lib/features/finance/presentation/screens/parent_hub/parent_fee_hub.dart',
     ).readAsStringSync();
     final parentDashboard = File(
       'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',

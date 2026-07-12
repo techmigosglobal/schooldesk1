@@ -1,6 +1,7 @@
 // handlers/fees.ts — categories, structures, invoices, payments, requests, config
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
+import { queueReportExport } from "./uploads.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -42,17 +43,11 @@ function normalizeFrequency(value: unknown) {
 function normalizeFeeType(value: unknown, fallback = "") {
   const raw = text(value, fallback).toLowerCase().replaceAll("-", "_")
     .replaceAll(" ", "_");
-  if (raw.includes("book") || raw.includes("kit")) return "book_kit";
   if (raw.includes("tuition")) return "tuition";
-  return raw || "tuition";
+  return "other";
 }
 
 const monthNames = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
   "June",
   "July",
   "August",
@@ -60,6 +55,9 @@ const monthNames = [
   "October",
   "November",
   "December",
+  "January",
+  "February",
+  "March",
 ];
 
 const monthNameLookup = new Map(
@@ -106,13 +104,17 @@ function invoiceBillingMode(invoice: Record<string, unknown>) {
   const direct = text(invoice.billing_mode).toLowerCase().replaceAll("-", "_")
     .replaceAll(" ", "_");
   if (direct) return direct;
-  return invoiceFeeType(invoice) === "book_kit" ? "one_time" : "monthly";
+  return invoiceFeeType(invoice) === "tuition" ? "monthly" : "one_time";
 }
 
 function invoiceAllowedMonthNames(invoice: Record<string, unknown>) {
   const configured = selectedMonthNamesFrom(invoice.allowed_month_names);
   if (configured.length > 0) return configured;
-  return invoiceFeeType(invoice) === "tuition" ? [...monthNames] : [];
+  const feeType = invoiceFeeType(invoice);
+  const billingMode = invoiceBillingMode(invoice);
+  if (feeType !== "tuition" || billingMode === "one_time") return [];
+  if (billingMode === "monthly") return [...monthNames];
+  return [];
 }
 
 function invoicePaidMonthNames(invoice: Record<string, unknown>) {
@@ -126,7 +128,7 @@ function invoicePaidMonthNames(invoice: Record<string, unknown>) {
 function invoiceMonthlyAmount(invoice: Record<string, unknown>) {
   const configured = money(invoice.monthly_amount);
   if (configured > 0) return configured;
-  const allowedCount = invoiceAllowedMonthNames(invoice).length || 12;
+  const allowedCount = invoiceAllowedMonthNames(invoice).length || 10;
   return money(
     money(invoice.net_amount ?? invoice.total_amount) / allowedCount,
   );
@@ -144,9 +146,7 @@ function invoiceComponentLabel(invoice: Record<string, unknown>) {
       if (categoryName) return categoryName;
     }
   }
-  return invoiceFeeType(invoice) === "book_kit"
-    ? "Book & Kit Fee"
-    : "Tuition Fee";
+  return invoiceFeeType(invoice) === "tuition" ? "Tuition Fee" : "One-time Fee";
 }
 
 function decorateInvoice(invoice: Record<string, unknown>) {
@@ -164,9 +164,7 @@ function decorateInvoice(invoice: Record<string, unknown>) {
     ...invoice,
     fee_type: feeType,
     billing_mode: billingMode,
-    priority: feeType === "book_kit"
-      ? 1
-      : (typeof invoice.priority === "number" ? invoice.priority : 2),
+    priority: feeType === "tuition" ? 2 : 1,
     fee_item_name: text(invoice.fee_item_name, invoiceComponentLabel(invoice)),
     monthly_amount: monthlyAmount,
     term_amount: money(invoice.term_amount),
@@ -185,63 +183,81 @@ function validateInvoiceSelection(
 ) {
   const decorated = decorateInvoice(invoice);
   const feeType = text(decorated.fee_type);
+  const billingMode = text(decorated.billing_mode);
   const balance = money(
     invoice.balance ?? invoice.net_amount ?? invoice.total_amount,
   );
-  if (feeType === "book_kit") {
+
+  // One-time fees: book_kit or any fee with one_time billing mode.
+  if (feeType !== "tuition" || billingMode === "one_time") {
     if (
       selectedMonthNames.length > 0 || selectedMonths > 0 || selectedTerms > 0
     ) {
-      throw new Error("Book & Kit Fee is one-time only and cannot be split");
+      throw new Error("This fee is one-time only and cannot be split");
     }
     return {
       amount: balance,
       selectedMonthNames: [] as string[],
       selectedMonths: 0,
       selectedTerms: 0,
-      paidMonthNames: decorateInvoice(invoice).paid_month_names as string[],
+      paidMonthNames: decorated.paid_month_names as string[],
     };
   }
 
-  if (selectedMonthNames.length > 12 || selectedMonths > 12) {
-    throw new Error("selected_months cannot exceed 12");
-  }
-  if (selectedTerms > 0) {
-    throw new Error("selected_terms cannot exceed configured academic terms");
+  // Monthly fees: month-by-month installment payment.
+  if (billingMode === "monthly") {
+    if (selectedMonthNames.length > 10 || selectedMonths > 10) {
+      throw new Error("selected_months cannot exceed the June–March cycle of 10");
+    }
+    if (selectedTerms > 0) {
+      throw new Error("selected_terms cannot exceed configured academic terms");
+    }
+
+    const unpaidMonthNames = decorated.unpaid_month_names as string[];
+    if (unpaidMonthNames.length === 0) {
+      throw new Error("All monthly installments are already paid");
+    }
+
+    let months = selectedMonthNames.length > 0
+      ? selectedMonthNames
+      : unpaidMonthNames.slice(0, Math.max(1, selectedMonths));
+    months = selectedMonthNamesFrom(months);
+    if (months.length === 0) {
+      throw new Error("Select at least one monthly installment");
+    }
+    if (months.length > unpaidMonthNames.length) {
+      throw new Error(
+        "Selected months exceed the remaining unpaid installments",
+      );
+    }
+    const expectedPrefix = unpaidMonthNames.slice(0, months.length);
+    if (!monthNamesEqual(months, expectedPrefix)) {
+      throw new Error(
+        "Monthly installments must be paid in order without skipping",
+      );
+    }
+
+    const monthlyAmount = invoiceMonthlyAmount(invoice);
+    const amount = months.length === unpaidMonthNames.length
+      ? balance
+      : money(monthlyAmount * months.length);
+    return {
+      amount,
+      selectedMonthNames: months,
+      selectedMonths: months.length,
+      selectedTerms: 0,
+      paidMonthNames: decorated.paid_month_names as string[],
+    };
   }
 
-  const unpaidMonthNames = decorated.unpaid_month_names as string[];
-  if (unpaidMonthNames.length === 0) {
-    throw new Error("All tuition months are already paid");
+  // Lump-sum fees: term, yearly, or any other billing mode — pay full balance.
+  if (balance <= 0) {
+    throw new Error("This fee has already been fully paid");
   }
-
-  let months = selectedMonthNames.length > 0
-    ? selectedMonthNames
-    : unpaidMonthNames.slice(0, Math.max(1, selectedMonths));
-  months = selectedMonthNamesFrom(months);
-  if (months.length === 0) {
-    throw new Error("Select at least one continuous tuition month");
-  }
-  if (months.length > unpaidMonthNames.length) {
-    throw new Error(
-      "Selected months exceed the remaining unpaid tuition months",
-    );
-  }
-  const expectedPrefix = unpaidMonthNames.slice(0, months.length);
-  if (!monthNamesEqual(months, expectedPrefix)) {
-    throw new Error(
-      "Tuition months must be paid in continuous order without skipping",
-    );
-  }
-
-  const monthlyAmount = invoiceMonthlyAmount(invoice);
-  const amount = months.length === unpaidMonthNames.length
-    ? balance
-    : money(monthlyAmount * months.length);
   return {
-    amount,
-    selectedMonthNames: months,
-    selectedMonths: months.length,
+    amount: balance,
+    selectedMonthNames: [] as string[],
+    selectedMonths: 0,
     selectedTerms: 0,
     paidMonthNames: decorated.paid_month_names as string[],
   };
@@ -492,12 +508,38 @@ async function attachPaymentRequestRelations(
     for (const row of data ?? []) parentsById.set(text(row.id), row);
   }
 
-  return rows.map((row) => ({
-    ...row,
-    invoice: invoicesById.get(text(row.invoice_id)) ?? null,
-    student: studentsById.get(text(row.student_id)) ?? null,
-    parent_user: parentsById.get(text(row.parent_user_id)) ?? null,
+  return await Promise.all(rows.map(async (row) => {
+    const storedProof = text(row.proof_url);
+    const proofUrl = storedProof.startsWith("payment-proofs/")
+      ? (await svc.storage.from("payment-proofs").createSignedUrl(
+        storedProof,
+        10 * 60,
+      )).data?.signedUrl ?? ""
+      : storedProof;
+    return {
+      ...row,
+      proof_url: proofUrl,
+      invoice: invoicesById.get(text(row.invoice_id)) ?? null,
+      student: studentsById.get(text(row.student_id)) ?? null,
+      parent_user: parentsById.get(text(row.parent_user_id)) ?? null,
+    };
   }));
+}
+
+async function uploadPrivatePaymentProof(
+  svc: SupabaseClient,
+  school: string,
+  requestId: string,
+  file: File,
+) {
+  const path = `${school}/${requestId}/${Date.now()}-${file.name}`;
+  const { error } = await svc.storage.from("payment-proofs").upload(
+    path,
+    file,
+    { upsert: false },
+  );
+  if (error) throw error;
+  return `payment-proofs/${path}`;
 }
 
 async function invoiceIdsForFeeStructure(
@@ -699,28 +741,20 @@ export async function handleFees(
   const feesPath = path.replace(/^\/fees/, "");
 
   if (feesPath === "/reports/exports" && method === "POST") {
-    const id = crypto.randomUUID();
-    const payload = {
-      id,
-      report_title: `${body.report_title ?? body.report ?? "Fees report"}`
-        .trim(),
-      report_type: `${body.report_type ?? "fees"}`.trim(),
-      format: `${body.format ?? "pdf"}`.trim().toLowerCase(),
-      scope: `${body.scope ?? "fees"}`.trim(),
-      parameters: body.parameters ?? body,
-      status: "queued",
-      requested_by: user.id,
-      created_at: new Date().toISOString(),
-      download_url: "",
-    };
-    const { data, error } = await svc.from("frontend_records").insert({
-      school_id: school,
-      table_name: "fee_report_exports",
-      record_id: id,
-      data: payload,
-    }).select().single();
-    if (error) return fail(error.message);
-    return ok(data?.data ?? payload);
+    try {
+      const data = await queueReportExport(
+        svc,
+        school,
+        user,
+        "fee_report_exports",
+        body,
+      );
+      return ok(data);
+    } catch (error) {
+      return fail(
+        error instanceof Error ? error.message : "failed to queue fee report export",
+      );
+    }
   }
 
   function normalizeCategoryPayload(input: Record<string, unknown>) {
@@ -752,11 +786,11 @@ export async function handleFees(
       fee_type: feeType,
       billing_mode: text(
         input.billing_mode,
-        feeType == "book_kit" ? "one_time" : "monthly",
+        feeType === "tuition" ? "monthly" : "one_time",
       ),
       priority:
-        parseInt(text(input.priority, feeType == "book_kit" ? "1" : "2")) ||
-        (feeType == "book_kit" ? 1 : 2),
+        parseInt(text(input.priority, feeType === "tuition" ? "2" : "1")) ||
+        (feeType === "tuition" ? 2 : 1),
       is_mandatory: input.is_mandatory ?? input.is_active ?? true,
     };
   }
@@ -849,11 +883,66 @@ export async function handleFees(
     }
 
     if (seg === "rollover" && method === "POST") {
+      const fromYear = body.from_academic_year_id;
+      const toYear = body.to_academic_year_id;
+      if (!fromYear || !toYear) {
+        return fail("from_academic_year_id and to_academic_year_id are required");
+      }
+
+      const { data: sourceStructures, error: fetchErr } = await svc
+        .from("fee_structures")
+        .select("*")
+        .eq("school_id", school)
+        .eq("academic_year_id", fromYear);
+      if (fetchErr) return fail(fetchErr.message);
+
+      const { data: targetStructures, error: targetErr } = await svc
+        .from("fee_structures")
+        .select("grade_id, section_id, category_id")
+        .eq("school_id", school)
+        .eq("academic_year_id", toYear);
+      if (targetErr) return fail(targetErr.message);
+
+      const targetSet = new Set(
+        (targetStructures ?? []).map(
+          (s) => `${s.grade_id}_${s.section_id}_${s.category_id}`,
+        ),
+      );
+
+      const toInsert: Record<string, unknown>[] = [];
+      let skippedCount = 0;
+
+      for (const src of sourceStructures ?? []) {
+        const key = `${src.grade_id}_${src.section_id}_${src.category_id}`;
+        if (targetSet.has(key)) {
+          skippedCount++;
+          continue;
+        }
+        toInsert.push({
+          school_id: school,
+          academic_year_id: toYear,
+          grade_id: src.grade_id,
+          section_id: src.section_id,
+          category_id: src.category_id,
+          amount: src.amount,
+          frequency: src.frequency,
+          is_mandatory: src.is_mandatory,
+          due_date: src.due_date,
+        });
+      }
+
+      let copiedCount = 0;
+      if (toInsert.length > 0) {
+        const { error: insertErr } = await svc.from("fee_structures").insert(toInsert);
+        if (insertErr) return fail(insertErr.message);
+        copiedCount = toInsert.length;
+      }
+
       return ok({
-        copied_count: 0,
-        skipped_count: 0,
-        from_academic_year_id: body.from_academic_year_id ?? null,
-        to_academic_year_id: body.to_academic_year_id ?? null,
+        copied_count: copiedCount,
+        skipped_count: skippedCount,
+        from_academic_year_id: fromYear,
+        to_academic_year_id: toYear,
       });
     }
 
@@ -1093,14 +1182,14 @@ export async function handleFees(
           );
           const billingMode = text(
             structure.billing_mode,
-            feeType === "book_kit" ? "one_time" : "monthly",
+            feeType === "tuition" ? "monthly" : "one_time",
           );
           const total = money(structure.amount);
           const dueDate = dueDateFrom(
             body.due_date ?? structure.due_date,
             structure.due_day,
           );
-          const structureTag = feeType === "book_kit" ? "BK" : text(
+          const structureTag = feeType !== "tuition" ? "ONE" : text(
             (structure.fee_category as Record<string, unknown> | null)?.name,
             "TUI",
           )
@@ -1126,12 +1215,12 @@ export async function handleFees(
             fee_type: feeType,
             billing_mode: billingMode,
             priority: parseInt(
-              text(structure.priority, feeType === "book_kit" ? "1" : "2"),
-            ) || (feeType === "book_kit" ? 1 : 2),
-            monthly_amount: feeType === "tuition" ? money(total / 12) : 0,
+              text(structure.priority, feeType === "tuition" ? "2" : "1"),
+            ) || (feeType === "tuition" ? 2 : 1),
+            monthly_amount: billingMode === "monthly" ? money(total / 10) : 0,
             term_amount: 0,
             term_count: 0,
-            allowed_month_names: feeType === "tuition" ? monthNames : [],
+            allowed_month_names: billingMode === "monthly" ? monthNames : [],
             paid_month_names: [],
           }).select().single();
           if (invoiceError) {
@@ -1248,7 +1337,7 @@ export async function handleFees(
       });
     }
 
-    if (seg === "intent" && method === "POST") {
+    if ((seg === "intent" || seg === "request") && method === "POST") {
       const selectedMonthNames = selectedMonthNamesFrom(
         body.selected_month_names,
       );
@@ -1262,6 +1351,9 @@ export async function handleFees(
         : { data: null };
       if (invoiceError) return fail(invoiceError.message);
       if (!invoice) return fail("Invoice not found", 404);
+      if (!isAdminOrPrincipal(user) && text(body.payment_method, "upi").toLowerCase() !== "upi") {
+        return fail("Parents can submit manual UPI payment proofs only", 400);
+      }
       try {
         if (
           !await parentCanAccessStudent(
@@ -1421,13 +1513,13 @@ export async function handleFees(
       }
       let proofUrl = "";
       if (screenshot) {
-        const filePath =
-          `payment-proofs/${school}/${Date.now()}-${screenshot.name}`;
-        const { error: uploadError } = await svc.storage.from("school-assets")
-          .upload(filePath, screenshot, { upsert: true });
-        if (uploadError) return fail(uploadError.message);
-        proofUrl = svc.storage.from("school-assets").getPublicUrl(filePath).data
-          .publicUrl;
+        try {
+          proofUrl = await uploadPrivatePaymentProof(
+            svc, school, text(existingRequest?.id, requestReference), screenshot,
+          );
+        } catch (error) {
+          return fail(error instanceof Error ? error.message : "proof upload failed");
+        }
       }
       const payload = {
         school_id: school,
@@ -1541,17 +1633,15 @@ export async function handleFees(
       const form = await req.formData().catch(() => null);
       if (!form) return fail("multipart form required");
       const screenshot = form.get("screenshot") as File | null;
+      const paymentId = normalized.split("/").filter(Boolean)[0];
       let proofUrl: string | null = null;
       if (screenshot) {
-        const filePath =
-          `payment-proofs/${school}/${Date.now()}-${screenshot.name}`;
-        const { error: uploadError } = await svc.storage.from("school-assets")
-          .upload(filePath, screenshot, { upsert: true });
-        if (uploadError) return fail(uploadError.message);
-        proofUrl = svc.storage.from("school-assets").getPublicUrl(filePath).data
-          .publicUrl;
+        try {
+          proofUrl = await uploadPrivatePaymentProof(svc, school, paymentId, screenshot);
+        } catch (error) {
+          return fail(error instanceof Error ? error.message : "proof upload failed");
+        }
       }
-      const paymentId = normalized.split("/").filter(Boolean)[0];
       const { data, error } = await svc.from("parent_payment_requests").update({
         transaction_ref: text(
           form.get("transaction_ref") ?? form.get("transaction_id"),
@@ -1623,58 +1713,18 @@ export async function handleFees(
           } for selected fee interval`,
         );
       }
-      const paymentPayload = {
-        school_id: school,
-        student_id: invoice.student_id,
-        invoice_id: invoiceId,
-        amount,
-        payment_method: text(body.payment_method ?? body.payment_mode, "cash"),
-        reference_number: text(
-          body.reference_number ?? body.transaction_ref ??
-            body.transaction_id ?? body.receipt_number,
-        ),
-        paid_at: text(body.payment_date)
-          ? `${text(body.payment_date)}T00:00:00.000Z`
-          : new Date().toISOString(),
-        notes: text(body.remarks),
-        status: text(body.status, "completed"),
-        created_by: user.id,
-        selected_months: selection.selectedMonths,
-        selected_month_names: selection.selectedMonthNames,
-        selected_terms: selection.selectedTerms,
-      };
-      const { data: payment, error } = await svc.from("payments").insert(
-        paymentPayload,
-      ).select().single();
+      const { data: payment, error } = await svc.rpc("record_fee_payment", {
+        p_school_id: school, p_invoice_id: invoiceId, p_student_id: invoice.student_id,
+        p_amount: amount, p_payment_method: text(body.payment_method ?? body.payment_mode, "cash"),
+        p_reference_number: text(body.reference_number ?? body.transaction_ref ?? body.transaction_id ?? body.receipt_number),
+        p_paid_at: text(body.payment_date) ? `${text(body.payment_date)}T00:00:00.000Z` : new Date().toISOString(),
+        p_notes: text(body.remarks), p_created_by: user.id,
+        p_selected_month_names: selection.selectedMonthNames, p_selected_months: selection.selectedMonths,
+      }).single();
       if (error) return fail(error.message);
-      const receiptNum = `RCP-${Date.now()}`;
-      await svc.from("fee_receipts").insert({
-        school_id: school,
-        invoice_id: invoiceId,
-        payment_id: payment.id,
-        receipt_number: receiptNum,
-        amount: amount,
-        payment_method: paymentPayload.payment_method,
-        transaction_ref: paymentPayload.reference_number ?? null,
-      });
-      try {
-        await applyInvoiceAllocationUpdate(
-          svc,
-          school,
-          invoice as Record<string, unknown>,
-          amount,
-          selection.selectedMonthNames,
-        );
-      } catch (allocationError) {
-        return fail(
-          allocationError instanceof Error
-            ? allocationError.message
-            : "failed to update invoice allocation",
-        );
-      }
+      const atomicPayment = payment as Record<string, unknown>;
       return ok({
-        ...payment,
-        receipt_number: receiptNum,
+        ...atomicPayment,
         selected_month_names: selection.selectedMonthNames,
       });
     }
@@ -1819,56 +1869,18 @@ export async function handleFees(
               : "failed to validate approved fee selection",
           );
         }
-        const { data: payment, error: paymentError } = await svc.from(
-          "payments",
-        ).insert({
-          school_id: school,
-          student_id: existing.student_id,
-          invoice_id: existing.invoice_id,
-          amount: existing.amount,
-          payment_method: existing.payment_method ?? "upi",
-          reference_number: existing.transaction_ref ??
-            existing.transaction_id ?? existing.request_reference,
-          paid_at: existing.payment_date ?? new Date().toISOString(),
-          notes: existing.remarks ?? "",
-          status: "completed",
-          created_by: user.id,
-          selected_months: selection.selectedMonths,
-          selected_month_names: selection.selectedMonthNames,
-          selected_terms: selection.selectedTerms,
-        }).select().single();
+        const { data: payment, error: paymentError } = await svc.rpc("record_fee_payment", {
+          p_school_id: school, p_invoice_id: existing.invoice_id, p_student_id: existing.student_id,
+          p_amount: existing.amount, p_payment_method: existing.payment_method ?? "upi",
+          p_reference_number: existing.transaction_ref ?? existing.transaction_id ?? existing.request_reference,
+          p_paid_at: existing.payment_date ?? new Date().toISOString(), p_notes: existing.remarks ?? "",
+          p_created_by: user.id, p_selected_month_names: selection.selectedMonthNames,
+          p_selected_months: selection.selectedMonths, p_request_id: seg,
+        }).single();
         if (paymentError) return fail(paymentError.message);
-        paymentId = payment.id;
-        const receiptNumber = `RCP-${Date.now()}`;
-        const { data: receipt, error: receiptError } = await svc.from(
-          "fee_receipts",
-        ).insert({
-          school_id: school,
-          invoice_id: existing.invoice_id,
-          payment_id: payment.id,
-          receipt_number: receiptNumber,
-          amount: existing.amount,
-          payment_method: existing.payment_method ?? "upi",
-          transaction_ref: existing.transaction_ref ??
-            existing.transaction_id ?? existing.request_reference,
-        }).select().single();
-        if (receiptError) return fail(receiptError.message);
-        receiptId = receipt.id;
-        try {
-          await applyInvoiceAllocationUpdate(
-            svc,
-            school,
-            invoice as Record<string, unknown>,
-            money(existing.amount),
-            selection.selectedMonthNames,
-          );
-        } catch (allocationError) {
-          return fail(
-            allocationError instanceof Error
-              ? allocationError.message
-              : "failed to update invoice allocation",
-          );
-        }
+        const atomicPayment = payment as Record<string, unknown>;
+        paymentId = text(atomicPayment.payment_id);
+        receiptId = text(atomicPayment.receipt_id);
       }
       const { data, error } = await svc.from("parent_payment_requests").update({
         status: body.status ?? "pending",

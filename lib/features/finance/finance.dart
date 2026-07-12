@@ -1,5 +1,3 @@
-export 'presentation/screens/parent_fees_screen/parent_fees_screen.dart';
-export 'presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart';
 export 'presentation/screens/fee_home_screen/fee_home_screen.dart';
 export 'presentation/screens/fee_structures_screen/fee_structures_screen.dart';
 export 'presentation/screens/fee_collect_screen/fee_collect_screen.dart';
@@ -9,9 +7,6 @@ export 'presentation/screens/fee_payment_config_screen/fee_payment_config_screen
 export 'presentation/screens/admin_fees_screen/admin_payment_requests_screen.dart';
 export 'presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart';
 export 'presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
-export 'presentation/screens/parent_payment_screens/parent_payment_selection_screen.dart';
-export 'presentation/screens/parent_payment_screens/parent_payment_success_screen.dart';
-export 'presentation/screens/parent_payment_screens/receipt_view_screen.dart';
 export 'presentation/screens/parent_hub/parent_fee_hub.dart';
 export 'presentation/screens/parent_hub/parent_payment_flow.dart';
 export 'presentation/screens/parent_hub/parent_payment_history_v2.dart';

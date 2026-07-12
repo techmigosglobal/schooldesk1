@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -87,7 +86,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     }
   }
 
-  // ── Pick and upload a file ──────────────────────────────────────────────────
+  // ── Pick and upload images ──────────────────────────────────────────────────
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -96,29 +95,6 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     for (final xfile in picked) {
       await _uploadFile(xfile.path, xfile.name);
     }
-  }
-
-  Future<void> _pickFile() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: [
-        'pdf',
-        'jpg',
-        'jpeg',
-        'png',
-        'webp',
-        'doc',
-        'docx',
-        'mp4',
-        'mov',
-        'm4v',
-        'webm',
-      ],
-    );
-    if (result == null || result.files.isEmpty) return;
-    final path = result.files.single.path;
-    if (path == null) return;
-    await _uploadFile(path, result.files.single.name);
   }
 
   Future<void> _uploadFile(String path, String name) async {
@@ -171,8 +147,6 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   }
 
   Future<void> _submit(bool isSubmit) async {
-    if (_titleController.text.trim().isEmpty) return;
-
     final destinations = <String>[];
     if (_destParentHome) destinations.add('PARENTS_HOME');
     if (_destSchoolGallery) destinations.add('SCHOOL_GALLERY');
@@ -181,6 +155,21 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     if (destinations.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select at least one destination.')),
+      );
+      return;
+    }
+    final landingOnly = destinations.length == 1 && _destSchoolLanding;
+    if (!landingOnly && _titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter an event title.')));
+      return;
+    }
+    if (_destSchoolLanding && _uploadedMedia.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add at least one image for the landing-page slider.'),
+        ),
       );
       return;
     }
@@ -285,6 +274,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
           destinations.contains('School Gallery');
       _destSchoolLanding =
           destinations.contains('SCHOOL_LANDING') ||
+          destinations.contains('Landing Page') ||
           destinations.contains('Public Landing Page');
       _error = null;
       _tabController.animateTo(0);
@@ -405,7 +395,12 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                   if (_error != null) _ErrorBox(message: _error!),
                   SchoolDeskTextField(
                     controller: _titleController,
-                    label: 'Event Title *',
+                    label:
+                        _destSchoolLanding &&
+                            !_destParentHome &&
+                            !_destSchoolGallery
+                        ? 'Event Title (optional for landing image)'
+                        : 'Event Title *',
                     hint: 'E.g. Annual Sports Day',
                   ),
                   const SizedBox(height: 14),
@@ -442,7 +437,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                   const SizedBox(height: 20),
                   // ── Attachment section ──────────────────────────────
                   Text(
-                    'Attachments / Images',
+                    'Images',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -458,11 +453,6 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                         icon: const Icon(Icons.photo_outlined, size: 18),
                         label: const Text('Pick Images'),
                       ),
-                      OutlinedButton.icon(
-                        onPressed: _uploading ? null : _pickFile,
-                        icon: const Icon(Icons.attach_file_rounded, size: 18),
-                        label: const Text('Pick File'),
-                      ),
                       if (_uploading)
                         const SizedBox.square(
                           dimension: 20,
@@ -472,42 +462,61 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                   ),
                   if (_uploadedUrls.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    ..._uploadedUrls.asMap().entries.map(
-                      (entry) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: _uploadedUrls.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final url = entry.value;
+                        final media = _uploadedMedia.firstWhere(
+                          (m) => m.url == url,
+                          orElse: () => EventPostMediaItem.fromUrl(url),
+                        );
+                        return Stack(
+                          clipBehavior: Clip.none,
                           children: [
-                            const Icon(
-                              Icons.check_circle,
-                              color: Colors.green,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                entry.value.split('/').last,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: SizedBox(
+                                width: 96,
+                                height: 96,
+                                child: EventPostMediaPreview(
+                                  item: media,
+                                  height: 96,
+                                  compact: true,
+                                ),
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 16),
-                              onPressed: () => setState(() {
-                                final url = entry.value;
-                                final idx = entry.key;
-                                _uploadedUrls.removeAt(idx);
-                                // Remove the matching media item by URL so the
-                                // two lists stay in sync even if they diverge
-                                // in length (e.g. after a failed upload).
-                                _uploadedMedia.removeWhere((m) => m.url == url);
-                              }),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                            Positioned(
+                              top: -8,
+                              right: -8,
+                              child: InkWell(
+                                onTap: () => setState(() {
+                                  _uploadedUrls.removeAt(idx);
+                                  // Remove the matching media item by URL so
+                                  // the two lists stay in sync even if they
+                                  // diverge in length (e.g. failed upload).
+                                  _uploadedMedia.removeWhere(
+                                    (m) => m.url == url,
+                                  );
+                                }),
+                                child: Container(
+                                  padding: const EdgeInsets.all(3),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black87,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close_rounded,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
-                        ),
-                      ),
+                        );
+                      }).toList(),
                     ),
                   ],
                   const SizedBox(height: 20),
@@ -533,12 +542,16 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                         setState(() => _destSchoolGallery = v ?? false),
                   ),
                   CheckboxListTile(
-                    title: const Text('Public Landing Page'),
+                    title: const Text('Landing Page (pre-login auto slider)'),
+                    subtitle: const Text(
+                      'Images only. The description is optional and is not shown on the slider.',
+                    ),
                     value: _destSchoolLanding,
                     dense: true,
                     onChanged: (v) =>
                         setState(() => _destSchoolLanding = v ?? false),
                   ),
+
                   const SizedBox(height: 24),
                   Wrap(
                     alignment: WrapAlignment.end,

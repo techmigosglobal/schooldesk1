@@ -26,6 +26,7 @@ import 'package:schooldesk1/features/monitoring/presentation/screens/principal_a
 import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
 import 'package:schooldesk1/features/dashboard/presentation/screens/super_admin_dashboard_screen/super_admin_dashboard_screen.dart';
 import 'package:schooldesk1/features/shared/presentation/screens/help_screen/help_screen.dart';
+import 'package:schooldesk1/features/communication/presentation/screens/issue_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -112,8 +113,8 @@ class AppRoutes {
   static const String superAdminAuditLogs = '/super-admin-audit-logs-screen';
   static const String superAdminSystemMonitor =
       '/super-admin-system-monitor-screen';
-  static const String superAdminErrorReporting =
-      '/super-admin-error-reporting-screen';
+  static const String superAdminAccess = '/super-admin-access-screen';
+  static const String superAdminIssues = '/super-admin-issues-screen';
 
   // Teacher Module Routes
   static const String teacherLogin = '/teacher-login-screen';
@@ -239,7 +240,8 @@ class AppRoutes {
     communicationCenter: (context) => const PrincipalChatCommunicationsScreen(),
     principalChatCommunications: (context) =>
         const PrincipalChatCommunicationsScreen(),
-    complaintManagement: (context) => const ComplaintManagementScreen(),
+    complaintManagement: (context) =>
+        const IssueScreen(role: IssueScreenRole.principal),
     eventsCalendar: (context) => const EventsCalendarScreen(),
     reportsAnalytics: (context) => const ReportsAnalyticsScreen(),
     academicManagement: (context) => const PrincipalAcademicYearsScreen(),
@@ -302,7 +304,10 @@ class AppRoutes {
     superAdminDashboard: (context) => const SuperAdminDashboardScreen(),
     superAdminAuditLogs: (context) => const PrincipalAuditLogsScreen(),
     superAdminSystemMonitor: (context) => const SystemMonitorScreen(),
-    superAdminErrorReporting: (context) => const SystemMonitorScreen(),
+    superAdminAccess: (context) =>
+        const AdminUserAccessScreen(ownerRole: 'super_admin'),
+    superAdminIssues: (context) =>
+        const IssueScreen(role: IssueScreenRole.superAdmin),
 
     // Teacher
     teacherLogin: (context) => const AuthLoginScreen(),
@@ -314,7 +319,8 @@ class AppRoutes {
         const TeacherAttendanceHistoryScreen(),
     teacherMyAttendance: (context) => const TeacherMyAttendanceScreen(),
     teacherCommunication: (context) => const TeacherCommunicationScreen(),
-    teacherComplaints: (context) => const TeacherComplaintScreen(),
+    teacherComplaints: (context) =>
+        const IssueScreen(role: IssueScreenRole.teacher),
     teacherParentInteraction: (context) =>
         const TeacherParentInteractionScreen(),
     teacherLeave: (context) => const TeacherLeaveScreen(),

@@ -100,4 +100,22 @@ void main() {
     expect(readme, contains('API_BASE_URL'));
     expect(readme, isNot(contains('flutter build apk --release\n')));
   });
+
+  test('Xcode builds receive the generated production Dart defines', () {
+    final project = File(
+      'ios/Runner.xcodeproj/project.pbxproj',
+    ).readAsStringSync();
+    final debugConfig = File('ios/Flutter/Debug.xcconfig').readAsStringSync();
+    final releaseConfig = File(
+      'ios/Flutter/Release.xcconfig',
+    ).readAsStringSync();
+    final generator = File('tool/generate_dart_defines.py').readAsStringSync();
+
+    // A target-level DART_DEFINES value overrides the base xcconfig. Keeping
+    // it out of Runner lets both Debug and Release use the generated values.
+    expect(project, isNot(contains('DART_DEFINES =')));
+    expect(debugConfig, contains('DartDefines.xcconfig'));
+    expect(releaseConfig, contains('DartDefines.xcconfig'));
+    expect(generator, contains('env.supabase.json'));
+  });
 }

@@ -7,6 +7,7 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/features/leave/presentation/screens/parent_leave_screen/parent_leave_request_form_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -24,7 +25,6 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
   bool _loading = true;
   String? _error;
 
-  static const _headerColor = Color(0xFF1A6B4A);
   final _api = BackendApiClient.instance;
   List<Map<String, dynamic>> _children = [];
   List<Map<String, dynamic>> _requests = [];
@@ -208,37 +208,13 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
         ),
       );
     }
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(_children.length, (index) {
-          final child = _children[index];
-          final isActive = index == _activeChildIndex;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              selected: isActive,
-              label: Text(_firstName(_studentName(child))),
-              selectedColor: _headerColor,
-              backgroundColor: context.appTheme.surface,
-              labelStyle: GoogleFonts.dmSans(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : context.appTheme.onSurface,
-              ),
-              side: BorderSide(
-                color: isActive
-                    ? _headerColor
-                    : context.appTheme.outlineVariant,
-              ),
-              onSelected: (_) {
-                setState(() => _activeChildIndex = index);
-                ParentChildSelectionService.saveIndex(_children, index);
-              },
-            ),
-          );
-        }),
-      ),
+    return ParentChildSelector(
+      children: _children,
+      selectedIndex: _activeChildIndex,
+      onSelected: (index) {
+        setState(() => _activeChildIndex = index);
+        ParentChildSelectionService.saveIndex(_children, index);
+      },
     );
   }
 
@@ -685,11 +661,6 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       return (row['name'] ?? row['email'] ?? '').toString();
     }
     return '';
-  }
-
-  String _firstName(String value) {
-    final parts = value.trim().split(RegExp(r'\s+'));
-    return parts.isEmpty || parts.first.isEmpty ? value : parts.first;
   }
 
   String _statusLabel(dynamic value) {

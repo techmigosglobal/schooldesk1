@@ -424,6 +424,7 @@ class _AdminFeeStructureFormScreenState
                 ? 'Enter a due day from 1 to 31.'
                 : null;
           },
+          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
         TextFormField(

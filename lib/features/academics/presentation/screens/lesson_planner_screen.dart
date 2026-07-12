@@ -258,6 +258,12 @@ class _TeacherLessonPlannerScreenState
 
   @override
   Widget build(BuildContext context) {
+    final uploaded = _planners
+        .where((planner) => _text(planner['status']) != 'completed')
+        .toList();
+    final completed = _planners
+        .where((planner) => _text(planner['status']) == 'completed')
+        .toList();
     return TeacherFlowScaffold(
       title: 'Lesson Planner',
       subtitle: 'Weekly class plans',
@@ -283,8 +289,20 @@ class _TeacherLessonPlannerScreenState
               subtitle: 'Waiting for weekly uploads',
               body: Text('Upload next week plans for your assigned class.'),
             )
-          else
-            ..._planners.map(_plannerCard),
+          else ...[
+            ...uploaded.map(_plannerCard),
+            if (completed.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Text(
+                'Completed Plans',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 14),
+              ...completed.map(_plannerCard),
+            ],
+          ],
         ],
       ),
     );
@@ -456,6 +474,10 @@ class _TeacherLessonPlannerScreenState
             const SizedBox(height: 6),
             Text(_text(planner['note'])),
           ],
+          if (isCompleted && _text(planner['completed_at']).isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('Completed: ${_shortDate(planner['completed_at'])}'),
+          ],
           if (attachments.isNotEmpty) ...[
             const SizedBox(height: 10),
             Wrap(
@@ -463,15 +485,19 @@ class _TeacherLessonPlannerScreenState
               runSpacing: 8,
               children: [
                 for (final attachment in attachments)
-                  OutlinedButton.icon(
-                    onPressed: () => _openAttachment(
-                      context,
-                      _text(attachment['url']),
-                      name: _text(attachment['name']),
-                    ),
-                    icon: const Icon(Icons.attach_file_rounded, size: 18),
-                    label: Text(
-                      _text(attachment['name'], fallback: 'Open attachment'),
+                  SizedBox(
+                    width: 132,
+                    child: EventPostMediaPreview(
+                      item: EventPostMediaItem(
+                        url: _text(attachment['url']),
+                        name: _text(attachment['name']),
+                        mimeType: _text(attachment['mime_type']),
+                        kind: EventPostMediaItem.fromUrl(
+                          _text(attachment['url']),
+                        ).kind,
+                      ),
+                      height: 92,
+                      compact: true,
                     ),
                   ),
               ],
@@ -480,18 +506,6 @@ class _TeacherLessonPlannerScreenState
         ],
       ),
     );
-  }
-
-  void _openAttachment(
-    BuildContext context,
-    String attachmentUrl, {
-    String name = '',
-  }) {
-    final item = EventPostMediaItem.fromUrl(attachmentUrl);
-    final namedItem = name.isNotEmpty && item.displayName.isEmpty
-        ? EventPostMediaItem(url: item.url, name: name, kind: item.kind)
-        : item;
-    openEventPostMediaPreview(context, namedItem);
   }
 
   Future<void> _pickDate(TextEditingController controller) async {

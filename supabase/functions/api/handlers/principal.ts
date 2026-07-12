@@ -634,7 +634,7 @@ function serializeClassRow(
   room: Record<string, any> | null,
   studentCount = 0,
   feeDues: { amount: number; students: number } = { amount: 0, students: 0 },
-  todayAttendancePct = 100.0,
+  todayAttendancePct: number | null = null,
 ) {
   const sectionName = text(section["section_name"]);
   const gradeName = text(grade?.["grade_name"]);
@@ -697,9 +697,10 @@ async function studentCountsBySection(
 async function feeDuesBySection(
   svc: SupabaseClient,
   school: string,
+  sectionYears: Map<string, string>,
 ) {
   const { data, error } = await svc.from("fee_invoices").select(
-    "student_id, balance, student:students(current_section_id)",
+    "student_id, academic_year_id, balance, status, student:students(current_section_id)",
   ).eq("school_id", school).gt("balance", 0);
   if (error) throw new Error(error.message);
   const totals = new Map<string, { amount: number; studentIds: Set<string> }>();
@@ -707,6 +708,12 @@ async function feeDuesBySection(
     const student = row.student as Record<string, any> | null;
     const sectionId = text(student?.current_section_id);
     if (!sectionId) continue;
+    if (sectionYears.get(sectionId) !== text(row.academic_year_id)) continue;
+    if (
+      ["cancelled", "void", "paid", "settled"].includes(
+        text(row.status).toLowerCase(),
+      )
+    ) continue;
     const current = totals.get(sectionId) ?? {
       amount: 0,
       studentIds: new Set<string>(),
@@ -740,9 +747,12 @@ async function attendanceBySection(
   for (const session of data ?? []) {
     const sectionId = text(session.section_id);
     if (!sectionId) continue;
-    const attendances = session.student_attendances as Array<{ status: string }> ?? [];
+    const attendances =
+      session.student_attendances as Array<{ status: string }> ?? [];
     if (attendances.length === 0) continue;
-    const present = attendances.filter((a: any) => a.status === "present" || a.status === "late").length;
+    const present = attendances.filter((a: any) =>
+      a.status === "present" || a.status === "late"
+    ).length;
     const pct = (present / attendances.length) * 100;
     pctMap.set(sectionId, pct);
   }
@@ -1149,6 +1159,7 @@ async function importClassRows(
           "class_teacher_id": classTeacherId || null,
           "co_teacher_id": coTeacherId || null,
           "room_id": room ? text(room.id) : null,
+          "sort_order": integer(grade["grade_number"]),
           "updated_at": new Date().toISOString(),
         }).eq("id", existingSection.id).eq("school_id", school);
         if (error) throw new Error(error.message);
@@ -1179,6 +1190,7 @@ async function importClassRows(
           "class_teacher_id": classTeacherId || null,
           "co_teacher_id": coTeacherId || null,
           "room_id": room ? text(room.id) : null,
+          "sort_order": integer(grade["grade_number"]),
         }).select().single();
         if (error) throw new Error(error.message);
         await syncSubjectMappings(
@@ -1237,10 +1249,18 @@ export async function handlePrincipal(
     try {
       const { data, error } = await svc.from("sections").select(
         "*, grade:grades(*), academic_year:academic_years(*), room:rooms(*), class_teacher:staff!sections_class_teacher_id_fkey(*), co_teacher:staff!sections_co_teacher_id_fkey(*)",
-      ).eq("school_id", school).order("created_at", { ascending: true });
+      ).eq("school_id", school).order("sort_order", {
+        ascending: true,
+        nullsFirst: false,
+      }).order("created_at", { ascending: true });
       if (error) return fail(error.message);
       const counts = await studentCountsBySection(svc, school);
-      const dues = await feeDuesBySection(svc, school);
+      const sectionYears = new Map(
+        (data ?? []).map((
+          row: Record<string, unknown>,
+        ) => [text(row.id), text(row.academic_year_id)]),
+      );
+      const dues = await feeDuesBySection(svc, school, sectionYears);
       const attendancePct = await attendanceBySection(svc, school);
       const classes = (data ?? []).map((row: any) =>
         serializeClassRow(
@@ -1249,7 +1269,7 @@ export async function handlePrincipal(
           (row["room"] ?? null) as Record<string, any> | null,
           counts.get(text(row["id"])) ?? 0,
           dues.get(text(row["id"])),
-          attendancePct.get(text(row["id"])) ?? 100.0,
+          attendancePct.get(text(row["id"])) ?? null,
         )
       );
       const totalStudents = classes.reduce(
@@ -1265,8 +1285,12 @@ export async function handlePrincipal(
           attendanceCount++;
         }
       }
-      const avgAttendance = attendanceCount > 0 ? (totalAttendancePct / attendanceCount) : 100.0;
-      const classesWithIssues = classes.filter((c: any) => c.pending_issues > 0).length;
+      const avgAttendance = attendanceCount > 0
+        ? (totalAttendancePct / attendanceCount)
+        : 0.0;
+      const classesWithIssues = classes.filter((c: any) =>
+        c.pending_issues > 0
+      ).length;
 
       return ok({
         classes,
@@ -1288,7 +1312,11 @@ export async function handlePrincipal(
     try {
       const grade = await resolveGrade(svc, school, body);
       const room = await resolveRoom(svc, school, body);
-      const classTeacherId = await resolveStaffId(svc, school, body.class_teacher_id);
+      const classTeacherId = await resolveStaffId(
+        svc,
+        school,
+        body.class_teacher_id,
+      );
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
       const academicYearId = await resolveAcademicYearId(
         svc,
@@ -1329,6 +1357,7 @@ export async function handlePrincipal(
         class_teacher_id: classTeacherId || null,
         co_teacher_id: coTeacherId || null,
         room_id: room ? text(room["id"]) : null,
+        sort_order: integer(grade["grade_number"]),
       };
       const { data: section, error } = await svc.from("sections").insert(
         sectionPayload,
@@ -1392,7 +1421,11 @@ export async function handlePrincipal(
     try {
       const grade = await resolveGrade(svc, school, body);
       const room = await resolveRoom(svc, school, body);
-      const classTeacherId = await resolveStaffId(svc, school, body.class_teacher_id);
+      const classTeacherId = await resolveStaffId(
+        svc,
+        school,
+        body.class_teacher_id,
+      );
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
       const academicYearId = await resolveAcademicYearId(
         svc,
@@ -1430,6 +1463,7 @@ export async function handlePrincipal(
         class_teacher_id: classTeacherId || null,
         co_teacher_id: coTeacherId || null,
         room_id: room ? text(room["id"]) : null,
+        sort_order: integer(grade["grade_number"]),
         updated_at: new Date().toISOString(),
       }).eq("id", sectionId).eq("school_id", school).select().single();
       if (error) return fail(error.message);

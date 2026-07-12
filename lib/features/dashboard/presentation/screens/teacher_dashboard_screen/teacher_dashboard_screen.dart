@@ -187,13 +187,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             )
           else
             TeacherCurrentClassCard(
-              greeting: 'Good morning, $shortName',
+              greeting: 'Hello, $shortName',
               classLabel: _currentClassTitle,
               subject: _currentSubject,
               timeLabel: _currentTimeLabel,
+              avatar: RoleAccessService.teacherAvatarUrl,
               actions: [
                 TeacherFlowAction(
-                  label: 'My QR Check-in',
+                  label: 'My Login',
                   icon: Icons.qr_code_scanner_rounded,
                   filled: true,
                   onTap: () => Navigator.pushNamed(

@@ -1,7 +1,9 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/feature_availability_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -56,25 +58,25 @@ class SchoolDeskUiIllustrations {
 
   static const secureLogin = 'assets/images/ui/secure-login.svg';
   static const emptyState = 'assets/images/ui/empty-state.svg';
-  static const attendance = 'assets/images/ui/illustration-attendance.svg';
-  static const homework = 'assets/images/ui/illustration-homework.svg';
-  static const notices = 'assets/images/ui/illustration-notices.svg';
+  static const attendance = 'assets/images/ui/illustration-attendance.png';
+  static const homework = 'assets/images/ui/homework.png';
+  static const notices = 'assets/images/ui/principal-events.png';
   static const fees = 'assets/images/ui/illustration-fees.svg';
-  static const chat = 'assets/images/ui/illustration-chat.svg';
-  static const calendar = 'assets/images/ui/illustration-calendar.svg';
-  static const classRoutine = 'assets/images/ui/illustration-class-routine.svg';
-  static const resources = 'assets/images/ui/illustration-resources.svg';
+  static const chat = 'assets/images/ui/illustration-chat.png';
+  static const calendar = 'assets/images/ui/leaves.png';
+  static const classRoutine = 'assets/images/ui/principal-classes.png';
+  static const resources = 'assets/images/ui/illustration-resources.png';
   static const lessonPlanner =
-      'assets/images/ui/illustration-lesson-planner.svg';
-  static const principalStudents = 'assets/images/ui/principal-students.svg';
+      'assets/images/ui/illustration-lesson-planner.png';
+  static const principalStudents = 'assets/images/ui/principal-students.png';
   static const principalStaffManagement =
-      'assets/images/ui/principal-staff-management.svg';
-  static const principalGuardians = 'assets/images/ui/principal-guardians.svg';
-  static const principalClasses = 'assets/images/ui/principal-classes.svg';
-  static const principalSubjects = 'assets/images/ui/principal-subjects.svg';
-  static const principalFees = 'assets/images/ui/principal-fees.svg';
-  static const principalEvents = 'assets/images/ui/principal-events.svg';
-  static const principalTimetable = 'assets/images/ui/principal-timetable.svg';
+      'assets/images/ui/principal-staff-management.png';
+  static const principalGuardians = 'assets/images/ui/principal-guardians.png';
+  static const principalClasses = 'assets/images/ui/principal-classes.png';
+  static const principalSubjects = 'assets/images/ui/principal-subjects.png';
+  static const principalFees = 'assets/images/ui/principal-fees.png';
+  static const principalEvents = 'assets/images/ui/illustration-calendar.png';
+  static const principalTimetable = 'assets/images/ui/principal-timetable.png';
 }
 
 class SchoolDeskCard extends StatelessWidget {
@@ -573,6 +575,8 @@ class SchoolDeskBottomNavItem {
   final bool selected;
   final int badgeCount;
   final VoidCallback onTap;
+  final Widget? customIcon;
+  final Widget? customActiveIcon;
 
   const SchoolDeskBottomNavItem({
     required this.label,
@@ -581,6 +585,8 @@ class SchoolDeskBottomNavItem {
     required this.selected,
     required this.onTap,
     this.badgeCount = 0,
+    this.customIcon,
+    this.customActiveIcon,
   });
 }
 
@@ -593,15 +599,26 @@ class SchoolDeskBottomNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
-    return SafeArea(
+    final isTeacher = BackendApiClient.instance.currentRoleName?.trim().toLowerCase() == 'teacher';
+
+    final barWidget = SafeArea(
       top: false,
       child: Material(
-        color: tokens.panel,
-        elevation: 10,
+        color: isTeacher ? Colors.transparent : tokens.panel,
+        elevation: isTeacher ? 0 : 10,
         shadowColor: context.appTheme.onSurface.withAlpha(24),
         child: Container(
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: tokens.panelBorder)),
+            color: isTeacher 
+                ? const Color(0xFFEFFBFA).withOpacity(0.85)
+                : null,
+            border: Border(
+              top: BorderSide(
+                color: isTeacher 
+                    ? const Color(0xFF0F9F8E).withOpacity(0.15)
+                    : tokens.panelBorder,
+              ),
+            ),
           ),
           padding: EdgeInsets.symmetric(
             horizontal: tokens.spacing.xs,
@@ -616,6 +633,16 @@ class SchoolDeskBottomNavigationBar extends StatelessWidget {
         ),
       ),
     );
+
+    if (isTeacher) {
+      return ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: barWidget,
+        ),
+      );
+    }
+    return barWidget;
   }
 }
 
@@ -634,16 +661,26 @@ class _SchoolDeskBottomNavButton extends StatelessWidget {
       textScale,
     );
     final color = item.selected ? theme.colorScheme.primary : tokens.textMuted;
+    final customWidget = item.selected
+        ? item.customActiveIcon
+        : item.customIcon;
     final icon = AnimatedSwitcher(
       duration: tokens.motion.fast,
       switchInCurve: tokens.motion.curve,
       switchOutCurve: tokens.motion.curve,
-      child: Icon(
-        item.selected ? item.activeIcon : item.icon,
-        key: ValueKey('${item.label}-${item.selected}'),
-        color: color,
-        size: 24,
-      ),
+      child: customWidget != null
+          ? SizedBox(
+              key: ValueKey('${item.label}-${item.selected}-custom'),
+              width: 24,
+              height: 24,
+              child: customWidget,
+            )
+          : Icon(
+              item.selected ? item.activeIcon : item.icon,
+              key: ValueKey('${item.label}-${item.selected}'),
+              color: color,
+              size: 24,
+            ),
     );
 
     return Semantics(
@@ -1275,12 +1312,14 @@ class SchoolDeskIllustration extends StatelessWidget {
     return Semantics(
       image: true,
       label: semanticLabel,
-      child: SvgPicture.asset(
-        asset,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-      ),
+      child: asset.endsWith('.svg')
+          ? SvgPicture.asset(
+              asset,
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+            )
+          : Image.asset(asset, width: size, height: size, fit: BoxFit.contain),
     );
   }
 }
@@ -1607,12 +1646,19 @@ class SchoolDeskIllustratedActionTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    SvgPicture.asset(
-                      illustrationAsset,
-                      width: imageSize,
-                      height: imageSize,
-                      fit: BoxFit.contain,
-                    ),
+                    illustrationAsset.endsWith('.svg')
+                        ? SvgPicture.asset(
+                            illustrationAsset,
+                            width: imageSize,
+                            height: imageSize,
+                            fit: BoxFit.contain,
+                          )
+                        : Image.asset(
+                            illustrationAsset,
+                            width: imageSize,
+                            height: imageSize,
+                            fit: BoxFit.contain,
+                          ),
                   ],
                 ),
               ),

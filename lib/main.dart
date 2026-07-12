@@ -14,6 +14,7 @@ import 'package:schooldesk1/core/di/service_locator.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
+import 'package:schooldesk1/core/services/app_permission_coordinator.dart';
 import 'package:schooldesk1/core/services/error_reporting_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/theme_provider.dart';
@@ -205,7 +206,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   maxScaleFactor: SchoolDeskResponsive.maxSupportedTextScale,
                 ),
               ),
-              child: AnimatedStartupSplash(child: child!),
+              child: AppPermissionLifecycleGate(
+                child: AnimatedStartupSplash(child: child!),
+              ),
             );
           },
           debugShowCheckedModeBanner: false,

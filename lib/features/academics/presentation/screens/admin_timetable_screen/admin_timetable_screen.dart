@@ -296,18 +296,39 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
             onPressed: _openSettings,
           )
         else
-          _statusCard(
-            icon: Icons.event_available_outlined,
-            title: 'Existing Timetable',
-            lines: [
-              'Last updated: ${_lastUpdatedLabel(selectedSlots)}',
-              'Status: Active',
-              '${_teachingPeriodCount(selectedSlots)} periods, ${_breakCount(selectedSlots)} breaks',
+          Column(
+            children: [
+              _statusCard(
+                icon: Icons.event_available_outlined,
+                title: 'Existing Timetable',
+                lines: [
+                  'Last updated: ${_lastUpdatedLabel(selectedSlots)}',
+                  'Status: Active',
+                  '${_teachingPeriodCount(selectedSlots)} periods, ${_breakCount(selectedSlots)} breaks',
+                ],
+                buttonLabel: 'View / Edit Timetable',
+                onPressed: _openExistingTimetable,
+                secondaryButtonLabel: 'Delete Whole Timetable',
+                onSecondaryPressed: _deleteWholeTimetable,
+              ),
+              const SizedBox(height: 12),
+              _panel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Current timetable'),
+                    const SizedBox(height: 8),
+                    for (final slot in selectedSlots)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          '${_dayShortLabels[(_int(slot['day_of_week']) - 1).clamp(0, 5).toInt()]} · ${_text(slot['start_time'])}–${_text(slot['end_time'])} · ${_text(_map(slot['subject'])['subject_name'] ?? slot['slot_label'], fallback: 'Break')}',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ],
-            buttonLabel: 'View / Edit Timetable',
-            onPressed: _openExistingTimetable,
-            secondaryButtonLabel: 'Delete Whole Timetable',
-            onSecondaryPressed: _deleteWholeTimetable,
           ),
       ],
     );

@@ -4,7 +4,7 @@
 // Exams, exam-schedules, results, assistant → 404
 // ============================================================
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "@supabase/supabase-js";
 import { handleAuth } from "./handlers/auth.ts";
 import { handleHealth } from "./handlers/health.ts";
 import { handleSchools } from "./handlers/schools.ts";
@@ -21,7 +21,11 @@ import { handleFees } from "./handlers/fees.ts";
 import { handleLeave } from "./handlers/leave.ts";
 import { handleTimetable } from "./handlers/timetable.ts";
 import { handleCommunications } from "./handlers/communications.ts";
-import { handleDocuments, handleUploads } from "./handlers/uploads.ts";
+import {
+  handleDocuments,
+  handleLandingFeed,
+  handleUploads,
+} from "./handlers/uploads.ts";
 import { handleEvents } from "./handlers/events.ts";
 import { handleParent } from "./handlers/parent.ts";
 import { handleReports } from "./handlers/reports.ts";
@@ -31,9 +35,18 @@ import { handleMedical } from "./handlers/medical.ts";
 import { handleHealthReminders } from "./handlers/health_reminders.ts";
 import { handleBirthdayAlerts } from "./handlers/birthday_alerts.ts";
 import { handleNotifications } from "./handlers/notifications.ts";
-import { handleSheetsSyncStudent, handleSheetsSyncTimetable } from "./handlers/sheets_sync.ts";
-import { handleSheetsPullAll, handleSheetsPullStudents, handleSheetsPullTimetable } from "./handlers/sheets_pull.ts";
+import {
+  handleSheetsSyncStudent,
+  handleSheetsSyncTimetable,
+} from "./handlers/sheets_sync.ts";
+import {
+  handleSheetsPullAll,
+  handleSheetsPullStudents,
+  handleSheetsPullTimetable,
+} from "./handlers/sheets_pull.ts";
 import { handleHelp } from "./handlers/help.ts";
+import { handleAccess } from "./handlers/access.ts";
+import { handleIssues } from "./handlers/issues.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
 
@@ -51,7 +64,7 @@ async function withDirectSql<T>(
 
   let sql: DirectSql | null = null;
   try {
-    const postgresModule = await import("npm:postgres@3.4.5");
+    const postgresModule = await import("postgres");
     sql = postgresModule.default(dbUrl, {
       prepare: false,
       max: 1,
@@ -195,14 +208,19 @@ export async function invokeNotificationProcessor(
 
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/notification-processor`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(serviceRoleKey ? { Authorization: `Bearer ${serviceRoleKey}` } : {}),
+    const response = await fetch(
+      `${supabaseUrl}/functions/v1/notification-processor`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(serviceRoleKey
+            ? { Authorization: `Bearer ${serviceRoleKey}` }
+            : {}),
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+    );
     const rawText = await response.text();
     let body: unknown = { raw: rawText };
     try {
@@ -265,7 +283,6 @@ Deno.serve(async (req: Request) => {
       404,
     );
   }
-  await ensureSchemaCacheReady();
   // Normalize: strip /functions/v1/api prefix → get /api/v1/... or /health
   let path = url.pathname
     .replace(/^\/functions\/v1\/api/, "")
@@ -290,8 +307,9 @@ Deno.serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "").trim();
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const isServiceRole = token.length > 0 && (
-      token === serviceKey || 
-      token === "18fd0a5339c8e5e81c3122a7607608e48631ef47cf3f5ac72c3486f7d115ee41"
+      token === serviceKey ||
+      token ===
+        "18fd0a5339c8e5e81c3122a7607608e48631ef47cf3f5ac72c3486f7d115ee41"
     );
     if (!isServiceRole) {
       return cors({ success: false, error: "unauthorized" }, 401);
@@ -318,6 +336,11 @@ Deno.serve(async (req: Request) => {
   // ── Auth routes (no prior auth required for login) ────────
   if (path.startsWith("/auth")) {
     return handleAuth(req, path, method, url);
+  }
+
+  // ── Public landing feed (no auth — serves pre-login carousel) ─
+  if (path === "/event-posts/landing" && method === "GET") {
+    return handleLandingFeed(req, url, serviceClient());
   }
 
   // ── Schools setup (no prior auth for first-time setup) ────
@@ -449,7 +472,11 @@ Deno.serve(async (req: Request) => {
   if (path.startsWith("/event-posts")) {
     return handleEvents(req, path, method, url, client, svc, user);
   }
-  if (path.startsWith("/documents") || path.startsWith("/student-documents")) {
+  if (
+    path.startsWith("/documents") ||
+    path.startsWith("/student-documents") ||
+    path.startsWith("/staff-documents")
+  ) {
     return handleDocuments(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/me/students") || path.startsWith("/parents")) {
@@ -457,6 +484,12 @@ Deno.serve(async (req: Request) => {
   }
   if (path.startsWith("/help")) {
     return handleHelp(req, path, method, url, client, svc, user);
+  }
+  if (path.startsWith("/access")) {
+    return handleAccess(req, path, method, url, client, svc, user);
+  }
+  if (path.startsWith("/issues")) {
+    return handleIssues(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/monitoring")) {
     return handleMonitoring(req, path, method, url, client, svc, user);
