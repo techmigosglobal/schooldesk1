@@ -102,10 +102,11 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final isWide = DesktopBreakpoints.isWideWidth(width);
+        final useTwoPane = DesktopBreakpoints.isTwoPaneWidth(width);
         // Side panel: 340px on standard desktop, 380px on wide
         final sidePanelWidth = isWide ? 380.0 : 340.0;
         final contentSpacing = tokens.spacing.lg;
-        final isNarrow = width < 960;
+        final isNarrow = !useTwoPane;
 
         final twoColumnContent = isNarrow
             ? Column(
@@ -208,14 +209,24 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // ── Header row: greeting + search bar ──────────────────────
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: header),
-                    SizedBox(width: contentSpacing),
-                    SizedBox(width: sidePanelWidth, child: searchBar),
-                  ],
-                ),
+                if (useTwoPane)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: header),
+                      SizedBox(width: contentSpacing),
+                      SizedBox(width: sidePanelWidth, child: searchBar),
+                    ],
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      header,
+                      SizedBox(height: contentSpacing),
+                      searchBar,
+                    ],
+                  ),
                 SizedBox(height: contentSpacing),
 
                 // ── KPI stats row (full-width) ─────────────────────────────

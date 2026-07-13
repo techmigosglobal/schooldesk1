@@ -22,6 +22,9 @@ void main() {
       expect(service, contains('deviceTokenPreview'));
       expect(service, contains('registerDeviceTokenIfPossible()'));
       expect(service, contains('_requestAndroidNotificationPermission'));
+      expect(service, contains('requestPermission('));
+      expect(service, contains('getAPNSToken()'));
+      expect(service, contains('_apnsRegistrationTimeout'));
       expect(service, contains('requestNotificationsPermission()'));
       expect(service, contains('areNotificationsEnabled()'));
       expect(
@@ -40,22 +43,33 @@ void main() {
     },
   );
 
-  test('permission recovery covers camera, media, and notifications', () {
-    final coordinator = File(
-      'lib/core/services/app_permission_coordinator.dart',
+  test('iOS requests only the permissions used by contextual features', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final app = File('lib/main.dart').readAsStringSync();
+    final filePickerPackage = File(
+      'third_party/flutter_plugins/file_picker/ios/file_picker/Package.swift',
+    ).readAsStringSync();
+    final paymentFlow = File(
+      'lib/features/finance/presentation/screens/parent_hub/parent_payment_flow.dart',
     ).readAsStringSync();
     final plist = File('ios/Runner/Info.plist').readAsStringSync();
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
     ).readAsStringSync();
 
-    expect(coordinator, contains('Permission.notification'));
-    expect(coordinator, contains('Permission.camera'));
-    expect(coordinator, contains('Permission.photos'));
-    expect(coordinator, contains('Permission.videos'));
-    expect(coordinator, contains('AppLifecycleState.resumed'));
-    expect(coordinator, contains('openAppSettings()'));
+    // Camera and photo access are requested by the feature SDKs only when a
+    // user opens the scanner or picker. Push permission is owned by Firebase.
+    // Keeping the broad permission plug-in out of the iOS binary avoids
+    // shipping unused location APIs and their App Store privacy requirement.
+    expect(pubspec, isNot(contains('permission_handler:')));
+    expect(app, isNot(contains('AppPermissionLifecycleGate')));
+    expect(filePickerPackage, isNot(contains('DKImagePickerController')));
+    expect(filePickerPackage, isNot(contains('PICKER_MEDIA')));
+    expect(paymentFlow, contains('ImagePicker().pickImage'));
+    expect(paymentFlow, isNot(contains('FileType.image')));
     expect(plist, contains('NSPhotoLibraryUsageDescription'));
+    expect(plist, isNot(contains('NSPhotoLibraryAddUsageDescription')));
+    expect(plist, isNot(contains('NSLocationWhenInUseUsageDescription')));
     expect(manifest, contains('android.permission.READ_MEDIA_IMAGES'));
     expect(manifest, contains('android.permission.READ_MEDIA_VIDEO'));
   });

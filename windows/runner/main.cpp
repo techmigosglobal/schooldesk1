@@ -26,7 +26,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
+  // Keep the native first frame consistent with the Dart window-manager
+  // configuration. This avoids a visible resize jump on Windows startup.
+  Win32Window::Size size(1280, 800);
   if (!window.Create(L"Arish Ville PreSchool App", origin, size)) {
     return EXIT_FAILURE;
   }

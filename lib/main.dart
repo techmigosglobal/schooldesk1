@@ -1,22 +1,25 @@
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui';
 import 'package:flutter/semantics.dart';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:schooldesk1/core/app_export.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/desktop/desktop_window_manager.dart';
 import 'package:schooldesk1/core/desktop/desktop_layout_wrapper.dart';
+import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/di/service_locator.dart';
+import 'package:schooldesk1/firebase_runtime_options.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
-import 'package:schooldesk1/core/services/app_permission_coordinator.dart';
 import 'package:schooldesk1/core/services/error_reporting_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/theme_provider.dart';
@@ -34,6 +37,34 @@ void main() async {
   // If this throws in production it means the APK/AAB was built without the
   // required --dart-define-from-file=env.supabase.json flag.
   EnvConfig.validate();
+
+  // ── Firebase — MUST be initialised before any Firebase API is called ─────
+  // FlutterFire reads GoogleService-Info.plist (iOS) / google-services.json
+  // (Android) automatically when options is null; Dart-define overrides
+  // supplement that for environments that need runtime configuration.
+  try {
+    await Firebase.initializeApp(
+      options: FirebaseRuntimeOptions.currentPlatform,
+    );
+    developer.log('[Firebase] Initialized successfully.', name: 'startup');
+  } on Object catch (error) {
+    // Firebase init failing is non-fatal for app rendering but push
+    // notifications will be unavailable. Log clearly so it is visible.
+    developer.log(
+      '[Firebase] initializeApp failed (push notifications unavailable): $error',
+      name: 'startup',
+      level: 1000,
+    );
+  }
+
+  // ── Background message handler — must be registered before runApp() ──────
+  // FirebaseMessaging requires this to be a top-level call so the Dart VM
+  // can find the entry-point when the app is woken for a background message.
+  if (!DesktopPlatform.isWindows) {
+    FirebaseMessaging.onBackgroundMessage(
+      schoolDeskFirebaseMessagingBackgroundHandler,
+    );
+  }
 
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
@@ -147,14 +178,16 @@ Future<void> _initializeDeferredStartupServices() async {
     name: 'RoleAccessService.initialize',
   );
   // Push notification init is best-effort; no retry needed.
-  try {
-    await PushNotificationService.instance.initialize();
-    await PushNotificationService.instance.registerDeviceTokenIfPossible();
-  } on Object catch (error) {
-    developer.log(
-      'Push notification init failed (non-fatal): $error',
-      name: 'startup',
-    );
+  if (!DesktopPlatform.isWindows) {
+    try {
+      await PushNotificationService.instance.initialize();
+      await PushNotificationService.instance.registerDeviceTokenIfPossible();
+    } on Object catch (error) {
+      developer.log(
+        'Push notification init failed (non-fatal): $error',
+        name: 'startup',
+      );
+    }
   }
 }
 
@@ -211,9 +244,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 ),
               ),
               child: DesktopLayoutWrapper(
-                child: AppPermissionLifecycleGate(
-                  child: AnimatedStartupSplash(child: child!),
-                ),
+                child: AnimatedStartupSplash(child: child!),
               ),
             );
           },

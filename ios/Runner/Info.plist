@@ -26,12 +26,13 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- The app only uses standard HTTPS/TLS provided by Apple and its SDKs. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is used to scan the daily staff attendance QR code.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Photo library access lets you attach school documents, homework, and event media.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Photo library access lets you save school documents and generated media.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -71,6 +72,10 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
 	</array>
 </dict>
 </plist>

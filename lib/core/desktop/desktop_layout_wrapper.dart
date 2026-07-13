@@ -25,6 +25,9 @@ class DesktopLayoutWrapper extends StatelessWidget {
         builder: (context, constraints) {
           return Column(
             children: [
+              // Windows uses a hidden native title bar. Keep the custom title
+              // bar visible at every supported window size so drag, minimize,
+              // maximize, and close controls never disappear after resizing.
               if (showToolbar && DesktopWindowManager.isInitialized)
                 const DesktopToolbar(),
               Expanded(child: child),

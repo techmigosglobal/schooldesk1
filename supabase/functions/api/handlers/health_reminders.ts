@@ -160,12 +160,17 @@ async function notifyHealthRecipients(
   });
   if (error) throw error;
 
-  const { data: events, error: eventError } = await svc.from("notification_events")
-    .insert(
+  const { data: events, error: eventError } = await svc.from(
+    "notification_events",
+  )
+    .upsert(
       recipients.map((recipient) => ({
         school_id: school,
         user_id: recipient.userId,
         event_type: "health_reminder",
+        dedupe_key: `health:${recipient.userId}:${reminderId}:${
+          text(reminder.reminder_time, "once").toLowerCase()
+        }`,
         event_data: {
           title: "Health Reminder",
           message: notificationBody(studentName, reminder) ||
@@ -178,6 +183,7 @@ async function notifyHealthRecipients(
           teacher_id: recipient.teacherId || "",
         },
       })),
+      { onConflict: "dedupe_key", ignoreDuplicates: true },
     )
     .select("id");
   if (eventError) throw eventError;
@@ -223,7 +229,9 @@ export async function handleHealthReminders(
       .order("reminder_date", { ascending: false })
       .order("created_at", { ascending: false });
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row: Record<string, unknown>) => normalize(row)));
+    return ok(
+      (data ?? []).map((row: Record<string, unknown>) => normalize(row)),
+    );
   }
 
   if (method === "POST") {

@@ -39,8 +39,11 @@ class ParentDashboardDesktopBody extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final isWide = DesktopBreakpoints.isWideWidth(width);
+        final useTwoPane = DesktopBreakpoints.isTwoPaneWidth(
+          width,
+        );
         final sidebarWidth = isWide ? 360.0 : 300.0;
-        final isNarrow = width < 960;
+        final isNarrow = !useTwoPane;
 
         final childContent = isNarrow
             ? Column(
@@ -167,7 +170,11 @@ class _SchoolFeedDesktopPanel extends StatelessWidget {
             action: TextButton.icon(
               onPressed: () =>
                   Navigator.pushNamed(context, AppRoutes.parentDashboard),
-              icon: Icon(Icons.open_in_new_rounded, size: 14, color: parentColor),
+              icon: Icon(
+                Icons.open_in_new_rounded,
+                size: 14,
+                color: parentColor,
+              ),
               label: Text(
                 'See All',
                 style: TextStyle(
@@ -290,8 +297,7 @@ class _FeedCardState extends State<_FeedCard> {
                 ]
               : [],
         ),
-        transform: Matrix4.identity()
-          ..translate(0.0, _hovering ? -4.0 : 0.0),
+        transform: Matrix4.identity()..translate(0.0, _hovering ? -4.0 : 0.0),
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
@@ -520,7 +526,8 @@ class _ChildOverviewPanel extends StatelessWidget {
     final feeBalance = _double(
       child['fee_balance'] ?? dashboard['fee_balance'],
     );
-    final homeworkPending = (child['homework_pending'] as int?) ??
+    final homeworkPending =
+        (child['homework_pending'] as int?) ??
         (dashboard['homework_pending'] as int?) ??
         0;
 
@@ -541,10 +548,7 @@ class _ChildOverviewPanel extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  parentColor,
-                  parentColor.withAlpha(180),
-                ],
+                colors: [parentColor, parentColor.withAlpha(180)],
               ),
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(tokens.radius.card),
@@ -608,8 +612,8 @@ class _ChildOverviewPanel extends StatelessWidget {
                   color: attendancePct >= 75
                       ? const Color(0xFF16A34A)
                       : attendancePct > 0
-                          ? const Color(0xFFF59E0B)
-                          : const Color(0xFF6B7280),
+                      ? const Color(0xFFF59E0B)
+                      : const Color(0xFF6B7280),
                 ),
                 Divider(height: tokens.spacing.md, color: tokens.panelBorder),
                 _StatRow(
@@ -701,26 +705,10 @@ class _ChildQuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = [
-      (
-        'Attendance',
-        Icons.bar_chart_rounded,
-        AppRoutes.parentAttendance
-      ),
-      (
-        'Homework',
-        Icons.assignment_rounded,
-        AppRoutes.parentHomework
-      ),
-      (
-        'Fee',
-        Icons.account_balance_wallet_rounded,
-        AppRoutes.parentFees
-      ),
-      (
-        'Leave',
-        Icons.event_busy_rounded,
-        AppRoutes.parentLeave
-      ),
+      ('Attendance', Icons.bar_chart_rounded, AppRoutes.parentAttendance),
+      ('Homework', Icons.assignment_rounded, AppRoutes.parentHomework),
+      ('Fee', Icons.account_balance_wallet_rounded, AppRoutes.parentFees),
+      ('Leave', Icons.event_busy_rounded, AppRoutes.parentLeave),
     ];
 
     return GridView.count(
@@ -779,9 +767,7 @@ class _ChildActionButtonState extends State<_ChildActionButton> {
               : tokens.panelMuted,
           borderRadius: BorderRadius.circular(tokens.radius.control),
           border: Border.all(
-            color: _hovering
-                ? widget.color.withAlpha(100)
-                : tokens.panelBorder,
+            color: _hovering ? widget.color.withAlpha(100) : tokens.panelBorder,
           ),
         ),
         child: InkWell(
@@ -830,56 +816,56 @@ class _ParentQuickAccessDesktopPanel extends StatelessWidget {
         'Academic profile',
         Icons.person_rounded,
         const Color(0xFF5B35F5),
-        AppRoutes.parentDashboard
+        AppRoutes.parentDashboard,
       ),
       (
         'Attendance',
         'Daily records',
         Icons.bar_chart_rounded,
         const Color(0xFF0E9384),
-        AppRoutes.parentAttendance
+        AppRoutes.parentAttendance,
       ),
       (
         'Homework',
         'Assignments',
         Icons.assignment_rounded,
         const Color(0xFF7C3AED),
-        AppRoutes.parentHomework
+        AppRoutes.parentHomework,
       ),
       (
         'Timetable',
         'Class schedule',
         Icons.calendar_month_rounded,
         const Color(0xFF2563EB),
-        AppRoutes.parentTimetable
+        AppRoutes.parentTimetable,
       ),
       (
         'Fee Details',
         'Payments & balance',
         Icons.account_balance_wallet_rounded,
         const Color(0xFF16A34A),
-        AppRoutes.parentFees
+        AppRoutes.parentFees,
       ),
       (
         'Notices',
         'School updates',
         Icons.campaign_rounded,
         const Color(0xFFEA580C),
-        AppRoutes.parentDashboard
+        AppRoutes.parentDashboard,
       ),
       (
         'Student Leave',
         'Apply for absence',
         Icons.event_busy_rounded,
         const Color(0xFFDB2777),
-        AppRoutes.parentLeave
+        AppRoutes.parentLeave,
       ),
       (
         'Gallery',
         'School photos',
         Icons.photo_library_rounded,
         const Color(0xFF9333EA),
-        AppRoutes.schoolGallery
+        AppRoutes.schoolGallery,
       ),
     ];
 
@@ -967,12 +953,10 @@ class _QuickAccessTileState extends State<_QuickAccessTile> {
               : tokens.panelMuted,
           borderRadius: BorderRadius.circular(tokens.radius.control),
           border: Border.all(
-            color:
-                _hovering ? widget.color.withAlpha(80) : tokens.panelBorder,
+            color: _hovering ? widget.color.withAlpha(80) : tokens.panelBorder,
           ),
         ),
-        transform: Matrix4.identity()
-          ..translate(0.0, _hovering ? -2.0 : 0.0),
+        transform: Matrix4.identity()..translate(0.0, _hovering ? -2.0 : 0.0),
         child: InkWell(
           onTap: widget.onTap,
           borderRadius: BorderRadius.circular(tokens.radius.control),

@@ -22,13 +22,15 @@ class DesktopToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!DesktopPlatform.isDesktop) return const SizedBox.shrink();
+    if (!DesktopPlatform.isWindows) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
 
     String displayTitle = title ?? 'Arish Ville PreSchool App';
-    final role = BackendApiClient.instance.currentRoleName?.trim().toLowerCase();
+    final role = BackendApiClient.instance.currentRoleName
+        ?.trim()
+        .toLowerCase();
     if (role != null && role.isNotEmpty) {
       final portalName = switch (role) {
         'principal' || 'admin' => 'Principal Portal',
@@ -46,32 +48,45 @@ class DesktopToolbar extends StatelessWidget {
       displayTitle += ' · $subtitle';
     }
 
-    return DragToMoveArea(
-      child: Container(
-        height: 40,
-        padding: EdgeInsets.only(left: tokens.spacing.md),
-        decoration: BoxDecoration(
-          color: tokens.panel,
-          border: Border(bottom: BorderSide(color: tokens.panelBorder)),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.school_rounded, size: 18, color: theme.colorScheme.primary),
-            const SizedBox(width: 8),
-            Text(
-              displayTitle,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: tokens.panel,
+        border: Border(bottom: BorderSide(color: tokens.panelBorder)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: DragToMoveArea(
+              child: Padding(
+                padding: EdgeInsets.only(left: tokens.spacing.md),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.school_rounded,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        displayTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const Spacer(),
-            ...actions,
-            if (showWindowControls) ...[
-              const _WindowControlButtons(),
-            ],
-          ],
-        ),
+          ),
+          ...actions,
+          if (showWindowControls) const _WindowControlButtons(),
+        ],
       ),
     );
   }
@@ -149,8 +164,8 @@ class _WindowButtonState extends State<_WindowButton> {
             color: _hovering && hover != null
                 ? hover
                 : _hovering
-                    ? Theme.of(context).hoverColor
-                    : Colors.transparent,
+                ? Theme.of(context).hoverColor
+                : Colors.transparent,
             child: Icon(
               widget.icon,
               size: 16,

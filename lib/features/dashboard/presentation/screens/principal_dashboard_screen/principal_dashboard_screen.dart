@@ -34,7 +34,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   String? _error;
   DateTime? _lastBackPressedAt;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
-  final Set<String> _birthdayFiredKeys = {};
 
   @override
   void initState() {
@@ -122,9 +121,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     UserResponse profile,
   ) async {
     try {
-      // Fire-and-forget: trigger birthday alerts for today (once per day).
-      _fireBirthdayAlerts(api);
-
       final optionalResults = await Future.wait<Object>([
         _loadOptional(
           label: 'academic years',
@@ -219,19 +215,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     }
   }
 
-  /// Triggers the birthday alert job once per day (fire-and-forget).
-  void _fireBirthdayAlerts(BackendApiClient api) {
-    final todayKey =
-        'birthday_alerts_fired_${DateTime.now().year}_${DateTime.now().month}_${DateTime.now().day}';
-    // Use a simple in-memory guard to avoid calling the endpoint
-    // multiple times within the same app session.
-    if (_birthdayFiredKeys.contains(todayKey)) return;
-    _birthdayFiredKeys.add(todayKey);
-    api.triggerBirthdayAlerts().catchError(
-      (_) => <String, dynamic>{},
-    ); // ignore errors
-  }
-
   Future<T> _loadOptional<T>({
     required String label,
     required Future<T> request,
@@ -260,18 +243,16 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isDesktopLayout =
-            DesktopBreakpoints.isDesktopWidth(constraints.maxWidth);
+        final isDesktopLayout = DesktopBreakpoints.isDesktopWidth(
+          constraints.maxWidth,
+        );
 
         if (isDesktopLayout) {
           return Scaffold(
             backgroundColor: Colors.transparent,
             body: AppBackground(
               accent: const Color(0xFF1478F2),
-              child: SafeArea(
-                bottom: false,
-                child: _buildDesktopBody(context),
-              ),
+              child: SafeArea(bottom: false, child: _buildDesktopBody(context)),
             ),
           );
         }
@@ -353,8 +334,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             _open(AppRoutes.notificationCenter, arguments: 'principal'),
       ),
       searchBar: _DashboardSearchBar(
-        onTap: () =>
-            _open(AppRoutes.globalSearch, arguments: 'principal'),
+        onTap: () => _open(AppRoutes.globalSearch, arguments: 'principal'),
       ),
       statsRow: _PrincipalStatsRow(data: _data),
       academicsSection: _AcademicModuleGrid(
@@ -378,8 +358,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           const _AcademicModuleItem(
             label: 'Staff Management',
             route: AppRoutes.staffManagement,
-            illustration:
-                SchoolDeskUiIllustrations.principalStaffManagement,
+            illustration: SchoolDeskUiIllustrations.principalStaffManagement,
             fallbackIcon: Icons.co_present_rounded,
             accent: Color(0xFF7C3AED),
             cardColor: Color(0xFFF3ECFF),
@@ -489,55 +468,55 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               ),
             )
           : _setupError != null
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Material(
-                    color: const Color(0xFFFFF7ED),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.info_outline_rounded,
-                            size: 18,
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Material(
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        size: 18,
+                        color: Color(0xFF92400E),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _setupError!,
+                          style: const TextStyle(
+                            fontSize: 13,
                             color: Color(0xFF92400E),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _setupError!,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFF92400E),
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() => _setupError = null);
-                              _loadDashboard();
-                            },
-                            child: const Text('Retry'),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() => _setupError = null);
+                          _loadDashboard();
+                        },
+                        child: const Text('Retry'),
+                      ),
+                    ],
                   ),
-                )
-              : _SetupPreviewPanel(
-                  progress: completedSetup / setupTotal,
-                  completed: completedSetup,
-                  total: setupTotal,
-                  steps: _data.setupSteps,
-                  onStepTap: (step) {
-                    if (step.route == null) {
-                      _showGoLiveStatus();
-                      return;
-                    }
-                    _open(step.route!);
-                  },
                 ),
+              ),
+            )
+          : _SetupPreviewPanel(
+              progress: completedSetup / setupTotal,
+              completed: completedSetup,
+              total: setupTotal,
+              steps: _data.setupSteps,
+              onStepTap: (step) {
+                if (step.route == null) {
+                  _showGoLiveStatus();
+                  return;
+                }
+                _open(step.route!);
+              },
+            ),
     );
   }
 
@@ -1273,9 +1252,10 @@ class _PrincipalAppHeader extends StatelessWidget {
                         children: [
                           Builder(
                             builder: (ctx) {
-                              final hideMenu = DesktopBreakpoints.isDesktopWidth(
-                                MediaQuery.sizeOf(context).width,
-                              );
+                              final hideMenu =
+                                  DesktopBreakpoints.isDesktopWidth(
+                                    MediaQuery.sizeOf(context).width,
+                                  );
                               if (hideMenu) return const SizedBox.shrink();
                               return IconButton(
                                 padding: EdgeInsets.zero,
@@ -1749,7 +1729,9 @@ class _AcademicModuleGrid extends StatelessWidget {
         final labelHeight = (34.0 * textScale).clamp(38.0, 58.0).toDouble();
         final tileExtent = 94.0 + 10.0 + labelHeight + 8.0;
         final compact = constraints.maxWidth < 370;
-        final isDesktop = DesktopBreakpoints.isDesktopWidth(constraints.maxWidth);
+        final isDesktop = DesktopBreakpoints.isDesktopWidth(
+          constraints.maxWidth,
+        );
         final columns = isDesktop ? 5 : (compact ? 2 : 3);
         return GridView.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(

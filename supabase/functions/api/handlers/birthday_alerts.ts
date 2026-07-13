@@ -22,6 +22,14 @@ function runDate(url: URL, body: Record<string, unknown>) {
     : new Date().toISOString().slice(0, 10);
 }
 
+function deliveryWindow(url: URL, body: Record<string, unknown>) {
+  const raw = text(
+    body.delivery_window ?? url.searchParams.get("delivery_window"),
+    "morning",
+  ).toLowerCase();
+  return raw === "afternoon" ? "afternoon" : "morning";
+}
+
 type BirthdayRecipient = {
   userId: string;
   targetRole: "teacher" | "principal" | "parent";
@@ -63,7 +71,8 @@ function birthdayBody(
     }
     return `${name} is celebrating a birthday today.`;
   } else {
-    const listStr = studentNames.slice(0, -1).join(", ") + " and " + studentNames[studentNames.length - 1];
+    const listStr = studentNames.slice(0, -1).join(", ") + " and " +
+      studentNames[studentNames.length - 1];
     if (targetRole === "parent") {
       return `Wish ${listStr} a happy birthday today.`;
     }
@@ -94,12 +103,12 @@ export async function handleBirthdayAlerts(
     return fail("method not allowed", 405);
   }
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-  
+
   const authHeader = req.headers.get("Authorization") ?? "";
   const token = authHeader.replace("Bearer ", "").trim();
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const isServiceRole = token.length > 0 && (
-    token === serviceKey || 
+    token === serviceKey ||
     token === "18fd0a5339c8e5e81c3122a7607608e48631ef47cf3f5ac72c3486f7d115ee41"
   );
 
@@ -107,19 +116,66 @@ export async function handleBirthdayAlerts(
   const suppliedSecret = text(
     req.headers.get("x-job-secret") ?? url.searchParams.get("job_secret"),
   );
-  const isAuthorizedJob = (configuredSecret.length > 0 && suppliedSecret === configuredSecret) || isServiceRole;
+  const isAuthorizedJob =
+    (configuredSecret.length > 0 && suppliedSecret === configuredSecret) ||
+    isServiceRole;
 
   if (!user && !isAuthorizedJob) return fail("unauthorized", 401);
 
   const school = user
     ? sid(user)
     : text(body.school_id ?? req.headers.get("x-school-id"));
+  const window = deliveryWindow(url, body);
+
+  // Scheduled jobs are project-wide. Fan out once per school here so the cron
+  // body does not need to contain a hard-coded tenant identifier.
+  if (!school && isAuthorizedJob) {
+    const { data: schools, error: schoolsError } = await svc.from("schools")
+      .select("id");
+    if (schoolsError) return fail(schoolsError.message);
+
+    const results: unknown[] = [];
+    for (const schoolRow of schools ?? []) {
+      const schoolId = text(schoolRow.id);
+      if (!schoolId) continue;
+      const headers = new Headers(req.headers);
+      headers.delete("content-length");
+      headers.set("content-type", "application/json");
+      const nestedRequest = new Request(req.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          ...body,
+          school_id: schoolId,
+          delivery_window: window,
+        }),
+      });
+      const response = await handleBirthdayAlerts(
+        nestedRequest,
+        path,
+        method,
+        url,
+        null,
+        svc,
+        null,
+      );
+      results.push(
+        await response.json().catch(() => ({
+          school_id: schoolId,
+          status: response.status,
+        })),
+      );
+    }
+    return ok({ delivery_window: window, schools_processed: results.length });
+  }
   if (!school) return fail("school_id required", 422);
   const date = runDate(url, body);
   const [, month, day] = date.split("-");
 
   const { data: students, error } = await svc.from("students")
-    .select("id, first_name, last_name, date_of_birth, current_section_id, photo_url")
+    .select(
+      "id, first_name, last_name, date_of_birth, current_section_id, photo_url",
+    )
     .eq("school_id", school)
     .eq("status", "active")
     .not("date_of_birth", "is", null);
@@ -141,9 +197,9 @@ export async function handleBirthdayAlerts(
     .eq("is_active", true)
     .in("role_name", ["principal", "Principal"]);
   if (principalError) return fail(principalError.message);
-  const principalUserIds = (principals ?? []).map((p) => text(p.id)).filter(Boolean);
-
-
+  const principalUserIds = (principals ?? []).map((p) => text(p.id)).filter(
+    Boolean,
+  );
 
   type StudentInfo = {
     id: string;
@@ -217,7 +273,7 @@ export async function handleBirthdayAlerts(
       if (!sectionError && section) {
         const staffIds = [
           text(section.class_teacher_id),
-          text(section.co_teacher_id)
+          text(section.co_teacher_id),
         ].filter(Boolean);
 
         if (staffIds.length > 0) {
@@ -271,19 +327,23 @@ export async function handleBirthdayAlerts(
     );
     if (upsertError) return fail(upsertError.message);
 
-    const { data: events, error: eventError } = await svc.from("notification_events")
-      .insert(
+    const { data: events, error: eventError } = await svc.from(
+      "notification_events",
+    )
+      .upsert(
         rows.map((row) => {
           const group = recipientMap.get(row.user_id as string)!;
           return {
             school_id: row.school_id,
             user_id: row.user_id,
             event_type: row.entity_type,
+            dedupe_key: `birthday:${row.user_id}:${row.entity_id}:${window}`,
             event_data: {
               title: row.title,
               message: row.body,
               reference_type: row.entity_type,
               reference_id: row.entity_id,
+              delivery_window: window,
               student_id: row.student_id ?? "",
               section_id: row.section_id ?? "",
               teacher_id: row.teacher_id ?? "",
@@ -291,6 +351,7 @@ export async function handleBirthdayAlerts(
             },
           };
         }),
+        { onConflict: "dedupe_key", ignoreDuplicates: true },
       )
       .select("id");
     if (eventError) return fail(eventError.message);
@@ -298,5 +359,9 @@ export async function handleBirthdayAlerts(
     if (eventIds.length > 0) triggerPushProcessing(eventIds);
   }
 
-  return ok({ date, notifications_created: rows.length });
+  return ok({
+    date,
+    delivery_window: window,
+    notifications_created: rows.length,
+  });
 }

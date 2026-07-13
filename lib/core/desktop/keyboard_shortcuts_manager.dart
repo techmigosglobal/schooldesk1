@@ -34,7 +34,8 @@ class DesktopKeyboardShortcutsManager extends StatelessWidget {
     return Shortcuts(
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.keyK, control: true): _searchIntent,
-        SingleActivator(LogicalKeyboardKey.comma, control: true): _settingsIntent,
+        SingleActivator(LogicalKeyboardKey.comma, control: true):
+            _settingsIntent,
         SingleActivator(LogicalKeyboardKey.slash, control: true): _helpIntent,
         SingleActivator(LogicalKeyboardKey.keyR, control: true): _refreshIntent,
         SingleActivator(LogicalKeyboardKey.f5): _refreshIntent,
@@ -43,7 +44,7 @@ class DesktopKeyboardShortcutsManager extends StatelessWidget {
         actions: {
           _DesktopShortcutIntent: CallbackAction<_DesktopShortcutIntent>(
             onInvoke: (intent) {
-              switch (intent?.action) {
+              switch (intent.action) {
                 case 'search':
                   _invokeOrNavigate(context, onSearch, AppRoutes.globalSearch);
                 case 'settings':
@@ -61,10 +62,7 @@ class DesktopKeyboardShortcutsManager extends StatelessWidget {
             },
           ),
         },
-        child: Focus(
-          autofocus: true,
-          child: child,
-        ),
+        child: Focus(autofocus: true, child: child),
       ),
     );
   }

@@ -103,7 +103,7 @@ extension MonitoringApi on BackendApiClient {
     }
   }
 
-  Future<void> wipeDatabase() async {
+  Future<Map<String, dynamic>> wipeDatabase() async {
     try {
       final response = await _dio.post('/monitoring/database/wipe');
       final data = _asMap(response.data);
@@ -112,6 +112,7 @@ extension MonitoringApi on BackendApiClient {
           message: data['message'] ?? 'Failed to wipe database storage',
         );
       }
+      return _asMap(data['data']);
     } on DioException catch (e) {
       throw _handleError(e);
     }

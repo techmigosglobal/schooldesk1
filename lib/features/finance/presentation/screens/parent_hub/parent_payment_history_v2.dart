@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
@@ -45,6 +46,11 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         return;
       }
 
+      final selectedIndex = await ParentChildSelectionService.indexFor(
+        children,
+        fallback: _activeChildIndex,
+      );
+      _activeChildIndex = selectedIndex;
       final child = children[_activeChildIndex];
       final studentId = (child['id'] ?? child['student_id'] ?? '').toString();
 
@@ -170,6 +176,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       isLoading: _loading,
       onSelected: (index) {
         setState(() => _activeChildIndex = index);
+        ParentChildSelectionService.saveIndex(_childrenData, index);
         _loadHistory();
       },
     );

@@ -27,6 +27,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
   Future<void> _loadReceipt() async {
     final pr = widget.args.paymentRequest;
     if (pr != null) {
+      final receipt = pr['receipt'] is Map
+          ? Map<String, dynamic>.from(pr['receipt'] as Map)
+          : const <String, dynamic>{};
       final invoice = pr['invoice'] is Map
           ? Map<String, dynamic>.from(pr['invoice'] as Map)
           : const <String, dynamic>{};
@@ -36,7 +39,11 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
 
       setState(() {
         _receiptData = {
-          'receipt_no': pr['receipt_id'] ?? pr['id'] ?? '',
+          'receipt_no':
+              receipt['receipt_number'] ??
+              pr['receipt_number'] ??
+              pr['request_reference'] ??
+              '',
           'school_name': invoice['school_name'] ?? 'School',
           'amount': (pr['amount'] as num?)?.toDouble() ?? 0.0,
           'payment_mode': pr['payment_mode'] ?? 'UPI',
@@ -66,6 +73,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
       );
       if (list.isNotEmpty) {
         final prMatch = list.first;
+        final receipt = prMatch['receipt'] is Map
+            ? Map<String, dynamic>.from(prMatch['receipt'] as Map)
+            : const <String, dynamic>{};
         final invoice = prMatch['invoice'] is Map
             ? Map<String, dynamic>.from(prMatch['invoice'] as Map)
             : const <String, dynamic>{};
@@ -75,7 +85,11 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
 
         setState(() {
           _receiptData = {
-            'receipt_no': prMatch['receipt_id'] ?? prMatch['id'] ?? '',
+            'receipt_no':
+                receipt['receipt_number'] ??
+                prMatch['receipt_number'] ??
+                prMatch['request_reference'] ??
+                '',
             'school_name': invoice['school_name'] ?? 'School',
             'amount': (prMatch['amount'] as num?)?.toDouble() ?? 0.0,
             'payment_mode': prMatch['payment_mode'] ?? 'UPI',
@@ -381,16 +395,25 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
           );
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.ibmPlexSans(
-            color: context.appTheme.muted,
-            fontSize: 13,
+        SizedBox(
+          width: 112,
+          child: Text(
+            label,
+            style: GoogleFonts.ibmPlexSans(
+              color: context.appTheme.muted,
+              fontSize: 13,
+            ),
           ),
         ),
-        valWidget,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: valWidget,
+          ),
+        ),
       ],
     );
   }

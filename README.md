@@ -32,6 +32,68 @@ installed iPhone build receives the same backend configuration as a run from
 Xcode. Release/debug CI builds should pass the same values through
 `--dart-define` or Codemagic variables.
 
+## iOS Archive and App Store Distribution
+
+The iOS release is `com.techmigos.arishville`. Build numbers must increase for
+every App Store Connect upload; update the `+<build>` suffix in `pubspec.yaml`
+before starting an archive (the current release is `1.0.9+18`). Do not commit
+`env.supabase.json`, signing certificates, or provisioning profiles.
+
+1. Make sure `env.supabase.json` contains the required production API,
+   Supabase, and Firebase values.
+2. Prepare the Release configuration. This regenerates Flutter's iOS package
+   graph and aligns its generated Swift Package deployment target with the app
+   target.
+
+   ```bash
+   scripts/prepare-ios-release.sh env.supabase.json
+   ```
+
+3. Create the Xcode archive from the workspace—not the `.xcodeproj` file:
+
+   ```bash
+   xcodebuild \
+     -workspace ios/Runner.xcworkspace \
+     -scheme Runner \
+     -configuration Release \
+     -destination 'generic/platform=iOS' \
+     -archivePath "$PWD/build/ios/archive/Runner.xcarchive" \
+     -allowProvisioningUpdates \
+     archive
+   ```
+
+   The archive is written to `build/ios/archive/Runner.xcarchive`. Open it in
+   Xcode with `open build/ios/archive/Runner.xcarchive`, then use Organizer to
+   **Validate App** followed by **Distribute App → App Store Connect**.
+
+4. App Store Connect distribution requires an **Apple Distribution**
+   certificate and matching distribution provisioning profile for the bundle
+   identifier. A development-signed archive is useful for local validation but
+   cannot be uploaded as an App Store build. Select the distribution signing
+   identity in Xcode/Organizer before exporting or uploading.
+
+5. Before upload, verify the archive identity and version:
+
+   ```bash
+   /usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' \
+     build/ios/archive/Runner.xcarchive/Info.plist
+   /usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleVersion' \
+     build/ios/archive/Runner.xcarchive/Info.plist
+   codesign -dv --verbose=2 \
+     build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+   ```
+
+### iOS privacy release checklist
+
+- The binary does not use Core Location and does not declare a location usage
+  string. Do not add `NSLocationWhenInUseUsageDescription` unless a future
+  feature actually accesses location.
+- `NSCameraUsageDescription` is for QR attendance; photo-library access is for
+  user-selected school media and payment proofs. Keep these descriptions in
+  sync with actual app behavior.
+- Confirm the App Store Connect privacy questionnaire and privacy policy match
+  the final app and bundled SDKs before distribution.
+
 ## Codemagic APK
 
 `codemagic.yaml` builds Android debug APKs with:

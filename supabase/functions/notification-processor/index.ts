@@ -457,6 +457,10 @@ function getNotificationTemplate(
             eventData.reference_id || eventData.homework_id || "",
           ),
           action: "submission",
+          route: String(
+            eventData.route || "/teacher-homework-screen/submissions",
+          ),
+          student_id: String(eventData.student_id || ""),
         },
       };
 
@@ -552,6 +556,8 @@ function getNotificationTemplate(
             eventData.reference_id || eventData.homework_id || "",
           ),
           action: "assignment",
+          route: String(eventData.route || "/parent-homework-screen/submit"),
+          student_id: String(eventData.student_id || ""),
         },
       };
 
@@ -567,6 +573,14 @@ function getNotificationTemplate(
           reference_type: "fee",
           payment_request_id: String(eventData.payment_request_id || ""),
           invoice_id: String(eventData.invoice_id || ""),
+          reference_id: String(
+            eventData.reference_id || eventData.payment_request_id || "",
+          ),
+          action: String(eventData.action || "payment_submitted"),
+          route: String(
+            eventData.route || "/principal-fees-screen/payment-requests",
+          ),
+          student_id: String(eventData.student_id || ""),
         },
       };
 
@@ -582,6 +596,12 @@ function getNotificationTemplate(
           reference_type: "fee",
           payment_request_id: String(eventData.payment_request_id || ""),
           invoice_id: String(eventData.invoice_id || ""),
+          reference_id: String(
+            eventData.reference_id || eventData.payment_request_id || "",
+          ),
+          action: String(eventData.action || "payment_approved"),
+          route: String(eventData.route || "/parent-fees-screen"),
+          student_id: String(eventData.student_id || ""),
         },
       };
 
@@ -596,6 +616,12 @@ function getNotificationTemplate(
           reference_type: "fee",
           payment_request_id: String(eventData.payment_request_id || ""),
           invoice_id: String(eventData.invoice_id || ""),
+          reference_id: String(
+            eventData.reference_id || eventData.payment_request_id || "",
+          ),
+          action: String(eventData.action || "payment_rejected"),
+          route: String(eventData.route || "/parent-fees-screen"),
+          student_id: String(eventData.student_id || ""),
         },
       };
 
@@ -768,6 +794,26 @@ async function markEventProcessed(eventId: string): Promise<void> {
     .eq("id", eventId);
 }
 
+async function claimEvent(eventId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("notification_events")
+    .update({ processed: true })
+    .eq("id", eventId)
+    .eq("processed", false)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id === eventId;
+}
+
+async function releaseEvent(eventId: string): Promise<void> {
+  const { error } = await supabase
+    .from("notification_events")
+    .update({ processed: false, sent_at: null })
+    .eq("id", eventId);
+  if (error) throw error;
+}
+
 async function activeDeviceTokensForUser(
   userId: string,
 ): Promise<ActiveDeviceToken[]> {
@@ -834,6 +880,19 @@ async function processNotificationEvent(
   event: NotificationEvent,
 ): Promise<EventProcessResult> {
   try {
+    // Immediate API processing and pg_cron may overlap. Atomically transition
+    // the row out of the pending set before contacting FCM; only one worker can
+    // claim a given event. Transient failures release it for a later retry.
+    if (!(await claimEvent(event.id))) {
+      return {
+        processed: true,
+        sentCount: 0,
+        invalidTokenCount: 0,
+        transientFailureCount: 0,
+        reason: "already_claimed",
+      };
+    }
+
     const devices = await activeDeviceTokensForUser(event.user_id);
     if (devices.length === 0) {
       console.log(`No active devices for user ${event.user_id}`);
@@ -935,6 +994,7 @@ async function processNotificationEvent(
     console.log(
       `Event ${event.id} not processed; ${transientFailureCount} transient FCM failure(s)`,
     );
+    await releaseEvent(event.id);
     return {
       processed: false,
       sentCount,
@@ -945,6 +1005,13 @@ async function processNotificationEvent(
     };
   } catch (error) {
     console.error(`Error processing notification event ${event.id}: ${error}`);
+    try {
+      await releaseEvent(event.id);
+    } catch (releaseError) {
+      console.error(
+        `Failed to release notification event ${event.id}: ${releaseError}`,
+      );
+    }
     return {
       processed: false,
       sentCount: 0,

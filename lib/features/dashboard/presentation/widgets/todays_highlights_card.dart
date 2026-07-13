@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
@@ -33,7 +32,6 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    await _triggerBirthdayAlertsIfNeeded(prefs);
     final svc = await NotificationService.getInstance();
     // Only force-refresh notifications once per app session to avoid
     // hammering the /notifications endpoint on every widget rebuild.
@@ -46,17 +44,6 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
       _prefs = prefs;
       _service = svc;
     });
-  }
-
-  Future<void> _triggerBirthdayAlertsIfNeeded(SharedPreferences prefs) async {
-    final api = BackendApiClient.instance;
-    if (!api.isAuthenticated) return;
-    final today = DateTime.now();
-    final key =
-        'birthday_alerts_synced_${today.year}_${today.month}_${today.day}_${widget.role}';
-    if (prefs.getBool(key) == true) return;
-    await api.triggerBirthdayAlerts().catchError((_) => <String, dynamic>{});
-    await prefs.setBool(key, true);
   }
 
   @override

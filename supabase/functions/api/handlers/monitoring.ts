@@ -9,6 +9,206 @@ function isSuperAdmin(user: User): boolean {
   return user.app_metadata?.role_name === "super_admin";
 }
 
+type StorageObject = { bucket_id: string; name: string };
+
+const wipeStorageBuckets = [
+  "school-assets",
+  "payment-proofs",
+  "issue-attachments",
+];
+
+function storagePathFromUrl(value: unknown, bucket: string): string {
+  const raw = text(value);
+  if (!raw) return "";
+  const directPrefix = `${bucket}/`;
+  if (raw.startsWith(directPrefix)) return raw.substring(directPrefix.length);
+  const marker = `/object/public/${bucket}/`;
+  const markerIndex = raw.indexOf(marker);
+  if (markerIndex < 0) return "";
+  return decodeURIComponent(raw.substring(markerIndex + marker.length));
+}
+
+function addStoragePath(
+  targets: Map<string, Set<string>>,
+  bucket: string,
+  value: unknown,
+) {
+  const path = storagePathFromUrl(value, bucket);
+  if (path) (targets.get(bucket) ?? new Set<string>()).add(path);
+  if (path && !targets.has(bucket)) targets.set(bucket, new Set([path]));
+}
+
+type SchoolWipeAccounts = {
+  retainedAccountIds: string[];
+  accountIdsToDelete: string[];
+};
+
+function isRetainedWipeRole(value: unknown): boolean {
+  const role = text(value).toLowerCase();
+  return role === "principal" || role === "super_admin";
+}
+
+async function collectSchoolWipeAccounts(
+  svc: SupabaseClient,
+  school: string,
+): Promise<SchoolWipeAccounts> {
+  const { data: publicAccounts, error: publicAccountsError } = await svc.from(
+    "users",
+  ).select("id, role_name").eq("school_id", school);
+  if (publicAccountsError) throw publicAccountsError;
+
+  const retainedAccountIds = new Set<string>();
+  const accountIdsToDelete = new Set<string>();
+  let hasPrincipal = false;
+  for (const account of publicAccounts ?? []) {
+    const id = text(account.id);
+    if (!id) continue;
+    if (text(account.role_name).toLowerCase() === "principal") {
+      hasPrincipal = true;
+    }
+    if (isRetainedWipeRole(account.role_name)) retainedAccountIds.add(id);
+    else accountIdsToDelete.add(id);
+  }
+
+  // Auth is not exposed through PostgREST.  Discover every Auth account
+  // belonging to this school so orphaned Auth users are removed too.
+  for (let page = 1;; page++) {
+    const { data, error } = await svc.auth.admin.listUsers({
+      page,
+      perPage: 1000,
+    });
+    if (error) throw error;
+    const users = data.users ?? [];
+    for (const account of users) {
+      if (text(account.app_metadata?.school_id) !== school) continue;
+      if (text(account.app_metadata?.role_name).toLowerCase() === "principal") {
+        hasPrincipal = true;
+      }
+      if (isRetainedWipeRole(account.app_metadata?.role_name)) {
+        retainedAccountIds.add(account.id);
+      } else {
+        accountIdsToDelete.add(account.id);
+      }
+    }
+    if (users.length < 1000) break;
+  }
+
+  // Metadata and the public profile can drift.  Never delete a principal or
+  // Super Admin account when either source of truth identifies it as retained.
+  for (const id of retainedAccountIds) accountIdsToDelete.delete(id);
+  if (!hasPrincipal) {
+    // The caller is a Super Admin, but a principal is still required as the
+    // school owner's recovery account after a destructive reset.
+    throw new Error("Wipe blocked: this school has no principal login to preserve");
+  }
+  return {
+    retainedAccountIds: [...retainedAccountIds],
+    accountIdsToDelete: [...accountIdsToDelete],
+  };
+}
+
+async function deleteSchoolAuthAccounts(
+  svc: SupabaseClient,
+  accountIds: readonly string[],
+) {
+  for (const accountId of accountIds) {
+    const { error } = await svc.auth.admin.deleteUser(accountId);
+    if (error) throw error;
+  }
+  return accountIds.length;
+}
+
+async function wipeSchoolStorage(
+  svc: SupabaseClient,
+  school: string,
+  retainedAccountIds: readonly string[],
+) {
+  const targets = new Map<string, Set<string>>();
+  for (const bucket of wipeStorageBuckets) targets.set(bucket, new Set());
+
+  const [
+    objectsResult,
+    issueResult,
+    paymentResult,
+    studentDocumentResult,
+    staffDocumentResult,
+    uploadResult,
+    studentResult,
+    staffResult,
+  ] = await Promise.all([
+    svc.schema("storage").from("objects").select("bucket_id, name")
+      .in("bucket_id", wipeStorageBuckets)
+      .like("name", `%${school}%`),
+    svc.from("issue_attachments").select("storage_path").eq("school_id", school),
+    svc.from("parent_payment_requests").select("proof_url").eq("school_id", school),
+    svc.from("student_documents").select("file_url").eq("school_id", school),
+    svc.from("staff_documents").select("file_url").eq("school_id", school),
+    svc.from("uploaded_files").select("path").eq("school_id", school),
+    svc.from("students").select("photo_url").eq("school_id", school),
+    svc.from("staff").select("photo_url").eq("school_id", school),
+  ]);
+  const results = [
+    objectsResult,
+    issueResult,
+    paymentResult,
+    studentDocumentResult,
+    staffDocumentResult,
+    uploadResult,
+    studentResult,
+    staffResult,
+  ];
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw failed.error;
+
+  for (const object of (objectsResult.data ?? []) as StorageObject[]) {
+    // The school's branding and retained account avatars survive.
+    if (
+      object.name.startsWith(`logos/${school}/`) ||
+      retainedAccountIds.some((id) =>
+        object.name.startsWith(`avatars/${school}/${id}/`)
+      )
+    ) continue;
+    targets.get(object.bucket_id)?.add(object.name);
+  }
+  for (const row of issueResult.data ?? []) {
+    const path = text(row.storage_path);
+    if (path) targets.get("issue-attachments")?.add(path);
+  }
+  for (const row of paymentResult.data ?? []) {
+    addStoragePath(targets, "payment-proofs", row.proof_url);
+  }
+  for (const row of studentDocumentResult.data ?? []) {
+    addStoragePath(targets, "school-assets", row.file_url);
+  }
+  for (const row of staffDocumentResult.data ?? []) {
+    addStoragePath(targets, "school-assets", row.file_url);
+  }
+  for (const row of uploadResult.data ?? []) {
+    const path = text(row.path);
+    if (path) targets.get("school-assets")?.add(path);
+  }
+  for (const row of studentResult.data ?? []) {
+    addStoragePath(targets, "school-assets", row.photo_url);
+  }
+  for (const row of staffResult.data ?? []) {
+    addStoragePath(targets, "school-assets", row.photo_url);
+  }
+
+  let removed = 0;
+  for (const [bucket, paths] of targets.entries()) {
+    for (const batch of Array.from(paths).reduce<string[][]>((all, path, index) => {
+      const batchIndex = Math.floor(index / 100);
+      (all[batchIndex] ??= []).push(path);
+      return all;
+    }, [])) {
+      const { error } = await svc.storage.from(bucket).remove(batch);
+      if (error) throw error;
+      removed += batch.length;
+    }
+  }
+  return removed;
+}
+
 function parseEventId(path: string): string | null {
   const match = path.match(/^\/monitoring\/error-events\/([^/]+)$/);
   return match?.[1] ?? null;
@@ -161,54 +361,33 @@ export async function handleMonitoring(
 
   // ── Database Wipe ─────────────────────────────────────────
   if (path === "/monitoring/database/wipe" && method === "POST") {
-    if (user.app_metadata?.role_name !== "super_admin") {
+    if (!isSuperAdmin(user)) {
       return fail("Unauthorized: SuperAdmin role required", 403);
     }
+    if (!school) return fail("No school is associated with this account", 400);
     try {
-      // Wipe in reverse dependency order to prevent foreign key errors
-      const tablesToClean = [
-        "fee_receipts",
-        "payments",
-        "student_attendances",
-        "attendance_summaries",
-        "attendance_sessions",
-        "student_leave_applications",
-        "leave_balances",
-        "leave_types",
-        "parent_payment_requests",
-        "fee_invoice_items",
-        "fee_invoices",
-        "fee_structures",
-        "fee_categories",
-        "student_documents",
-        "medical_records",
-        "student_guardians",
-        "guardians",
-        "students",
-        "staff_subjects",
-        "grade_subjects",
-        "timetable_slots",
-        "parent_teacher_meetings",
-        "sections",
-        "staff_qualifications",
-        "staff",
-        "subjects",
-        "rooms",
-        "terms",
-        "academic_years"
-      ];
-      for (const table of tablesToClean) {
-        const { error } = await svc.from(table).delete().eq("school_id", school);
-        if (error) {
-          if (error.message.includes("column \"school_id\" does not exist")) {
-            const { error: delErr } = await svc.from(table).delete().neq("id", "00000000-0000-0000-0000-000000000000");
-            if (delErr) return fail(`Wipe failed on table ${table}: ${delErr.message}`);
-          } else {
-            return fail(`Wipe failed on table ${table}: ${error.message}`);
-          }
-        }
-      }
-      return ok({ success: true, message: "Database wiped successfully" });
+      const accounts = await collectSchoolWipeAccounts(svc, school);
+      const storageObjectsRemoved = await wipeSchoolStorage(
+        svc,
+        school,
+        accounts.retainedAccountIds,
+      );
+      const { data, error } = await svc.rpc("wipe_school_data", {
+        p_school_id: school,
+        p_retained_user_ids: accounts.retainedAccountIds,
+      });
+      if (error) return fail(`Wipe failed: ${error.message}`);
+      const authAccountsDeleted = await deleteSchoolAuthAccounts(
+        svc,
+        accounts.accountIdsToDelete,
+      );
+      return ok({
+        ...(data as Record<string, unknown> ?? {}),
+        auth_accounts_deleted: authAccountsDeleted,
+        retained_login_accounts: accounts.retainedAccountIds.length,
+        storage_objects_removed: storageObjectsRemoved,
+        message: "School data wiped; only principal and Super Admin logins were preserved",
+      });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }

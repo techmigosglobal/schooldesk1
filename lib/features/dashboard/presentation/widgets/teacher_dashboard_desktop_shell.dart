@@ -70,8 +70,9 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final isWide = DesktopBreakpoints.isWideWidth(width);
+        final useTwoPane = DesktopBreakpoints.isTwoPaneWidth(width);
         final sidebarWidth = isWide ? 380.0 : 320.0;
-        final isNarrow = width < 960;
+        final isNarrow = !useTwoPane;
 
         final childContent = isNarrow
             ? Column(
@@ -338,10 +339,15 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
             )
           else
             ...timetable.map((row) {
-              final subject = teacherFlowText(row['subject'], fallback: 'Subject');
+              final subject = teacherFlowText(
+                row['subject'],
+                fallback: 'Subject',
+              );
               final time = teacherFlowText(row['time'], fallback: 'Period');
-              final classLabel =
-                  teacherFlowText(row['class'], fallback: _currentClass);
+              final classLabel = teacherFlowText(
+                row['class'],
+                fallback: _currentClass,
+              );
               return _FeedItem(
                 time: time,
                 title: '$subject - $classLabel',
@@ -393,42 +399,42 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
         'Assigned sections',
         Icons.class_rounded,
         const Color(0xFF5B35F5),
-        AppRoutes.teacherClasses
+        AppRoutes.teacherClasses,
       ),
       (
         'Timetable',
         'Today and week',
         Icons.calendar_month_rounded,
         const Color(0xFF0EA5E9),
-        AppRoutes.teacherTimetable
+        AppRoutes.teacherTimetable,
       ),
       (
         'Attendance',
         'Mark your class',
         Icons.how_to_reg_rounded,
         const Color(0xFF0E9384),
-        AppRoutes.teacherAttendance
+        AppRoutes.teacherAttendance,
       ),
       (
         'Lesson Planner',
         'Weekly plans',
         Icons.auto_stories_rounded,
         const Color(0xFFDB2777),
-        AppRoutes.teacherLessonPlanner
+        AppRoutes.teacherLessonPlanner,
       ),
       (
         'Homework',
         'Assignments & review',
         Icons.assignment_rounded,
         const Color(0xFF7C3AED),
-        AppRoutes.teacherHomework
+        AppRoutes.teacherHomework,
       ),
       (
         'Leaves',
         'Apply and track',
         Icons.event_busy_rounded,
         const Color(0xFFF59E0B),
-        AppRoutes.teacherLeave
+        AppRoutes.teacherLeave,
       ),
     ];
 
@@ -482,8 +488,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
             icon: Icons.event_busy_rounded,
             color: Colors.purple,
             urgency: 'Admin',
-            onTap: () =>
-                Navigator.pushNamed(context, AppRoutes.teacherLeave),
+            onTap: () => Navigator.pushNamed(context, AppRoutes.teacherLeave),
           ),
         ],
       ),
@@ -629,8 +634,7 @@ class _FeedItem extends StatelessWidget {
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: color.withAlpha(20),
                   borderRadius: BorderRadius.circular(10),
@@ -693,9 +697,7 @@ class _QuickActionTileState extends State<_QuickActionTile> {
               : tokens.panelMuted,
           borderRadius: BorderRadius.circular(tokens.radius.control),
           border: Border.all(
-            color: _hovering
-                ? widget.color.withAlpha(100)
-                : tokens.panelBorder,
+            color: _hovering ? widget.color.withAlpha(100) : tokens.panelBorder,
           ),
         ),
         child: InkWell(

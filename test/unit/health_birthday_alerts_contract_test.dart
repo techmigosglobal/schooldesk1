@@ -38,7 +38,7 @@ void main() {
       expect(handler, contains('resolveStudentRecipients'));
       expect(handler, contains('class_teacher_id'));
       expect(handler, contains('co_teacher_id'));
-      expect(handler, contains('role_name", "principal"'));
+      expect(handler, contains('.eq("role_name", "principal")'));
       expect(handler, contains('svc.from("health_reminders").insert'));
       expect(handler, contains('entity_type: "health_reminder"'));
       expect(handler, contains('route: "/notification-center-screen"'));
@@ -61,9 +61,29 @@ void main() {
       expect(handler, contains('parent_student_links'));
       expect(handler, contains('class_teacher_id'));
       expect(handler, contains('co_teacher_id'));
-      expect(handler, contains('role_name", "principal"'));
+      expect(handler, contains('.in("role_name", ["principal", "Principal"])'));
       expect(handler, contains('upsert('));
       expect(handler, contains('onConflict: "user_id,entity_type,entity_id"'));
+      expect(handler, contains('onConflict: "dedupe_key"'));
+      expect(handler, contains('delivery_window'));
+    });
+
+    test('push queue claims events and schedules two daily windows', () {
+      final processor = File(
+        'supabase/functions/notification-processor/index.ts',
+      ).readAsStringSync();
+      final migration = File(
+        'supabase/migrations/20260712191838_limit_birthday_health_push_delivery.sql',
+      ).readAsStringSync();
+
+      expect(processor, contains('async function claimEvent'));
+      expect(processor, contains('.eq("processed", false)'));
+      expect(processor, contains('reason: "already_claimed"'));
+      expect(migration, contains('uniq_notification_events_dedupe_key'));
+      expect(migration, contains("'daily-birthday-alerts-morning'"));
+      expect(migration, contains("'daily-birthday-alerts-afternoon'"));
+      expect(migration, contains("'30 3 * * *'"));
+      expect(migration, contains("'30 9 * * *'"));
     });
 
     test('parent health screen uses day-specific reminders and history', () {
@@ -99,7 +119,7 @@ void main() {
         highlights,
         contains("n.referenceType.contains('health_reminder')"),
       );
-      expect(highlights, contains('api.triggerBirthdayAlerts()'));
+      expect(highlights, isNot(contains('api.triggerBirthdayAlerts()')));
       expect(highlights, contains('_BirthdayAlertSection'));
       expect(highlights, contains('_BirthdayAlertTile'));
       expect(

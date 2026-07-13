@@ -156,8 +156,18 @@ export async function authedClient(req: Request) {
     { global: { headers: { Authorization: `Bearer ${token}` } } },
   );
   const { data: { user }, error } = await client.auth.getUser();
-  if (error || !user) return { user: null, client: null, svc: serviceClient() };
-  return { user, client, svc: serviceClient() };
+  const svc = serviceClient();
+  if (error || !user) return { user: null, client: null, svc };
+
+  // Auth user deletion does not instantly invalidate an already-issued JWT.
+  // Require the active application profile on every protected request so a
+  // school wipe immediately blocks deleted accounts from using stale tokens.
+  const { data: profile, error: profileError } = await svc.from("users")
+    .select("id, is_active").eq("id", user.id).maybeSingle();
+  if (profileError || !profile || profile.is_active !== true) {
+    return { user: null, client: null, svc };
+  }
+  return { user, client, svc };
 }
 
 export function triggerPushProcessing(eventIds: string | string[]) {

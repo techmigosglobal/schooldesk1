@@ -13,7 +13,9 @@ abstract final class DesktopWindowManager {
   static bool get isInitialized => _initialized;
 
   static Future<void> init() async {
-    if (!DesktopPlatform.isDesktop || _initialized) return;
+    // The custom frame and controls are intentionally Windows-only. Other
+    // desktop targets retain their native title bars until explicitly designed.
+    if (!DesktopPlatform.isWindows || _initialized) return;
 
     try {
       await windowManager.ensureInitialized();

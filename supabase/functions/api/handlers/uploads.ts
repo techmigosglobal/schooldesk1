@@ -118,12 +118,17 @@ async function notifyUsersByRole(
     type: string;
     referenceType: string;
     referenceId: string;
+    excludeUserId?: string;
   },
 ) {
-  const { data: users, error } = await svc.from("users").select("id").eq(
+  let usersQuery = svc.from("users").select("id").eq(
     "school_id",
     school,
   ).eq("role_name", roleName);
+  if (payload.excludeUserId?.trim()) {
+    usersQuery = usersQuery.neq("id", payload.excludeUserId.trim());
+  }
+  const { data: users, error } = await usersQuery;
   if (error) throw error;
   const userIds = (users ?? []).map((row: Record<string, unknown>) =>
     `${row.id ?? ""}`.trim()
@@ -699,13 +704,16 @@ export async function handleEvents(
       "school_id",
       school,
     ).in("status", ["approved", "published"])
-     .contains("destinations", ["SCHOOL_GALLERY"])
-     .order("created_at", {
-      ascending: false,
-    }).limit(50);
+      // `destinations` is jsonb.  Passing a JavaScript array here serializes
+      // to a Postgres-array literal (`{SCHOOL_GALLERY}`), which PostgREST then
+      // rejects as invalid JSON. Keep the JSON array literal intact.
+      .contains("destinations", JSON.stringify(["SCHOOL_GALLERY"]))
+      .order("created_at", {
+        ascending: false,
+      }).limit(50);
     if (error) return fail(error.message);
     return ok(
-      (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>))
+      (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)),
     );
   }
   if (path === "/event-posts/home-feed" && method === "GET") {
@@ -713,13 +721,13 @@ export async function handleEvents(
       "school_id",
       school,
     ).in("status", ["approved", "published"])
-     .contains("destinations", ["PARENTS_HOME"])
-     .order("created_at", {
-      ascending: false,
-    }).limit(20);
+      .contains("destinations", JSON.stringify(["PARENTS_HOME"]))
+      .order("created_at", {
+        ascending: false,
+      }).limit(20);
     if (error) return fail(error.message);
     return ok(
-      (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>))
+      (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)),
     );
   }
   if (path === "/event-posts/teacher" && method === "GET") {
@@ -876,7 +884,39 @@ export async function handleEvents(
         referenceId: seg,
       });
     } catch {
-      // Approval itself is the source of truth; notification failures should not block it.
+      // Approval itself is the source of truth; an individual notification
+      // failure must not stop this post from being visible in the gallery.
+    }
+    // A gallery selection is school-wide. Once approved, alert the other
+    // teachers and every parent whose gallery has just gained this post.
+    // The post's teacher already receives the more specific approval alert
+    // above, so exclude that user from the broad teacher notification.
+    const destinations = approvedEventDestinations(
+      existing.destinations,
+      existing.visibility,
+    );
+    if (destinations.includes("SCHOOL_GALLERY")) {
+      try {
+        const galleryPayload = {
+          title: "School gallery updated",
+          body: `${
+            existing.title ?? "A school event"
+          } is now in the school gallery.`,
+          type: "gallery_published",
+          referenceType: "event_post",
+          referenceId: seg,
+        };
+        await Promise.all([
+          notifyUsersByRole(svc, school, "parent", galleryPayload),
+          notifyUsersByRole(svc, school, "teacher", {
+            ...galleryPayload,
+            excludeUserId: `${existing.created_by ?? ""}`,
+          }),
+        ]);
+      } catch {
+        // Approval remains successful even if a broad gallery notification
+        // fan-out has a transient failure.
+      }
     }
     return ok(eventPostRow(data as Record<string, unknown>));
   }
@@ -1364,7 +1404,7 @@ export async function handleLandingFeed(
     )
     .eq("school_id", schoolId)
     .in("status", ["approved", "published"])
-    .contains("destinations", ["SCHOOL_LANDING"])
+    .contains("destinations", JSON.stringify(["SCHOOL_LANDING"]))
     .order("created_at", { ascending: false })
     .limit(10);
 

@@ -22,7 +22,11 @@ import 'package:schooldesk1/core/services/notification_service.dart';
 Future<void> schoolDeskFirebaseMessagingBackgroundHandler(
   RemoteMessage message,
 ) async {
+  // Firebase must be re-initialised in the background isolate because it runs
+  // in a separate Dart VM context. Guard against double-initialisation.
   await PushNotificationService.ensureFirebaseInitialized();
+  // Background message handling is intentionally minimal — the OS delivers
+  // the notification UI automatically. Any heavy work risks being killed.
 }
 
 class PushNotificationService {
@@ -35,6 +39,7 @@ class PushNotificationService {
   static const _pendingPayloadKey = 'schooldesk.pending_notification_payload';
   static const _firebaseOperationTimeout = Duration(seconds: 4);
   static const _deviceRegistrationTimeout = Duration(seconds: 5);
+  static const _apnsRegistrationTimeout = Duration(seconds: 10);
   static const _androidChannel = AndroidNotificationChannel(
     'schooldesk_updates',
     '${AppConstants.appName} updates',
@@ -137,10 +142,15 @@ class PushNotificationService {
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
-    FirebaseMessaging.onBackgroundMessage(
-      schoolDeskFirebaseMessagingBackgroundHandler,
-    );
-    _firebaseAvailable = await ensureFirebaseInitialized();
+
+    // Firebase.initializeApp() is called in main() before runApp(), and
+    // FirebaseMessaging.onBackgroundMessage() is also registered there.
+    // Here we only verify the app is available before proceeding.
+    _firebaseAvailable = Firebase.apps.isNotEmpty;
+    if (!_firebaseAvailable) {
+      // Attempt recovery in case the main() init was skipped (e.g. unit tests).
+      _firebaseAvailable = await ensureFirebaseInitialized();
+    }
     if (!_firebaseAvailable) return;
 
     _messaging = FirebaseMessaging.instance;
@@ -237,14 +247,19 @@ class PushNotificationService {
     final messaging = _messaging;
     if (messaging == null) return;
     try {
-      final settings = await messaging
-          .requestPermission(
-            alert: true,
-            badge: true,
-            sound: true,
-            provisional: false,
-          )
-          .timeout(_firebaseOperationTimeout);
+      final settings = _isApplePlatform
+          ? await messaging.requestPermission(
+              alert: true,
+              announcement: false,
+              badge: true,
+              carPlay: false,
+              criticalAlert: false,
+              provisional: false,
+              sound: true,
+            )
+          : await messaging.getNotificationSettings().timeout(
+              _firebaseOperationTimeout,
+            );
       _permissionStatus = settings.authorizationStatus.name;
       if (!kIsWeb) {
         await messaging
@@ -259,10 +274,10 @@ class PushNotificationService {
       _permissionStatus = 'unavailable';
       _lastRegistrationError = error.toString();
       developer.log(
-        'Failed to request notification permission at startup: $error',
+        'Failed to get notification settings at startup: $error',
         name: 'PushNotificationService',
       );
-      // Keep the app usable if the platform cannot show a permission prompt.
+      // Keep the app usable if the platform cannot get settings.
     }
   }
 
@@ -338,6 +353,22 @@ class PushNotificationService {
     final messaging = _messaging;
     if (messaging == null) return;
     try {
+      if (_isApplePlatform) {
+        final deadline = DateTime.now().add(_apnsRegistrationTimeout);
+        String? apnsToken;
+        while (DateTime.now().isBefore(deadline)) {
+          apnsToken = await messaging.getAPNSToken();
+          if ((apnsToken ?? '').isNotEmpty) break;
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        if ((apnsToken ?? '').isEmpty) {
+          throw StateError(
+            'APNs token was not available after '
+            '${_apnsRegistrationTimeout.inSeconds} seconds.',
+          );
+        }
+      }
+
       _currentToken = await messaging
           .getToken(
             vapidKey: kIsWeb && EnvConfig.firebaseVapidKey.isNotEmpty
@@ -437,6 +468,11 @@ class PushNotificationService {
       TargetPlatform.fuchsia => 'android',
     };
   }
+
+  bool get _isApplePlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
 
   Future<void> dispose() async {
     await _onMessageSub?.cancel();

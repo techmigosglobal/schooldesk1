@@ -483,6 +483,10 @@ async function attachPaymentRequestRelations(
   const invoicesById = new Map<string, Record<string, unknown>>();
   const studentsById = new Map<string, Record<string, unknown>>();
   const parentsById = new Map<string, Record<string, unknown>>();
+  const receiptsById = new Map<string, Record<string, unknown>>();
+  const receiptIds = [
+    ...new Set(rows.map((row) => text(row.receipt_id)).filter(Boolean)),
+  ];
 
   if (invoiceIds.length) {
     const { data, error } = await svc.from("fee_invoices").select("*")
@@ -508,6 +512,14 @@ async function attachPaymentRequestRelations(
     for (const row of data ?? []) parentsById.set(text(row.id), row);
   }
 
+  if (receiptIds.length) {
+    const { data, error } = await svc.from("fee_receipts").select("*")
+      .eq("school_id", school)
+      .in("id", receiptIds);
+    if (error) throw error;
+    for (const row of data ?? []) receiptsById.set(text(row.id), row);
+  }
+
   return await Promise.all(rows.map(async (row) => {
     const storedProof = text(row.proof_url);
     const proofUrl = storedProof.startsWith("payment-proofs/")
@@ -522,6 +534,7 @@ async function attachPaymentRequestRelations(
       invoice: invoicesById.get(text(row.invoice_id)) ?? null,
       student: studentsById.get(text(row.student_id)) ?? null,
       parent_user: parentsById.get(text(row.parent_user_id)) ?? null,
+      receipt: receiptsById.get(text(row.receipt_id)) ?? null,
     };
   }));
 }
@@ -1582,6 +1595,26 @@ export async function handleFees(
               const ln = text(studentRow.last_name);
               studentName = fn && ln ? `${fn} ${ln}` : fn || ln || "a student";
             }
+            const feeMessage =
+              `A parent submitted ${amountLabel} payment proof for ${studentName}. Please review and verify.`;
+            const { error: logError } = await svc.from("notification_logs")
+              .insert(validPrincipals.map((p: Record<string, unknown>) => ({
+                school_id: school,
+                user_id: text(p.id),
+                target_role: "principal",
+                title: "New payment proof submitted",
+                body: feeMessage,
+                type: "fee",
+                entity_type: "parent_payment_requests",
+                entity_id: text(data.id),
+                reference_type: "fee",
+                reference_id: text(data.id),
+                action: "payment_submitted",
+                route: "/principal-fees-screen/payment-requests",
+                student_id: text(invoice.student_id),
+                is_read: false,
+              })));
+            if (logError) console.error("Failed to write fee in-app notifications", logError.message);
             const { data: feeEvents, error: feeEventError } = await svc
               .from("notification_events")
               .insert(
@@ -1589,18 +1622,18 @@ export async function handleFees(
                   school_id: school,
                   user_id: text(p.id),
                   event_type: "fee_payment_submitted",
-                  title: "New payment proof submitted",
-                  body: `A parent submitted ${amountLabel} payment proof for ${studentName}. Please review and verify.`,
                   event_data: {
                     payment_request_id: data.id,
                     invoice_id: invoice.id,
                     student_id: invoice.student_id,
                     amount: expectedAmount,
                     request_reference: data.request_reference,
-                    message: `A parent submitted ${amountLabel} payment proof for ${studentName}. Please review and verify.`,
+                    message: feeMessage,
+                    reference_type: "fee",
+                    reference_id: text(data.id),
+                    action: "payment_submitted",
+                    route: "/principal-fees-screen/payment-requests",
                   },
-                  entity_type: "parent_payment_requests",
-                  entity_id: data.id,
                   processed: false,
                 }))
               )
@@ -1902,12 +1935,27 @@ export async function handleFees(
           const approvalBody = isApproved
             ? `Your ${amountLabel} payment has been verified and approved. Receipt is now available.`
             : `Your ${amountLabel} payment was ${statusLabel}.${body.admin_remarks ? ` Remark: ${text(body.admin_remarks)}` : ""}`;
+          const { error: logError } = await svc.from("notification_logs").insert({
+            school_id: school,
+            user_id: parentUserId,
+            target_role: "parent",
+            title: isApproved ? "Payment Approved ✅" : `Payment ${statusLabel}`,
+            body: approvalBody,
+            type: "fee",
+            entity_type: "parent_payment_requests",
+            entity_id: seg,
+            reference_type: "fee",
+            reference_id: seg,
+            action: isApproved ? "payment_approved" : "payment_rejected",
+            route: "/parent-fees-screen",
+            student_id: text(existing.student_id),
+            is_read: false,
+          });
+          if (logError) console.error("Failed to write parent fee in-app notification", logError.message);
           const { data: feeDecisionEvent } = await svc.from("notification_events").insert({
             school_id: school,
             user_id: parentUserId,
             event_type: isApproved ? "fee_payment_approved" : "fee_payment_rejected",
-            title: isApproved ? "Payment Approved ✅" : `Payment ${statusLabel}`,
-            body: approvalBody,
             event_data: {
               payment_request_id: seg,
               invoice_id: existing.invoice_id,
@@ -1915,9 +1963,12 @@ export async function handleFees(
               status: status,
               admin_remarks: text(body.admin_remarks),
               message: approvalBody,
+              reference_type: "fee",
+              reference_id: seg,
+              action: isApproved ? "payment_approved" : "payment_rejected",
+              route: "/parent-fees-screen",
+              student_id: text(existing.student_id),
             },
-            entity_type: "parent_payment_requests",
-            entity_id: seg,
             processed: false,
           }).select("id").maybeSingle();
           if (feeDecisionEvent?.id) triggerPushProcessing(feeDecisionEvent.id);

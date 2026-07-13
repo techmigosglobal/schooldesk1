@@ -1,7 +1,7 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -210,15 +210,12 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
 
   Future<void> _pickProofFile() async {
     try {
-      final result = await FilePicker.pickFiles(type: FileType.image);
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.single;
-        if (file.path != null) {
-          setState(() {
-            _proofName = file.name;
-            _proofPath = file.path;
-          });
-        }
+      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        setState(() {
+          _proofName = image.name;
+          _proofPath = image.path;
+        });
       }
     } on Object catch (e) {
       if (mounted) {
@@ -962,22 +959,29 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
 
   Widget _infoRow(String label, String value, {Color? valColor}) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.ibmPlexSans(
-            fontSize: 13,
-            color: context.appTheme.muted,
-            fontWeight: FontWeight.w500,
+        SizedBox(
+          width: 116,
+          child: Text(
+            label,
+            style: GoogleFonts.ibmPlexSans(
+              fontSize: 13,
+              color: context.appTheme.muted,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
-        Text(
-          value,
-          style: GoogleFonts.ibmPlexSans(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: valColor ?? context.appTheme.onSurface,
+        const SizedBox(width: 12),
+        Expanded(
+          child: SelectableText(
+            value,
+            textAlign: TextAlign.right,
+            style: GoogleFonts.ibmPlexSans(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: valColor ?? context.appTheme.onSurface,
+            ),
           ),
         ),
       ],

@@ -32,7 +32,7 @@ class ParentChildSelector extends StatelessWidget {
     final animationsDisabled = MediaQuery.disableAnimationsOf(context);
 
     return SizedBox(
-      height: 78,
+      height: 90,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: padding ?? const EdgeInsets.symmetric(horizontal: 2),
@@ -42,11 +42,11 @@ class ParentChildSelector extends StatelessWidget {
           final child = children[index];
           final selected = index == selectedIndex;
           final name = _name(child);
+          final classLabel = _classLabel(child);
           return Semantics(
             button: true,
             selected: selected,
-            label:
-                '$name${selected ? ', selected' : ''}',
+            label: '$name${selected ? ', selected' : ''}',
             child: Material(
               color: Colors.transparent,
               borderRadius: BorderRadius.circular(18),
@@ -87,7 +87,7 @@ class ParentChildSelector extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SchoolDeskAdaptiveText(
-                              name.split(' ').first,
+                              name,
                               maxLines: 1,
                               minFontSize: 10,
                               style: Theme.of(context).textTheme.labelLarge
@@ -98,6 +98,21 @@ class ParentChildSelector extends StatelessWidget {
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
+                            if (classLabel.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                classLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: selected
+                                          ? Colors.white.withAlpha(220)
+                                          : tokens.onSurfaceVariant,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -183,18 +198,52 @@ String _name(Map<String, dynamic> child) {
   return combined.isEmpty ? 'Student' : combined;
 }
 
-String _classLabel(Map<String, dynamic> child) {
-  final grade = _firstText(child, const ['class', 'class_name', 'grade_name']);
-  final section = _firstText(child, const ['section', 'section_name']);
-  return [grade, section].where((part) => part.isNotEmpty).join(' • ');
-}
-
 String _firstText(Map<String, dynamic> child, List<String> keys) {
   for (final key in keys) {
     final value = child[key]?.toString().trim() ?? '';
     if (value.isNotEmpty) return value;
   }
   return '';
+}
+
+String _classLabel(Map<String, dynamic> child) {
+  String scalarText(List<String> keys) {
+    for (final key in keys) {
+      final value = child[key];
+      if (value is Map) continue;
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  String nestedText(String key, List<String> nestedKeys) {
+    final value = child[key];
+    if (value is! Map) return '';
+    for (final nestedKey in nestedKeys) {
+      final text = value[nestedKey]?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  final directGrade = scalarText(
+    const ['grade_name', 'class_name', 'grade', 'class'],
+  );
+  final grade = directGrade.isNotEmpty
+      ? directGrade
+      : nestedText('grade', const ['grade_name', 'name']);
+  final directSection = scalarText(
+    const ['section_name', 'current_section_name', 'section'],
+  );
+  final section = directSection.isNotEmpty
+      ? directSection
+      : nestedText('section', const ['section_name', 'name']);
+  final values = [
+    if (grade.isNotEmpty) 'Class $grade',
+    if (section.isNotEmpty) 'Section $section',
+  ];
+  return values.join(' • ');
 }
 
 String _initials(String name) {

@@ -79,8 +79,11 @@ export async function handleUsers(
       "school_id",
       school,
     ).range((page - 1) * size, page * size - 1);
-    if (url.searchParams.get("role")) {
-      q = q.eq("role_name", url.searchParams.get("role")!);
+    const role = url.searchParams.get("role")?.trim();
+    if (role) {
+      // Published clients send display-cased roles (for example, "Parent"),
+      // while account roles are stored normalized ("parent").
+      q = q.ilike("role_name", role);
     }
     if (url.searchParams.get("status")) {
       q = q.eq("is_active", url.searchParams.get("status") === "active");

@@ -212,84 +212,97 @@ export async function handleHomework(
       }).select().single();
       if (error) return fail(error.message);
 
-      // Notify parents linked to students in this section
+      // Notify the linked parent for every assigned child.  A teacher can
+      // target one student or a whole section; both paths need the same
+      // in-app and push notification contract.
       const sectionId = text(body.section_id);
+      const assignedStudentIds = new Set<string>();
+      const individualStudentId = text(body.student_id);
+      if (individualStudentId) assignedStudentIds.add(individualStudentId);
       if (sectionId) {
         const { data: students } = await svc.from("students")
           .select("id")
           .eq("school_id", school)
           .eq("current_section_id", sectionId);
+        for (const student of students ?? []) {
+          const studentId = text(student.id);
+          if (studentId) assignedStudentIds.add(studentId);
+        }
+      }
 
-        if (students && students.length > 0) {
-          const studentIds = students.map((s: { id: string }) => s.id);
-          const { data: links } = await svc.from("parent_student_links")
-            .select("parent_user_id")
-            .eq("school_id", school)
-            .in("student_id", studentIds);
+      if (assignedStudentIds.size > 0) {
+        const { data: links } = await svc.from("parent_student_links")
+          .select("parent_user_id, student_id")
+          .eq("school_id", school)
+          .in("student_id", [...assignedStudentIds]);
 
-          if (links && links.length > 0) {
-            const parentIds = [
-              ...new Set(
-                links.map((l: { parent_user_id: string }) => l.parent_user_id)
-                  .filter(Boolean),
-              ),
-            ];
-
-            if (parentIds.length > 0) {
-              const notifications = parentIds.map((pid: string) => ({
+        if (links && links.length > 0) {
+          const notifications = links.map(
+            (link: { parent_user_id: string; student_id: string }) => ({
+              school_id: school,
+              user_id: link.parent_user_id,
+              target_role: "parent",
+              title: `New Homework: ${text(body.title, "Assignment")}`,
+              body: `Homework assigned for ${
+                text(body.subject_id, "your child's class")
+              }.`,
+              type: "homework",
+              entity_type: "homework",
+              entity_id: id,
+              is_read: false,
+              reference_type: "homework",
+              reference_id: id,
+              action: "assignment",
+              route: "/parent-homework-screen/submit",
+              student_id: link.student_id,
+            }),
+          );
+          // Insert in-app notification logs.
+          const { error: notificationError } = await svc.from(
+            "notification_logs",
+          ).insert(notifications);
+          if (notificationError) {
+            console.error(
+              "Failed to write homework in-app notifications",
+              notificationError.message,
+            );
+          }
+          // Also queue FCM pushes for the same linked parents.
+          try {
+            const hwTitle = text(body.title, "Assignment");
+            const subjectLabel = text(
+              body.subject_id,
+              "your child's class",
+            );
+            const eventRows = links.map(
+              (link: { parent_user_id: string; student_id: string }) => ({
                 school_id: school,
-                user_id: pid,
-                target_role: "parent",
-                title: `New Homework: ${text(body.title, "Assignment")}`,
-                body: `Homework assigned for ${
-                  text(body.subject_id, "your child's class")
-                }.`,
-                type: "homework",
-                entity_type: "homework",
-                entity_id: id,
-                is_read: false,
-                reference_type: "homework",
-                reference_id: id,
-                action: "assignment",
-                route: "/parent-homework-screen/submit",
-              }));
-              // Insert in-app notification logs
-              await svc.from("notification_logs").insert(notifications);
-              // Also insert notification_events so the processor sends an FCM push to each parent
-              try {
-                const hwTitle = text(body.title, "Assignment");
-                const subjectLabel = text(
-                  body.subject_id,
-                  "your child's class",
-                );
-                const eventRows = parentIds.map((pid: string) => ({
-                  school_id: school,
-                  user_id: pid,
-                  event_type: "homework_assigned",
-                  event_data: {
-                    homework_id: id,
-                    title: `New Homework: ${hwTitle}`,
-                    message: `Homework assigned for ${subjectLabel}.`,
-                    reference_type: "homework",
-                    reference_id: id,
-                    action: "assignment",
-                    route: "/parent-homework-screen/submit",
-                  },
-                }));
-                const { data: events, error: eventError } = await svc
-                  .from("notification_events")
-                  .insert(eventRows)
-                  .select("id");
-                if (!eventError) {
-                  const eventIds = (events ?? []).map((row: { id: string }) =>
-                    text(row.id)
-                  ).filter(Boolean);
-                  if (eventIds.length > 0) triggerPushProcessing(eventIds);
-                }
-              } catch (_) {
-                /* best-effort push — notification_logs already saved */
-              }
+                user_id: link.parent_user_id,
+                event_type: "homework_assigned",
+                event_data: {
+                  homework_id: id,
+                  title: `New Homework: ${hwTitle}`,
+                  message: `Homework assigned for ${subjectLabel}.`,
+                  reference_type: "homework",
+                  reference_id: id,
+                  action: "assignment",
+                  route: "/parent-homework-screen/submit",
+                  student_id: link.student_id,
+                },
+              }),
+            );
+            const { data: events, error: eventError } = await svc
+              .from("notification_events")
+              .insert(eventRows)
+              .select("id");
+            if (!eventError) {
+              const eventIds = (events ?? []).map((row: { id: string }) =>
+                text(row.id)
+              ).filter(Boolean);
+              if (eventIds.length > 0) triggerPushProcessing(eventIds);
             }
+          } catch (_) {
+            /* best-effort push — notification_logs already saved */
           }
         }
       }
@@ -422,7 +435,8 @@ export async function handleHomework(
         hasAttachment ? " (with attachment)" : ""
       }: ${hwTitle}`;
 
-      const teacherUserId = await teacherUserIdForStaff(svc, school, staffId);
+      const teacherUserId = await teacherUserIdForStaff(svc, school, staffId) ||
+        text(hw.created_by);
 
       const notifBase = {
         school_id: school,

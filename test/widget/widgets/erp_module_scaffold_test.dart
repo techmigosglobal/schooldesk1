@@ -289,7 +289,7 @@ void main() {
 
     expect(find.text(SchoolDeskGlossary.search), findsOneWidget);
     expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.account_circle_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.account_circle_rounded), findsOneWidget);
   });
 
   testWidgets('SchoolDeskRecordCard keeps row content and actions semantic', (

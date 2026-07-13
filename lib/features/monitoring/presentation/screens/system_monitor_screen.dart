@@ -186,10 +186,10 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
     final wipeConfirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Wipe Database Storage'),
+        title: const Text('Wipe All School Data'),
         content: const Text(
-          'Are you sure you want to wipe all transaction, students, academic, and attendance records for this school?\n\n'
-          'Active user accounts and school profile metadata will be preserved so you do not get locked out.\n\n'
+          'This permanently deletes every school record: people, login accounts, academics, attendance, fees, communications, settings, reports, notifications, documents, audit history, and uploaded files.\n\n'
+          'Only the school profile/branding and Principal and Super Admin login accounts are preserved.\n\n'
           'THIS ACTION CANNOT BE UNDONE!',
         ),
         actions: [
@@ -202,7 +202,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Wipe Database'),
+            child: const Text('Delete Everything Except Principal & Super Admin'),
           ),
         ],
       ),
@@ -212,11 +212,16 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
 
     setState(() => _loading = true);
     try {
-      await _api.wipeDatabase();
+      final result = await _api.wipeDatabase();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Database storage wiped successfully!'),
+        SnackBar(
+          content: Text(
+            'School reset: ${result['deleted_rows'] ?? 0} records, '
+            '${result['storage_objects_removed'] ?? 0} files, and '
+            '${result['auth_accounts_deleted'] ?? 0} login accounts removed. '
+            'Principal and Super Admin accounts remain.',
+          ),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ),
@@ -328,7 +333,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                               ).colorScheme.error,
                             ),
                             icon: const Icon(Icons.delete_forever_rounded),
-                            label: const Text('Wipe DB'),
+                            label: const Text('Wipe School Data'),
                             onPressed: _loading ? null : _wipeDb,
                           ),
                         ],

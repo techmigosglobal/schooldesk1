@@ -2,8 +2,12 @@ import 'package:flutter/foundation.dart';
 
 /// Desktop-specific layout breakpoints for progressive enhancement.
 abstract final class DesktopBreakpoints {
-  /// Minimum width to treat layout as desktop (persistent sidebar, multi-column).
-  static const double desktop = 1200;
+  /// Minimum supported Windows window width. Desktop layouts must fit this
+  /// value because it is also enforced by [DesktopWindowManager].
+  static const double desktop = 1024;
+
+  /// Width at which two panes can coexist without squeezing forms and data.
+  static const double twoPane = 1200;
 
   /// Comfortable wide layout with extra columns and spacing.
   static const double wide = 1440;
@@ -30,11 +34,13 @@ abstract final class DesktopBreakpoints {
   static const double defaultWindowHeight = 800;
 
   static bool isDesktopWidth(double width) {
-    final isNativeDesktop = !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.linux);
+    final isNativeDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
     return width >= (isNativeDesktop ? 720 : desktop);
   }
+  static bool isTwoPaneWidth(double width) => width >= twoPane;
   static bool isWideWidth(double width) => width >= wide;
   static bool isUltraWideWidth(double width) => width >= ultraWide;
 

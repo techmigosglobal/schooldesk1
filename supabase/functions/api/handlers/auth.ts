@@ -116,6 +116,11 @@ export async function handleAuth(
       .eq("id", authUser.id)
       .maybeSingle();
 
+    if (!profile || profile.is_active !== true) {
+      await anonClient.auth.signOut();
+      return fail("account is no longer active", 401);
+    }
+
     // Update last_login
     await svc().from("users").update({ last_login: new Date().toISOString() })
       .eq("id", authUser.id);
@@ -168,6 +173,13 @@ export async function handleAuth(
       refresh_token,
     });
     if (error || !data.session) return fail("session expired", 401);
+
+    const { data: profile } = await svc().from("users")
+      .select("id, is_active").eq("id", data.session.user.id).maybeSingle();
+    if (!profile || profile.is_active !== true) {
+      await anonClient.auth.signOut();
+      return fail("account is no longer active", 401);
+    }
 
     return ok({
       token: data.session.access_token,

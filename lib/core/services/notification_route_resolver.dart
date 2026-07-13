@@ -151,6 +151,11 @@ class NotificationRouteResolver {
         },
         'reference_id': referenceId,
         'id': referenceId,
+        'homework_id': referenceId,
+        if ((data['student_id'] ?? '').toString().trim().isNotEmpty)
+          'student_id': data['student_id'].toString().trim(),
+        if ((data['student_name'] ?? '').toString().trim().isNotEmpty)
+          'student_name': data['student_name'].toString().trim(),
         if (route == AppRoutes.parentHomeworkSubmit) 'open_feedback': true,
       };
     }

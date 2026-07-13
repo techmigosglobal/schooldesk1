@@ -32,7 +32,7 @@ class _DesktopHoverInkWellState extends State<DesktopHoverInkWell> {
     final hoverColor =
         widget.hoverColor ?? Theme.of(context).hoverColor.withAlpha(40);
 
-    Widget content = AnimatedContainer(
+    final content = AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       decoration: BoxDecoration(
         borderRadius: widget.borderRadius,
