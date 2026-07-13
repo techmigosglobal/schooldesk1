@@ -37,8 +37,85 @@ class ParentDashboardDesktopBody extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWide = DesktopBreakpoints.isWideWidth(constraints.maxWidth);
+        final width = constraints.maxWidth;
+        final isWide = DesktopBreakpoints.isWideWidth(width);
         final sidebarWidth = isWide ? 360.0 : 300.0;
+        final isNarrow = width < 960;
+
+        final childContent = isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (children.isNotEmpty) ...[
+                    _ChildSwitcherPanel(
+                      children: children,
+                      activeIndex: activeChildIndex,
+                      onSelected: onChildSelected,
+                      parentColor: parentColor,
+                    ),
+                    SizedBox(height: tokens.spacing.md),
+                    _ChildOverviewPanel(
+                      child: _activeChild,
+                      dashboard: dashboard,
+                      parentColor: parentColor,
+                    ),
+                    SizedBox(height: tokens.spacing.lg),
+                  ],
+                  _SchoolFeedDesktopPanel(
+                    eventPosts: eventPosts,
+                    parentColor: parentColor,
+                  ),
+                  SizedBox(height: tokens.spacing.lg),
+                  const TodaysHighlightsCard(role: 'parent'),
+                  SizedBox(height: tokens.spacing.lg),
+                  _ParentQuickAccessDesktopPanel(parentColor: parentColor),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Left: School feed + highlights + quick access ──────────
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _SchoolFeedDesktopPanel(
+                          eventPosts: eventPosts,
+                          parentColor: parentColor,
+                        ),
+                        SizedBox(height: tokens.spacing.lg),
+                        const TodaysHighlightsCard(role: 'parent'),
+                        SizedBox(height: tokens.spacing.lg),
+                        _ParentQuickAccessDesktopPanel(parentColor: parentColor),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: tokens.spacing.lg),
+                  // ── Right: Child overview sidebar ─────────────────────────
+                  SizedBox(
+                    width: sidebarWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (children.isNotEmpty) ...[
+                          _ChildSwitcherPanel(
+                            children: children,
+                            activeIndex: activeChildIndex,
+                            onSelected: onChildSelected,
+                            parentColor: parentColor,
+                          ),
+                          SizedBox(height: tokens.spacing.md),
+                          _ChildOverviewPanel(
+                            child: _activeChild,
+                            dashboard: dashboard,
+                            parentColor: parentColor,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              );
 
         return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
@@ -47,51 +124,7 @@ class ParentDashboardDesktopBody extends StatelessWidget {
             tokens.spacing.xl,
             tokens.spacing.xxl,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Left: School feed + highlights + quick access ──────────
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _SchoolFeedDesktopPanel(
-                      eventPosts: eventPosts,
-                      parentColor: parentColor,
-                    ),
-                    SizedBox(height: tokens.spacing.lg),
-                    const TodaysHighlightsCard(role: 'parent'),
-                    SizedBox(height: tokens.spacing.lg),
-                    _ParentQuickAccessDesktopPanel(parentColor: parentColor),
-                  ],
-                ),
-              ),
-              SizedBox(width: tokens.spacing.lg),
-              // ── Right: Child overview sidebar ─────────────────────────
-              SizedBox(
-                width: sidebarWidth,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (children.isNotEmpty) ...[
-                      _ChildSwitcherPanel(
-                        children: children,
-                        activeIndex: activeChildIndex,
-                        onSelected: onChildSelected,
-                        parentColor: parentColor,
-                      ),
-                      SizedBox(height: tokens.spacing.md),
-                      _ChildOverviewPanel(
-                        child: _activeChild,
-                        dashboard: dashboard,
-                        parentColor: parentColor,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
+          child: childContent,
         );
       },
     );

@@ -105,6 +105,94 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
         // Side panel: 340px on standard desktop, 380px on wide
         final sidePanelWidth = isWide ? 380.0 : 340.0;
         final contentSpacing = tokens.spacing.lg;
+        final isNarrow = width < 960;
+
+        final twoColumnContent = isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Main column
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _SectionLabel(
+                        label: 'Academics',
+                        icon: Icons.school_rounded,
+                        color: Color(0xFF1478F2),
+                      ),
+                      SizedBox(height: tokens.spacing.sm),
+                      academicsSection,
+                      SizedBox(height: contentSpacing),
+                      const _SectionLabel(
+                        label: 'School Setup',
+                        icon: Icons.tune_rounded,
+                        color: Color(0xFF7C3AED),
+                      ),
+                      SizedBox(height: tokens.spacing.sm),
+                      setupSection,
+                    ],
+                  ),
+                  SizedBox(height: contentSpacing * 1.5),
+                  // Highlights
+                  const _SectionLabel(
+                    label: "Today's Highlights",
+                    icon: Icons.today_rounded,
+                    color: Color(0xFF0E9384),
+                  ),
+                  SizedBox(height: tokens.spacing.sm),
+                  highlights,
+                ],
+              )
+            : IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Main column: Academics grid + setup
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Academics section header
+                          const _SectionLabel(
+                            label: 'Academics',
+                            icon: Icons.school_rounded,
+                            color: Color(0xFF1478F2),
+                          ),
+                          SizedBox(height: tokens.spacing.sm),
+                          academicsSection,
+                          SizedBox(height: contentSpacing),
+                          // School setup (full width within main column)
+                          const _SectionLabel(
+                            label: 'School Setup',
+                            icon: Icons.tune_rounded,
+                            color: Color(0xFF7C3AED),
+                          ),
+                          SizedBox(height: tokens.spacing.sm),
+                          setupSection,
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: contentSpacing),
+
+                    // Sidebar: Today's highlights + pending actions
+                    SizedBox(
+                      width: sidePanelWidth,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const _SectionLabel(
+                            label: "Today's Highlights",
+                            icon: Icons.today_rounded,
+                            color: Color(0xFF0E9384),
+                          ),
+                          SizedBox(height: tokens.spacing.sm),
+                          highlights,
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
 
         return RefreshIndicator(
           onRefresh: () async {},
@@ -135,56 +223,7 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
                 SizedBox(height: contentSpacing),
 
                 // ── Two-column zone ────────────────────────────────────────
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Main column: Academics grid + setup
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Academics section header
-                            _SectionLabel(
-                              label: 'Academics',
-                              icon: Icons.school_rounded,
-                              color: const Color(0xFF1478F2),
-                            ),
-                            SizedBox(height: tokens.spacing.sm),
-                            academicsSection,
-                            SizedBox(height: contentSpacing),
-                            // School setup (full width within main column)
-                            _SectionLabel(
-                              label: 'School Setup',
-                              icon: Icons.tune_rounded,
-                              color: const Color(0xFF7C3AED),
-                            ),
-                            SizedBox(height: tokens.spacing.sm),
-                            setupSection,
-                          ],
-                        ),
-                      ),
-                      SizedBox(width: contentSpacing),
-
-                      // Sidebar: Today's highlights + pending actions
-                      SizedBox(
-                        width: sidePanelWidth,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _SectionLabel(
-                              label: "Today's Highlights",
-                              icon: Icons.today_rounded,
-                              color: const Color(0xFF0E9384),
-                            ),
-                            SizedBox(height: tokens.spacing.sm),
-                            highlights,
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                twoColumnContent,
               ],
             ),
           ),

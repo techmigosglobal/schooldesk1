@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'desktop_responsive_breakpoints.dart';
-
 /// Platform detection with graceful fallbacks for web/mobile.
 abstract final class DesktopPlatform {
   static bool get isDesktop {
@@ -21,16 +19,11 @@ abstract final class DesktopPlatform {
   }
 
   static bool isDesktopLayout(BuildContext context) {
-    if (!isDesktop) return false;
-    return DesktopBreakpoints.isDesktopWidth(
-      MediaQuery.sizeOf(context).width,
-    );
+    return isDesktop;
   }
 
   static bool shouldUsePersistentSidebar(BuildContext context) {
-    if (!isDesktop) {
-      return MediaQuery.sizeOf(context).width >= 980;
-    }
-    return MediaQuery.sizeOf(context).width >= 900;
+    if (isDesktop) return true;
+    return MediaQuery.sizeOf(context).width >= 980;
   }
 }

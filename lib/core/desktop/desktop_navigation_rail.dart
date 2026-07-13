@@ -48,20 +48,19 @@ class DesktopNavigationRail extends StatefulWidget {
 }
 
 class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
-  late bool _expanded;
-
-  @override
-  void initState() {
-    super.initState();
-    _expanded = widget.initiallyExpanded;
-  }
+  bool? _userExpanded;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
     final roleColor = tokens.roleColor(widget.role);
-    final width = _expanded
+
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 1150;
+    final expanded = _userExpanded ?? (isNarrow ? false : widget.initiallyExpanded);
+
+    final width = expanded
         ? DesktopBreakpoints.sidebarExpanded
         : DesktopBreakpoints.sidebarCollapsed;
 
@@ -83,23 +82,23 @@ class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
       child: Column(
         children: [
           _DesktopRailHeader(
-            expanded: _expanded,
+            expanded: expanded,
             roleColor: roleColor,
             portalLabel: widget.portalLabel,
             organizationName: widget.organizationName,
             organizationLogo: widget.organizationLogo,
             portalIcon: widget.portalIcon,
-            onToggle: () => setState(() => _expanded = !_expanded),
+            onToggle: () => setState(() => _userExpanded = !expanded),
           ),
           Expanded(
             child: ListView(
               padding: EdgeInsets.symmetric(
-                horizontal: _expanded ? tokens.spacing.sm : tokens.spacing.xs,
+                horizontal: expanded ? tokens.spacing.sm : tokens.spacing.xs,
                 vertical: tokens.spacing.sm,
               ),
               children: [
                 for (final section in widget.sections) ...[
-                  if (_expanded)
+                  if (expanded)
                     Padding(
                       padding: EdgeInsets.fromLTRB(
                         tokens.spacing.sm,
@@ -118,7 +117,7 @@ class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
                     ),
                   for (final item in section.items)
                     _DesktopRailItem(
-                      expanded: _expanded,
+                      expanded: expanded,
                       item: item,
                       roleColor: roleColor,
                       isSelected: widget.selectedIndex == item.index,
@@ -130,11 +129,11 @@ class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
           ),
           if (widget.footerActions.isNotEmpty)
             _DesktopRailFooter(
-              expanded: _expanded,
+              expanded: expanded,
               actions: widget.footerActions,
             ),
           _DesktopRailUserFooter(
-            expanded: _expanded,
+            expanded: expanded,
             userName: widget.userName,
             userSubtitle: widget.userSubtitle,
             initials: widget.initials,

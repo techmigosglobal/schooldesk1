@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Desktop-specific layout breakpoints for progressive enhancement.
 abstract final class DesktopBreakpoints {
   /// Minimum width to treat layout as desktop (persistent sidebar, multi-column).
@@ -27,7 +29,12 @@ abstract final class DesktopBreakpoints {
   static const double defaultWindowWidth = 1280;
   static const double defaultWindowHeight = 800;
 
-  static bool isDesktopWidth(double width) => width >= desktop;
+  static bool isDesktopWidth(double width) {
+    final isNativeDesktop = !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux);
+    return width >= (isNativeDesktop ? 720 : desktop);
+  }
   static bool isWideWidth(double width) => width >= wide;
   static bool isUltraWideWidth(double width) => width >= ultraWide;
 

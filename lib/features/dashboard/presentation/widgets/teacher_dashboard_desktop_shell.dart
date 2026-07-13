@@ -71,6 +71,62 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
         final width = constraints.maxWidth;
         final isWide = DesktopBreakpoints.isWideWidth(width);
         final sidebarWidth = isWide ? 380.0 : 320.0;
+        final isNarrow = width < 960;
+
+        final childContent = isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildClassHeroPanel(context, tokens),
+                  SizedBox(height: tokens.spacing.lg),
+                  const TodaysHighlightsCard(role: 'teacher'),
+                  SizedBox(height: tokens.spacing.lg),
+                  _buildQuickActionsPanel(context, tokens),
+                  SizedBox(height: tokens.spacing.lg),
+                  _buildActionQueuePanel(context, tokens),
+                  SizedBox(height: tokens.spacing.lg),
+                  _buildTodayFeedPanel(context, tokens),
+                  if (announcements.isNotEmpty) ...[
+                    SizedBox(height: tokens.spacing.lg),
+                    _buildNoticesPanel(context, tokens),
+                  ],
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Main content column ──────────────────────────────────────
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildClassHeroPanel(context, tokens),
+                        SizedBox(height: tokens.spacing.lg),
+                        const TodaysHighlightsCard(role: 'teacher'),
+                        SizedBox(height: tokens.spacing.lg),
+                        _buildTodayFeedPanel(context, tokens),
+                        if (announcements.isNotEmpty) ...[
+                          SizedBox(height: tokens.spacing.lg),
+                          _buildNoticesPanel(context, tokens),
+                        ],
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: tokens.spacing.lg),
+                  // ── Sidebar column ────────────────────────────────────────────
+                  SizedBox(
+                    width: sidebarWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildQuickActionsPanel(context, tokens),
+                        SizedBox(height: tokens.spacing.md),
+                        _buildActionQueuePanel(context, tokens),
+                      ],
+                    ),
+                  ),
+                ],
+              );
 
         return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
@@ -79,41 +135,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
             tokens.spacing.xl,
             tokens.spacing.xxl,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Main content column ──────────────────────────────────────
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildClassHeroPanel(context, tokens),
-                    SizedBox(height: tokens.spacing.lg),
-                    const TodaysHighlightsCard(role: 'teacher'),
-                    SizedBox(height: tokens.spacing.lg),
-                    _buildTodayFeedPanel(context, tokens),
-                    if (announcements.isNotEmpty) ...[
-                      SizedBox(height: tokens.spacing.lg),
-                      _buildNoticesPanel(context, tokens),
-                    ],
-                  ],
-                ),
-              ),
-              SizedBox(width: tokens.spacing.lg),
-              // ── Sidebar column ────────────────────────────────────────────
-              SizedBox(
-                width: sidebarWidth,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildQuickActionsPanel(context, tokens),
-                    SizedBox(height: tokens.spacing.md),
-                    _buildActionQueuePanel(context, tokens),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          child: childContent,
         );
       },
     );
