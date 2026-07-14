@@ -9,6 +9,8 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
+import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class IdCardGenerationScreen extends StatefulWidget {
   const IdCardGenerationScreen({super.key});
@@ -171,6 +173,91 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
 
   @override
   Widget build(BuildContext context) {
+
+
+  final isDesktop = DesktopBreakpoints.isDesktopWidth(
+
+
+        MediaQuery.sizeOf(context).width,
+
+
+      );
+
+
+      if (isDesktop) {
+
+
+        return DesktopScreenWrapper(
+
+
+          breadcrumbs: ['Documents', 'ID Cards'],
+
+
+          title: 'ID Cards',
+
+
+          actions: const [],
+
+
+          child: Card(
+
+
+            elevation: 0,
+
+
+            child: Padding(
+
+
+              padding: const EdgeInsets.all(32),
+
+
+              child: Center(
+
+
+                child: Column(
+
+
+                  mainAxisSize: MainAxisSize.min,
+
+
+                  children: [
+
+
+                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
+
+
+                    const SizedBox(height: 16),
+
+
+                    Text('ID Cards', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+
+
+                    const SizedBox(height: 8),
+
+
+                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
+
+
+                  ],
+
+
+                ),
+
+
+              ),
+
+
+            ),
+
+
+          ),
+
+
+        );
+
+
+      }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark
         ? const Color(0xFF151C26)

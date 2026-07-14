@@ -4,6 +4,8 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
+import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class TeacherClassesScreen extends StatefulWidget {
   const TeacherClassesScreen({super.key});
@@ -46,6 +48,91 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
 
   @override
   Widget build(BuildContext context) {
+
+
+  final isDesktop = DesktopBreakpoints.isDesktopWidth(
+
+
+        MediaQuery.sizeOf(context).width,
+
+
+      );
+
+
+      if (isDesktop) {
+
+
+        return DesktopScreenWrapper(
+
+
+          breadcrumbs: ['Classes'],
+
+
+          title: 'My Classes',
+
+
+          actions: const [],
+
+
+          child: Card(
+
+
+            elevation: 0,
+
+
+            child: Padding(
+
+
+              padding: const EdgeInsets.all(32),
+
+
+              child: Center(
+
+
+                child: Column(
+
+
+                  mainAxisSize: MainAxisSize.min,
+
+
+                  children: [
+
+
+                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
+
+
+                    const SizedBox(height: 16),
+
+
+                    Text('My Classes', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+
+
+                    const SizedBox(height: 8),
+
+
+                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
+
+
+                  ],
+
+
+                ),
+
+
+              ),
+
+
+            ),
+
+
+          ),
+
+
+        );
+
+
+      }
+
     final classLabel = RoleAccessService.teacherClassName;
     final linkedStudentPreview = _students.isEmpty
         ? 'No linked students'

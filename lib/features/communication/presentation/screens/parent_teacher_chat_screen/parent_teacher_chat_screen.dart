@@ -13,6 +13,8 @@ import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
+import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
+import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class ParentTeacherChatScreen extends StatefulWidget {
   const ParentTeacherChatScreen({super.key});
@@ -470,6 +472,91 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+
+
+  final isDesktop = DesktopBreakpoints.isDesktopWidth(
+
+
+        MediaQuery.sizeOf(context).width,
+
+
+      );
+
+
+      if (isDesktop) {
+
+
+        return DesktopScreenWrapper(
+
+
+          breadcrumbs: ['Communication', 'Chat'],
+
+
+          title: 'Chat',
+
+
+          actions: const [],
+
+
+          child: Card(
+
+
+            elevation: 0,
+
+
+            child: Padding(
+
+
+              padding: const EdgeInsets.all(32),
+
+
+              child: Center(
+
+
+                child: Column(
+
+
+                  mainAxisSize: MainAxisSize.min,
+
+
+                  children: [
+
+
+                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
+
+
+                    const SizedBox(height: 16),
+
+
+                    Text('Chat', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+
+
+                    const SizedBox(height: 8),
+
+
+                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
+
+
+                  ],
+
+
+                ),
+
+
+              ),
+
+
+            ),
+
+
+          ),
+
+
+        );
+
+
+      }
+
     final isWide = MediaQuery.of(context).size.width >= 760;
     return SchoolDeskModuleScaffold(
       title: 'Communication',

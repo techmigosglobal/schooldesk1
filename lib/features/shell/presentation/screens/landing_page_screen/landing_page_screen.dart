@@ -161,6 +161,9 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
 
   @override
   Widget build(BuildContext context) {
+
+
+
     final size = MediaQuery.sizeOf(context);
     final isSmall = size.width < 400;
     final isNarrow = size.width < 350;

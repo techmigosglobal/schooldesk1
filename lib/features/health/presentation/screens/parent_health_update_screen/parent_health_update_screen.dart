@@ -4,6 +4,8 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
+import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
+import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 /// Parent Health Update screen — parents can set pill/medication reminders
 /// for their children. These reminders are visible to teachers and principals
@@ -274,6 +276,91 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
 
   @override
   Widget build(BuildContext context) {
+
+
+  final isDesktop = DesktopBreakpoints.isDesktopWidth(
+
+
+        MediaQuery.sizeOf(context).width,
+
+
+      );
+
+
+      if (isDesktop) {
+
+
+        return DesktopScreenWrapper(
+
+
+          breadcrumbs: ['Health', 'Update'],
+
+
+          title: 'Health Update',
+
+
+          actions: const [],
+
+
+          child: Card(
+
+
+            elevation: 0,
+
+
+            child: Padding(
+
+
+              padding: const EdgeInsets.all(32),
+
+
+              child: Center(
+
+
+                child: Column(
+
+
+                  mainAxisSize: MainAxisSize.min,
+
+
+                  children: [
+
+
+                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
+
+
+                    const SizedBox(height: 16),
+
+
+                    Text('Health Update', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+
+
+                    const SizedBox(height: 8),
+
+
+                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
+
+
+                  ],
+
+
+                ),
+
+
+              ),
+
+
+            ),
+
+
+          ),
+
+
+        );
+
+
+      }
+
     return SchoolDeskModuleScaffold(
       title: 'Health Updates',
       subtitle: 'Set pill reminders for your child',

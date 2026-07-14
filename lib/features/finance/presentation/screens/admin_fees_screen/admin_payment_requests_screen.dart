@@ -12,6 +12,8 @@ import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
+import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class AdminPaymentRequestsScreen extends StatefulWidget {
   const AdminPaymentRequestsScreen({super.key});
@@ -62,6 +64,91 @@ class _AdminPaymentRequestsScreenState
 
   @override
   Widget build(BuildContext context) {
+
+
+  final isDesktop = DesktopBreakpoints.isDesktopWidth(
+
+
+        MediaQuery.sizeOf(context).width,
+
+
+      );
+
+
+      if (isDesktop) {
+
+
+        return DesktopScreenWrapper(
+
+
+          breadcrumbs: ['Finance', 'Payments'],
+
+
+          title: 'Payment Requests',
+
+
+          actions: const [],
+
+
+          child: Card(
+
+
+            elevation: 0,
+
+
+            child: Padding(
+
+
+              padding: const EdgeInsets.all(32),
+
+
+              child: Center(
+
+
+                child: Column(
+
+
+                  mainAxisSize: MainAxisSize.min,
+
+
+                  children: [
+
+
+                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
+
+
+                    const SizedBox(height: 16),
+
+
+                    Text('Payment Requests', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+
+
+                    const SizedBox(height: 8),
+
+
+                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
+
+
+                  ],
+
+
+                ),
+
+
+              ),
+
+
+            ),
+
+
+          ),
+
+
+        );
+
+
+      }
+
     return SchoolDeskModuleScaffold(
       title: 'Payment Requests',
       subtitle: 'Review parent-submitted fee payments',
