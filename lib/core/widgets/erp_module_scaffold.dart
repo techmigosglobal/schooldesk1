@@ -162,7 +162,6 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
               : null,
           body: Row(
             children: [
-              if (showRail && widget.drawer != null) widget.drawer!,
               Expanded(
                 child: Column(
                   children: [

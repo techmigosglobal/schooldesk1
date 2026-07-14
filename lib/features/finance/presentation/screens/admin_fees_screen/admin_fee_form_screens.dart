@@ -191,77 +191,59 @@ class _AdminFeeStructureFormScreenState
 
 
       if (isDesktop) {
-
-
         return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Finance', 'Fees', 'Form'],
-
-
-          title: 'Fee Form',
-
-
+          breadcrumbs: const ['Finance', 'Fees', 'Form'],
+          title: widget.args.isEditing ? 'Edit Fee Structure' : 'Create Fee Structure',
+          subtitle: 'Class and section-wise fee setup owned by Principal finance',
           actions: const [],
-
-
+          maxWidth: 600,
           child: Card(
-
-
             elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Fee Form', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: context.appTheme.outlineVariant),
             ),
-
-
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!_hasReferenceData)
+                      const SchoolDeskStatusPanel.empty(
+                        title: 'Setup data missing',
+                        message: 'Academic years, classes, and fee categories are required before fee structure requests can be prepared.',
+                      )
+                    else ...[
+                      _buildSummary(),
+                      const SizedBox(height: 14),
+                      _buildSelectors(),
+                      const SizedBox(height: 14),
+                      _buildAmountFields(),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton.icon(
+                          onPressed: _saving ? null : _save,
+                          icon: _saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.save_rounded, size: 18),
+                          label: Text(_saving ? 'Saving...' : 'Save Structure'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
-
-
         );
-
-
       }
 
     return SchoolDeskModuleScaffold(

@@ -124,89 +124,156 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
       if (isDesktop) {
-
-
         return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Academics', 'Management', 'Form'],
-
-
-          title: 'Academic Form',
-
-
+          breadcrumbs: const ['Academics', 'Management', 'Form'],
+          title: widget.args.isEditing ? 'Edit Academic Year' : 'Create Academic Year',
+          subtitle: 'Add a new academic year with start and end dates',
           actions: const [],
-
-
+          maxWidth: 600,
           child: Card(
-
-
             elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Academic Form', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFFDCE7F5)),
             ),
-
-
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _YearTextField(
+                      label: 'Academic Year Name',
+                      required: true,
+                      controller: _nameController,
+                      enabled: !_saving,
+                      hint: '2026 - 2027',
+                      validator: (value) => _required(value, 'Enter academic year.'),
+                      helper: 'Use a clear and unique name for the academic year.',
+                    ),
+                    const SizedBox(height: 24),
+                    _YearDateField(
+                      label: 'Start Date',
+                      controller: _startController,
+                      helper: 'Select the first day of the academic year.',
+                      enabled: !_saving,
+                      onTap: () => _pickDate(_startController),
+                    ),
+                    const SizedBox(height: 24),
+                    _YearDateField(
+                      label: 'End Date',
+                      controller: _endController,
+                      helper: 'Select the last day of the academic year.',
+                      enabled: !_saving,
+                      onTap: () => _pickDate(_endController),
+                    ),
+                    const SizedBox(height: 24),
+                    _YearStatusField(
+                      value: _status,
+                      enabled: !_saving,
+                      onChanged: (value) => setState(() {
+                        _status = value ?? 'active';
+                        _isCurrent = _status == 'active' ? _isCurrent : false;
+                      }),
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFDCE7F5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const CircleAvatar(
+                            radius: 28,
+                            backgroundColor: Color(0xFFE7F0FF),
+                            child: Icon(
+                              Icons.verified_user_outlined,
+                              color: Color(0xFF105DDF),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Mark as current academic year',
+                                  style: GoogleFonts.dmSans(
+                                    color: const Color(0xFF08142F),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  'This will set this academic year as the current active year in the system.',
+                                  style: GoogleFonts.dmSans(
+                                    color: const Color(0xFF60708C),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _isCurrent,
+                            activeColor: Colors.white,
+                            activeTrackColor: const Color(0xFF105DDF),
+                            onChanged: _saving
+                                ? null
+                                : (value) => setState(() {
+                                    _isCurrent = value;
+                                    if (value) _status = 'active';
+                                  }),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _saving ? null : _save,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF105DDF),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                'Save Academic Year',
+                                style: GoogleFonts.dmSans(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-
-
         );
-
-
       }
 
     return Scaffold(

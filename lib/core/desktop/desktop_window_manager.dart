@@ -35,6 +35,7 @@ abstract final class DesktopWindowManager {
       );
 
       await windowManager.waitUntilReadyToShow(options, () async {
+        await windowManager.maximize();
         await windowManager.show();
         await windowManager.focus();
       });

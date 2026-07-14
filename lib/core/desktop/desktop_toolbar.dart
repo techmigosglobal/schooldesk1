@@ -169,7 +169,9 @@ class _WindowButtonState extends State<_WindowButton> {
             child: Icon(
               widget.icon,
               size: 16,
-              color: _hovering && hover != null ? Colors.white : null,
+              color: _hovering && hover != null
+                  ? Colors.white
+                  : Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),

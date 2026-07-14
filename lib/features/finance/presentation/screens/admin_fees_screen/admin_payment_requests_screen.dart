@@ -76,77 +76,45 @@ class _AdminPaymentRequestsScreenState
 
 
       if (isDesktop) {
-
-
         return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Finance', 'Payments'],
-
-
+          breadcrumbs: const ['Finance', 'Payments'],
           title: 'Payment Requests',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Payment Requests', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
+          actions: [
+            IconButton(
+              tooltip: 'Refresh payment requests',
+              onPressed: _loading ? null : () => _loadRequests(showSpinner: false),
+              icon: const Icon(Icons.refresh_rounded),
             ),
-
-
-          ),
-
-
+          ],
+          maxWidth: 800,
+          child: _loading
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_error != null) ...[
+                      _buildErrorState(),
+                      const SizedBox(height: 16),
+                    ],
+                    _buildSummary(),
+                    const SizedBox(height: 14),
+                    _buildStatusFilters(),
+                    const SizedBox(height: 14),
+                    if (_visibleRequests.isEmpty)
+                      const SchoolDeskStatusPanel.empty(
+                        title: 'No payment requests',
+                        message: 'Parent payment requests will appear here.',
+                      )
+                    else
+                      ..._visibleRequests.map(_requestCard),
+                  ],
+                ),
         );
-
-
       }
 
     return SchoolDeskModuleScaffold(

@@ -55,77 +55,80 @@ class _AdminPaymentRequestDecisionScreenState
 
 
       if (isDesktop) {
-
-
+        final request = widget.args.request;
         return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Finance', 'Payments', 'Decision'],
-
-
+          breadcrumbs: const ['Finance', 'Payments', 'Decision'],
           title: 'Payment Decision',
-
-
           actions: const [],
-
-
+          maxWidth: 600,
           child: Card(
-
-
             elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Payment Decision', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: context.appTheme.outlineVariant),
             ),
-
-
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildDetails(request),
+                    const SizedBox(height: 16),
+                    _buildDecisionSelector(),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _remarksController,
+                      enabled: !_submitting,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: InputDecoration(
+                        labelText: _decision == 'approved'
+                            ? 'Payment approval note'
+                            : _decision == 'clarification_required'
+                            ? 'Clarification note'
+                            : 'Rejection reason',
+                        alignLabelWithHint: true,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: FilledButton.icon(
+                        onPressed: _submitting ? null : _submit,
+                        icon: _submitting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : Icon(
+                                _decision == 'approved'
+                                    ? Icons.check_circle_rounded
+                                    : _decision == 'clarification_required'
+                                    ? Icons.help_outline_rounded
+                                    : Icons.cancel_rounded,
+                                size: 18,
+                              ),
+                        label: Text(
+                          _submitting
+                              ? 'Submitting...'
+                              : _decision == 'approved'
+                              ? 'Approve Payment'
+                              : _decision == 'clarification_required'
+                              ? 'Request Clarification'
+                              : 'Reject Payment',
+                          style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-
-
         );
-
-
       }
 
     final request = widget.args.request;

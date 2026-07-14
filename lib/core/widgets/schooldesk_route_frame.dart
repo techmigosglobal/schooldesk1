@@ -206,7 +206,7 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
     
     Widget content = widget.child;
     
-    final bool isDesktop = DesktopPlatform.isDesktopLayout(context);
+    final bool isDesktop = DesktopPlatform.shouldUsePersistentSidebar(context);
     final bool isPublic = widget.metadata.isPublic;
     final bool isKiosk = widget.metadata.portal == 'kiosk';
     

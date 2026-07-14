@@ -164,77 +164,41 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
 
 
       if (isDesktop) {
-
-
         return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Finance', 'Collect'],
-
-
+          breadcrumbs: const ['Finance', 'Collect'],
           title: 'Collect Fee',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Collect Fee', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: _loadData,
             ),
-
-
+          ],
+          maxWidth: 600,
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: context.appTheme.outlineVariant),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? FeeEmptyState(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'Error',
+                          message: _error!,
+                          actionLabel: 'Retry',
+                          onAction: _loadData,
+                        )
+                      : _selectedInvoice == null
+                          ? _buildStudentPicker()
+                          : _buildPaymentForm(),
+            ),
           ),
-
-
         );
-
-
       }
 
     return Scaffold(
