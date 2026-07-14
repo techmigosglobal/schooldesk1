@@ -33,15 +33,11 @@ class ShareExportService {
     // Fallback default position for iPad/macOS popovers to prevent presentation failures
     origin ??= const Rect.fromLTWH(0, 0, 150, 150);
 
-    await SharePlus.instance.share(
-      ShareParams(
-        title: title,
-        subject: subject,
-        text: text,
-        files: [XFile(file.path, mimeType: mimeType, name: safeFileName)],
-        fileNameOverrides: [safeFileName],
-        sharePositionOrigin: origin,
-      ),
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: mimeType, name: safeFileName)],
+      subject: subject,
+      text: text,
+      sharePositionOrigin: origin,
     );
   }
 

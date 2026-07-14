@@ -199,13 +199,14 @@ class TeacherCurrentClassCard extends StatelessWidget {
                   children: [
                     Text(
                       greeting,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
-                        color: Colors.white.withOpacity(0.85),
-                        fontWeight: FontWeight.w900,
-                        fontSize: 22,
+                        color: Colors.white.withOpacity(0.9),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
                         letterSpacing: -0.3,
+                        height: 1.15,
                       ),
                     ),
                     const SizedBox(height: 4),

@@ -870,7 +870,27 @@ class _ParentFeeHubState extends State<ParentFeeHub>
           _receiptIsAvailable(_text(payment['rawStatus'])),
       orElse: () => const <String, dynamic>{},
     );
-    if (paidRecord.isEmpty) {
+
+    Map<String, dynamic>? pr;
+    if (paidRecord.isNotEmpty) {
+      pr = paidRecord['paymentRequest'] is Map
+          ? Map<String, dynamic>.from(paidRecord['paymentRequest'] as Map)
+          : null;
+    } else if (fee['status'] == 'Paid' || fee['status'] == 'Partial') {
+      pr = {
+        'receipt_number': fee['invoiceNumber'],
+        'amount': fee['paidAmount'] ?? fee['amount'] ?? 0.0,
+        'payment_mode': '-',
+        'created_at': DateTime.now().toIso8601String(),
+        'transaction_ref': '-',
+        'invoice': {
+          'invoice_number': fee['invoiceNumber'],
+        },
+        'student': _childrenData[_activeChildIndex],
+      };
+    }
+
+    if (pr == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Receipt is not available for this payment yet.'),
@@ -878,15 +898,14 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       );
       return;
     }
+
     await Navigator.pushNamed(
       context,
       AppRoutes.parentReceipt,
       arguments: ParentPaymentSelectionArgs(
         fees: [fee],
         student: _childrenData[_activeChildIndex],
-        paymentRequest: paidRecord['paymentRequest'] is Map
-            ? Map<String, dynamic>.from(paidRecord['paymentRequest'] as Map)
-            : null,
+        paymentRequest: pr,
       ),
     );
     if (mounted) await _loadData(forceRefresh: true, showSpinner: false);

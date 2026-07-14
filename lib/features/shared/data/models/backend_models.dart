@@ -557,6 +557,7 @@ class StudentModel {
   final String activeEnrollmentId;
   final String status;
   final String photoUrl;
+  final String? parentUserId;
   final List<Map<String, dynamic>> guardians;
   final List<Map<String, dynamic>> documents;
   final List<Map<String, dynamic>> parentAccounts;
@@ -581,6 +582,7 @@ class StudentModel {
     this.activeEnrollmentId = '',
     required this.status,
     required this.photoUrl,
+    this.parentUserId,
     this.guardians = const [],
     this.documents = const [],
     this.parentAccounts = const [],
@@ -652,6 +654,7 @@ class StudentModel {
       activeEnrollmentId: '${json['active_enrollment_id'] ?? ''}',
       status: json['status'] as String? ?? 'active',
       photoUrl: _photoUrlFromJson(json),
+      parentUserId: json['parent_user_id'] as String?,
       guardians: guardians,
       documents: _asListMap(json['documents']),
       parentAccounts: _asListMap(json['parent_accounts']),

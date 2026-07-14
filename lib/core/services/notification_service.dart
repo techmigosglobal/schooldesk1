@@ -355,6 +355,65 @@ class NotificationService extends ChangeNotifier {
       // Notification delivery is best-effort
     }
   }
+
+  Future<void> triggerFeePaymentAlert({
+    required String studentName,
+    required String amount,
+    required String paymentMode,
+  }) async {
+    final title = 'Fee Payment Received';
+    final body = '$studentName has submitted a fee payment of ₹$amount via $paymentMode.';
+
+    await addNotification(
+      AppNotification.transient(
+        title: title,
+        body: body,
+        category: NotificationCategory.pendingApproval,
+        role: 'principal',
+        priority: NotificationPriority.high,
+      ),
+    );
+
+    try {
+      await _api.createRaw('/notifications', {
+        'title': title,
+        'body': body,
+        'category': NotificationCategory.pendingApproval,
+        'notification_type': NotificationCategory.pendingApproval,
+        'target_role': 'principal',
+        'priority': 'high',
+      });
+    } on Object catch (_) {}
+  }
+
+  Future<void> triggerFeeApprovalAlert({
+    required String studentName,
+    required String status,
+  }) async {
+    final title = 'Fee Payment $status';
+    final body = 'Your fee payment for $studentName has been $status.';
+
+    await addNotification(
+      AppNotification.transient(
+        title: title,
+        body: body,
+        category: NotificationCategory.general,
+        role: 'parent',
+        priority: NotificationPriority.high,
+      ),
+    );
+
+    try {
+      await _api.createRaw('/notifications', {
+        'title': title,
+        'body': body,
+        'category': NotificationCategory.general,
+        'notification_type': NotificationCategory.general,
+        'target_role': 'parent',
+        'priority': 'high',
+      });
+    } on Object catch (_) {}
+  }
 }
 
 class NotificationCategory {

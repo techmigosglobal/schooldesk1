@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class PrincipalPaymentRequests extends StatefulWidget {
@@ -107,6 +108,25 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         adminRemarks: remarks,
       );
       if (!mounted) return;
+
+      try {
+        final student = request['student'] is Map
+            ? Map<String, dynamic>.from(request['student'] as Map)
+            : const <String, dynamic>{};
+        final studentName = '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
+        final finalName = studentName.isEmpty ? 'your child' : studentName;
+        
+        String prettyStatus = decision;
+        if (decision == 'approved') prettyStatus = 'Approved';
+        else if (decision == 'rejected') prettyStatus = 'Rejected';
+        else if (decision == 'clarification_required') prettyStatus = 'Clarification Required';
+
+        NotificationService.getInstance().then((s) => s.triggerFeeApprovalAlert(
+          studentName: finalName,
+          status: prettyStatus,
+        ));
+      } catch (_) {}
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

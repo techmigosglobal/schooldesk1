@@ -97,9 +97,13 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
           final roll = s.admissionNumber.isNotEmpty
               ? s.admissionNumber
               : s.studentCode;
-          final parentLink =
-              parentByAdmission[s.admissionNumber.toLowerCase().trim()] ??
-              parentByAdmission[s.studentCode.toLowerCase().trim()];
+          final parentOption = s.parentUserId != null && s.parentUserId!.isNotEmpty
+              ? _parentOptions.firstWhere((p) => p['id'] == s.parentUserId, orElse: () => <String, String>{})
+              : null;
+          final parentLink = (parentOption != null && parentOption.isNotEmpty)
+              ? parentOption
+              : parentByAdmission[s.admissionNumber.toLowerCase().trim()] ??
+                parentByAdmission[s.studentCode.toLowerCase().trim()];
           return {
             'id': s.id,
             'name': s.fullName,

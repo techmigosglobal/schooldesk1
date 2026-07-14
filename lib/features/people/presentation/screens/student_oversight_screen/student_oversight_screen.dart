@@ -234,9 +234,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final parents = await _loadParentAccounts();
       final sectionMap = {for (final s in sections) s.id: s};
       final gradeMap = {for (final g in grades) g.id: g};
+      final parentMap = {for (final p in parents) p.id: p};
 
       final loaded = students
-          .map((student) => _mapApiStudentToUi(student, sectionMap, gradeMap))
+          .map((student) => _mapApiStudentToUi(student, sectionMap, gradeMap, parentMap))
           .toList();
       final classes =
           {
@@ -350,6 +351,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     api.StudentModel student,
     Map<String, api.SectionModel> sectionMap,
     Map<String, api.GradeModel> gradeMap,
+    Map<String, api.UserAccountModel> parentMap,
   ) {
     final section = student.currentSectionId == null
         ? null
@@ -368,6 +370,16 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         ? 'Unknown Student'
         : student.fullName.trim();
 
+    var gName = student.primaryGuardianName.trim();
+    var gPhone = student.primaryGuardianPhone.trim();
+    if (gName.isEmpty && student.parentUserId != null) {
+      final p = parentMap[student.parentUserId!];
+      if (p != null) {
+        gName = p.name.trim().isNotEmpty ? p.name.trim() : p.username.trim();
+        gPhone = p.phone.trim();
+      }
+    }
+
     return StudentModel(
       id: student.id,
       systemId: student.studentCode.trim(),
@@ -383,12 +395,8 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       dateOfBirth: student.dateOfBirth ?? '',
       admissionDate: student.admissionDate ?? '',
       gender: student.gender ?? '',
-      guardianName: student.primaryGuardianName.isEmpty
-          ? 'Not assigned'
-          : student.primaryGuardianName,
-      guardianPhone: student.primaryGuardianPhone.isEmpty
-          ? '-'
-          : student.primaryGuardianPhone,
+      guardianName: gName.isEmpty ? 'Not assigned' : gName,
+      guardianPhone: gPhone.isEmpty ? '-' : gPhone,
       avatarInitials: _extractInitials(name),
       attendancePercent: student.attendancePercent,
       attendanceStatusLabel: student.attendanceStatusLabel,
@@ -1260,8 +1268,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     try {
       final sectionMap = {for (final s in _sections) s.id: s};
       final gradeMap = {for (final g in _grades) g.id: g};
+      final parentMap = {for (final p in _parents) p.id: p};
       final latest = await api.BackendApiClient.instance.getStudent(student.id);
-      detailStudent = _mapApiStudentToUi(latest, sectionMap, gradeMap);
+      detailStudent = _mapApiStudentToUi(latest, sectionMap, gradeMap, parentMap);
     } on Object catch (_) {
       detailStudent = student;
     }
@@ -1369,8 +1378,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     try {
       final sectionMap = {for (final s in _sections) s.id: s};
       final gradeMap = {for (final g in _grades) g.id: g};
+      final parentMap = {for (final p in _parents) p.id: p};
       final latest = await api.BackendApiClient.instance.getStudent(student.id);
-      final detailed = _mapApiStudentToUi(latest, sectionMap, gradeMap);
+      final detailed = _mapApiStudentToUi(latest, sectionMap, gradeMap, parentMap);
       if (!mounted) return;
       if (_selectedStudent?.id == student.id) {
         setState(() {
@@ -2883,34 +2893,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD9F3FF),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.check_circle_rounded,
-                            color: Color(0xFF1687B2),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Data will be synchronized with the central academic server upon submission.',
-                              style: GoogleFonts.dmSans(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF254354),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(
@@ -3020,13 +3003,15 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
         side: const BorderSide(color: Color(0xFF4E9AAE), width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-      child: Text(
-        'Cancel',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.dmSans(
-          fontWeight: FontWeight.w900,
-          color: const Color(0xFF2F788B),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          'Cancel',
+          maxLines: 1,
+          style: GoogleFonts.dmSans(
+            fontWeight: FontWeight.w900,
+            color: const Color(0xFF2F788B),
+          ),
         ),
       ),
     );
@@ -3049,13 +3034,15 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                 color: context.appTheme.surface,
               ),
             )
-          : Text(
-              _isEdit ? 'Save Student' : 'Activate Student',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.dmSans(
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
+          : FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                _isEdit ? 'Save Student' : 'Activate Student',
+                maxLines: 1,
+                style: GoogleFonts.dmSans(
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
               ),
             ),
     );

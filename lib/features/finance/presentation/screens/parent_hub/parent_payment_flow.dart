@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
@@ -265,6 +266,16 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         );
       }
       if (!mounted) return;
+      try {
+        final studentName = _text(widget.args.student?['name'], fallback: 'A student');
+        final amount = _totalAmount.toString();
+        NotificationService.getInstance().then((s) => s.triggerFeePaymentAlert(
+          studentName: studentName,
+          amount: amount,
+          paymentMode: 'UPI',
+        ));
+      } catch (_) {}
+      
       setState(() {
         _submitting = false;
         _currentStep = 3;
