@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
+import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 
@@ -543,7 +544,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
                     Icon(Icons.download_rounded, size: 12, color: report.color),
                     const SizedBox(width: 4),
                     Text(
-                      'Export',
+                      'Export CSV',
                       style: GoogleFonts.ibmPlexSans(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -624,45 +625,34 @@ class _PrincipalReportsState extends State<PrincipalReports> {
 
   Future<void> _requestExport(_ReportDef report) async {
     try {
-      await BackendApiClient.instance.createReportExport(
+      final export = await BackendApiClient.instance.createReportExport(
         '/fees/reports/exports',
         reportTitle: report.title,
         reportType: report.reportType,
-        format: 'pdf',
+        format: 'csv',
         parameters: {
           'invoice_count': _invoices.length,
           'structure_count': _structures.length,
         },
       );
+      final downloadUrl = textValue(export['download_url']);
+      if (downloadUrl.isEmpty) {
+        throw StateError('The report was created without a download file.');
+      }
+      final bytes = await BackendApiClient.instance.downloadReportExport(
+        downloadUrl,
+      );
+      if (bytes.isEmpty) {
+        throw StateError('The generated report file is empty.');
+      }
       if (!mounted) return;
-      await showDialog(
+      await const ShareExportService().shareBytes(
+        bytes: bytes,
+        fileName: '${_exportFileName(report.title)}.csv',
+        mimeType: 'text/csv',
+        title: report.title,
+        subject: '${report.title} export',
         context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          title: Row(
-            children: [
-              Icon(report.icon, color: report.color),
-              const SizedBox(width: 8),
-              Text(report.title),
-            ],
-          ),
-          content: Text(
-            'Your "${report.title}" export has been queued on the server. '
-            'It will be generated in the background and available for download shortly.',
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: report.color,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
       );
     } on Object catch (e) {
       if (!mounted) return;
@@ -670,6 +660,14 @@ class _PrincipalReportsState extends State<PrincipalReports> {
         context,
       ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
     }
+  }
+
+  String _exportFileName(String title) {
+    final normalized = title
+        .trim()
+        .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+    return normalized.isEmpty ? 'fee_report' : normalized;
   }
 }
 

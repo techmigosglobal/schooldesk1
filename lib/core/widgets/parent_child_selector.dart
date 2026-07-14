@@ -207,6 +207,14 @@ String _firstText(Map<String, dynamic> child, List<String> keys) {
 }
 
 String _classLabel(Map<String, dynamic> child) {
+  return parentChildClassAndSectionLabel(child);
+}
+
+/// Formats the child’s academic placement for every parent-facing surface.
+///
+/// Database identifiers are deliberately excluded: parents should see a class
+/// and section name, never the UUID used to scope backend requests.
+String parentChildClassAndSectionLabel(Map<String, dynamic> child) {
   String scalarText(List<String> keys) {
     for (final key in keys) {
       final value = child[key];
@@ -227,23 +235,48 @@ String _classLabel(Map<String, dynamic> child) {
     return '';
   }
 
-  final directGrade = scalarText(
-    const ['grade_name', 'class_name', 'grade', 'class'],
-  );
+  final directGrade = scalarText(const ['grade_name', 'class_name', 'class']);
   final grade = directGrade.isNotEmpty
       ? directGrade
       : nestedText('grade', const ['grade_name', 'name']);
-  final directSection = scalarText(
-    const ['section_name', 'current_section_name', 'section'],
-  );
+  final sectionData = child['current_section'] is Map
+      ? child['current_section']
+      : child['section'];
+  final nestedSection = sectionData is Map
+      ? Map<dynamic, dynamic>.from(sectionData)
+      : const <dynamic, dynamic>{};
+  final nestedGrade = nestedSection['grade'];
+  final gradeFromSection = nestedGrade is Map
+      ? _firstMapText(nestedGrade, const ['grade_name', 'name'])
+      : '';
+  final resolvedGrade = grade.isNotEmpty ? grade : gradeFromSection;
+  final directSection = scalarText(const [
+    'section_name',
+    'current_section_name',
+  ]);
   final section = directSection.isNotEmpty
       ? directSection
-      : nestedText('section', const ['section_name', 'name']);
+      : _firstMapText(nestedSection, const ['section_name', 'name']);
   final values = [
-    if (grade.isNotEmpty) 'Class $grade',
-    if (section.isNotEmpty) 'Section $section',
+    if (resolvedGrade.isNotEmpty) _withPrefix(resolvedGrade, 'Class'),
+    if (section.isNotEmpty) _withPrefix(section, 'Section'),
   ];
   return values.join(' • ');
+}
+
+String _firstMapText(Map<dynamic, dynamic> value, List<String> keys) {
+  for (final key in keys) {
+    final text = value[key]?.toString().trim() ?? '';
+    if (text.isNotEmpty) return text;
+  }
+  return '';
+}
+
+String _withPrefix(String value, String prefix) {
+  final normalized = value.trim();
+  return normalized.toLowerCase().startsWith('${prefix.toLowerCase()} ')
+      ? normalized
+      : '$prefix $normalized';
 }
 
 String _initials(String name) {

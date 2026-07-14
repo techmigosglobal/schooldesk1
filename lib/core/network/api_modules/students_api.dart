@@ -78,8 +78,11 @@ extension BackendStudentsApi on BackendApiClient {
     Map<dynamic, dynamic> source,
   ) {
     final row = Map<String, dynamic>.from(source);
-    final currentSection = _asMap(row['current_section']);
-    final grade = _asMap(currentSection['grade']);
+    // The parent endpoint returns the student's current class as `section`.
+    // Older payloads used `current_section`, so accept both without ever
+    // exposing the section UUID as a display value.
+    final currentSection = _asMap(row['current_section'] ?? row['section']);
+    final grade = _asMap(row['grade'] ?? currentSection['grade']);
     final classTeacher = _asMap(currentSection['class_teacher']);
     final attendanceSummary = _asMap(row['attendance_summary']);
     final feeSummary = _asMap(row['fee_summary']);
@@ -92,15 +95,18 @@ extension BackendStudentsApi on BackendApiClient {
     ].where((part) => part.isNotEmpty).join(' ');
     row['name'] = _firstNonEmpty([row['name'], row['full_name'], fullName]);
     row['id'] = _firstNonEmpty([row['id'], row['student_id']]);
-    row['class'] = _firstNonEmpty([
+    row['class'] = _firstScalarText([
       row['class'],
+      row['class_name'],
       row['grade_name'],
       grade['grade_name'],
+      grade['name'],
     ]);
-    row['section'] = _firstNonEmpty([
-      row['section'],
+    row['section'] = _firstScalarText([
       row['section_name'],
+      row['current_section_name'],
       currentSection['section_name'],
+      currentSection['name'],
     ]);
     row['rollNo'] = _firstNonEmpty([
       row['rollNo'],
@@ -147,6 +153,15 @@ extension BackendStudentsApi on BackendApiClient {
       ]);
     }
     return row;
+  }
+
+  String _firstScalarText(Iterable<dynamic> values) {
+    for (final value in values) {
+      if (value is Map) continue;
+      final text = _trimmed(value);
+      if (text.isNotEmpty) return text;
+    }
+    return '';
   }
 
   Future<StudentModel> getStudent(String id) async {

@@ -51,7 +51,13 @@ async function notify(
     type: "issue",
     entity_type: "issue",
     entity_id: issueId,
-    route: "/issues-screen",
+    route: targetRole === "principal"
+      ? "/complaint-management-screen"
+      : targetRole === "teacher"
+      ? "/teacher-complaints-screen"
+      : targetRole === "super_admin"
+      ? "/super-admin-issues-screen"
+      : "/parent-complaints-screen",
     priority: "high",
     is_read: false,
   }));
@@ -66,6 +72,7 @@ async function notify(
         message: row.body,
         reference_type: "issue",
         reference_id: issueId,
+        route: row.route,
       },
     })),
   ).select("id");

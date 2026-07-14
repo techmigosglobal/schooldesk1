@@ -68,6 +68,23 @@ void main() {
       expect(target.route, AppRoutes.communicationCenter);
     });
 
+    test(
+      'routes issue notifications to the role-specific complaint screen',
+      () {
+        final principal = NotificationRouteResolver.resolve(
+          data: {'reference_type': 'issue'},
+          currentRole: 'principal',
+        );
+        final teacher = NotificationRouteResolver.resolve(
+          data: {'reference_type': 'complaint'},
+          currentRole: 'teacher',
+        );
+
+        expect(principal.route, AppRoutes.complaintManagement);
+        expect(teacher.route, AppRoutes.teacherComplaints);
+      },
+    );
+
     test('routes role-based push report and event references', () {
       final dailyAttendance = NotificationRouteResolver.resolve(
         data: {'reference_type': 'staff_attendance_daily_report'},

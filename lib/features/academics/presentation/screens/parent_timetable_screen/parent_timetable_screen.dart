@@ -311,16 +311,12 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
 
   Widget _buildChildSelector() {
     if (_children.isEmpty) return const SizedBox.shrink();
-    final children = List.generate(
-      _children.length,
-      (index) => {'id': _childIds[index], 'name': _children[index]},
-    );
     return ParentChildSelector(
-      children: children,
+      children: _childRows,
       selectedIndex: _activeChildIndex,
       onSelected: (index) {
         setState(() => _activeChildIndex = index);
-        ParentChildSelectionService.saveIndex(children, index);
+        ParentChildSelectionService.saveIndex(_childRows, index);
         _loadChildTimetable(index);
       },
     );

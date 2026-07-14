@@ -33,7 +33,18 @@ class AdminFeeStructureFormArgs {
     this.ownerRole = 'admin',
   });
 
-  bool get isEditing => feeStructure != null;
+  /// A non-null structure can also be a create-form seed (for example, the
+  /// selected academic year and class). Only a persisted backend record has an
+  /// identifier and may use the update workflow.
+  bool get isEditing {
+    final structure = feeStructure;
+    if (structure == null) return false;
+    final id =
+        structure['id'] ??
+        structure['structure_id'] ??
+        structure['fee_structure_id'];
+    return id?.toString().trim().isNotEmpty ?? false;
+  }
 }
 
 @immutable
@@ -147,11 +158,11 @@ class _AdminFeeStructureFormScreenState
     );
     _selectedGradeId = _initialId(
       '${fee['grade_id'] ?? ''}',
-      widget.args.grades.map((grade) => grade.id),
+      _gradeOptions.map((grade) => grade.id),
     );
     _selectedSectionId = _initialId('${fee['section_id'] ?? ''}', [
       '',
-      ...widget.args.sections.map((section) => section.id),
+      ..._structureSectionOptions.map((section) => section.id),
     ]);
     _selectedCategoryId = _initialId(
       '${fee['fee_category_id'] ?? fee['category_id'] ?? ''}',
@@ -179,72 +190,71 @@ class _AdminFeeStructureFormScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
 
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-        return DesktopScreenWrapper(
-          breadcrumbs: const ['Finance', 'Fees', 'Form'],
-          title: widget.args.isEditing ? 'Edit Fee Structure' : 'Create Fee Structure',
-          subtitle: 'Class and section-wise fee setup owned by Principal finance',
-          actions: const [],
-          maxWidth: 600,
-          child: Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: context.appTheme.outlineVariant),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (!_hasReferenceData)
-                      const SchoolDeskStatusPanel.empty(
-                        title: 'Setup data missing',
-                        message: 'Academic years, classes, and fee categories are required before fee structure requests can be prepared.',
-                      )
-                    else ...[
-                      _buildSummary(),
-                      const SizedBox(height: 14),
-                      _buildSelectors(),
-                      const SizedBox(height: 14),
-                      _buildAmountFields(),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: FilledButton.icon(
-                          onPressed: _saving ? null : _save,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.save_rounded, size: 18),
-                          label: Text(_saving ? 'Saving...' : 'Save Structure'),
-                        ),
+    if (isDesktop) {
+      return DesktopScreenWrapper(
+        breadcrumbs: const ['Finance', 'Fees', 'Form'],
+        title: widget.args.isEditing
+            ? 'Edit Fee Structure'
+            : 'Create Fee Structure',
+        subtitle: 'Class and section-wise fee setup owned by Principal finance',
+        actions: const [],
+        maxWidth: 600,
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: context.appTheme.outlineVariant),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!_hasReferenceData)
+                    const SchoolDeskStatusPanel.empty(
+                      title: 'Setup data missing',
+                      message:
+                          'Academic years, classes, and fee categories are required before fee structure requests can be prepared.',
+                    )
+                  else ...[
+                    _buildSummary(),
+                    const SizedBox(height: 14),
+                    _buildSelectors(),
+                    const SizedBox(height: 14),
+                    _buildAmountFields(),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: FilledButton.icon(
+                        onPressed: _saving ? null : _save,
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.save_rounded, size: 18),
+                        label: Text(_saving ? 'Saving...' : 'Save Structure'),
                       ),
-                    ],
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
           ),
-        );
-      }
+        ),
+      );
+    }
 
     return SchoolDeskModuleScaffold(
       title: widget.args.isEditing
@@ -371,13 +381,20 @@ class _AdminFeeStructureFormScreenState
           validator: (value) => _required(value, 'Select academic year.'),
           onChanged: _saving
               ? null
-              : (value) => setState(() => _selectedYearId = value ?? ''),
+              : (value) => setState(() {
+                  _selectedYearId = value ?? '';
+                  _selectedGradeId = _initialId(
+                    '',
+                    _gradeOptions.map((grade) => grade.id),
+                  );
+                  _selectedSectionId = '';
+                }),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           value: _selectedGradeId,
           decoration: const InputDecoration(labelText: 'Class'),
-          items: widget.args.grades
+          items: _gradeOptions
               .map(
                 (grade) => DropdownMenuItem(
                   value: grade.id,
@@ -686,9 +703,21 @@ class _AdminFeeStructureFormScreenState
     return confirmed == true;
   }
 
+  List<GradeModel> get _gradeOptions {
+    final gradeIds = widget.args.sections
+        .where((section) => section.academicYearId == _selectedYearId)
+        .map((section) => section.gradeId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    return widget.args.grades
+        .where((grade) => gradeIds.contains(grade.id))
+        .toList();
+  }
+
   List<SectionModel> get _structureSectionOptions =>
       widget.args.sections.where((section) {
-        return section.gradeId == _selectedGradeId;
+        return section.gradeId == _selectedGradeId &&
+            section.academicYearId == _selectedYearId;
       }).toList()..sort((a, b) => a.sectionName.compareTo(b.sectionName));
 
   String get _selectedCategoryName {
@@ -767,8 +796,20 @@ class _AdminInvoiceGenerationFormScreenState
 
   List<SectionModel> get _sectionOptions =>
       widget.args.sections.where((section) {
-        return section.gradeId == _selectedGradeId;
+        return section.gradeId == _selectedGradeId &&
+            section.academicYearId == _selectedYearId;
       }).toList()..sort((a, b) => a.sectionName.compareTo(b.sectionName));
+
+  List<GradeModel> get _gradeOptions {
+    final gradeIds = widget.args.sections
+        .where((section) => section.academicYearId == _selectedYearId)
+        .map((section) => section.gradeId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    return widget.args.grades
+        .where((grade) => gradeIds.contains(grade.id))
+        .toList();
+  }
 
   List<StudentModel> get _studentOptions {
     final sectionIds = _sectionOptions.map((section) => section.id).toSet();
@@ -792,7 +833,7 @@ class _AdminInvoiceGenerationFormScreenState
     );
     _selectedGradeId = _initialId(
       '${seed['grade_id'] ?? ''}',
-      widget.args.grades.map((grade) => grade.id),
+      _gradeOptions.map((grade) => grade.id),
     );
     _labelController = TextEditingController(text: _defaultInvoiceLabel());
     _dueDateController = TextEditingController(
@@ -908,7 +949,7 @@ class _AdminInvoiceGenerationFormScreenState
         DropdownButtonFormField<String>(
           value: _selectedGradeId,
           decoration: const InputDecoration(labelText: 'Class'),
-          items: widget.args.grades
+          items: _gradeOptions
               .map(
                 (grade) => DropdownMenuItem(
                   value: grade.id,
@@ -1177,6 +1218,9 @@ class _AdminInvoiceGenerationFormScreenState
   Future<void> _loadTermsForYear(String yearId) async {
     setState(() {
       _selectedYearId = yearId;
+      _selectedGradeId = _initialId('', _gradeOptions.map((grade) => grade.id));
+      _selectedSectionId = '';
+      _selectedStudentId = '';
       _selectedTermId = '';
       _terms = [];
       _loadingTerms = true;

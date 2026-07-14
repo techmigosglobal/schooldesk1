@@ -1338,7 +1338,7 @@ class _ParentQuickAccessRow extends StatelessWidget {
     _QuickAction(
       label: 'Fees',
       icon: Icons.receipt_long_rounded,
-      asset: SchoolDeskUiIllustrations.fees,
+      asset: SchoolDeskUiIllustrations.principalFees,
       route: AppRoutes.parentFees,
       color: Color(0xFFEA580C),
     ),

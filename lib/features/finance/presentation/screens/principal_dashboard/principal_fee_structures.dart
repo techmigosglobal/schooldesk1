@@ -137,6 +137,22 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
     }).toList();
   }
 
+  /// Grades are school-wide records. Only show grades which still have a
+  /// section in the selected academic year so deleted class rows cannot leak
+  /// into the fee setup selector.
+  List<GradeModel> get _gradeOptions {
+    final gradeIds = _sections
+        .where(
+          (section) =>
+              _selectedAcademicYearId.isEmpty ||
+              section.academicYearId == _selectedAcademicYearId,
+        )
+        .map((section) => section.gradeId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    return _grades.where((grade) => gradeIds.contains(grade.id)).toList();
+  }
+
   // Group filtered structures by category for organised display
   Map<String, List<Map<String, dynamic>>> get _groupedByCategory {
     final grouped = <String, List<Map<String, dynamic>>>{};
@@ -248,13 +264,28 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
                                 )
                                 .toList(),
                             onChanged: (v) {
-                              setState(() => _selectedAcademicYearId = v ?? '');
+                              final yearId = v ?? '';
+                              final availableGradeIds = _sections
+                                  .where(
+                                    (section) =>
+                                        section.academicYearId == yearId,
+                                  )
+                                  .map((section) => section.gradeId)
+                                  .toSet();
+                              setState(() {
+                                _selectedAcademicYearId = yearId;
+                                if (!availableGradeIds.contains(
+                                  _selectedGradeId,
+                                )) {
+                                  _selectedGradeId = '';
+                                }
+                              });
                             },
                           ),
                           const SizedBox(height: 10),
                         ],
                         // Class / Grade dropdown (NEW)
-                        if (_grades.isNotEmpty)
+                        if (_gradeOptions.isNotEmpty)
                           DropdownButtonFormField<String>(
                             value: _selectedGradeId.isEmpty
                                 ? null
@@ -267,7 +298,7 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
                               prefixIcon: Icon(Icons.class_rounded, size: 18),
                             ),
                             hint: const Text('Select a class to enable add'),
-                            items: _grades
+                            items: _gradeOptions
                                 .map(
                                   (g) => DropdownMenuItem(
                                     value: g.id,
@@ -311,7 +342,7 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
                   const SizedBox(height: 16),
 
                   // Hint when no class selected
-                  if (_selectedGradeId.isEmpty && _grades.isNotEmpty)
+                  if (_selectedGradeId.isEmpty && _gradeOptions.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 16),

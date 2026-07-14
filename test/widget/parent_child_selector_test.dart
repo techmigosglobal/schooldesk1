@@ -40,13 +40,44 @@ void main() {
       ),
     );
 
-    expect(find.text('Aarav'), findsOneWidget);
-    expect(find.text('Diya'), findsOneWidget);
+    expect(find.text('Aarav Sharma'), findsOneWidget);
+    expect(find.text('Diya Sharma'), findsOneWidget);
     expect(find.text('Selected: 0'), findsOneWidget);
 
-    await tester.tap(find.text('Diya'));
+    await tester.tap(find.text('Diya Sharma'));
     await tester.pumpAndSettle();
 
     expect(find.text('Selected: 1'), findsOneWidget);
   });
+
+  testWidgets('shows class and section names from the linked student record', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ParentChildSelector(
+            children: [
+              {
+                'id': 'child-1',
+                'name': 'Aarav Sharma',
+                'section': {
+                  'id': '16c92c3d-4207-47a9-9a98-a8df3c60e341',
+                  'section_name': 'A',
+                  'grade': {'id': 'grade-4', 'grade_name': '4'},
+                },
+              },
+            ],
+            selectedIndex: 0,
+            onSelected: _ignoreSelection,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Class 4 • Section A'), findsOneWidget);
+    expect(find.textContaining('16c92c3d'), findsNothing);
+  });
 }
+
+void _ignoreSelection(int _) {}

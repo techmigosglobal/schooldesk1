@@ -262,6 +262,19 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
             child: ChoiceChip(
               selected: isSelected,
               label: Text(f.$2),
+              selectedColor: context.appTheme.primary,
+              backgroundColor: context.appTheme.surface,
+              side: BorderSide(
+                color: isSelected
+                    ? context.appTheme.primary
+                    : context.appTheme.outlineVariant,
+              ),
+              labelStyle: TextStyle(
+                color: isSelected
+                    ? Colors.white
+                    : context.appTheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
               onSelected: (_) => setState(() => _statusFilter = f.$1),
             ),
           );

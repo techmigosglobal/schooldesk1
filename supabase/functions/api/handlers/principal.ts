@@ -1312,11 +1312,7 @@ export async function handlePrincipal(
     try {
       const grade = await resolveGrade(svc, school, body);
       const room = await resolveRoom(svc, school, body);
-      const classTeacherId = await resolveStaffId(
-        svc,
-        school,
-        body.class_teacher_id,
-      );
+      const classTeacherId = await resolveStaffId(svc, school, body.class_teacher_id);
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
       const academicYearId = await resolveAcademicYearId(
         svc,
@@ -1421,11 +1417,7 @@ export async function handlePrincipal(
     try {
       const grade = await resolveGrade(svc, school, body);
       const room = await resolveRoom(svc, school, body);
-      const classTeacherId = await resolveStaffId(
-        svc,
-        school,
-        body.class_teacher_id,
-      );
+      const classTeacherId = await resolveStaffId(svc, school, body.class_teacher_id);
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
       const academicYearId = await resolveAcademicYearId(
         svc,
@@ -1501,10 +1493,49 @@ export async function handlePrincipal(
 
   if (path.match(/^\/principal\/classes\/[^/]+$/) && method === "DELETE") {
     const sectionId = classId(path);
+    const { data: section, error: sectionError } = await svc.from("sections")
+      .select("id, grade_id").eq("id", sectionId).eq("school_id", school)
+      .maybeSingle();
+    if (sectionError) return fail(sectionError.message);
+    if (!section) return fail("Class not found", 404);
+
+    // Clear fee definitions tied to this class before removing its section.
+    // Invoice item snapshots keep historic amounts/names, while the removed
+    // class can no longer surface in a fee selector or another module.
+    const { error: sectionFeesError } = await svc.from("fee_structures")
+      .delete().eq("school_id", school).eq("section_id", sectionId);
+    if (sectionFeesError) return fail(sectionFeesError.message);
+
     const { error } = await svc.from("sections").delete().eq("id", sectionId)
       .eq("school_id", school);
     if (error) return fail(error.message);
-    return ok({ success: true, section_id: sectionId });
+
+    const gradeId = text(section.grade_id);
+    let deletedGradeId = "";
+    if (gradeId) {
+      const { count, error: remainingSectionsError } = await svc
+        .from("sections").select("id", { count: "exact", head: true })
+        .eq("school_id", school).eq("grade_id", gradeId);
+      if (remainingSectionsError) return fail(remainingSectionsError.message);
+
+      // A grade without any section is an orphan from a deleted class. Remove
+      // its class-wide fee definitions and the grade itself so it cannot be
+      // retrieved by any feature.
+      if ((count ?? 0) === 0) {
+        const { error: gradeFeesError } = await svc.from("fee_structures")
+          .delete().eq("school_id", school).eq("grade_id", gradeId);
+        if (gradeFeesError) return fail(gradeFeesError.message);
+        const { error: gradeError } = await svc.from("grades").delete()
+          .eq("id", gradeId).eq("school_id", school);
+        if (gradeError) return fail(gradeError.message);
+        deletedGradeId = gradeId;
+      }
+    }
+    return ok({
+      success: true,
+      section_id: sectionId,
+      deleted_grade_id: deletedGradeId,
+    });
   }
 
   if (

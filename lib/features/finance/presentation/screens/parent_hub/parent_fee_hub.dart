@@ -178,10 +178,13 @@ class _ParentFeeHubState extends State<ParentFeeHub>
           if (payments is List) {
             for (final p in payments.whereType<Map>()) {
               final payment = Map<String, dynamic>.from(p);
+              final amount =
+                  (payment['amount_paid'] as num?)?.toDouble() ?? 0.0;
               historyList.add({
                 'id': payment['id'] ?? '',
+                'invoiceId': inv['id'] ?? '',
                 'component': 'Invoice ${inv['invoice_number'] ?? ''}',
-                'amount': (payment['amount_paid'] as num?)?.toDouble() ?? 0.0,
+                'amount': amount,
                 'date': (payment['payment_date'] ?? '').toString(),
                 'method': (payment['payment_mode'] ?? '').toString(),
                 'receiptNo': (payment['receipt_number'] ?? '').toString(),
@@ -191,6 +194,18 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 'parentName': '',
                 'status': 'Paid',
                 'rawStatus': 'completed',
+                'paymentRequest': {
+                  ...payment,
+                  'amount': amount,
+                  'payment_mode': payment['payment_mode'],
+                  'payment_date': payment['payment_date'],
+                  'transaction_ref': payment['reference_number'],
+                  'receipt': {
+                    'receipt_number': payment['receipt_number'],
+                  },
+                  'invoice': inv,
+                  'student': child,
+                },
               });
             }
           }
@@ -727,25 +742,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
             Align(
               alignment: Alignment.centerRight,
               child: OutlinedButton.icon(
-                onPressed: () {
-                  final paidRequest = _paymentHistory.firstWhere(
-                    (p) =>
-                        p['invoiceId'] == fee['id'] &&
-                        p['rawStatus'] == 'completed',
-                    orElse: () => const <String, dynamic>{},
-                  );
-                  if (paidRequest.isNotEmpty) {
-                    Navigator.pushNamed(
-                      context,
-                      '/parent/receipt',
-                      arguments: ParentPaymentSelectionArgs(
-                        fees: [fee],
-                        student: _childrenData[_activeChildIndex],
-                        paymentRequest: paidRequest['paymentRequest'],
-                      ),
-                    );
-                  }
-                },
+                onPressed: () => _openReceiptForFee(fee),
                 icon: const Icon(Icons.receipt_long, size: 14),
                 label: Text(
                   'Receipt',
@@ -865,8 +862,41 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     }
   }
 
+  Future<void> _openReceiptForFee(Map<String, dynamic> fee) async {
+    final invoiceId = _text(fee['id']);
+    final paidRecord = _paymentHistory.firstWhere(
+      (payment) =>
+          _text(payment['invoiceId']) == invoiceId &&
+          _receiptIsAvailable(_text(payment['rawStatus'])),
+      orElse: () => const <String, dynamic>{},
+    );
+    if (paidRecord.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Receipt is not available for this payment yet.'),
+        ),
+      );
+      return;
+    }
+    await Navigator.pushNamed(
+      context,
+      AppRoutes.parentReceipt,
+      arguments: ParentPaymentSelectionArgs(
+        fees: [fee],
+        student: _childrenData[_activeChildIndex],
+        paymentRequest: paidRecord['paymentRequest'] is Map
+            ? Map<String, dynamic>.from(paidRecord['paymentRequest'] as Map)
+            : null,
+      ),
+    );
+    if (mounted) await _loadData(forceRefresh: true, showSpinner: false);
+  }
+
+  bool _receiptIsAvailable(String status) =>
+      status == 'completed' || status == 'approved' || status == 'paid';
+
   String _studentClass(Map<String, dynamic> student) =>
-      '${student['class'] ?? student['class_name'] ?? student['current_section_id'] ?? ''}';
+      parentChildClassAndSectionLabel(student);
 
   String _studentRoll(Map<String, dynamic> student) =>
       '${student['rollNo'] ?? student['roll_no'] ?? student['student_code'] ?? ''}';

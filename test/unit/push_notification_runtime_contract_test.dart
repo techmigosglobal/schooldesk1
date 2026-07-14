@@ -99,4 +99,27 @@ void main() {
     );
     expect(gradle, contains('com.google.gms.google-services'));
   });
+
+  test('push payloads preserve their destination and expire after ten days', () {
+    final processor = File(
+      'supabase/functions/notification-processor/index.ts',
+    ).readAsStringSync();
+    final migration = File(
+      'supabase/migrations/20260714112246_enforce_notification_retention_and_remove_orphan_classes.sql',
+    ).readAsStringSync();
+
+    expect(processor, contains('function withEventRouting'));
+    expect(
+      processor,
+      contains('reference_id: eventValue(eventData, "reference_id")'),
+    );
+    expect(
+      processor,
+      contains('getNotificationTemplate(event.event_type, event.event_data)'),
+    );
+    expect(migration, contains("'purge-expired-notifications'"));
+    expect(migration, contains("interval '10 days'"));
+    expect(migration, contains('delete from public.notification_events'));
+    expect(migration, contains('delete from public.notification_logs'));
+  });
 }

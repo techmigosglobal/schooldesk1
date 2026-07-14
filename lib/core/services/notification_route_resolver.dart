@@ -60,6 +60,7 @@ class NotificationRouteResolver {
     final fallbackRoute = switch (referenceType) {
       'announcement' || 'notice' => _communicationRouteFor(role),
       'message' => _messageRouteFor(role),
+      'issue' || 'complaint' => _issueRouteFor(role),
       'homework' => _homeworkRouteFor(role, data),
       'fee' => _feeRouteFor(role),
       'exam' || 'exam_schedule' => _examRouteFor(role),
@@ -180,6 +181,16 @@ class NotificationRouteResolver {
     };
   }
 
+  static String _issueRouteFor(String role) {
+    return switch (role) {
+      'principal' => AppRoutes.complaintManagement,
+      'teacher' => AppRoutes.teacherComplaints,
+      'parent' => AppRoutes.parentComplaints,
+      'super_admin' => AppRoutes.superAdminIssues,
+      _ => AppRoutes.notificationCenter,
+    };
+  }
+
   static String _feeRouteFor(String role) {
     return switch (role) {
       'parent' => AppRoutes.parentFees,
@@ -253,18 +264,20 @@ class NotificationRouteResolver {
   static String _healthRouteFor(String role) {
     return switch (role) {
       'parent' => AppRoutes.parentHealth,
-      // Teachers and principal receive health reminder alerts but have no
-      // dedicated health management screen — route to notification center.
-      'teacher' => AppRoutes.notificationCenter,
+      // Teachers have no separate health workspace; the communication hub is
+      // where they can act on a parent reminder with the family.
+      'teacher' => AppRoutes.teacherCommunication,
       'principal' => AppRoutes.notificationCenter,
       _ => AppRoutes.notificationCenter,
     };
   }
 
   static String _birthdayRouteFor(String role) {
-    // Birthday notifications have no dedicated screen — route to notification
-    // center for all roles so tapping the push opens a meaningful screen.
-    return AppRoutes.notificationCenter;
+    // Teachers can act on birthday notices through the communication hub;
+    // other roles retain the notification center as their meaningful target.
+    return role == 'teacher'
+        ? AppRoutes.teacherCommunication
+        : AppRoutes.notificationCenter;
   }
 
   static String _leaveRouteFor(String role) {

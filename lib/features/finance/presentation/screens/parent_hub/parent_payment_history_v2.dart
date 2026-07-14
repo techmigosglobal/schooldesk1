@@ -68,22 +68,36 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       for (final inv in invoices) {
         final payments = inv['payments'];
         if (payments is List) {
-          for (final p in payments.whereType<Map>()) {
-            final payment = Map<String, dynamic>.from(p);
-            historyList.add({
-              'id': payment['id'] ?? '',
-              'invoiceId': inv['id'] ?? '',
-              'component': 'Invoice ${inv['invoice_number'] ?? ''}',
-              'amount': (payment['amount_paid'] as num?)?.toDouble() ?? 0.0,
+            for (final p in payments.whereType<Map>()) {
+              final payment = Map<String, dynamic>.from(p);
+              final amount =
+                  (payment['amount_paid'] as num?)?.toDouble() ?? 0.0;
+              historyList.add({
+                'id': payment['id'] ?? '',
+                'invoiceId': inv['id'] ?? '',
+                'component': 'Invoice ${inv['invoice_number'] ?? ''}',
+                'amount': amount,
               'date': (payment['payment_date'] ?? '').toString(),
               'method': (payment['payment_mode'] ?? '').toString(),
               'receiptNo': (payment['receipt_number'] ?? '').toString(),
               'student': _studentName(child),
               'class': _studentClass(child),
               'rollNo': _studentRoll(child),
-              'status': 'Paid',
-              'rawStatus': 'completed',
-            });
+                'status': 'Paid',
+                'rawStatus': 'completed',
+                'paymentRequest': {
+                  ...payment,
+                  'amount': amount,
+                  'payment_mode': payment['payment_mode'],
+                  'payment_date': payment['payment_date'],
+                  'transaction_ref': payment['reference_number'],
+                  'receipt': {
+                    'receipt_number': payment['receipt_number'],
+                  },
+                  'invoice': inv,
+                  'student': child,
+                },
+              });
           }
         }
       }
@@ -428,7 +442,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
   }
 
   String _studentClass(Map<String, dynamic> student) =>
-      '${student['class'] ?? student['class_name'] ?? student['current_section_id'] ?? ''}';
+      parentChildClassAndSectionLabel(student);
 
   String _studentRoll(Map<String, dynamic> student) =>
       '${student['rollNo'] ?? student['roll_no'] ?? student['student_code'] ?? ''}';

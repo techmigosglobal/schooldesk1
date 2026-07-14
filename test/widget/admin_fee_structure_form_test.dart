@@ -13,6 +13,28 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
+  test('treats a prefilled create form as creation, not an edit', () {
+    const seededCreate = AdminFeeStructureFormArgs(
+      academicYears: [],
+      grades: [],
+      sections: [],
+      feeCategories: [],
+      feeStructure: {'academic_year_id': 'year-1', 'grade_id': 'grade-1'},
+      ownerRole: 'principal',
+    );
+    const existingStructure = AdminFeeStructureFormArgs(
+      academicYears: [],
+      grades: [],
+      sections: [],
+      feeCategories: [],
+      feeStructure: {'structure_id': 'fee-structure-1'},
+      ownerRole: 'principal',
+    );
+
+    expect(seededCreate.isEditing, isFalse);
+    expect(existingStructure.isEditing, isTrue);
+  });
+
   testWidgets('updates the payment preview as the due day is edited', (
     tester,
   ) async {

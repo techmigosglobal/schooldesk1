@@ -92,6 +92,30 @@ void main() {
     expect(screen, contains("row['fees_due_students']"));
   });
 
+  test('deleting a class also removes its orphaned grade and fee setup', () {
+    final principal = File(
+      'supabase/functions/api/handlers/principal.ts',
+    ).readAsStringSync();
+    final feeStructures = File(
+      'lib/features/finance/presentation/screens/principal_dashboard/principal_fee_structures.dart',
+    ).readAsStringSync();
+    final migration = File(
+      'supabase/migrations/20260714112246_enforce_notification_retention_and_remove_orphan_classes.sql',
+    ).readAsStringSync();
+
+    expect(principal, contains('const { data: section, error: sectionError }'));
+    expect(principal, contains('sectionFeesError'));
+    expect(principal, contains('remainingSectionsError'));
+    expect(principal, contains('deleted_grade_id'));
+    expect(feeStructures, contains('List<GradeModel> get _gradeOptions'));
+    expect(
+      feeStructures,
+      contains('section.academicYearId == _selectedAcademicYearId'),
+    );
+    expect(migration, contains('delete from public.fee_structures fs'));
+    expect(migration, contains('delete from public.grades g'));
+  });
+
   test('staff subject assignments have a direct class name relationship', () {
     final migrations = Directory('supabase/migrations')
         .listSync()

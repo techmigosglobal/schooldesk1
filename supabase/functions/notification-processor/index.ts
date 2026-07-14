@@ -280,6 +280,51 @@ interface FcmSendResult {
   error?: string;
 }
 
+function eventValue(eventData: Record<string, unknown>, key: string): string {
+  const value = eventData[key];
+  return value == null ? "" : String(value);
+}
+
+// Templates provide the user-facing text, while the source event owns the
+// destination. Preserve that routing metadata in every FCM payload so tapping
+// a principal (or any role) notification opens its intended screen.
+function withEventRouting(
+  template: NotificationTemplate,
+  eventType: string,
+  eventData: Record<string, unknown>,
+): NotificationTemplate {
+  const data = {
+    ...template.data,
+    ...(template.data["reference_type"]
+      ? {}
+      : {
+        reference_type: eventValue(eventData, "reference_type") || eventType,
+      }),
+    ...(template.data["reference_id"]
+      ? {}
+      : {
+        reference_id: eventValue(eventData, "reference_id") ||
+          eventValue(eventData, "entity_id") || eventValue(eventData, "id"),
+      }),
+    ...(template.data["route"] || !eventValue(eventData, "route")
+      ? {}
+      : { route: eventValue(eventData, "route") }),
+    ...(template.data["action"] || !eventValue(eventData, "action")
+      ? {}
+      : { action: eventValue(eventData, "action") }),
+    ...(template.data["student_id"] || !eventValue(eventData, "student_id")
+      ? {}
+      : { student_id: eventValue(eventData, "student_id") }),
+    ...(template.data["section_id"] || !eventValue(eventData, "section_id")
+      ? {}
+      : { section_id: eventValue(eventData, "section_id") }),
+    ...(template.data["teacher_id"] || !eventValue(eventData, "teacher_id")
+      ? {}
+      : { teacher_id: eventValue(eventData, "teacher_id") }),
+  };
+  return { ...template, data };
+}
+
 interface EventProcessResult {
   processed: boolean;
   sentCount: number;
@@ -907,7 +952,8 @@ async function processNotificationEvent(
     }
 
     // Build the notification template
-    const template = getNotificationTemplate(
+    const template = withEventRouting(
+      getNotificationTemplate(event.event_type, event.event_data),
       event.event_type,
       event.event_data,
     );

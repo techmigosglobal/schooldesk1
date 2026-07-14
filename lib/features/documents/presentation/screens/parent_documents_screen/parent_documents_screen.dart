@@ -50,8 +50,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
       '${_activeChild['name'] ?? '${_activeChild['first_name'] ?? ''} ${_activeChild['last_name'] ?? ''}'}'
           .trim();
 
-  String get _activeClassName =>
-      '${_activeChild['class'] ?? _activeChild['current_section_id'] ?? ''}';
+  String get _activeClassName => parentChildClassAndSectionLabel(_activeChild);
 
   @override
   void initState() {

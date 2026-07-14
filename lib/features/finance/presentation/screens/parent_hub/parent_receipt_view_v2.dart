@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/pdf_service.dart';
+import 'package:schooldesk1/core/services/share_export_service.dart';
 
 class ParentReceiptViewV2 extends StatefulWidget {
   final ParentPaymentSelectionArgs args;
@@ -15,6 +17,7 @@ class ParentReceiptViewV2 extends StatefulWidget {
 
 class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
   bool _loading = false;
+  bool _sharing = false;
   String? _error;
   Map<String, dynamic> _receiptData = const {};
 
@@ -323,16 +326,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    // Simulating Share
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Receipt shared successfully'),
-                      ),
-                    );
-                  },
+                  onPressed: _sharing ? null : _shareReceipt,
                   icon: const Icon(Icons.share_rounded),
-                  label: const Text('Share'),
+                  label: Text(_sharing ? 'Preparing...' : 'Share'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF1A6B4A),
                     side: const BorderSide(color: Color(0xFF1A6B4A)),
@@ -367,6 +363,72 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         ],
       ),
     );
+  }
+
+  Future<void> _shareReceipt() async {
+    setState(() => _sharing = true);
+    try {
+      final receiptNo = _text(_receiptData['receipt_no'], fallback: 'receipt');
+      final amount = (_receiptData['amount'] as num?)?.toDouble() ?? 0.0;
+      final student = widget.args.student ?? const <String, dynamic>{};
+      final className = _text(
+        student['class'] ?? student['class_name'] ?? student['grade_name'],
+      );
+      final rollNo = _text(
+        student['rollNo'] ?? student['roll_number'] ?? student['admission_number'],
+      );
+      final paidAt = DateTime.tryParse(_text(_receiptData['paid_at'])) ??
+          DateTime.now();
+      final pdf = await PdfService.getInstance().generateFeeReceipt(
+        receiptNo: receiptNo,
+        studentName: _text(_receiptData['student_name'], fallback: 'Student'),
+        className: className,
+        rollNo: rollNo,
+        parentName: '',
+        feeItems: [
+          {
+            'description': _text(
+              _receiptData['invoice_number'],
+              fallback: 'Fee payment',
+            ),
+            'amount': amount,
+          },
+        ],
+        totalAmount: amount,
+        paidAmount: amount,
+        balance: 0,
+        paymentMode: _text(_receiptData['payment_mode'], fallback: 'UPI'),
+        paymentDate: paidAt,
+        schoolName: _text(_receiptData['school_name'], fallback: 'School'),
+        schoolAddress: '',
+      );
+      if (!mounted) return;
+      await const ShareExportService().shareBytes(
+        bytes: pdf,
+        fileName: 'Receipt_${_receiptFileToken(receiptNo)}.pdf',
+        mimeType: 'application/pdf',
+        title: 'Payment Receipt',
+        subject: 'Payment receipt $receiptNo',
+        context: context,
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to share receipt: $error'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  String _receiptFileToken(String value) {
+    final cleaned = value
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+    return cleaned.isEmpty ? 'payment' : cleaned;
   }
 
   Widget _receiptRow(String label, String value, {bool isStatus = false}) {
