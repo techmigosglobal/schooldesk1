@@ -274,7 +274,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           amount: amount,
           paymentMode: 'UPI',
         ));
-      } catch (_) {}
+      } on Object catch (_) {}
       
       setState(() {
         _submitting = false;

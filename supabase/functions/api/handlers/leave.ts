@@ -9,6 +9,46 @@ function text(v: unknown, fb = ""): string {
   return t || fb;
 }
 
+function role(user: User) {
+  return text(user.app_metadata?.role_name).toLowerCase();
+}
+
+function canReviewLeaves(user: User) {
+  return ["principal", "admin", "super_admin"].includes(role(user));
+}
+
+async function currentStaffId(
+  svc: SupabaseClient,
+  school: string,
+  user: User,
+) {
+  const { data, error } = await svc.from("users")
+    .select("linked_id, role_name")
+    .eq("id", user.id)
+    .eq("school_id", school)
+    .maybeSingle();
+  if (error) throw error;
+  return role(user) === "teacher" &&
+      text(data?.role_name).toLowerCase() === "teacher"
+    ? text(data?.linked_id)
+    : "";
+}
+
+async function parentCanAccessStudent(
+  svc: SupabaseClient,
+  user: User,
+  studentId: string,
+) {
+  if (!studentId) return false;
+  const { data, error } = await svc.from("parent_student_links")
+    .select("id")
+    .eq("parent_user_id", user.id)
+    .eq("student_id", studentId)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
 async function ensureDefaultLeaveTypes(
   svc: SupabaseClient,
   school: string,
@@ -116,9 +156,25 @@ export async function handleLeave(
   }
 
   if (path === "/leave/balances" && method === "GET") {
+    if (!canReviewLeaves(user) && role(user) !== "teacher") {
+      return fail("staff or principal access required", 403);
+    }
     let q = svc.from("leave_balances").select("*").eq("school_id", school);
-    if (url.searchParams.get("staff_id")) {
-      q = q.eq("staff_id", url.searchParams.get("staff_id")!);
+    const ownStaffId = canReviewLeaves(user)
+      ? ""
+      : await currentStaffId(svc, school, user);
+    if (!canReviewLeaves(user) && !ownStaffId) {
+      return fail("staff profile required", 403);
+    }
+    const requestedStaffId = text(url.searchParams.get("staff_id"));
+    if (
+      !canReviewLeaves(user) && requestedStaffId &&
+      requestedStaffId !== ownStaffId
+    ) {
+      return fail("staff balance access denied", 403);
+    }
+    if (requestedStaffId || ownStaffId) {
+      q = q.eq("staff_id", requestedStaffId || ownStaffId);
     }
     if (url.searchParams.get("academic_year_id")) {
       q = q.eq("academic_year_id", url.searchParams.get("academic_year_id")!);
@@ -129,14 +185,30 @@ export async function handleLeave(
   }
 
   if (path === "/leave/applications" && method === "GET") {
+    if (!canReviewLeaves(user) && role(user) !== "teacher") {
+      return fail("staff or principal access required", 403);
+    }
     let q = svc.from("leave_applications").select(
       "*, staff:staff(first_name, last_name, staff_code)",
     ).eq("school_id", school);
     if (url.searchParams.get("status")) {
       q = q.eq("status", url.searchParams.get("status")!);
     }
-    if (url.searchParams.get("staff_id")) {
-      q = q.eq("staff_id", url.searchParams.get("staff_id")!);
+    const ownStaffId = canReviewLeaves(user)
+      ? ""
+      : await currentStaffId(svc, school, user);
+    if (!canReviewLeaves(user) && !ownStaffId) {
+      return fail("staff profile required", 403);
+    }
+    const requestedStaffId = text(url.searchParams.get("staff_id"));
+    if (
+      !canReviewLeaves(user) && requestedStaffId &&
+      requestedStaffId !== ownStaffId
+    ) {
+      return fail("leave application access denied", 403);
+    }
+    if (requestedStaffId || ownStaffId) {
+      q = q.eq("staff_id", requestedStaffId || ownStaffId);
     }
     const { data, error } = await q.order("created_at", { ascending: false });
     if (error) return fail(error.message);
@@ -144,8 +216,17 @@ export async function handleLeave(
   }
 
   if (path === "/leave/applications" && method === "POST") {
-    const staffId = text(body.staff_id);
-    if (!staffId) return fail("staff_id required", 400);
+    if (role(user) !== "teacher") {
+      return fail("only teachers can submit staff leave requests", 403);
+    }
+    const staffId = await currentStaffId(svc, school, user);
+    if (!staffId) return fail("staff profile required", 403);
+    if (text(body.staff_id) && text(body.staff_id) !== staffId) {
+      return fail(
+        "staff leave request must belong to the signed-in teacher",
+        403,
+      );
+    }
     const leaveTypes = await ensureDefaultLeaveTypes(svc, school);
     const defaultLeaveTypeId = text(leaveTypes[0]?.id);
     const {
@@ -172,7 +253,9 @@ export async function handleLeave(
       if (principalUserId) {
         const fromDate = text(data.start_date).split("T")[0] ?? "";
         const toDate = text(data.end_date).split("T")[0] ?? "";
-        const dateRange = fromDate && toDate ? ` (${fromDate} to ${toDate})` : "";
+        const dateRange = fromDate && toDate
+          ? ` (${fromDate} to ${toDate})`
+          : "";
         const staffUserId = await resolveUserId(svc, school, staffId);
         // Resolve staff name from staff table
         const { data: staffRow } = await svc.from("staff")
@@ -183,17 +266,20 @@ export async function handleLeave(
         const staffName = staffRow
           ? `${text(staffRow.first_name)} ${text(staffRow.last_name)}`.trim()
           : text(staffUserId, "A teacher");
-        const notifBody = `${staffName} has submitted a leave request${dateRange}. Please review.`;
-        const { data: eventRow } = await svc.from("notification_events").insert({
-          school_id: school,
-          user_id: principalUserId,
-          event_type: "leave_submitted",
-          event_data: {
-            leave_id: data.id,
-            message: notifBody,
-            reference_type: "leave",
+        const notifBody =
+          `${staffName} has submitted a leave request${dateRange}. Please review.`;
+        const { data: eventRow } = await svc.from("notification_events").insert(
+          {
+            school_id: school,
+            user_id: principalUserId,
+            event_type: "leave_submitted",
+            event_data: {
+              leave_id: data.id,
+              message: notifBody,
+              reference_type: "leave",
+            },
           },
-        }).select("id").maybeSingle();
+        ).select("id").maybeSingle();
         if (eventRow?.id) triggerPushProcessing(eventRow.id);
         await svc.from("notification_logs").insert({
           school_id: school,
@@ -208,17 +294,25 @@ export async function handleLeave(
         });
       }
     } catch (notifErr) {
-      console.error(`Failed to create leave submission notification: ${notifErr}`);
+      console.error(
+        `Failed to create leave submission notification: ${notifErr}`,
+      );
     }
     return ok(data);
   }
 
   const recallMatch = path.match(/^\/leave\/applications\/([^/]+)\/recall$/);
   if (recallMatch && method === "POST") {
+    if (role(user) !== "teacher") {
+      return fail("only the requesting teacher can recall leave", 403);
+    }
+    const staffId = await currentStaffId(svc, school, user);
+    if (!staffId) return fail("staff profile required", 403);
     const { data, error } = await svc.from("leave_applications").update({
       status: "recalled",
       updated_at: new Date().toISOString(),
-    }).eq("id", recallMatch[1]).eq("school_id", school).select().single();
+    }).eq("id", recallMatch[1]).eq("school_id", school).eq("staff_id", staffId)
+      .eq("status", "pending").select().single();
     if (error) return fail(error.message);
     // Notify the principal that a leave request was recalled
     try {
@@ -233,16 +327,19 @@ export async function handleLeave(
         const dateRange = fromDate && toDate
           ? ` (${fromDate} to ${toDate})`
           : "";
-        const { data: eventRow } = await svc.from("notification_events").insert({
-          school_id: school,
-          user_id: principalUserId,
-          event_type: "leave_recalled",
-          event_data: {
-            leave_id: recallMatch[1],
-            message: `${staffName} has recalled their leave request${dateRange}.`,
-            reference_type: "leave",
+        const { data: eventRow } = await svc.from("notification_events").insert(
+          {
+            school_id: school,
+            user_id: principalUserId,
+            event_type: "leave_recalled",
+            event_data: {
+              leave_id: recallMatch[1],
+              message:
+                `${staffName} has recalled their leave request${dateRange}.`,
+              reference_type: "leave",
+            },
           },
-        }).select("id").maybeSingle();
+        ).select("id").maybeSingle();
         if (eventRow?.id) triggerPushProcessing(eventRow.id);
         await svc.from("notification_logs").insert({
           school_id: school,
@@ -266,6 +363,7 @@ export async function handleLeave(
     /^\/leave\/applications\/([^/]+)\/(approve|reject)$/,
   );
   if (actionMatch && method === "POST") {
+    if (!canReviewLeaves(user)) return fail("principal access required", 403);
     const [, leaveId, action] = actionMatch;
     const resolvedStatus = action === "approve" ? "approved" : "rejected";
     const { data, error } = await svc.from("leave_applications").update({
@@ -332,6 +430,7 @@ export async function handleLeave(
     /^\/leave\/applications\/([^/]+)\/approve$/,
   );
   if (approveAliasMatch && method === "PUT") {
+    if (!canReviewLeaves(user)) return fail("principal access required", 403);
     const status = `${body.status ?? "approved"}`.trim().toLowerCase();
     const resolvedStatus = status == "rejected" ? "rejected" : "approved";
     const { data, error } = await svc.from("leave_applications").update({
@@ -396,14 +495,24 @@ export async function handleLeave(
 
   // Student leave
   if (path === "/student-leave/applications" && method === "GET") {
+    if (!canReviewLeaves(user) && role(user) !== "parent") {
+      return fail("parent or principal access required", 403);
+    }
     let q = svc.from("student_leave_applications").select(
       "*, student:students(first_name, last_name)",
     ).eq("school_id", school);
     if (url.searchParams.get("status")) {
       q = q.eq("status", url.searchParams.get("status")!);
     }
-    if (url.searchParams.get("student_id")) {
-      q = q.eq("student_id", url.searchParams.get("student_id")!);
+    const requestedStudentId = text(url.searchParams.get("student_id"));
+    if (role(user) === "parent") {
+      if (!requestedStudentId) return fail("student_id required", 400);
+      if (!await parentCanAccessStudent(svc, user, requestedStudentId)) {
+        return fail("student leave access denied", 403);
+      }
+    }
+    if (requestedStudentId) {
+      q = q.eq("student_id", requestedStudentId);
     }
     const { data, error } = await q;
     if (error) return fail(error.message);
@@ -411,6 +520,14 @@ export async function handleLeave(
   }
 
   if (path === "/student-leave/applications" && method === "POST") {
+    if (role(user) !== "parent") {
+      return fail("only parents can submit student leave requests", 403);
+    }
+    const studentId = text(body.student_id);
+    if (!studentId) return fail("student_id required", 400);
+    if (!await parentCanAccessStudent(svc, user, studentId)) {
+      return fail("student leave request must belong to a linked child", 403);
+    }
     const {
       from_date: _fromDate,
       to_date: _toDate,
@@ -435,7 +552,9 @@ export async function handleLeave(
         const studentId = text(data.student_id);
         const fromDate = text(data.start_date).split("T")[0] ?? "";
         const toDate = text(data.end_date).split("T")[0] ?? "";
-        const dateRange = fromDate && toDate ? ` (${fromDate} to ${toDate})` : "";
+        const dateRange = fromDate && toDate
+          ? ` (${fromDate} to ${toDate})`
+          : "";
         // Resolve student name
         let studentLabel = "A student";
         if (studentId) {
@@ -450,17 +569,20 @@ export async function handleLeave(
             studentLabel = fn && ln ? `${fn} ${ln}` : fn || ln || "A student";
           }
         }
-        const notifBody = `A parent submitted a leave request for ${studentLabel}${dateRange}. Please review.`;
-        const { data: eventRow } = await svc.from("notification_events").insert({
-          school_id: school,
-          user_id: principalUserId,
-          event_type: "student_leave_submitted",
-          event_data: {
-            leave_id: data.id,
-            message: notifBody,
-            reference_type: "leave",
+        const notifBody =
+          `A parent submitted a leave request for ${studentLabel}${dateRange}. Please review.`;
+        const { data: eventRow } = await svc.from("notification_events").insert(
+          {
+            school_id: school,
+            user_id: principalUserId,
+            event_type: "student_leave_submitted",
+            event_data: {
+              leave_id: data.id,
+              message: notifBody,
+              reference_type: "leave",
+            },
           },
-        }).select("id").maybeSingle();
+        ).select("id").maybeSingle();
         if (eventRow?.id) triggerPushProcessing(eventRow.id);
         await svc.from("notification_logs").insert({
           school_id: school,
@@ -475,7 +597,9 @@ export async function handleLeave(
         });
       }
     } catch (notifErr) {
-      console.error(`Failed to create student leave submission notification: ${notifErr}`);
+      console.error(
+        `Failed to create student leave submission notification: ${notifErr}`,
+      );
     }
     return ok(data);
   }
@@ -484,7 +608,11 @@ export async function handleLeave(
     /^\/student-leave\/applications\/([^/]+)\/decision$/,
   );
   if (studentDecisionMatch && method === "PUT") {
+    if (!canReviewLeaves(user)) return fail("principal access required", 403);
     const nextStatus = `${body.status ?? "pending"}`.trim().toLowerCase();
+    if (!["approved", "rejected"].includes(nextStatus)) {
+      return fail("status must be approved or rejected", 422);
+    }
     const { data, error } = await svc.from("student_leave_applications").update(
       {
         status: nextStatus,

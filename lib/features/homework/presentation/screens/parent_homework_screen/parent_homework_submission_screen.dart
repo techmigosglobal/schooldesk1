@@ -3,7 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -59,10 +58,12 @@ class _ParentHomeworkSubmissionScreenState
       _hwText(_homeworkDetails['homework_id'] ?? _homeworkDetails['id']);
   String get _submissionStatus =>
       _hwText(_homeworkDetails['submission_status']);
-  String get _submissionRemarks => _hwText(
-    _homeworkDetails['submission_remarks'] ?? _homeworkDetails['remarks'],
+  String get _parentComment => _hwText(
+    _homeworkDetails['parent_comment'] ?? _homeworkDetails['remarks'],
   );
-  bool get _hasFeedback => _submissionStatus.isNotEmpty;
+  String get _teacherFeedback => _hwText(_homeworkDetails['teacher_feedback']);
+  bool get _hasFeedback =>
+      _submissionStatus == 'reviewed' || _submissionStatus == 'needs_revision';
   bool get _needsRevision => _submissionStatus == 'needs_revision';
   bool get _isApproved => _submissionStatus == 'reviewed';
 
@@ -91,8 +92,8 @@ class _ParentHomeworkSubmissionScreenState
     _homeworkDetails = Map<String, dynamic>.from(widget.args.homework);
 
     // Set initial text if details already has remarks
-    final initialRemarks = _submissionRemarks.isNotEmpty
-        ? _submissionRemarks
+    final initialRemarks = _parentComment.isNotEmpty
+        ? _parentComment
         : _hwText(
             _homeworkDetails['answer_text'] ?? _homeworkDetails['remarks'],
           );
@@ -141,7 +142,11 @@ class _ParentHomeworkSubmissionScreenState
 
       // 3. Construct mapped details
       final submissionStatus = _hwText(sub['status']);
-      final submissionRemarks = _hwText(sub['remarks']);
+      final suppliedParentComment = _hwText(sub['parent_comment']);
+      final parentComment = suppliedParentComment.isNotEmpty
+          ? suppliedParentComment
+          : _hwText(sub['remarks']);
+      final teacherFeedback = _hwText(sub['teacher_feedback']);
 
       final fromUrl = _hwText(
         rawHw['attachment_url'] ?? rawHw['attachmentUrl'],
@@ -164,7 +169,8 @@ class _ParentHomeworkSubmissionScreenState
         'instructions': rawHw['description'] ?? rawHw['instructions'] ?? '',
         'submission_id': _hwText(sub['id']),
         'submission_status': submissionStatus,
-        'submission_remarks': submissionRemarks,
+        'parent_comment': parentComment,
+        'teacher_feedback': teacherFeedback,
         'submission_attachment_url': _hwText(sub['attachment_url']),
         'submission_attachment_urls': sub['attachment_urls'] ?? const [],
         'attachments': allAttachments,
@@ -173,8 +179,8 @@ class _ParentHomeworkSubmissionScreenState
       if (!mounted) return;
       setState(() {
         _homeworkDetails = mappedHw;
-        if (submissionRemarks.isNotEmpty) {
-          _answerController.text = submissionRemarks;
+        if (parentComment.isNotEmpty) {
+          _answerController.text = parentComment;
         }
 
         // Also populate existing submission files to attachments block
@@ -343,6 +349,10 @@ class _ParentHomeworkSubmissionScreenState
                       children: [
                         _homeworkContextCard(),
                         const SizedBox(height: 14),
+                        if (_hasFeedback && _parentComment.isNotEmpty) ...[
+                          _parentCommentCard(),
+                          const SizedBox(height: 14),
+                        ],
                         if (_hasFeedback) ...[
                           _feedbackCard(),
                           const SizedBox(height: 14),
@@ -692,10 +702,10 @@ class _ParentHomeworkSubmissionScreenState
               ),
             ],
           ),
-          if (_submissionRemarks.isNotEmpty) ...[
+          if (_teacherFeedback.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              _submissionRemarks,
+              _teacherFeedback,
               style: GoogleFonts.dmSans(
                 fontSize: 13,
                 color: context.appTheme.onSurface,
@@ -713,6 +723,49 @@ class _ParentHomeworkSubmissionScreenState
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _parentCommentCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.appTheme.primary.withAlpha(12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.appTheme.primary.withAlpha(65)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.person_outline_rounded,
+                color: context.appTheme.primary,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Your Submitted Comment',
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: context.appTheme.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _parentComment,
+            style: GoogleFonts.dmSans(
+              fontSize: 13,
+              color: context.appTheme.onSurface,
+            ),
+          ),
         ],
       ),
     );
@@ -914,18 +967,6 @@ class _ParentHomeworkSubmissionScreenState
         attachmentUrl: "",
         attachmentUrls: _attachmentUrls,
       );
-      try {
-        final svc = await NotificationService.getInstance();
-        await svc.triggerHomeworkSubmittedAlert(
-          homeworkId: _homeworkId,
-          homeworkTitle: _hwText(
-            _homeworkDetails['title'],
-            fallback: 'Homework',
-          ),
-          studentName: widget.args.studentName,
-          hasAttachment: _attachmentUrls.isNotEmpty,
-        );
-      } on Object catch (_) {}
       if (!mounted) return;
       Navigator.pop(
         context,

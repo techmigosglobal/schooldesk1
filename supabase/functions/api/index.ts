@@ -83,7 +83,7 @@ async function withDirectSql<T>(
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-school-id",
+    "authorization, x-client-info, apikey, content-type, x-school-id, x-job-secret",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 };
 
@@ -384,6 +384,12 @@ Deno.serve(async (req: Request) => {
       svc,
       user,
     );
+  }
+
+  // ── Health reminder delivery (4 PM IST scheduled job) ────
+  if (path.startsWith("/jobs/health-reminders")) {
+    const { user, client, svc } = await authedClient(req);
+    return handleHealthReminders(req, path, method, url, client, svc, user);
   }
 
   // ── All other routes require authentication ────────────────

@@ -5,6 +5,10 @@ function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
 }
 
+function roleName(user: User): string {
+  return `${user.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
+}
+
 function parseId(path: string, prefix: string): string | null {
   const rest = path.slice(prefix.length);
   const seg = rest.split("/").filter(Boolean)[0];
@@ -52,6 +56,7 @@ export async function handleCalendar(
       return ok(data ?? []);
     }
     if (!id && method === "POST") {
+      if (roleName(user) !== "principal") return fail("forbidden", 403);
       const payload = {
         ...body,
         school_id: sid,
@@ -67,6 +72,7 @@ export async function handleCalendar(
       return ok(data);
     }
     if (id && method === "PUT") {
+      if (roleName(user) !== "principal") return fail("forbidden", 403);
       const payload = {
         ...body,
         event_name: body.event_name ?? body.event_title,
@@ -83,6 +89,7 @@ export async function handleCalendar(
       return ok(data);
     }
     if (id && method === "DELETE") {
+      if (roleName(user) !== "principal") return fail("forbidden", 403);
       const { error } = await svc.from("events").delete().eq("id", id).eq(
         "school_id",
         sid,

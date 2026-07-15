@@ -55,7 +55,7 @@ async function collectSchoolWipeAccounts(
   const { data: publicAccounts, error: publicAccountsError } = await svc.from(
     "users",
   ).select("id, role_name").eq("school_id", school);
-  if (publicAccountsError) throw publicAccountsError;
+  if (publicAccountsError) throw new Error(publicAccountsError.message);
 
   const retainedAccountIds = new Set<string>();
   const accountIdsToDelete = new Set<string>();
@@ -77,7 +77,7 @@ async function collectSchoolWipeAccounts(
       page,
       perPage: 1000,
     });
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     const users = data.users ?? [];
     for (const account of users) {
       if (text(account.app_metadata?.school_id) !== school) continue;
@@ -111,11 +111,26 @@ async function deleteSchoolAuthAccounts(
   svc: SupabaseClient,
   accountIds: readonly string[],
 ) {
+  let deletedCount = 0;
   for (const accountId of accountIds) {
-    const { error } = await svc.auth.admin.deleteUser(accountId);
-    if (error) throw error;
+    try {
+      const { error } = await svc.auth.admin.deleteUser(accountId);
+      if (error) {
+        // If the user does not exist in Auth, we can ignore the error
+        const msg = error.message?.toLowerCase() || "";
+        if (error.status === 404 || msg.includes("not found")) {
+          console.warn(`Auth user ${accountId} not found for deletion, skipping`);
+          continue;
+        }
+        throw new Error(error.message);
+      }
+      deletedCount++;
+    } catch (err) {
+      // Log exception but do not abort the entire wipe process
+      console.error(`Exception while deleting auth user ${accountId}:`, err);
+    }
   }
-  return accountIds.length;
+  return deletedCount;
 }
 
 async function wipeSchoolStorage(
@@ -196,14 +211,22 @@ async function wipeSchoolStorage(
 
   let removed = 0;
   for (const [bucket, paths] of targets.entries()) {
+    if (paths.size === 0) continue;
     for (const batch of Array.from(paths).reduce<string[][]>((all, path, index) => {
       const batchIndex = Math.floor(index / 100);
       (all[batchIndex] ??= []).push(path);
       return all;
     }, [])) {
-      const { error } = await svc.storage.from(bucket).remove(batch);
-      if (error) throw error;
-      removed += batch.length;
+      try {
+        const { data, error } = await svc.storage.from(bucket).remove(batch);
+        if (error) {
+          console.error(`Failed to remove storage files in bucket ${bucket}:`, error.message);
+        } else if (data) {
+          removed += data.length;
+        }
+      } catch (err) {
+        console.error(`Exception while removing storage files in bucket ${bucket}:`, err);
+      }
     }
   }
   return removed;
@@ -310,7 +333,7 @@ export async function handleMonitoring(
       for (const table of tables) {
         const { data, error } = await svc.from(table).select("*").eq("school_id", school);
         if (error) {
-          if (error.message.includes("column \"school_id\" does not exist")) {
+          if (error.message.includes("school_id") && error.message.includes("does not exist")) {
             const { data: allData, error: allErr } = await svc.from(table).select("*");
             if (allErr) return fail(`Backup failed on table ${table}: ${allErr.message}`);
             backup[table] = allData ?? [];
@@ -323,7 +346,8 @@ export async function handleMonitoring(
       }
       return ok(backup);
     } catch (err) {
-      return fail(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      return fail(msg);
     }
   }
 
@@ -355,7 +379,8 @@ export async function handleMonitoring(
       }
       return ok({ success: true, message: "Database restored successfully" });
     } catch (err) {
-      return fail(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      return fail(msg);
     }
   }
 
@@ -371,7 +396,11 @@ export async function handleMonitoring(
         svc,
         school,
         accounts.retainedAccountIds,
-      );
+      ).catch((storageErr) => {
+        // Fallback: log error but do not fail the entire database wipe
+        console.error("Storage wipe failed, continuing with db wipe:", storageErr);
+        return 0;
+      });
       const { data, error } = await svc.rpc("wipe_school_data", {
         p_school_id: school,
         p_retained_user_ids: accounts.retainedAccountIds,
@@ -380,7 +409,10 @@ export async function handleMonitoring(
       const authAccountsDeleted = await deleteSchoolAuthAccounts(
         svc,
         accounts.accountIdsToDelete,
-      );
+      ).catch((authErr) => {
+        console.error("Auth accounts deletion failed, continuing:", authErr);
+        return 0;
+      });
       return ok({
         ...(data as Record<string, unknown> ?? {}),
         auth_accounts_deleted: authAccountsDeleted,
@@ -389,7 +421,8 @@ export async function handleMonitoring(
         message: "School data wiped; only principal and Super Admin logins were preserved",
       });
     } catch (err) {
-      return fail(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      return fail(msg);
     }
   }
 

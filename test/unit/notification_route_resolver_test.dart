@@ -114,6 +114,15 @@ void main() {
       expect(lessonPlannerDigest.route, AppRoutes.principalLessonPlanner);
     });
 
+    test('routes a parent attendance notification to child attendance', () {
+      final target = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'attendance'},
+        currentRole: 'parent',
+      );
+
+      expect(target.route, AppRoutes.parentAttendance);
+    });
+
     test('passes event post reference context into principal approvals', () {
       final target = NotificationRouteResolver.resolve(
         data: {

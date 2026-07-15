@@ -444,6 +444,7 @@ class AppNotification {
   final String studentId;
   final String sectionId;
   final String teacherId;
+  final String studentPhotoUrl;
 
   const AppNotification({
     required this.id,
@@ -460,6 +461,7 @@ class AppNotification {
     this.studentId = '',
     this.sectionId = '',
     this.teacherId = '',
+    this.studentPhotoUrl = '',
   });
 
   factory AppNotification.transient({
@@ -474,6 +476,7 @@ class AppNotification {
     String studentId = '',
     String sectionId = '',
     String teacherId = '',
+    String studentPhotoUrl = '',
   }) {
     return AppNotification(
       id: 'transient_${DateTime.now().microsecondsSinceEpoch}',
@@ -490,6 +493,7 @@ class AppNotification {
       studentId: studentId,
       sectionId: sectionId,
       teacherId: teacherId,
+      studentPhotoUrl: studentPhotoUrl,
     );
   }
 
@@ -509,6 +513,7 @@ class AppNotification {
       studentId: studentId,
       sectionId: sectionId,
       teacherId: teacherId,
+      studentPhotoUrl: studentPhotoUrl,
     );
   }
 
@@ -521,6 +526,7 @@ class AppNotification {
     'student_id': studentId,
     'section_id': sectionId,
     'teacher_id': teacherId,
+    'student_photo_url': studentPhotoUrl,
   };
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
@@ -534,6 +540,8 @@ class AppNotification {
     final studentId = '${json['student_id'] ?? json['studentId'] ?? ''}';
     final sectionId = '${json['section_id'] ?? json['sectionId'] ?? ''}';
     final teacherId = '${json['teacher_id'] ?? json['teacherId'] ?? ''}';
+    final studentPhotoUrl =
+        '${json['student_photo_url'] ?? json['studentPhotoUrl'] ?? ''}';
 
     final sentAtRaw = '${json['sent_at'] ?? json['created_at'] ?? ''}';
     var parsedTimestamp = DateTime.now();
@@ -577,6 +585,7 @@ class AppNotification {
       studentId: studentId,
       sectionId: sectionId,
       teacherId: teacherId,
+      studentPhotoUrl: studentPhotoUrl,
     );
   }
 }

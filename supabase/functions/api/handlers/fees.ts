@@ -60,6 +60,46 @@ const monthNames = [
   "March",
 ];
 
+const defaultFeeCategories = [
+  {
+    name: "Tuition",
+    description: "Recurring tuition fee",
+  },
+  {
+    name: "Books & Kit",
+    description: "One-time books and learning materials fee",
+  },
+  {
+    name: "Transport",
+    description: "Recurring transport fee",
+  },
+  {
+    name: "Activity",
+    description: "Activity and enrichment fee",
+  },
+];
+
+async function ensureDefaultFeeCategories(
+  svc: SupabaseClient,
+  school: string,
+) {
+  const { count, error } = await svc.from("fee_categories").select("id", {
+    count: "exact",
+    head: true,
+  }).eq("school_id", school);
+  if (error) throw error;
+  if ((count ?? 0) > 0) return;
+
+  const { error: insertError } = await svc.from("fee_categories").insert(
+    defaultFeeCategories.map((category) => ({
+      school_id: school,
+      ...category,
+      is_active: true,
+    })),
+  );
+  if (insertError) throw insertError;
+}
+
 const monthNameLookup = new Map(
   monthNames.map((month, index) => [month.toLowerCase(), index]),
 );
@@ -207,7 +247,9 @@ function validateInvoiceSelection(
   // Monthly fees: month-by-month installment payment.
   if (billingMode === "monthly") {
     if (selectedMonthNames.length > 10 || selectedMonths > 10) {
-      throw new Error("selected_months cannot exceed the June–March cycle of 10");
+      throw new Error(
+        "selected_months cannot exceed the June–March cycle of 10",
+      );
     }
     if (selectedTerms > 0) {
       throw new Error("selected_terms cannot exceed configured academic terms");
@@ -595,18 +637,25 @@ async function invoiceIdsForFeeStructure(
       .eq("school_id", school)
       .eq("status", "active");
     if (structure.section_id) {
-      studentQuery = studentQuery.eq("current_section_id", structure.section_id);
+      studentQuery = studentQuery.eq(
+        "current_section_id",
+        structure.section_id,
+      );
     } else if (structure.grade_id) {
       const { data: sections } = await svc.from("sections")
         .select("id")
         .eq("school_id", school).eq("grade_id", structure.grade_id);
-      const sectionIds = (sections ?? []).map((s: Record<string, unknown>) => text(s.id)).filter(Boolean);
+      const sectionIds = (sections ?? []).map((s: Record<string, unknown>) =>
+        text(s.id)
+      ).filter(Boolean);
       if (sectionIds.length > 0) {
         studentQuery = studentQuery.in("current_section_id", sectionIds);
       }
     }
     const { data: students } = await studentQuery;
-    const studentIds = (students ?? []).map((s: Record<string, unknown>) => text(s.id)).filter(Boolean);
+    const studentIds = (students ?? []).map((s: Record<string, unknown>) =>
+      text(s.id)
+    ).filter(Boolean);
 
     if (studentIds.length > 0) {
       // Find orphaned invoices: same academic year, same students, no fee_structure_id, not fully paid
@@ -631,24 +680,28 @@ async function deleteInvoiceWorkflowRows(
   school: string,
   invoiceIds: string[],
 ) {
-  if (invoiceIds.length === 0) return { 
-    deleted_invoices: 0,
-    deleted_receipts: 0, 
-    deleted_payments: 0,
-    deleted_requests: 0,
-  };
+  if (invoiceIds.length === 0) {
+    return {
+      deleted_invoices: 0,
+      deleted_receipts: 0,
+      deleted_payments: 0,
+      deleted_requests: 0,
+    };
+  }
   const scoped = await svc.from("fee_invoices").select("id").eq(
     "school_id",
     school,
   ).in("id", invoiceIds);
   if (scoped.error) throw new Error(scoped.error.message);
   const ids = (scoped.data ?? []).map((row) => text(row.id)).filter(Boolean);
-  if (ids.length === 0) return { 
-    deleted_invoices: 0,
-    deleted_receipts: 0, 
-    deleted_payments: 0,
-    deleted_requests: 0,
-  };
+  if (ids.length === 0) {
+    return {
+      deleted_invoices: 0,
+      deleted_receipts: 0,
+      deleted_payments: 0,
+      deleted_requests: 0,
+    };
+  }
 
   // Delete receipts by payment IDs, since fee_receipts are linked to payments.
   const paymentIds = await svc.from("payments").select("id").eq(
@@ -656,7 +709,8 @@ async function deleteInvoiceWorkflowRows(
     school,
   ).in("invoice_id", ids);
   if (paymentIds.error) throw new Error(paymentIds.error.message);
-  const paymentIdList = (paymentIds.data ?? []).map((row) => text(row.id)).filter(Boolean);
+  const paymentIdList = (paymentIds.data ?? []).map((row) => text(row.id))
+    .filter(Boolean);
 
   const receiptDelete = paymentIdList.length === 0
     ? { error: null, count: 0 }
@@ -682,7 +736,9 @@ async function deleteInvoiceWorkflowRows(
     "invoice_id",
     ids,
   );
-  if (invoiceItemsDelete.error) throw new Error(invoiceItemsDelete.error.message);
+  if (invoiceItemsDelete.error) {
+    throw new Error(invoiceItemsDelete.error.message);
+  }
   // Delete invoices themselves
   const invoiceDelete = await svc.from("fee_invoices").delete().eq(
     "school_id",
@@ -705,7 +761,7 @@ async function deleteFeeStructureWorkflowRows(
 ) {
   // 1. Get all invoice IDs related to this fee structure
   const invoiceIds = await invoiceIdsForFeeStructure(svc, school, structureId);
-  
+
   // 2. Delete invoice-related workflow (payments, receipts, requests, invoices, items)
   const invoiceDeletionStats = await deleteInvoiceWorkflowRows(
     svc,
@@ -718,7 +774,9 @@ async function deleteFeeStructureWorkflowRows(
     "fee_structure_id",
     structureId,
   );
-  if (installmentsDelete.error) throw new Error(installmentsDelete.error.message);
+  if (installmentsDelete.error) {
+    throw new Error(installmentsDelete.error.message);
+  }
 
   // 4. Delete fee_concessions (linked to this structure)
   const concessionDelete = await svc.from("fee_concessions").delete().eq(
@@ -727,7 +785,7 @@ async function deleteFeeStructureWorkflowRows(
   ).eq("fee_structure_id", structureId);
   if (concessionDelete.error) throw new Error(concessionDelete.error.message);
 
-  return { 
+  return {
     deleted_invoices: invoiceDeletionStats.deleted_invoices,
     deleted_receipts: invoiceDeletionStats.deleted_receipts,
     deleted_payments: invoiceDeletionStats.deleted_payments,
@@ -752,6 +810,39 @@ export async function handleFees(
     ? await req.json().catch(() => ({}))
     : {};
   const feesPath = path.replace(/^\/fees/, "");
+  const isParent = roleName(user) === "parent";
+
+  // Fee setup, invoice generation, cash collection, reports, concessions and
+  // payment configuration are school-finance operations. Parents only use the
+  // child-scoped invoice and manual UPI proof endpoints further below.
+  const isParentPaymentAction = [
+    "/payments/intent",
+    "/payments/request",
+    "/payments/submit",
+  ].includes(feesPath) ||
+    /^\/payments\/[^/]+\/resubmit$/.test(feesPath);
+  const isFinanceManagementPath = path.startsWith("/fee-categories") ||
+    path.startsWith("/fee-structures") ||
+    path.startsWith("/fee-invoices") ||
+    path.startsWith("/fee-concessions") ||
+    path === "/invoices" ||
+    path.startsWith("/fee-payments") ||
+    path === "/payments" ||
+    feesPath.startsWith("/categories") ||
+    feesPath.startsWith("/structures") ||
+    feesPath.startsWith("/invoices") ||
+    (feesPath.startsWith("/payments") && !isParentPaymentAction) ||
+    feesPath.startsWith("/concessions") ||
+    feesPath.startsWith("/reminders") ||
+    feesPath.startsWith("/payment-configs") ||
+    (feesPath === "/payment-config" && method !== "GET") ||
+    feesPath === "/reports/exports";
+  if (isFinanceManagementPath && !isAdminOrPrincipal(user)) {
+    return fail("principal access required", 403);
+  }
+  if (isParentPaymentAction && !isParent) {
+    return fail("only parents can submit manual UPI payment proofs", 403);
+  }
 
   if (feesPath === "/reports/exports" && method === "POST") {
     try {
@@ -765,7 +856,9 @@ export async function handleFees(
       return ok(data);
     } catch (error) {
       return fail(
-        error instanceof Error ? error.message : "failed to queue fee report export",
+        error instanceof Error
+          ? error.message
+          : "failed to queue fee report export",
       );
     }
   }
@@ -816,6 +909,20 @@ export async function handleFees(
       : "/fees/categories";
     const seg = path.slice(base.length).split("/").filter(Boolean)[0];
     if (!seg && method === "GET") {
+      // A new school can begin fee setup as soon as it has an academic year
+      // and classes. Supply the small standard category baseline once, while
+      // preserving every category that the school has already configured.
+      if (isAdminOrPrincipal(user)) {
+        try {
+          await ensureDefaultFeeCategories(svc, school);
+        } catch (error) {
+          return fail(
+            error instanceof Error
+              ? error.message
+              : "failed to prepare default fee categories",
+          );
+        }
+      }
       const { data, error } = await svc.from("fee_categories").select("*").eq(
         "school_id",
         school,
@@ -899,7 +1006,9 @@ export async function handleFees(
       const fromYear = body.from_academic_year_id;
       const toYear = body.to_academic_year_id;
       if (!fromYear || !toYear) {
-        return fail("from_academic_year_id and to_academic_year_id are required");
+        return fail(
+          "from_academic_year_id and to_academic_year_id are required",
+        );
       }
 
       const { data: sourceStructures, error: fetchErr } = await svc
@@ -946,7 +1055,9 @@ export async function handleFees(
 
       let copiedCount = 0;
       if (toInsert.length > 0) {
-        const { error: insertErr } = await svc.from("fee_structures").insert(toInsert);
+        const { error: insertErr } = await svc.from("fee_structures").insert(
+          toInsert,
+        );
         if (insertErr) return fail(insertErr.message);
         copiedCount = toInsert.length;
       }
@@ -1050,7 +1161,8 @@ export async function handleFees(
           if (orphanIds.length > 0) {
             await deleteInvoiceWorkflowRows(svc, school, orphanIds);
           }
-          (cleanup as Record<string, unknown>).reconciled_orphans = orphanIds.length;
+          (cleanup as Record<string, unknown>).reconciled_orphans =
+            orphanIds.length;
         } catch (_) {
           // Best-effort reconciliation — don't fail the whole request.
         }
@@ -1364,7 +1476,10 @@ export async function handleFees(
         : { data: null };
       if (invoiceError) return fail(invoiceError.message);
       if (!invoice) return fail("Invoice not found", 404);
-      if (!isAdminOrPrincipal(user) && text(body.payment_method, "upi").toLowerCase() !== "upi") {
+      if (
+        !isAdminOrPrincipal(user) &&
+        text(body.payment_method, "upi").toLowerCase() !== "upi"
+      ) {
         return fail("Parents can submit manual UPI payment proofs only", 400);
       }
       try {
@@ -1467,6 +1582,9 @@ export async function handleFees(
             "request_reference",
             requestReference,
           );}
+        if (!isAdminOrPrincipal(user)) {
+          requestQuery = requestQuery.eq("parent_user_id", user.id);
+        }
         const { data, error } = await requestQuery.maybeSingle();
         if (error) return fail(error.message);
         if (!data) return fail("Payment intent not found", 404);
@@ -1528,10 +1646,15 @@ export async function handleFees(
       if (screenshot) {
         try {
           proofUrl = await uploadPrivatePaymentProof(
-            svc, school, text(existingRequest?.id, requestReference), screenshot,
+            svc,
+            school,
+            text(existingRequest?.id, requestReference),
+            screenshot,
           );
         } catch (error) {
-          return fail(error instanceof Error ? error.message : "proof upload failed");
+          return fail(
+            error instanceof Error ? error.message : "proof upload failed",
+          );
         }
       }
       const payload = {
@@ -1581,7 +1704,9 @@ export async function handleFees(
           .in("role_name", ["principal", "admin", "super_admin"]);
         if (principals && principals.length > 0) {
           const amountLabel = `INR ${expectedAmount.toFixed(0)}`;
-          const validPrincipals = principals.filter((p: Record<string, unknown>) => text(p.id));
+          const validPrincipals = principals.filter((
+            p: Record<string, unknown>,
+          ) => text(p.id));
           if (validPrincipals.length > 0) {
             // Resolve student name for a readable notification
             let studentName = text(invoice.student_id, "a student");
@@ -1614,7 +1739,12 @@ export async function handleFees(
                 student_id: text(invoice.student_id),
                 is_read: false,
               })));
-            if (logError) console.error("Failed to write fee in-app notifications", logError.message);
+            if (logError) {
+              console.error(
+                "Failed to write fee in-app notifications",
+                logError.message,
+              );
+            }
             const { data: feeEvents, error: feeEventError } = await svc
               .from("notification_events")
               .insert(
@@ -1635,7 +1765,7 @@ export async function handleFees(
                     route: "/principal-fees-screen/payment-requests",
                   },
                   processed: false,
-                }))
+                })),
               )
               .select("id");
             if (!feeEventError) {
@@ -1663,6 +1793,9 @@ export async function handleFees(
     }
 
     if (seg && normalized.endsWith("/resubmit") && method === "PATCH") {
+      if (!isParent) {
+        return fail("only parents can resubmit payment proofs", 403);
+      }
       const form = await req.formData().catch(() => null);
       if (!form) return fail("multipart form required");
       const screenshot = form.get("screenshot") as File | null;
@@ -1670,9 +1803,16 @@ export async function handleFees(
       let proofUrl: string | null = null;
       if (screenshot) {
         try {
-          proofUrl = await uploadPrivatePaymentProof(svc, school, paymentId, screenshot);
+          proofUrl = await uploadPrivatePaymentProof(
+            svc,
+            school,
+            paymentId,
+            screenshot,
+          );
         } catch (error) {
-          return fail(error instanceof Error ? error.message : "proof upload failed");
+          return fail(
+            error instanceof Error ? error.message : "proof upload failed",
+          );
         }
       }
       const { data, error } = await svc.from("parent_payment_requests").update({
@@ -1689,7 +1829,10 @@ export async function handleFees(
         remarks: `${form.get("remarks") ?? ""}`,
         status: "pending_verification",
         updated_at: new Date().toISOString(),
-      }).eq("id", paymentId).eq("school_id", school).select().single();
+      }).eq("id", paymentId).eq("school_id", school).eq(
+        "parent_user_id",
+        user.id,
+      ).select().single();
       if (error) return fail(error.message);
       try {
         return ok(
@@ -1747,12 +1890,25 @@ export async function handleFees(
         );
       }
       const { data: payment, error } = await svc.rpc("record_fee_payment", {
-        p_school_id: school, p_invoice_id: invoiceId, p_student_id: invoice.student_id,
-        p_amount: amount, p_payment_method: text(body.payment_method ?? body.payment_mode, "cash"),
-        p_reference_number: text(body.reference_number ?? body.transaction_ref ?? body.transaction_id ?? body.receipt_number),
-        p_paid_at: text(body.payment_date) ? `${text(body.payment_date)}T00:00:00.000Z` : new Date().toISOString(),
-        p_notes: text(body.remarks), p_created_by: user.id,
-        p_selected_month_names: selection.selectedMonthNames, p_selected_months: selection.selectedMonths,
+        p_school_id: school,
+        p_invoice_id: invoiceId,
+        p_student_id: invoice.student_id,
+        p_amount: amount,
+        p_payment_method: text(
+          body.payment_method ?? body.payment_mode,
+          "cash",
+        ),
+        p_reference_number: text(
+          body.reference_number ?? body.transaction_ref ??
+            body.transaction_id ?? body.receipt_number,
+        ),
+        p_paid_at: text(body.payment_date)
+          ? `${text(body.payment_date)}T00:00:00.000Z`
+          : new Date().toISOString(),
+        p_notes: text(body.remarks),
+        p_created_by: user.id,
+        p_selected_month_names: selection.selectedMonthNames,
+        p_selected_months: selection.selectedMonths,
       }).single();
       if (error) return fail(error.message);
       const atomicPayment = payment as Record<string, unknown>;
@@ -1803,6 +1959,9 @@ export async function handleFees(
       Boolean,
     )[0];
     if (!seg && method === "GET") {
+      if (!isAdminOrPrincipal(user) && !isParent) {
+        return fail("parent or principal access required", 403);
+      }
       let q = svc.from("parent_payment_requests").select("*").eq(
         "school_id",
         school,
@@ -1830,6 +1989,9 @@ export async function handleFees(
       }
     }
     if (!seg && method === "POST") {
+      if (!isParent) {
+        return fail("only parents can submit payment requests", 403);
+      }
       const studentId = text((body as Record<string, unknown>).student_id);
       try {
         if (
@@ -1902,14 +2064,24 @@ export async function handleFees(
               : "failed to validate approved fee selection",
           );
         }
-        const { data: payment, error: paymentError } = await svc.rpc("record_fee_payment", {
-          p_school_id: school, p_invoice_id: existing.invoice_id, p_student_id: existing.student_id,
-          p_amount: existing.amount, p_payment_method: existing.payment_method ?? "upi",
-          p_reference_number: existing.transaction_ref ?? existing.transaction_id ?? existing.request_reference,
-          p_paid_at: existing.payment_date ?? new Date().toISOString(), p_notes: existing.remarks ?? "",
-          p_created_by: user.id, p_selected_month_names: selection.selectedMonthNames,
-          p_selected_months: selection.selectedMonths, p_request_id: seg,
-        }).single();
+        const { data: payment, error: paymentError } = await svc.rpc(
+          "record_fee_payment",
+          {
+            p_school_id: school,
+            p_invoice_id: existing.invoice_id,
+            p_student_id: existing.student_id,
+            p_amount: existing.amount,
+            p_payment_method: existing.payment_method ?? "upi",
+            p_reference_number: existing.transaction_ref ??
+              existing.transaction_id ?? existing.request_reference,
+            p_paid_at: existing.payment_date ?? new Date().toISOString(),
+            p_notes: existing.remarks ?? "",
+            p_created_by: user.id,
+            p_selected_month_names: selection.selectedMonthNames,
+            p_selected_months: selection.selectedMonths,
+            p_request_id: seg,
+          },
+        ).single();
         if (paymentError) return fail(paymentError.message);
         const atomicPayment = payment as Record<string, unknown>;
         paymentId = text(atomicPayment.payment_id);
@@ -1930,32 +2102,50 @@ export async function handleFees(
         const parentUserId = text(existing.parent_user_id);
         if (parentUserId) {
           const isApproved = ["approved", "completed", "paid"].includes(status);
-          const statusLabel = isApproved ? "approved" : (status === "clarification_required" ? "requires clarification" : "rejected");
+          const statusLabel = isApproved
+            ? "approved"
+            : (status === "clarification_required"
+              ? "requires clarification"
+              : "rejected");
           const amountLabel = `INR ${money(existing.amount).toFixed(0)}`;
           const approvalBody = isApproved
             ? `Your ${amountLabel} payment has been verified and approved. Receipt is now available.`
-            : `Your ${amountLabel} payment was ${statusLabel}.${body.admin_remarks ? ` Remark: ${text(body.admin_remarks)}` : ""}`;
-          const { error: logError } = await svc.from("notification_logs").insert({
+            : `Your ${amountLabel} payment was ${statusLabel}.${
+              body.admin_remarks ? ` Remark: ${text(body.admin_remarks)}` : ""
+            }`;
+          const { error: logError } = await svc.from("notification_logs")
+            .insert({
+              school_id: school,
+              user_id: parentUserId,
+              target_role: "parent",
+              title: isApproved
+                ? "Payment Approved ✅"
+                : `Payment ${statusLabel}`,
+              body: approvalBody,
+              type: "fee",
+              entity_type: "parent_payment_requests",
+              entity_id: seg,
+              reference_type: "fee",
+              reference_id: seg,
+              action: isApproved ? "payment_approved" : "payment_rejected",
+              route: "/parent-fees-screen",
+              student_id: text(existing.student_id),
+              is_read: false,
+            });
+          if (logError) {
+            console.error(
+              "Failed to write parent fee in-app notification",
+              logError.message,
+            );
+          }
+          const { data: feeDecisionEvent } = await svc.from(
+            "notification_events",
+          ).insert({
             school_id: school,
             user_id: parentUserId,
-            target_role: "parent",
-            title: isApproved ? "Payment Approved ✅" : `Payment ${statusLabel}`,
-            body: approvalBody,
-            type: "fee",
-            entity_type: "parent_payment_requests",
-            entity_id: seg,
-            reference_type: "fee",
-            reference_id: seg,
-            action: isApproved ? "payment_approved" : "payment_rejected",
-            route: "/parent-fees-screen",
-            student_id: text(existing.student_id),
-            is_read: false,
-          });
-          if (logError) console.error("Failed to write parent fee in-app notification", logError.message);
-          const { data: feeDecisionEvent } = await svc.from("notification_events").insert({
-            school_id: school,
-            user_id: parentUserId,
-            event_type: isApproved ? "fee_payment_approved" : "fee_payment_rejected",
+            event_type: isApproved
+              ? "fee_payment_approved"
+              : "fee_payment_rejected",
             event_data: {
               payment_request_id: seg,
               invoice_id: existing.invoice_id,
@@ -2245,7 +2435,9 @@ export async function handleFees(
         if (!invoice) return fail("Invoice not found", 404);
 
         const currentStudentId = studentId || text(invoice.student_id);
-        if (!currentStudentId) return fail("student_id not found on invoice", 400);
+        if (!currentStudentId) {
+          return fail("student_id not found on invoice", 400);
+        }
 
         // Find the parent user ID(s)
         const { data: links, error: linksError } = await svc
@@ -2270,8 +2462,8 @@ export async function handleFees(
         const balanceVal = money(invoice.balance);
         const amountLabel = `INR ${balanceVal.toFixed(0)}`;
         const dueDateLabel = text(invoice.due_date).split("T")[0];
-        
-        const messageBody = customMessage || 
+
+        const messageBody = customMessage ||
           `Reminder: Outstanding balance of ${amountLabel} is due for ${studentName} by ${dueDateLabel}.`;
 
         const eventsToInsert = parentUserIds.map((pId) => ({
@@ -2311,7 +2503,9 @@ export async function handleFees(
         }));
         await svc.from("notification_logs").insert(logsToInsert);
 
-        const eventIds = (insertedEvents ?? []).map((row: { id: string }) => text(row.id)).filter(Boolean);
+        const eventIds = (insertedEvents ?? []).map((row: { id: string }) =>
+          text(row.id)
+        ).filter(Boolean);
         if (eventIds.length > 0) {
           triggerPushProcessing(eventIds);
         }
@@ -2332,7 +2526,10 @@ export async function handleFees(
 
         if (invoicesError) return fail(invoicesError.message);
         if (!invoices || invoices.length === 0) {
-          return ok({ success: true, message: "No outstanding invoices found." });
+          return ok({
+            success: true,
+            message: "No outstanding invoices found.",
+          });
         }
 
         let totalRemindersSent = 0;
@@ -2359,8 +2556,9 @@ export async function handleFees(
           const balanceVal = money(invoice.balance);
           const amountLabel = `INR ${balanceVal.toFixed(0)}`;
           const dueDateLabel = text(invoice.due_date).split("T")[0];
-          
-          const messageBody = `Reminder: Outstanding balance of ${amountLabel} is due for ${studentName} by ${dueDateLabel}.`;
+
+          const messageBody =
+            `Reminder: Outstanding balance of ${amountLabel} is due for ${studentName} by ${dueDateLabel}.`;
 
           const eventsToInsert = parentUserIds.map((pId) => ({
             school_id: school,
@@ -2396,7 +2594,9 @@ export async function handleFees(
           }));
           await svc.from("notification_logs").insert(logsToInsert);
 
-          const eventIds = (insertedEvents ?? []).map((row: { id: string }) => text(row.id)).filter(Boolean);
+          const eventIds = (insertedEvents ?? []).map((row: { id: string }) =>
+            text(row.id)
+          ).filter(Boolean);
           if (eventIds.length > 0) {
             triggerPushProcessing(eventIds);
           }
@@ -2415,9 +2615,18 @@ export async function handleFees(
   }
 
   if (path === "/parent-payment-requests" && method === "POST") {
+    if (!isParent) return fail("only parents can submit payment requests", 403);
+    const studentId = text(body.student_id);
+    if (
+      !studentId || !await parentCanAccessStudent(svc, school, user, studentId)
+    ) {
+      return fail("payment request must belong to a linked child", 403);
+    }
     const { data, error } = await svc.from("parent_payment_requests").insert({
       ...body,
       school_id: school,
+      parent_user_id: user.id,
+      status: "pending_verification",
     }).select().single();
     if (error) return fail(error.message);
     return ok(data);

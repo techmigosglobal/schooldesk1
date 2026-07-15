@@ -71,6 +71,7 @@ class NotificationRouteResolver {
       'staff_attendance' ||
       'staff_attendance_daily_report' ||
       'staff_attendance_monthly_report' => _attendanceRouteFor(role),
+      'attendance' || 'attendance_marked' => _attendanceRouteFor(role),
       'lesson_planner_weekly_digest' => _lessonPlannerRouteFor(role),
       'lesson_planner' || 'lesson_plan' => _lessonPlannerRouteFor(role),
       'health' || 'health_reminder' => _healthRouteFor(role),

@@ -260,9 +260,12 @@ export async function handleStaff(
     const page = parseInt(url.searchParams.get("page") ?? "1");
     const size = parseInt(url.searchParams.get("page_size") ?? "50");
     const search = url.searchParams.get("search") ?? "";
-    let q = svc.from("staff").select("*, department:departments(*)", {
+    let q = svc.from("staff").select(
+      "*, department:departments(*), documents:staff_documents(*)",
+      {
       count: "exact",
-    }).eq("school_id", school).range((page - 1) * size, page * size - 1);
+      },
+    ).eq("school_id", school).range((page - 1) * size, page * size - 1);
     if (url.searchParams.get("status")) {
       q = q.eq("is_active", url.searchParams.get("status") === "active");
     }
@@ -309,7 +312,7 @@ export async function handleStaff(
   if (id && method === "GET") {
     const { data, error } = await svc.from("staff")
       .select(
-        "*, department:departments(*), staff_documents(*), staff_qualifications(*)",
+        "*, department:departments(*), documents:staff_documents(*), staff_qualifications(*)",
       )
       .eq("id", id)
       .eq("school_id", school)

@@ -23,7 +23,7 @@ void main() {
       expect(migration, contains('add column if not exists priority text'));
     });
 
-    test('backend exposes parent health reminder history and fan-out', () {
+    test('backend saves parent reminders and delivers them at 4 PM', () {
       final index = File('supabase/functions/api/index.ts').readAsStringSync();
       final handler = File(
         'supabase/functions/api/handlers/health_reminders.ts',
@@ -31,17 +31,26 @@ void main() {
 
       expect(index, contains('handleHealthReminders'));
       expect(index, contains('path.startsWith("/health-reminders")'));
+      expect(index, contains('path.startsWith("/jobs/health-reminders")'));
       expect(handler, contains('path !== "/health-reminders"'));
+      expect(handler, contains('path === "/jobs/health-reminders/run"'));
+      expect(handler, contains('HEALTH_REMINDER_JOB_SECRET'));
+      expect(handler, contains('Asia/Kolkata'));
+      expect(handler, contains('isAfterFourPmIndia'));
+      expect(handler, contains('deliverHealthReminders'));
       expect(handler, contains('method === "GET"'));
       expect(handler, contains('method === "POST"'));
       expect(handler, contains('parentCanAccessStudent'));
       expect(handler, contains('resolveStudentRecipients'));
       expect(handler, contains('class_teacher_id'));
       expect(handler, contains('co_teacher_id'));
-      expect(handler, contains('.eq("role_name", "principal")'));
       expect(handler, contains('svc.from("health_reminders").insert'));
       expect(handler, contains('entity_type: "health_reminder"'));
       expect(handler, contains('route: "/notification-center-screen"'));
+      expect(handler, contains('notification_logs").insert'));
+      expect(handler, contains('notification_events").insert'));
+      expect(handler, isNot(contains('notification_logs").upsert')));
+      expect(handler, isNot(contains('notification_events").upsert')));
     });
 
     test('backend birthday job creates idempotent role notifications', () {
@@ -97,6 +106,7 @@ void main() {
       expect(source, contains("'reminder_date'"));
       expect(source, contains('Reminder Date'));
       expect(source, contains('Reminder History'));
+      expect(source, contains('4:00 PM on the selected date'));
       expect(source, isNot(contains('triggerHealthReminderAlert')));
       expect(
         source,

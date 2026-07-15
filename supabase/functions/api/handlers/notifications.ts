@@ -1,5 +1,5 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok } from "../index.ts";
+import { fail, ok, triggerPushProcessing } from "../index.ts";
 
 function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -128,6 +128,47 @@ async function registerDeviceToken(
 
     if (error) {
       return fail(`Failed to register token: ${error.message}`);
+    }
+
+    // A push event can be created while this user has no active device (for
+    // example, while switching roles on one phone). The processor records
+    // those as deferred instead of pretending they were delivered. Resume
+    // only those deferred events now that this device is ready.
+    const { data: deferredEvents, error: deferredError } = await svc
+      .from("notification_events")
+      .select("id, event_data")
+      .eq("school_id", school)
+      .eq("user_id", userId)
+      .eq("processed", true)
+      .contains("event_data", { _push_deferred_no_device: true })
+      .order("created_at", { ascending: true })
+      .limit(50);
+    if (deferredError) {
+      return fail(`Failed to resume deferred notifications: ${deferredError.message}`);
+    }
+
+    const deferredIds = (deferredEvents ?? []).map((event) =>
+      `${event.id ?? ""}`.trim()
+    ).filter(Boolean);
+    if (deferredIds.length > 0) {
+      const resumeResults = await Promise.all(
+        (deferredEvents ?? []).map((event) => {
+          const eventData = event.event_data &&
+              typeof event.event_data === "object"
+            ? event.event_data as Record<string, unknown>
+            : {};
+          return svc.from("notification_events").update({
+            processed: false,
+            sent_at: null,
+            event_data: { ...eventData, _push_deferred_no_device: false },
+          }).eq("id", event.id);
+        }),
+      );
+      const resumeError = resumeResults.find((result) => result.error)?.error;
+      if (resumeError) {
+        return fail(`Failed to resume deferred notifications: ${resumeError.message}`);
+      }
+      triggerPushProcessing(deferredIds);
     }
 
     return ok({ message: "Device token registered successfully" });

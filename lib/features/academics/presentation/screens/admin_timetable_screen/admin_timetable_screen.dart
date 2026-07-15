@@ -44,6 +44,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   bool _loading = true;
   bool _saving = false;
   String? _error;
+  int _selectedOverviewDay = 1;
   String _selectedSectionId = '';
   _ManualTimetableStage _stage = _ManualTimetableStage.selectClass;
   _TimetableSettings _settings = _TimetableSettings.defaults();
@@ -402,24 +403,141 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
               ),
               const SizedBox(height: 12),
               _panel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Current timetable'),
-                    const SizedBox(height: 8),
-                    for (final slot in selectedSlots)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          '${_dayShortLabels[(_int(slot['day_of_week']) - 1).clamp(0, 5).toInt()]} · ${_text(slot['start_time'])}–${_text(slot['end_time'])} · ${_text(_map(slot['subject'])['subject_name'] ?? slot['slot_label'], fallback: 'Break')}',
-                        ),
-                      ),
-                  ],
-                ),
+                child: _buildSavedTimetablePreview(selectedSlots),
               ),
             ],
           ),
       ],
+    );
+  }
+
+  Widget _buildSavedTimetablePreview(List<Map<String, dynamic>> slots) {
+    final availableDays = slots
+        .map((slot) => _int(slot['day_of_week']))
+        .where((day) => day >= 1 && day <= _dayShortLabels.length)
+        .toSet()
+        .toList()
+      ..sort();
+    if (availableDays.isEmpty) return const SizedBox.shrink();
+
+    final activeDay = availableDays.contains(_selectedOverviewDay)
+        ? _selectedOverviewDay
+        : availableDays.first;
+    final daySlots = slots
+        .where((slot) => _int(slot['day_of_week']) == activeDay)
+        .toList()
+      ..sort(_slotSort);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Current timetable',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+            ),
+            Text(
+              '${daySlots.length} slots',
+              style: const TextStyle(
+                color: _muted,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final day in availableDays)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(_dayShortLabels[day - 1]),
+                    selected: day == activeDay,
+                    selectedColor: const Color(0xFF2563EB),
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    side: const BorderSide(color: Color(0xFFBFDBFE)),
+                    labelStyle: TextStyle(
+                      color: day == activeDay
+                          ? Colors.white
+                          : const Color(0xFF1E3A5F),
+                      fontWeight: FontWeight.w800,
+                    ),
+                    onSelected: (_) =>
+                        setState(() => _selectedOverviewDay = day),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        for (final slot in daySlots)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _savedTimetableSlotRow(slot),
+          ),
+      ],
+    );
+  }
+
+  Widget _savedTimetableSlotRow(Map<String, dynamic> slot) {
+    final isBreak = _isBreakSlot(slot);
+    final slotColor = isBreak
+        ? const Color(0xFFF59E0B)
+        : const Color(0xFF2563EB);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isBreak ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isBreak ? const Color(0xFFFDE68A) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 32,
+            decoration: BoxDecoration(
+              color: slotColor,
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 102,
+            child: Text(
+              '${_text(slot['start_time'])}–${_text(slot['end_time'])}',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              _subjectName(slot),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: isBreak
+                    ? const Color(0xFF92400E)
+                    : const Color(0xFF172033),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Icon(
+            isBreak ? Icons.coffee_outlined : Icons.menu_book_outlined,
+            size: 18,
+            color: slotColor,
+          ),
+        ],
+      ),
     );
   }
 
@@ -518,8 +636,23 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
             children: [
               for (var day = 1; day <= 6; day++)
                 FilterChip(
-                  label: Text(_dayShortLabels[day - 1]),
+                  label: Text(
+                    _dayShortLabels[day - 1],
+                    style: TextStyle(
+                      color: _settings.workingDays.contains(day)
+                          ? Colors.white
+                          : const Color(0xFF1E3A5F),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                   selected: _settings.workingDays.contains(day),
+                  selectedColor: const Color(0xFF2563EB),
+                  backgroundColor: const Color(0xFFF1F5F9),
+                  checkmarkColor: Colors.white,
+                  side: const BorderSide(color: Color(0xFFBFDBFE)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   onSelected: (selected) {
                     setState(() {
                       if (selected) {
@@ -2086,7 +2219,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   static String _subjectName(Map<String, dynamic> slot) {
     final subject = _map(slot['subject']);
     return _text(
-      subject['subject_name'] ?? slot['subject_name'] ?? slot['label'],
+      subject['subject_name'] ??
+          slot['subject_name'] ??
+          slot['slot_label'] ??
+          slot['label'],
       fallback: 'Break',
     );
   }

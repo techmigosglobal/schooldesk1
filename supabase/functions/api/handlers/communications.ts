@@ -1537,10 +1537,11 @@ export async function handleCommunications(
 
   // ── Notifications ─────────────────────────────────────────
   if (path === "/notifications" && method === "GET") {
-    const { data, error } = await svc.from("notification_logs").select("*").eq(
-      "user_id",
-      user.id,
-    ).order("created_at", { ascending: false }).limit(50);
+    const { data, error } = await svc.from("notification_logs")
+      .select("*, student:students(photo_url)")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
     if (error) return fail(error.message);
     return ok((data ?? []).map((row: Record<string, unknown>) => ({
       ...row,
@@ -1554,6 +1555,8 @@ export async function handleCommunications(
       student_id: row.student_id ?? "",
       section_id: row.section_id ?? "",
       teacher_id: row.teacher_id ?? "",
+      student_photo_url: (row.student as Record<string, unknown> | null)
+        ?.photo_url ?? "",
       sent_at: row.created_at ?? null,
     })));
   }
@@ -2066,19 +2069,17 @@ export async function handleCommunications(
     }).select().single();
     if (error) return fail(error.message);
 
-    // Trigger push and in-app notifications asynchronously
-    const promise = notifyLessonPlannerUploaded(
+    // Persist notification rows before returning success. This keeps a lesson
+    // plan from silently losing its principal notification if an edge runtime
+    // finishes the request before a background promise completes.
+    await notifyLessonPlannerUploaded(
       svc,
       school,
       payload.id,
       payload.teacher_name,
-      payload.subject_name,
+      teacherId,
       payload.section_id,
     );
-    const runtime = (globalThis as any).EdgeRuntime;
-    if (runtime?.waitUntil) {
-      runtime.waitUntil(promise);
-    }
 
     return ok(normalizeLessonPlannerRow(data));
   }
@@ -2144,7 +2145,7 @@ async function notifyLessonPlannerUploaded(
   school: string,
   lessonPlannerId: string,
   teacherName: string,
-  subjectName: string,
+  teacherId: string,
   sectionId: string,
 ) {
   try {
@@ -2159,6 +2160,19 @@ async function notifyLessonPlannerUploaded(
     const className = sectionData
       ? `${sectionData.grade?.grade_name ?? ""} - ${sectionData.section_name ?? ""}`
       : "Assigned Class";
+    const { data: teacher } = await svc
+      .from("staff")
+      .select("first_name, last_name, full_name, name, staff_code, email")
+      .eq("school_id", school)
+      .eq("id", teacherId)
+      .maybeSingle();
+    const resolvedTeacherName = lessonPlannerDisplayText(
+      teacherName,
+      teacher && typeof teacher === "object"
+        ? lessonPlannerStaffName(teacher as Record<string, unknown>)
+        : "",
+      "A teacher",
+    );
 
     const eventIds: string[] = [];
 
@@ -2176,7 +2190,7 @@ async function notifyLessonPlannerUploaded(
           user_id: p.id,
           target_role: "principal",
           title: "New Lesson Planner",
-          body: `Teacher ${teacherName} uploaded a lesson planner for ${subjectName} in Class ${className}.`,
+          body: `${resolvedTeacherName} uploaded a weekly lesson plan for Class ${className}.`,
           type: "lesson_planner",
           entity_type: "lesson_planner",
           entity_id: lessonPlannerId,
@@ -2191,10 +2205,12 @@ async function notifyLessonPlannerUploaded(
           event_type: "lesson_planner",
           event_data: {
             title: "New Lesson Planner",
-            message: `Teacher ${teacherName} uploaded a lesson planner for ${subjectName} in Class ${className}.`,
+            message: `${resolvedTeacherName} uploaded a weekly lesson plan for Class ${className}.`,
             reference_type: "lesson_planner",
             reference_id: lessonPlannerId,
             route: "/principal-lesson-planner-screen",
+            section_id: sectionId,
+            teacher_id: teacherId,
           },
         }).select("id").maybeSingle();
         if (evData?.id) {
@@ -2247,6 +2263,7 @@ async function notifyLessonPlannerUploaded(
             reference_type: "lesson_planner",
             reference_id: lessonPlannerId,
             route: "/parent-lesson-planner-screen",
+            section_id: sectionId,
           },
         }).select("id").maybeSingle();
         if (evData?.id) {

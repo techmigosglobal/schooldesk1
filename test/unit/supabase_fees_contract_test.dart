@@ -17,6 +17,25 @@ void main() {
   });
 
   test(
+    'fee management remains principal-only while parents use proof flow',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+
+      expect(source, contains('isFinanceManagementPath'));
+      expect(source, contains('principal access required'));
+      expect(source, contains('isParentPaymentAction'));
+      expect(
+        source,
+        contains('only parents can submit manual UPI payment proofs'),
+      );
+      expect(source, contains('only parents can resubmit payment proofs'));
+      expect(source, contains('parent or principal access required'));
+    },
+  );
+
+  test(
     'fees handler includes payment intent submit resubmit and config flows',
     () {
       final source = File(

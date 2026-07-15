@@ -3,7 +3,11 @@ import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
 import { queueReportExport } from "./uploads.ts";
 
-/** Notify parents of absent students via FCM push notification. Best-effort; never throws. */
+/**
+ * Notify parents when a student is marked absent. Each notification is stored
+ * for the in-app inbox first, then queued for FCM, so either delivery channel
+ * can be unavailable without losing the other.
+ */
 async function notifyParentsOfAbsence(
   svc: SupabaseClient,
   school: string,
@@ -37,26 +41,84 @@ async function notifyParentsOfAbsence(
       parentEventMap.get(parentId)!.studentIds.push(studentId);
     }
 
-    const eventRows = Array.from(parentEventMap.values()).map((
+    const deliveries = Array.from(parentEventMap.values()).map((
       { parentUserId, studentIds },
-    ) => ({
+    ) => {
+      const sortedStudentIds = [...new Set(studentIds)].sort();
+      const entityId = `absence:${attendanceDate}:${sortedStudentIds.join(",")}`;
+      const message = sortedStudentIds.length === 1
+        ? `Your child was marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`
+        : `Your children were marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`;
+      return {
+        userId: parentUserId,
+        studentIds: sortedStudentIds,
+        entityId,
+        message,
+      };
+    });
+
+    // Prevent a retry or a re-submitted attendance session from duplicating a
+    // parent's in-app alert for the same students and date.
+    const entityIds = deliveries.map((delivery) => delivery.entityId);
+    const { data: existingLogs, error: existingLogsError } = await svc.from(
+      "notification_logs",
+    )
+      .select("user_id, entity_id")
+      .eq("school_id", school)
+      .eq("entity_type", "attendance")
+      .in("entity_id", entityIds);
+    if (existingLogsError) throw existingLogsError;
+    const existingLogKeys = new Set(
+      (existingLogs ?? []).map((row) =>
+        `${row.user_id ?? ""}|${row.entity_id ?? ""}`
+      ),
+    );
+    const newDeliveries = deliveries.filter(
+      (delivery) =>
+        !existingLogKeys.has(`${delivery.userId}|${delivery.entityId}`),
+    );
+    if (newDeliveries.length > 0) {
+      const { error: logError } = await svc.from("notification_logs").insert(
+        newDeliveries.map((delivery) => ({
+          school_id: school,
+          user_id: delivery.userId,
+          target_role: "parent",
+          title: "Attendance Update",
+          body: delivery.message,
+          type: "attendance",
+          entity_type: "attendance",
+          entity_id: delivery.entityId,
+          route: "/parent-attendance-screen",
+          priority: "high",
+          student_id: delivery.studentIds.length === 1
+            ? delivery.studentIds[0]
+            : null,
+          is_read: false,
+        })),
+      );
+      if (logError) throw logError;
+    }
+
+    const eventRows = newDeliveries.map((delivery) => ({
       school_id: school,
-      user_id: parentUserId,
+      user_id: delivery.userId,
       event_type: "attendance_marked",
+      dedupe_key: `attendance:${delivery.userId}:${delivery.entityId}`,
       event_data: {
-        student_ids: studentIds,
+        student_ids: delivery.studentIds,
+        student_id: delivery.studentIds.length === 1 ? delivery.studentIds[0] : "",
         status: "absent",
         date: attendanceDate,
-        message:
-          `Your child was marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`,
+        message: delivery.message,
         reference_type: "attendance",
+        reference_id: delivery.entityId,
+        route: "/parent-attendance-screen",
       },
     }));
 
-    const { data: events, error: eventError } = await svc
-      .from("notification_events")
-      .insert(eventRows)
-      .select("id");
+    const { data: events, error: eventError } = eventRows.length === 0
+      ? { data: [], error: null }
+      : await svc.from("notification_events").insert(eventRows).select("id");
     if (!eventError) {
       const eventIds = (events ?? []).map((row: { id: string }) =>
         `${row.id ?? ""}`.trim()
@@ -341,6 +403,12 @@ export async function handleAttendance(
     }
     if (url.searchParams.get("date")) {
       q = q.eq("date", url.searchParams.get("date")!);
+    }
+    if (url.searchParams.get("start_date")) {
+      q = q.gte("date", url.searchParams.get("start_date")!);
+    }
+    if (url.searchParams.get("end_date")) {
+      q = q.lte("date", url.searchParams.get("end_date")!);
     }
     if (url.searchParams.get("subject_id")) {
       q = q.eq("subject_id", url.searchParams.get("subject_id")!);
@@ -694,13 +762,19 @@ export async function handleAttendance(
     if (url.searchParams.get("date")) {
       q = q.eq("date", url.searchParams.get("date")!);
     }
+    if (url.searchParams.get("start_date")) {
+      q = q.gte("date", url.searchParams.get("start_date")!);
+    }
+    if (url.searchParams.get("end_date")) {
+      q = q.lte("date", url.searchParams.get("end_date")!);
+    }
     if (url.searchParams.get("staff_id")) {
       q = q.eq("staff_id", url.searchParams.get("staff_id")!);
     }
     if (!canDisplayStaffQr(roleName) && linkedStaffId) {
       q = q.eq("staff_id", linkedStaffId);
     }
-    const { data, error } = await q;
+    const { data, error } = await q.order("date", { ascending: false });
     if (error) return fail(error.message);
     return ok(data);
   }

@@ -6,11 +6,15 @@ extension BackendAttendanceApi on BackendApiClient {
   Future<List<AttendanceSessionModel>> getAttendanceSessions({
     String? sectionId,
     String? date,
+    String? startDate,
+    String? endDate,
   }) async {
     try {
       final queryParams = <String, dynamic>{};
       if (sectionId != null) queryParams['section_id'] = sectionId;
       if (date != null) queryParams['date'] = date;
+      if (startDate != null) queryParams['start_date'] = startDate;
+      if (endDate != null) queryParams['end_date'] = endDate;
 
       final response = await _dio.get(
         '/attendance/sessions',
@@ -282,10 +286,18 @@ extension BackendAttendanceApi on BackendApiClient {
 
   Future<List<StaffAttendanceModel>> getStaffAttendanceForDate({
     String? date,
+    String? startDate,
+    String? endDate,
   }) async {
     try {
       final queryParams = <String, dynamic>{};
       if (date != null && date.isNotEmpty) queryParams['date'] = date;
+      if (startDate != null && startDate.isNotEmpty) {
+        queryParams['start_date'] = startDate;
+      }
+      if (endDate != null && endDate.isNotEmpty) {
+        queryParams['end_date'] = endDate;
+      }
 
       final response = await _dio.get(
         '/attendance/staff',

@@ -20,6 +20,10 @@ void main() {
     expect(source, contains('reason: r.reason ?? r.remarks ?? ""'));
     expect(source, contains('status: "submitted"'));
     expect(source, contains('status: "needs_review"'));
+    expect(source, contains('notification_logs'));
+    expect(source, contains('entity_type: "attendance"'));
+    expect(source, contains('route: "/parent-attendance-screen"'));
+    expect(source, contains('dedupe_key: `attendance:'));
     expect(
       source,
       isNot(

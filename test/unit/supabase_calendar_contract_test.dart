@@ -28,7 +28,21 @@ void main() {
     expect(index, contains('path.startsWith("/parent-teacher-meetings")'));
     expect(calendar, contains('svc.from("events")'));
     expect(calendar, contains('svc.from("holidays")'));
+    expect(calendar, contains('roleName(user) !== "principal"'));
+    expect(calendar, contains('return fail("forbidden", 403)'));
     expect(communications, contains('parent_teacher_meetings'));
     expect(communications, contains('/parent-teacher-meetings'));
+  });
+
+  test('calendar uses one visual surface for every role and limits creation', () {
+    final source = File(
+      'lib/features/calendar/presentation/screens/events_calendar_screen/events_calendar_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('_buildSharedCalendar()'));
+    expect(source, contains('SchoolDeskModuleScaffold('));
+    expect(source, contains('floatingActionButton: _canManageEvents'));
+    expect(source, contains("label: const Text('Create event')"));
+    expect(source, contains('_buildCalendarSummary()'));
   });
 }

@@ -3516,12 +3516,6 @@ class _TeacherDetailPage extends StatelessWidget {
                   values: staff.assignedClasses,
                   emptyText: 'No classes assigned',
                 ),
-                const SizedBox(height: 10),
-                _DetailChipSection(
-                  title: 'Subjects',
-                  values: staff.subjects,
-                  emptyText: 'No subjects assigned',
-                ),
               ],
             ),
           ],

@@ -25,10 +25,12 @@ void main() {
       );
     });
 
-    test('staff_id is required for leave submission', () {
+    test('staff leave submissions are bound to the signed-in teacher', () {
+      expect(source, contains('only teachers can submit staff leave requests'));
+      expect(source, contains('currentStaffId(svc, school, user)'));
       expect(
         source,
-        contains('if (!staffId) return fail("staff_id required", 400)'),
+        contains('staff leave request must belong to the signed-in teacher'),
       );
     });
 
@@ -46,6 +48,19 @@ void main() {
       // PUT /approve (alias)
       expect(source, contains('/leave\\/applications\\/([^/]+)\\/approve'));
     });
+
+    test(
+      'only principals can decide leave and parents see only linked student leave',
+      () {
+        expect(source, contains('canReviewLeaves(user)'));
+        expect(source, contains('principal access required'));
+        expect(source, contains('parentCanAccessStudent'));
+        expect(
+          source,
+          contains('student leave request must belong to a linked child'),
+        );
+      },
+    );
 
     test('approve handler creates notification_events for teacher', () {
       expect(source, contains('notification_events'));

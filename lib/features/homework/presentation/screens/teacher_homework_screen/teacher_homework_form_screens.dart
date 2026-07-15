@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -795,16 +794,6 @@ class _TeacherHomeworkSubmissionsScreenState
         status: normalizedStatus,
         remarks: comment,
       );
-      final notificationService = await NotificationService.getInstance();
-      await notificationService.triggerHomeworkFeedbackAlert(
-        homeworkId: _homeworkId,
-        homeworkTitle: teacherFlowText(
-          widget.args.homework['title'],
-          fallback: 'Homework',
-        ),
-        comment: comment,
-        studentId: teacherFlowText(submission['student_id']),
-      );
       await _loadSubmissions();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1078,11 +1067,16 @@ class _TeacherHomeworkSubmissionsScreenState
 
   List<String> _submissionAttachmentUrls(Map<String, dynamic> submission) {
     final urls = <String>[];
+    void addUnique(String url) {
+      if (url.isNotEmpty && !urls.contains(url)) urls.add(url);
+    }
     final single = teacherFlowText(submission['attachment_url']);
-    if (single.isNotEmpty) urls.add(single);
+    addUnique(single);
     final multi = submission['attachment_urls'];
     if (multi is List) {
-      urls.addAll(multi.map(teacherFlowText).where((url) => url.isNotEmpty));
+      for (final url in multi.map(teacherFlowText)) {
+        addUnique(url);
+      }
     }
     return urls;
   }

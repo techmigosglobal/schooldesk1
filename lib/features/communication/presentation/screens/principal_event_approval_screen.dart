@@ -582,90 +582,61 @@ class _PrincipalEventApprovalScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
 
+    if (isDesktop) {
+      return DesktopScreenWrapper(
+        breadcrumbs: ['Communication', 'Events'],
 
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
+        title: 'Event Approval',
 
+        actions: const [],
 
-        MediaQuery.sizeOf(context).width,
+        child: Card(
+          elevation: 0,
 
+          child: Padding(
+            padding: const EdgeInsets.all(32),
 
-      );
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
 
+                children: [
+                  Icon(
+                    Icons.desktop_windows_rounded,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
 
-      if (isDesktop) {
+                  const SizedBox(height: 16),
 
+                  Text(
+                    'Event Approval',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
 
-        return DesktopScreenWrapper(
+                  const SizedBox(height: 8),
 
-
-          breadcrumbs: ['Communication', 'Events'],
-
-
-          title: 'Event Approval',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Event Approval', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
+                  Text(
+                    'Desktop view coming soon',
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.color?.withOpacity(0.5),
+                    ),
+                  ),
+                ],
               ),
-
-
             ),
-
-
           ),
-
-
-        );
-
-
-      }
+        ),
+      );
+    }
 
     return SchoolDeskModuleScaffold(
       title: 'Event Approvals',
@@ -741,6 +712,7 @@ class _PrincipalEventApprovalScreenState
 
   Widget _buildPostCard(Map<String, dynamic> post, {bool highlighted = false}) {
     final attachments = EventPostMediaItem.parseList(post['media_urls']);
+    final postId = (post['id'] ?? '').toString().trim();
     final status = (post['approval_status'] ?? 'draft').toString();
     final destinations = _labels(post['destinations']);
 
@@ -794,7 +766,7 @@ class _PrincipalEventApprovalScreenState
                   _metaChip(Icons.place_outlined, destinations.join(', ')),
               ],
             ),
-            _buildAttachmentSection(attachments),
+            _buildAttachmentSection(attachments, postId: postId),
             _buildDecisionActions(post),
           ],
         ),
@@ -802,7 +774,10 @@ class _PrincipalEventApprovalScreenState
     );
   }
 
-  Widget _buildAttachmentSection(List<EventPostMediaItem> attachments) {
+  Widget _buildAttachmentSection(
+    List<EventPostMediaItem> attachments, {
+    required String postId,
+  }) {
     if (attachments.isEmpty) return const SizedBox(height: 14);
     return Padding(
       padding: const EdgeInsets.only(top: 16, bottom: 14),
@@ -822,7 +797,8 @@ class _PrincipalEventApprovalScreenState
             children: attachments.map((attachment) {
               if (attachment.isImage) {
                 return InkWell(
-                  onTap: () => _openAttachmentPreview(attachment),
+                  onTap: () =>
+                      _openAttachmentPreview(attachment, postId: postId),
                   borderRadius: BorderRadius.circular(10),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
@@ -831,7 +807,8 @@ class _PrincipalEventApprovalScreenState
                       width: 132,
                       height: 96,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _fileTile(attachment),
+                      errorBuilder: (_, __, ___) =>
+                          _fileTile(attachment, postId: postId),
                     ),
                   ),
                 );
@@ -849,7 +826,7 @@ class _PrincipalEventApprovalScreenState
                   ),
                 );
               }
-              return _fileTile(attachment);
+              return _fileTile(attachment, postId: postId);
             }).toList(),
           ),
         ],
@@ -857,11 +834,11 @@ class _PrincipalEventApprovalScreenState
     );
   }
 
-  Widget _fileTile(EventPostMediaItem attachment) {
+  Widget _fileTile(EventPostMediaItem attachment, {required String postId}) {
     return SizedBox(
       width: 220,
       child: OutlinedButton.icon(
-        onPressed: () => _openAttachmentPreview(attachment),
+        onPressed: () => _openAttachmentPreview(attachment, postId: postId),
         icon: Icon(
           attachment.isPdf
               ? Icons.picture_as_pdf_outlined
@@ -933,10 +910,12 @@ class _PrincipalEventApprovalScreenState
     );
   }
 
-  Future<void> _openAttachmentPreview(EventPostMediaItem attachment) async {
+  Future<void> _openAttachmentPreview(
+    EventPostMediaItem attachment, {
+    required String postId,
+  }) async {
     await openEventPostMediaPreview(context, attachment);
-    final postId = _selectedPost?['id']?.toString().trim();
-    if (postId != null && postId.isNotEmpty && mounted) {
+    if (postId.isNotEmpty && mounted) {
       setState(() => _viewedAttachmentPostIds.add(postId));
     }
   }

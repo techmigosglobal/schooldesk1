@@ -98,11 +98,16 @@ async function studentNameForId(
 
 function submissionPayload(row: Record<string, unknown>) {
   const urls = Array.isArray(row.file_urls) ? row.file_urls : [];
+  // `remarks` was the legacy shared field. Keep it as a fallback for older
+  // rows, but expose the two authors' messages separately from now on.
+  const parentComment = text(row.parent_comment) || text(row.remarks);
   return {
     ...row,
     attachment_urls: urls,
     attachment_url: text(urls[0]),
-    answer_text: text(row.remarks),
+    parent_comment: parentComment,
+    teacher_feedback: text(row.teacher_feedback),
+    answer_text: parentComment,
     submitted_at: row.submitted_at ?? row.created_at,
   };
 }
@@ -250,9 +255,6 @@ export async function handleHomework(
               entity_type: "homework",
               entity_id: id,
               is_read: false,
-              reference_type: "homework",
-              reference_id: id,
-              action: "assignment",
               route: "/parent-homework-screen/submit",
               student_id: link.student_id,
             }),
@@ -406,6 +408,9 @@ export async function handleHomework(
       student_id: studentId,
       submitted_at: new Date().toISOString(),
       file_urls: [...new Set(fileUrls)],
+      // Preserve the parent's submission comment when a teacher later adds
+      // feedback. `remarks` remains populated only for legacy consumers.
+      parent_comment: text(body.answer_text),
       remarks: text(body.answer_text),
       status: "submitted",
       updated_at: new Date().toISOString(),
@@ -447,18 +452,23 @@ export async function handleHomework(
         entity_type: "homework",
         entity_id: homeworkId,
         is_read: false,
-        reference_type: "homework",
-        reference_id: homeworkId,
-        action: "submission",
         route: "/teacher-homework-screen/submissions",
         student_id: studentId,
         teacher_id: staffId,
       };
       if (teacherUserId) {
-        await svc.from("notification_logs").insert({
+        const { error: notificationError } = await svc.from(
+          "notification_logs",
+        ).insert({
           ...notifBase,
           user_id: teacherUserId,
         });
+        if (notificationError) {
+          console.error(
+            "Failed to write homework submission in-app notification",
+            notificationError.message,
+          );
+        }
         // Create push notification event for the teacher
         try {
           const { data: eventRow } = await svc.from("notification_events")
@@ -493,7 +503,7 @@ export async function handleHomework(
     const { data, error } = await svc.from("homework_submissions").update({
       status: reviewStatus,
       grade: text(body.grade),
-      remarks: reviewRemarks,
+      teacher_feedback: reviewRemarks,
       updated_at: new Date().toISOString(),
     }).eq("id", reviewMatch[1]).eq("school_id", school).eq(
       "homework_id",
@@ -529,12 +539,18 @@ export async function handleHomework(
           entity_type: "homework",
           entity_id: homeworkId,
           is_read: false,
-          reference_type: "homework",
-          reference_id: homeworkId,
-          action: reviewStatus === "reviewed" ? "feedback" : "needs_revision",
+          route: "/parent-homework-screen/submit",
           student_id: studentId,
         }));
-        await svc.from("notification_logs").insert(parentNotifs);
+        const { error: notificationError } = await svc.from(
+          "notification_logs",
+        ).insert(parentNotifs);
+        if (notificationError) {
+          console.error(
+            "Failed to write homework feedback in-app notification",
+            notificationError.message,
+          );
+        }
         // Create push notification events for each parent
         try {
           const eventIds: string[] = [];

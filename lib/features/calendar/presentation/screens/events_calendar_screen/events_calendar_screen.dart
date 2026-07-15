@@ -9,12 +9,11 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 enum _EventFilter {
   month,
@@ -180,9 +179,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         .toLowerCase();
     return role == null || role.isEmpty || role == 'principal';
   }
-
-  bool get _isPrincipalPortal =>
-      widget.portal == SchoolCalendarPortal.principal;
 
   AcademicYearModel? get _selectedAcademicYear {
     for (final year in _academicYears) {
@@ -618,159 +614,33 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Calendar'],
-
-
-          title: 'Calendar',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Calendar', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
-    if (!_isPrincipalPortal) return _buildReadOnlyCalendar();
-
-    return _buildPrincipalCalendar();
+    return _buildSharedCalendar();
   }
 
-  Widget _buildPrincipalCalendar() {
-    return PrincipalDirectoryScaffold(
-      title: 'Academic Calendar',
-      subtitle:
-          'Live school calendar for events, holidays, PTMs, and approvals',
-      loading: _loading,
-      error: _error,
-      onRefresh: _loadData,
-      onAdd: _canManageEvents ? _openCreateEvent : null,
-      addTooltip: 'Create event',
-      addIcon: Icons.event_available_rounded,
-      secondaryActions: _canManageEvents
-          ? [
-              Semantics(
-                button: true,
-                label: 'Open pending event approvals',
-                child: IconButton(
-                  tooltip: 'Approve event posts',
-                  icon: const Icon(Icons.fact_check_rounded),
-                  onPressed: () async {
-                    final changed = await Navigator.pushNamed(
-                      context,
-                      AppRoutes.principalEventApprovals,
-                    );
-                    if (changed == true && mounted) await _loadData();
-                  },
-                ),
-              ),
-              Semantics(
-                button: true,
-                label: 'Refresh school calendar data',
-                child: IconButton(
-                  tooltip: 'Refresh school calendar',
-                  icon: const Icon(Icons.sync_rounded),
-                  onPressed: _loadData,
-                ),
-              ),
-            ]
-          : null,
-      isEmpty: false,
-      emptyState: _buildCalendarEmptyState(),
-      filters: _buildFilters(),
-      slivers: [
-        if (_displayMode == _EventsDisplayMode.agenda)
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(22, 8, 22, 72),
-            sliver: SliverToBoxAdapter(child: _buildAgendaView()),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(22, 8, 22, 72),
-            sliver: SliverToBoxAdapter(child: _buildCalendarView()),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildReadOnlyCalendar() {
+  Widget _buildSharedCalendar() {
     return SchoolDeskModuleScaffold(
       title: 'Academic Calendar',
-      subtitle: 'Holidays, events, PTMs, and school milestones',
+      subtitle: _canManageEvents
+          ? 'Create and manage school events, holidays, PTMs, and milestones'
+          : 'School events, holidays, PTMs, and milestones',
       drawer: _schoolCalendarDrawer(),
       actions: [
+        if (_canManageEvents)
+          Semantics(
+            button: true,
+            label: 'Open pending event approvals',
+            child: IconButton(
+              tooltip: 'Approve event posts',
+              icon: const Icon(Icons.fact_check_rounded),
+              onPressed: () async {
+                final changed = await Navigator.pushNamed(
+                  context,
+                  AppRoutes.principalEventApprovals,
+                );
+                if (changed == true && mounted) await _loadData();
+              },
+            ),
+          ),
         Semantics(
           button: true,
           label: 'Refresh school calendar',
@@ -781,11 +651,19 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           ),
         ),
       ],
+      floatingActionButton: _canManageEvents
+          ? FloatingActionButton.extended(
+              onPressed: () => _openCreateEvent(initialDate: _selectedDate),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Create event'),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
+            SliverToBoxAdapter(child: _buildCalendarSummary()),
             SliverToBoxAdapter(child: _buildFilters()),
             if (_loading)
               const SliverFillRemaining(
@@ -822,6 +700,11 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   Widget _schoolCalendarDrawer() {
     switch (widget.portal) {
+      case SchoolCalendarPortal.principal:
+        return PrincipalDrawer(
+          selectedIndex: PrincipalNav.calendar,
+          onDestinationSelected: (_) {},
+        );
       case SchoolCalendarPortal.teacher:
         return TeacherDrawer(
           selectedIndex: TeacherNav.calendar,
@@ -832,9 +715,78 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           selectedIndex: ParentNav.calendar,
           onDestinationSelected: (_) {},
         );
-      case SchoolCalendarPortal.principal:
-        return const SizedBox.shrink();
     }
+  }
+
+  Widget _buildCalendarSummary() {
+    final today = DateTime.now();
+    final upcoming = _events.where((event) =>
+      !event.isCancelled &&
+      !event.start.isBefore(DateTime(today.year, today.month, today.day))
+    ).length;
+    final holidays = _events.where((event) => event.isHoliday).length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              context.appTheme.primary,
+              context.appTheme.secondary,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: context.appTheme.primary.withAlpha(55),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_month_rounded, color: Colors.white, size: 30),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    DateFormat('MMMM y').format(_monthDateForAcademicYear(_selectedMonth)),
+                    style: GoogleFonts.dmSans(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '$upcoming upcoming  •  $holidays holidays',
+                    style: GoogleFonts.dmSans(
+                      color: Colors.white.withAlpha(220),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: _goToToday,
+              style: TextButton.styleFrom(
+                foregroundColor: context.appTheme.primary,
+                backgroundColor: Colors.white,
+              ),
+              child: const Text('Today'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildCalendarView() {
@@ -976,46 +928,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         ],
       ),
     );
-  }
-
-  Widget _buildCalendarEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          EmptyStateWidget(
-            icon: Icons.event_busy_rounded,
-            title: _events.isEmpty
-                ? 'No calendar entries yet'
-                : 'No calendar entries match these filters',
-            description: _events.isEmpty
-                ? 'Create calendar entries or publish PTM slots for this academic year.'
-                : 'Use Reset filters to return to the full school calendar.',
-          ),
-          if (_events.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: _resetCalendarFilters,
-              icon: const Icon(Icons.filter_alt_off_rounded),
-              label: const Text('Reset filters'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  void _resetCalendarFilters() {
-    setState(() {
-      _query = '';
-      _filter = _EventFilter.month;
-      _displayMode = _EventsDisplayMode.month;
-      _selectedMonth = DateTime.now().month;
-      _selectedDate = DateTime.now();
-      _focusedDay = _selectedDate;
-      _selectedWeekStart = _startOfWeek(_selectedDate);
-    });
   }
 
   Widget _buildFilters() {

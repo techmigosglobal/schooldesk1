@@ -30,29 +30,6 @@ function deliveryWindow(url: URL, body: Record<string, unknown>) {
   return raw === "afternoon" ? "afternoon" : "morning";
 }
 
-type BirthdayRecipient = {
-  userId: string;
-  targetRole: "teacher" | "principal" | "parent";
-  entityType: "birthday" | "birthday_wish";
-  teacherId?: string;
-};
-
-async function usersForStaff(
-  svc: SupabaseClient,
-  school: string,
-  staffIds: string[],
-) {
-  if (staffIds.length === 0) return [];
-  const { data, error } = await svc.from("users")
-    .select("id, linked_id")
-    .eq("school_id", school)
-    .eq("is_active", true)
-    .eq("linked_type", "staff")
-    .in("linked_id", staffIds);
-  if (error) throw error;
-  return data ?? [];
-}
-
 function birthdayTitle(studentNames: string[]) {
   return studentNames.length === 1 ? "Birthday Today" : "Birthdays Today 🎂";
 }
@@ -64,22 +41,16 @@ function birthdayBody(
   if (studentNames.length === 1) {
     const name = studentNames[0];
     if (targetRole === "parent") {
-      return `Wish ${name} a happy birthday today.`;
+      return `Happy Birthday to ${name}! Wishing your child a day filled with joy, laughter, and wonderful memories.`;
     }
-    if (targetRole === "teacher") {
-      return `${name} in your class has a birthday today.`;
-    }
-    return `${name} is celebrating a birthday today.`;
+    return `Today we celebrate ${name}. Please join us in wishing a very happy birthday!`;
   } else {
     const listStr = studentNames.slice(0, -1).join(", ") + " and " +
       studentNames[studentNames.length - 1];
     if (targetRole === "parent") {
-      return `Wish ${listStr} a happy birthday today.`;
+      return `Happy Birthday to ${listStr}! Wishing them a day filled with joy, laughter, and wonderful memories.`;
     }
-    if (targetRole === "teacher") {
-      return `${listStr} in your class have birthdays today.`;
-    }
-    return `${listStr} are celebrating their birthdays today.`;
+    return `Today we celebrate ${listStr}. Please join us in wishing them very happy birthdays!`;
   }
 }
 
@@ -190,16 +161,16 @@ export async function handleBirthdayAlerts(
     return ok({ date, notifications_created: 0 });
   }
 
-  // Fetch all active principals
-  const { data: principals, error: principalError } = await svc.from("users")
-    .select("id")
+  // Birthday highlights are a whole-school celebration: every active parent,
+  // teacher, and principal receives the same daily wishes, not only users
+  // linked to the student's class.
+  const { data: schoolRecipients, error: recipientError } = await svc.from(
+    "users",
+  )
+    .select("id, role_name, linked_id")
     .eq("school_id", school)
-    .eq("is_active", true)
-    .in("role_name", ["principal", "Principal"]);
-  if (principalError) return fail(principalError.message);
-  const principalUserIds = (principals ?? []).map((p) => text(p.id)).filter(
-    Boolean,
-  );
+    .eq("is_active", true);
+  if (recipientError) return fail(recipientError.message);
 
   type StudentInfo = {
     id: string;
@@ -242,56 +213,23 @@ export async function handleBirthdayAlerts(
       photo_url: text(student.photo_url),
     };
 
-    // A. Add student to linked parents
-    const { data: linkedParents } = await svc.from("parent_student_links")
-      .select("parent_user_id")
-      .eq("school_id", school)
-      .eq("student_id", student.id);
-    if (linkedParents) {
-      for (const link of linkedParents) {
-        const parentId = text(link.parent_user_id);
-        if (parentId) {
-          addStudentToRecipient(parentId, "parent", studentInfo);
-        }
-      }
-    }
-
-    // B. Add student to all principals
-    for (const principalId of principalUserIds) {
-      addStudentToRecipient(principalId, "principal", studentInfo);
-    }
-
-    // C. Add student to teachers of their section
     const sectionId = text(student.current_section_id);
-    if (sectionId) {
-      const { data: section, error: sectionError } = await svc.from("sections")
-        .select("class_teacher_id, co_teacher_id")
-        .eq("school_id", school)
-        .eq("id", sectionId)
-        .maybeSingle();
-
-      if (!sectionError && section) {
-        const staffIds = [
-          text(section.class_teacher_id),
-          text(section.co_teacher_id),
-        ].filter(Boolean);
-
-        if (staffIds.length > 0) {
-          const teachers = await usersForStaff(svc, school, staffIds);
-          for (const teacher of teachers) {
-            const teacherUserId = text(teacher.id);
-            if (teacherUserId) {
-              addStudentToRecipient(
-                teacherUserId,
-                "teacher",
-                studentInfo,
-                sectionId,
-                text(teacher.linked_id),
-              );
-            }
-          }
-        }
-      }
+    for (const recipient of schoolRecipients ?? []) {
+      const targetRole = text(recipient.role_name).toLowerCase();
+      if (
+        targetRole !== "parent" &&
+        targetRole !== "teacher" &&
+        targetRole !== "principal"
+      ) continue;
+      const userId = text(recipient.id);
+      if (!userId) continue;
+      addStudentToRecipient(
+        userId,
+        targetRole,
+        studentInfo,
+        sectionId,
+        targetRole === "teacher" ? text(recipient.linked_id) : undefined,
+      );
     }
   }
 
@@ -321,17 +259,38 @@ export async function handleBirthdayAlerts(
   }
 
   if (rows.length > 0) {
-    const { error: upsertError } = await svc.from("notification_logs").upsert(
-      rows,
-      { onConflict: "user_id,entity_type,entity_id" },
-    );
-    if (upsertError) return fail(upsertError.message);
-
-    const { data: events, error: eventError } = await svc.from(
-      "notification_events",
+    // Older deployments created the recipient uniqueness rule as an index
+    // rather than a table constraint. PostgREST cannot always use that index
+    // as an upsert conflict target, so filter known rows before inserting.
+    // This keeps the daily job idempotent across both schema variants.
+    const entityIds = rows.map((row) => text(row.entity_id)).filter(Boolean);
+    const { data: existingLogs, error: existingLogsError } = await svc.from(
+      "notification_logs",
     )
-      .upsert(
-        rows.map((row) => {
+      .select("user_id, entity_type, entity_id")
+      .eq("school_id", school)
+      .in("entity_type", ["birthday", "birthday_wish"])
+      .in("entity_id", entityIds);
+    if (existingLogsError) return fail(existingLogsError.message);
+
+    const existingLogKeys = new Set(
+      (existingLogs ?? []).map((row) =>
+        `${text(row.user_id)}|${text(row.entity_type)}|${text(row.entity_id)}`
+      ),
+    );
+    const rowsToInsert = rows.filter((row) =>
+      !existingLogKeys.has(
+        `${text(row.user_id)}|${text(row.entity_type)}|${text(row.entity_id)}`,
+      )
+    );
+    if (rowsToInsert.length > 0) {
+      const { error: insertError } = await svc.from("notification_logs").insert(
+        rowsToInsert,
+      );
+      if (insertError) return fail(insertError.message);
+    }
+
+    const eventRows = rows.map((row) => {
           const group = recipientMap.get(row.user_id as string)!;
           return {
             school_id: row.school_id,
@@ -348,12 +307,29 @@ export async function handleBirthdayAlerts(
               section_id: row.section_id ?? "",
               teacher_id: row.teacher_id ?? "",
               students: group.students,
+              photo_url: group.students.length === 1
+                ? group.students[0].photo_url
+                : "",
             },
           };
-        }),
-        { onConflict: "dedupe_key", ignoreDuplicates: true },
-      )
-      .select("id");
+        });
+    const dedupeKeys = eventRows.map((row) => text(row.dedupe_key));
+    const { data: existingEvents, error: existingEventsError } = await svc
+      .from("notification_events")
+      .select("dedupe_key")
+      .in("dedupe_key", dedupeKeys);
+    if (existingEventsError) return fail(existingEventsError.message);
+    const existingDedupeKeys = new Set(
+      (existingEvents ?? []).map((row) => text(row.dedupe_key)),
+    );
+    const eventsToInsert = eventRows.filter(
+      (row) => !existingDedupeKeys.has(text(row.dedupe_key)),
+    );
+    const { data: events, error: eventError } = eventsToInsert.length === 0
+      ? { data: [], error: null }
+      : await svc.from("notification_events").insert(eventsToInsert).select(
+        "id",
+      );
     if (eventError) return fail(eventError.message);
     const eventIds = (events ?? []).map((row) => text(row.id)).filter(Boolean);
     if (eventIds.length > 0) triggerPushProcessing(eventIds);

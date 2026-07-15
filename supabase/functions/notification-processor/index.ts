@@ -434,8 +434,11 @@ function getNotificationTemplate(
         data: {
           event_type: "attendance_marked",
           reference_type: "attendance",
+          reference_id: String(eventData.reference_id || ""),
           status: String(eventData.status || "absent"),
           date: String(eventData.date || ""),
+          student_id: String(eventData.student_id || ""),
+          route: String(eventData.route || "/parent-attendance-screen"),
         },
       };
 
@@ -536,6 +539,25 @@ function getNotificationTemplate(
           event_type: "event_created",
           reference_type: "event",
           event_id: String(eventData.event_id || ""),
+        },
+      };
+
+    case "lesson_planner":
+      return {
+        title: String(eventData.title || "New Lesson Planner"),
+        body: String(
+          eventData.message ||
+            "A teacher uploaded a weekly lesson plan for your review.",
+        ),
+        data: {
+          event_type: "lesson_planner",
+          reference_type: "lesson_planner",
+          reference_id: String(eventData.reference_id || ""),
+          route: String(
+            eventData.route || "/principal-lesson-planner-screen",
+          ),
+          section_id: String(eventData.section_id || ""),
+          teacher_id: String(eventData.teacher_id || ""),
         },
       };
 
@@ -941,13 +963,20 @@ async function processNotificationEvent(
     const devices = await activeDeviceTokensForUser(event.user_id);
     if (devices.length === 0) {
       console.log(`No active devices for user ${event.user_id}`);
-      await markEventProcessed(event.id);
+      await supabase.from("notification_events").update({
+        processed: true,
+        sent_at: null,
+        event_data: {
+          ...event.event_data,
+          _push_deferred_no_device: true,
+        },
+      }).eq("id", event.id);
       return {
         processed: true,
         sentCount: 0,
         invalidTokenCount: 0,
         transientFailureCount: 0,
-        reason: "no_active_devices",
+        reason: "deferred_no_active_devices",
       };
     }
 

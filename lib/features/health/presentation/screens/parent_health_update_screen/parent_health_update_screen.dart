@@ -91,7 +91,6 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
     final dosageCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
     DateTime reminderDate = DateTime.now();
-    String reminderTime = 'Morning';
     bool active = true;
 
     showModalBottomSheet(
@@ -176,30 +175,32 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: reminderTime,
-                      decoration: const InputDecoration(
-                        labelText: 'Reminder Time',
-                        border: OutlineInputBorder(),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(ctx).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'Morning',
-                          child: Text('Morning'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Afternoon',
-                          child: Text('Afternoon'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Evening',
-                          child: Text('Evening'),
-                        ),
-                        DropdownMenuItem(value: 'Night', child: Text('Night')),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setModalState(() => reminderTime = v);
-                      },
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.schedule_rounded,
+                            color: Theme.of(ctx).colorScheme.onPrimaryContainer,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'The class teacher, co-teacher and principal will see this in Today\'s Highlights at 4:00 PM on the selected date.',
+                              style: Theme.of(ctx).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      ctx,
+                                    ).colorScheme.onPrimaryContainer,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
                     SwitchListTile(
@@ -228,7 +229,7 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                           'condition': conditionCtrl.text.trim(),
                           'medication': medicationCtrl.text.trim(),
                           'dosage': dosageCtrl.text.trim(),
-                          'reminder_time': reminderTime,
+                          'reminder_time': '4:00 PM',
                           'notes': notesCtrl.text.trim(),
                           'is_active': active,
                         };
@@ -242,17 +243,19 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
-                                  'Health reminder saved. Teacher and principal will be notified.',
+                                  'Health reminder saved. It will appear for the class team and principal at 4:00 PM on the selected date.',
                                 ),
                               ),
                             );
                             _loadHealthRecords(student['id'].toString());
                           }
-                        } on Object catch (e) {
+                        } on Object catch (_) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Failed to save: $e'),
+                                content: const Text(
+                                  'Could not save the health reminder. Please try again.',
+                                ),
                                 backgroundColor: Theme.of(
                                   context,
                                 ).colorScheme.error,
@@ -276,90 +279,61 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
 
+    if (isDesktop) {
+      return DesktopScreenWrapper(
+        breadcrumbs: ['Health', 'Update'],
 
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
+        title: 'Health Update',
 
+        actions: const [],
 
-        MediaQuery.sizeOf(context).width,
+        child: Card(
+          elevation: 0,
 
+          child: Padding(
+            padding: const EdgeInsets.all(32),
 
-      );
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
 
+                children: [
+                  Icon(
+                    Icons.desktop_windows_rounded,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
 
-      if (isDesktop) {
+                  const SizedBox(height: 16),
 
+                  Text(
+                    'Health Update',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
 
-        return DesktopScreenWrapper(
+                  const SizedBox(height: 8),
 
-
-          breadcrumbs: ['Health', 'Update'],
-
-
-          title: 'Health Update',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Health Update', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
+                  Text(
+                    'Desktop view coming soon',
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.color?.withOpacity(0.5),
+                    ),
+                  ),
+                ],
               ),
-
-
             ),
-
-
           ),
-
-
-        );
-
-
-      }
+        ),
+      );
+    }
 
     return SchoolDeskModuleScaffold(
       title: 'Health Updates',

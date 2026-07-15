@@ -46,16 +46,25 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
     }
     try {
       final children = await _api.getMyStudents();
-      final requests = await _api.getStudentLeaveApplications();
       final selectedIndex = await ParentChildSelectionService.indexFor(
         children,
         fallback: _activeChildIndex,
       );
+      final safeSelectedIndex = children.isEmpty
+          ? 0
+          : selectedIndex.clamp(0, children.length - 1);
+      final selectedChild = children.isNotEmpty
+          ? children[safeSelectedIndex]
+          : null;
+      final studentId = selectedChild?['id']?.toString() ?? '';
+      final requests = studentId.isEmpty
+          ? <Map<String, dynamic>>[]
+          : await _api.getStudentLeaveApplications(studentId: studentId);
       if (!mounted) return;
       setState(() {
         _children = children;
         _requests = requests;
-        _activeChildIndex = selectedIndex;
+        _activeChildIndex = safeSelectedIndex;
         _loading = false;
         _error = null;
       });
@@ -70,90 +79,61 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
 
+    if (isDesktop) {
+      return DesktopScreenWrapper(
+        breadcrumbs: ['Leave'],
 
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
+        title: 'Leave Requests',
 
+        actions: const [],
 
-        MediaQuery.sizeOf(context).width,
+        child: Card(
+          elevation: 0,
 
+          child: Padding(
+            padding: const EdgeInsets.all(32),
 
-      );
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
 
+                children: [
+                  Icon(
+                    Icons.desktop_windows_rounded,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
 
-      if (isDesktop) {
+                  const SizedBox(height: 16),
 
+                  Text(
+                    'Leave Requests',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
 
-        return DesktopScreenWrapper(
+                  const SizedBox(height: 8),
 
-
-          breadcrumbs: ['Leave'],
-
-
-          title: 'Leave Requests',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Leave Requests', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
+                  Text(
+                    'Desktop view coming soon',
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.color?.withOpacity(0.5),
+                    ),
+                  ),
+                ],
               ),
-
-
             ),
-
-
           ),
-
-
-        );
-
-
-      }
+        ),
+      );
+    }
 
     final drawer = ParentDrawer(
       selectedIndex: _selectedNavIndex,
@@ -301,6 +281,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       onSelected: (index) {
         setState(() => _activeChildIndex = index);
         ParentChildSelectionService.saveIndex(_children, index);
+        _loadData(showSpinner: false);
       },
     );
   }

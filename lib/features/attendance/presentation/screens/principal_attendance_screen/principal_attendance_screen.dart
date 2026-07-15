@@ -32,19 +32,30 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   _AttendanceView _view = _AttendanceView.staff;
   String _selectedSectionId = '';
   String _selectedStudentId = '';
+  DateTime _selectedDate = DateTime.now();
   late final PageController _pageController;
   Timer? _staffAttendancePollingTimer;
 
   List<StaffAttendanceModel> _staffAttendance = [];
+  List<StaffAttendanceModel> _monthlyStaffAttendance = [];
   List<StaffModel> _staff = [];
   List<SectionModel> _sections = [];
   List<AttendanceSessionModel> _sessions = [];
+  List<AttendanceSessionModel> _monthlySessions = [];
   List<StudentModel> _sectionStudents = [];
   List<Map<String, dynamic>> _studentAttendanceRecords = [];
   final Map<String, List<StudentModel>> _studentsBySection = {};
   final Map<String, List<Map<String, dynamic>>> _recordsByStudent = {};
 
-  String get _todayText => DateTime.now().toIso8601String().split('T').first;
+  String get _todayText => DateFormat('yyyy-MM-dd').format(DateTime.now());
+  String get _selectedDateText =>
+      DateFormat('yyyy-MM-dd').format(_selectedDate);
+  bool get _isViewingToday => _selectedDateText == _todayText;
+  DateTime get _monthStart => DateTime(_selectedDate.year, _selectedDate.month);
+  DateTime get _monthEnd =>
+      DateTime(_selectedDate.year, _selectedDate.month + 1, 0);
+  String get _monthStartText => DateFormat('yyyy-MM-dd').format(_monthStart);
+  String get _monthEndText => DateFormat('yyyy-MM-dd').format(_monthEnd);
 
   @override
   void initState() {
@@ -70,9 +81,10 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   Future<void> _pollStaffAttendance() async {
+    if (!_isViewingToday) return;
     try {
       final staffAttendance = await BackendApiClient.instance
-          .getStaffAttendanceForDate(date: _todayText);
+          .getStaffAttendanceForDate(date: _selectedDateText);
       if (!mounted) return;
       setState(() {
         _staffAttendance = staffAttendance;
@@ -90,18 +102,28 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     try {
       final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getStaffAttendanceForDate(date: _todayText),
+        api.getStaffAttendanceForDate(date: _selectedDateText),
+        api.getStaffAttendanceForDate(
+          startDate: _monthStartText,
+          endDate: _monthEndText,
+        ),
         api.getStaff(page: 1, pageSize: 500, status: 'active'),
         api.getSections(),
-        api.getAttendanceSessions(date: _todayText),
+        api.getAttendanceSessions(date: _selectedDateText),
+        api.getAttendanceSessions(
+          startDate: _monthStartText,
+          endDate: _monthEndText,
+        ),
       ]);
-      final sections = results[2] as List<SectionModel>;
+      final sections = results[3] as List<SectionModel>;
       if (!mounted) return;
       setState(() {
         _staffAttendance = results[0] as List<StaffAttendanceModel>;
-        _staff = (results[1] as PaginatedList<StaffModel>).data;
+        _monthlyStaffAttendance = results[1] as List<StaffAttendanceModel>;
+        _staff = (results[2] as PaginatedList<StaffModel>).data;
         _sections = sections;
-        _sessions = results[3] as List<AttendanceSessionModel>;
+        _sessions = results[4] as List<AttendanceSessionModel>;
+        _monthlySessions = results[5] as List<AttendanceSessionModel>;
         _selectedSectionId =
             _selectedSectionId.isNotEmpty &&
                 sections.any((section) => section.id == _selectedSectionId)
@@ -174,8 +196,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       final records = await BackendApiClient.instance
           .getStudentAttendanceRecords(
             studentId,
-            month: DateTime.now().month,
-            year: DateTime.now().year,
+            month: _selectedDate.month,
+            year: _selectedDate.year,
           );
       if (!mounted) return;
       setState(() {
@@ -205,8 +227,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           final records = await BackendApiClient.instance
               .getStudentAttendanceRecords(
                 student.id,
-                month: DateTime.now().month,
-                year: DateTime.now().year,
+                month: _selectedDate.month,
+                year: _selectedDate.year,
               );
           return _StudentRecordLoad.success(student.id, records);
         } on Object catch (error) {
@@ -230,90 +252,61 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
 
+    if (isDesktop) {
+      return DesktopScreenWrapper(
+        breadcrumbs: ['Attendance'],
 
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
+        title: 'Attendance',
 
+        actions: const [],
 
-        MediaQuery.sizeOf(context).width,
+        child: Card(
+          elevation: 0,
 
+          child: Padding(
+            padding: const EdgeInsets.all(32),
 
-      );
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
 
+                children: [
+                  Icon(
+                    Icons.desktop_windows_rounded,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
 
-      if (isDesktop) {
+                  const SizedBox(height: 16),
 
+                  Text(
+                    'Attendance',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
 
-        return DesktopScreenWrapper(
+                  const SizedBox(height: 8),
 
-
-          breadcrumbs: ['Attendance'],
-
-
-          title: 'Attendance',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Attendance', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
+                  Text(
+                    'Desktop view coming soon',
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.color?.withOpacity(0.5),
+                    ),
+                  ),
+                ],
               ),
-
-
             ),
-
-
           ),
-
-
-        );
-
-
-      }
+        ),
+      );
+    }
 
     return PopScope(
       canPop: true,
@@ -331,6 +324,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   children: [
                     _topBar(),
                     _modePicker(),
+                    _dateNavigator(),
                     Expanded(child: _viewPage(_activePrincipalView())),
                   ],
                 ),
@@ -497,6 +491,78 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     setState(() => _view = view);
   }
 
+  Widget _dateNavigator() {
+    final dateLabel = DateFormat('EEE, dd MMM yyyy').format(_selectedDate);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: _SoftCard(
+        color: const Color(0xFFEAF5FF),
+        child: Row(
+          children: [
+            const _IconBubble(
+              icon: Icons.calendar_month_rounded,
+              color: Color(0xFF1976E8),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _isViewingToday
+                        ? 'Reviewing today'
+                        : 'Reviewing $dateLabel',
+                    style: _UiText.title,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${DateFormat('MMMM yyyy').format(_selectedDate)} archive is available below.',
+                    style: _UiText.caption,
+                  ),
+                ],
+              ),
+            ),
+            if (!_isViewingToday)
+              TextButton(onPressed: _showToday, child: const Text('Today')),
+            IconButton(
+              tooltip: 'Choose attendance date',
+              onPressed: _chooseAttendanceDate,
+              icon: const Icon(Icons.edit_calendar_rounded),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showToday() => _setAttendanceDate(DateTime.now());
+
+  Future<void> _chooseAttendanceDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+      helpText: 'Review attendance by date',
+    );
+    if (picked != null) await _setAttendanceDate(picked);
+  }
+
+  Future<void> _setAttendanceDate(DateTime date) async {
+    final normalized = DateTime(date.year, date.month, date.day);
+    final monthChanged =
+        normalized.year != _selectedDate.year ||
+        normalized.month != _selectedDate.month;
+    setState(() {
+      _selectedDate = normalized;
+      if (monthChanged) {
+        _recordsByStudent.clear();
+        _studentAttendanceRecords = const [];
+      }
+    });
+    await _load();
+  }
+
   Widget _staffView() {
     final attendanceByStaffId = {
       for (final row in _staffAttendance) row.staffId: row,
@@ -507,7 +573,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionHeader('Staff Attendance Record', action: _todayText),
+          _sectionHeader('Staff Attendance Record', action: _selectedDateText),
           const SizedBox(height: 12),
           _SoftCard(
             child: Row(
@@ -540,7 +606,60 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   ),
                 ),
               ),
+          const SizedBox(height: 8),
+          _monthlyStaffArchive(),
         ],
+      ),
+    );
+  }
+
+  Widget _monthlyStaffArchive() {
+    final byDate = <String, List<StaffAttendanceModel>>{};
+    for (final row in _monthlyStaffAttendance) {
+      final date = row.date == null
+          ? ''
+          : DateFormat('yyyy-MM-dd').format(row.date!.toLocal());
+      if (date.isEmpty) continue;
+      byDate.putIfAbsent(date, () => []).add(row);
+    }
+    final dates = byDate.keys.toList()..sort((a, b) => b.compareTo(a));
+    return _SoftCard(
+      padding: EdgeInsets.zero,
+      child: ExpansionTile(
+        leading: const _IconBubble(
+          icon: Icons.inventory_2_outlined,
+          color: Color(0xFF6557E8),
+        ),
+        title: Text(
+          '${DateFormat('MMMM').format(_selectedDate)} staff archive',
+          style: _UiText.title,
+        ),
+        subtitle: Text(
+          '${_monthlyStaffAttendance.length} check-in${_monthlyStaffAttendance.length == 1 ? '' : 's'} this month',
+          style: _UiText.caption,
+        ),
+        children: dates.isEmpty
+            ? const [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: _EmptyLine('No staff check-ins for this month.'),
+                ),
+              ]
+            : dates.map((date) {
+                final rows = byDate[date] ?? const [];
+                final checkedIn = rows.where((row) => row.checkedIn).length;
+                return ListTile(
+                  leading: const Icon(Icons.event_available_rounded),
+                  title: Text(
+                    DateFormat('EEE, dd MMM').format(DateTime.parse(date)),
+                  ),
+                  subtitle: Text(
+                    '$checkedIn staff check-in${checkedIn == 1 ? '' : 's'}',
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => _setAttendanceDate(DateTime.parse(date)),
+                );
+              }).toList(),
       ),
     );
   }
@@ -651,10 +770,12 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionHeader('Class Registers', action: _todayText),
+          _sectionHeader('Class Registers', action: _selectedDateText),
           const SizedBox(height: 12),
           if (sessions.isEmpty)
-            const _SoftCard(child: _EmptyLine('No sessions found today.'))
+            const _SoftCard(
+              child: _EmptyLine('No sessions found for this date.'),
+            )
           else
             for (final session in sessions)
               Padding(
@@ -759,7 +880,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Marked today: $_markedStudentsToday/$_expectedStudentsToday',
+                      'Marked ${_isViewingToday ? 'today' : DateFormat('dd MMM').format(_selectedDate)}: $_markedStudentsToday/$_expectedStudentsToday',
                       style: _UiText.title,
                     ),
                   ),
@@ -789,7 +910,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                         onTap: () => _openStudent(student),
                       ),
                       _StudentAttendanceMeta(
-                        record: _latestStudentRecord(student.id),
+                        record: _selectedDayStudentRecord(student.id),
                         dateLabel: _recordDate,
                         timeLabel: _recordTime,
                         statusLabel: _recordStatus,
@@ -799,8 +920,83 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   ),
                 ),
               ),
+            const SizedBox(height: 8),
+            _monthlyStudentArchive(),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _monthlyStudentArchive() {
+    final sessions = _monthlySessions
+        .where(
+          (session) =>
+              _selectedSectionId.isEmpty ||
+              session.sectionId == _selectedSectionId,
+        )
+        .toList();
+    final byDate = <String, List<AttendanceSessionModel>>{};
+    for (final session in sessions) {
+      final date = session.date.trim();
+      if (date.isEmpty) continue;
+      byDate.putIfAbsent(date, () => []).add(session);
+    }
+    final dates = byDate.keys.toList()..sort((a, b) => b.compareTo(a));
+    return _SoftCard(
+      padding: EdgeInsets.zero,
+      child: ExpansionTile(
+        leading: const _IconBubble(
+          icon: Icons.history_rounded,
+          color: Color(0xFF10A7A7),
+        ),
+        title: Text(
+          '${DateFormat('MMMM').format(_selectedDate)} class archive',
+          style: _UiText.title,
+        ),
+        subtitle: Text(
+          '${sessions.length} class register${sessions.length == 1 ? '' : 's'} this month',
+          style: _UiText.caption,
+        ),
+        children: dates.isEmpty
+            ? const [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: _EmptyLine('No class registers for this month.'),
+                ),
+              ]
+            : dates.map((date) {
+                final daySessions = byDate[date] ?? const [];
+                final marked = daySessions.fold<int>(
+                  0,
+                  (sum, session) => sum + _effectiveMarkedCount(session),
+                );
+                final present = daySessions.fold<int>(
+                  0,
+                  (sum, session) => sum + _effectivePresentCount(session),
+                );
+                final isComplete = daySessions.every(
+                  (session) => !_isIncompleteSession(session),
+                );
+                return ListTile(
+                  leading: Icon(
+                    isComplete
+                        ? Icons.fact_check_rounded
+                        : Icons.pending_actions_rounded,
+                    color: isComplete
+                        ? const Color(0xFF24A765)
+                        : const Color(0xFFF59E0B),
+                  ),
+                  title: Text(
+                    DateFormat('EEE, dd MMM').format(DateTime.parse(date)),
+                  ),
+                  subtitle: Text(
+                    '${daySessions.length} register${daySessions.length == 1 ? '' : 's'} · $present present · $marked marked',
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => _setAttendanceDate(DateTime.parse(date)),
+                );
+              }).toList(),
       ),
     );
   }
@@ -1096,7 +1292,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         scope: 'principal_attendance',
         parameters: {
           'section_id': _selectedSectionId,
-          'date': _todayText,
+          'date': _selectedDateText,
           'student_count': rows.length,
           'sessions': _sessions.length,
         },
@@ -1116,7 +1312,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       } else {
         final bytes = await PdfService.getInstance().generateAttendanceReport(
           className: _sectionLabel(_selectedSectionId),
-          month: DateFormat('dd MMM yyyy').format(DateTime.now()),
+          month: DateFormat('dd MMM yyyy').format(_selectedDate),
           students: rows,
           schoolName: AppConstants.appName,
         );
@@ -1151,12 +1347,13 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     }).toList();
   }
 
-  Map<String, dynamic>? _latestStudentRecord(String studentId) {
-    final records = _recordsByStudent[studentId] ?? const [];
+  Map<String, dynamic>? _selectedDayStudentRecord(String studentId) {
+    final records = (_recordsByStudent[studentId] ?? const [])
+        .where((row) => _recordDate(row) == _selectedDateText)
+        .toList();
     if (records.isEmpty) return null;
-    final sorted = [...records];
-    sorted.sort((a, b) => _recordDateTime(b).compareTo(_recordDateTime(a)));
-    return sorted.first;
+    records.sort((a, b) => _recordDateTime(b).compareTo(_recordDateTime(a)));
+    return records.first;
   }
 
   DateTime _recordDateTime(Map<String, dynamic> row) {
@@ -1331,7 +1528,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   );
 
   String _studentStatusLabel(String studentId) {
-    final record = _latestStudentRecord(studentId);
+    final record = _selectedDayStudentRecord(studentId);
     if (record == null) return 'Unmarked';
     final status = _recordStatus(record);
     return status.toLowerCase() == 'unmarked' ? 'Unmarked' : status;
@@ -1489,7 +1686,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
 
   String _dateOnly(String value) {
     final text = value.trim();
-    if (text.isEmpty) return _todayText;
+    if (text.isEmpty) return _selectedDateText;
     return text.split('T').first;
   }
 

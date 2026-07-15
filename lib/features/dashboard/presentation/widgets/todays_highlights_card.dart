@@ -355,10 +355,17 @@ class _BirthdayAlertTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            acknowledged ? Icons.check_circle_rounded : Icons.cake_rounded,
-            size: 16,
-            color: acknowledged ? Colors.green : pink,
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: pink.withAlpha(25),
+            foregroundImage: notification.studentPhotoUrl.isNotEmpty
+                ? NetworkImage(notification.studentPhotoUrl)
+                : null,
+            child: Icon(
+              acknowledged ? Icons.check_circle_rounded : Icons.cake_rounded,
+              size: 18,
+              color: acknowledged ? Colors.green : pink,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(

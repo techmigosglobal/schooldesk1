@@ -117,15 +117,19 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         final finalName = studentName.isEmpty ? 'your child' : studentName;
         
         String prettyStatus = decision;
-        if (decision == 'approved') prettyStatus = 'Approved';
-        else if (decision == 'rejected') prettyStatus = 'Rejected';
-        else if (decision == 'clarification_required') prettyStatus = 'Clarification Required';
+        if (decision == 'approved') {
+          prettyStatus = 'Approved';
+        } else if (decision == 'rejected') {
+          prettyStatus = 'Rejected';
+        } else if (decision == 'clarification_required') {
+          prettyStatus = 'Clarification Required';
+        }
 
         NotificationService.getInstance().then((s) => s.triggerFeeApprovalAlert(
           studentName: finalName,
           status: prettyStatus,
         ));
-      } catch (_) {}
+      } on Object catch (_) {}
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

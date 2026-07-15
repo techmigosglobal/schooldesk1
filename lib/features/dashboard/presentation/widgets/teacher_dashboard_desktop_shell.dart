@@ -321,11 +321,14 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
                 : 'Punch-in ${myAttendance!.checkInTimeLabel}',
             icon: Icons.qr_code_scanner_rounded,
             color: teacherFlowAccent,
-            onTap: () => Navigator.pushNamed(
-              context,
-              AppRoutes.teacherMyAttendance,
-              arguments: {'auto_scan': true},
-            ),
+            onTap: () async {
+              await Navigator.pushNamed(
+                context,
+                AppRoutes.teacherMyAttendance,
+                arguments: {'auto_scan': true},
+              );
+              onRefresh();
+            },
           ),
           if (timetable.isEmpty)
             _FeedItem(

@@ -56,5 +56,9 @@ void main() {
       contains("request['from_date'] ?? request['start_date']"),
     );
     expect(leaveScreen, contains("request['to_date'] ?? request['end_date']"));
+    expect(
+      leaveScreen,
+      contains('getStudentLeaveApplications(studentId: studentId)'),
+    );
   });
 }

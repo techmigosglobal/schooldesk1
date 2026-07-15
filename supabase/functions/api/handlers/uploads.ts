@@ -124,7 +124,7 @@ async function notifyUsersByRole(
   let usersQuery = svc.from("users").select("id").eq(
     "school_id",
     school,
-  ).eq("role_name", roleName);
+  ).ilike("role_name", roleName);
   if (payload.excludeUserId?.trim()) {
     usersQuery = usersQuery.neq("id", payload.excludeUserId.trim());
   }
@@ -851,6 +851,20 @@ export async function handleEvents(
       seg,
     ).eq("school_id", school).select().single();
     if (error) return fail(error.message);
+    if (body.is_submit === true) {
+      try {
+        await notifyUsersByRole(svc, school, "principal", {
+          title: "Event post pending approval",
+          body: `${payload.title} was updated and submitted for review.`,
+          type: "pending_approval",
+          referenceType: "event_post",
+          referenceId: `${data.id ?? seg}`,
+        });
+      } catch {
+        // Saving the teacher's update remains successful even if the
+        // notification fan-out is temporarily unavailable.
+      }
+    }
     return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && parts[1] === "approve" && method === "POST") {

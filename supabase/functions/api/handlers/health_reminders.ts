@@ -16,7 +16,26 @@ function text(value: unknown, fallback = "") {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function isAfterFourPmIndia() {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date()),
+  );
+  return Number.isFinite(hour) && hour >= 16;
 }
 
 function cleanDate(value: unknown) {
@@ -81,15 +100,14 @@ async function resolveStudentRecipients(
   const recipients: Recipient[] = [];
   if (staffIds.size > 0) {
     const { data: teachers, error: teacherError } = await svc.from("users")
-      .select("id, linked_id")
+      .select("id, linked_id, role_name")
       .eq("school_id", school)
       .eq("is_active", true)
-      .eq("linked_type", "staff")
       .in("linked_id", [...staffIds]);
     if (teacherError) throw teacherError;
     for (const teacher of teachers ?? []) {
       const userId = text(teacher.id);
-      if (userId) {
+      if (userId && text(teacher.role_name).toLowerCase() === "teacher") {
         recipients.push({
           userId,
           targetRole: "teacher",
@@ -100,19 +118,28 @@ async function resolveStudentRecipients(
   }
 
   const { data: principals, error: principalError } = await svc.from("users")
-    .select("id")
+    .select("id, role_name")
     .eq("school_id", school)
-    .eq("is_active", true)
-    .eq("role_name", "principal");
+    .eq("is_active", true);
   if (principalError) throw principalError;
   for (const principal of principals ?? []) {
     const userId = text(principal.id);
-    if (userId) recipients.push({ userId, targetRole: "principal" });
+    if (userId && text(principal.role_name).toLowerCase() === "principal") {
+      recipients.push({ userId, targetRole: "principal" });
+    }
   }
 
   const name = [student.first_name, student.last_name].map((part) => text(part))
     .filter(Boolean).join(" ") || "Student";
-  return { studentName: name, sectionId, recipients };
+  const uniqueRecipients = new Map<string, Recipient>();
+  for (const recipient of recipients) {
+    uniqueRecipients.set(recipient.userId, recipient);
+  }
+  return {
+    studentName: name,
+    sectionId,
+    recipients: [...uniqueRecipients.values()],
+  };
 }
 
 function notificationBody(
@@ -137,6 +164,7 @@ async function notifyHealthRecipients(
   recipients: Recipient[],
 ) {
   const reminderId = text(reminder.id);
+  if (!reminderId || recipients.length === 0) return 0;
   const rows = recipients.map((recipient) => ({
     school_id: school,
     user_id: recipient.userId,
@@ -154,41 +182,139 @@ async function notifyHealthRecipients(
     teacher_id: recipient.teacherId || null,
     is_read: false,
   }));
-  if (rows.length === 0) return;
-  const { error } = await svc.from("notification_logs").upsert(rows, {
-    onConflict: "user_id,entity_type,entity_id",
-  });
-  if (error) throw error;
-
-  const { data: events, error: eventError } = await svc.from(
-    "notification_events",
+  // Legacy projects have this uniqueness rule as a partial index. PostgREST
+  // cannot target that index in an upsert, so explicitly filter rows first.
+  const { data: existingLogs, error: existingLogsError } = await svc.from(
+    "notification_logs",
   )
-    .upsert(
-      recipients.map((recipient) => ({
-        school_id: school,
-        user_id: recipient.userId,
-        event_type: "health_reminder",
-        dedupe_key: `health:${recipient.userId}:${reminderId}:${
-          text(reminder.reminder_time, "once").toLowerCase()
-        }`,
-        event_data: {
-          title: "Health Reminder",
-          message: notificationBody(studentName, reminder) ||
-            "A parent added a health reminder.",
-          health_reminder_id: reminderId,
-          reference_type: "health_reminder",
-          reference_id: reminderId,
-          student_id: text(reminder.student_id) || "",
-          section_id: sectionId || "",
-          teacher_id: recipient.teacherId || "",
-        },
-      })),
-      { onConflict: "dedupe_key", ignoreDuplicates: true },
-    )
-    .select("id");
+    .select("user_id")
+    .eq("school_id", school)
+    .eq("entity_type", "health_reminder")
+    .eq("entity_id", reminderId);
+  if (existingLogsError) throw existingLogsError;
+  const existingUsers = new Set(
+    (existingLogs ?? []).map((row) => text(row.user_id)),
+  );
+  const logsToInsert = rows.filter((row) =>
+    !existingUsers.has(text(row.user_id))
+  );
+  if (logsToInsert.length > 0) {
+    const { error } = await svc.from("notification_logs").insert(logsToInsert);
+    if (error) throw error;
+  }
+
+  const eventRows = recipients.map((recipient) => ({
+    school_id: school,
+    user_id: recipient.userId,
+    event_type: "health_reminder",
+    dedupe_key: `health:${recipient.userId}:${reminderId}:4pm`,
+    event_data: {
+      title: "Health Reminder",
+      message: notificationBody(studentName, reminder) ||
+        "A parent added a health reminder.",
+      health_reminder_id: reminderId,
+      reference_type: "health_reminder",
+      reference_id: reminderId,
+      student_id: text(reminder.student_id) || "",
+      section_id: sectionId || "",
+      teacher_id: recipient.teacherId || "",
+    },
+  }));
+  const dedupeKeys = eventRows.map((row) => text(row.dedupe_key));
+  const { data: existingEvents, error: existingEventsError } = await svc.from(
+    "notification_events",
+  ).select("dedupe_key").in("dedupe_key", dedupeKeys);
+  if (existingEventsError) throw existingEventsError;
+  const knownEventKeys = new Set(
+    (existingEvents ?? []).map((row) => text(row.dedupe_key)),
+  );
+  const eventsToInsert = eventRows.filter(
+    (row) => !knownEventKeys.has(text(row.dedupe_key)),
+  );
+  const { data: events, error: eventError } = eventsToInsert.length === 0
+    ? { data: [], error: null }
+    : await svc.from("notification_events").insert(eventsToInsert).select("id");
   if (eventError) throw eventError;
   const eventIds = (events ?? []).map((row) => text(row.id)).filter(Boolean);
   if (eventIds.length > 0) triggerPushProcessing(eventIds);
+  return logsToInsert.length;
+}
+
+async function deliverHealthReminders(
+  svc: SupabaseClient,
+  school: string,
+  date: string,
+) {
+  const { data: reminders, error } = await svc.from("health_reminders")
+    .select("*")
+    .eq("school_id", school)
+    .eq("reminder_date", date)
+    .eq("is_active", true);
+  if (error) throw error;
+
+  let notificationsCreated = 0;
+  for (const reminder of reminders ?? []) {
+    const studentId = text(reminder.student_id);
+    if (!studentId) continue;
+    const resolved = await resolveStudentRecipients(svc, school, studentId);
+    if (!resolved) continue;
+    notificationsCreated += await notifyHealthRecipients(
+      svc,
+      school,
+      reminder as Record<string, unknown>,
+      resolved.studentName,
+      resolved.sectionId,
+      resolved.recipients,
+    );
+  }
+  return { remindersProcessed: (reminders ?? []).length, notificationsCreated };
+}
+
+function isAuthorizedJob(req: Request, url: URL) {
+  const configuredSecret = text(Deno.env.get("HEALTH_REMINDER_JOB_SECRET"));
+  const suppliedSecret = text(
+    req.headers.get("x-job-secret") ?? url.searchParams.get("job_secret"),
+  );
+  const token = text(req.headers.get("Authorization")?.replace("Bearer ", ""));
+  const serviceKey = text(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
+  return (configuredSecret.length > 0 && suppliedSecret === configuredSecret) ||
+    (serviceKey.length > 0 && token === serviceKey);
+}
+
+async function runHealthReminderJob(
+  req: Request,
+  url: URL,
+  svc: SupabaseClient,
+  user: User | null,
+) {
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  if (!user && !isAuthorizedJob(req, url)) return fail("unauthorized", 401);
+  const school = user
+    ? sid(user)
+    : text(body.school_id ?? req.headers.get("x-school-id"));
+  const date = cleanDate(body.date ?? url.searchParams.get("date"));
+
+  if (!school && !user) {
+    const { data: schools, error } = await svc.from("schools").select("id");
+    if (error) return fail(error.message);
+    let schoolsProcessed = 0;
+    let notificationsCreated = 0;
+    for (const schoolRow of schools ?? []) {
+      const schoolId = text(schoolRow.id);
+      if (!schoolId) continue;
+      const delivered = await deliverHealthReminders(svc, schoolId, date);
+      schoolsProcessed += 1;
+      notificationsCreated += delivered.notificationsCreated;
+    }
+    return ok({
+      date,
+      schools_processed: schoolsProcessed,
+      notifications_created: notificationsCreated,
+    });
+  }
+  if (!school) return fail("school_id required", 422);
+  const delivered = await deliverHealthReminders(svc, school, date);
+  return ok({ date, ...delivered });
 }
 
 function normalize(row: Record<string, unknown>) {
@@ -208,11 +334,16 @@ export async function handleHealthReminders(
   path: string,
   method: string,
   url: URL,
-  _client: SupabaseClient,
+  _client: SupabaseClient | null,
   svc: SupabaseClient,
-  user: User,
+  user: User | null,
 ): Promise<Response> {
+  if (path === "/jobs/health-reminders/run") {
+    if (method !== "POST") return fail("method not allowed", 405);
+    return runHealthReminderJob(req, url, svc, user);
+  }
   if (path !== "/health-reminders") return fail("not found", 404);
+  if (!user) return fail("unauthorized", 401);
 
   const school = sid(user);
 
@@ -235,6 +366,9 @@ export async function handleHealthReminders(
   }
 
   if (method === "POST") {
+    if (role(user) !== "parent") {
+      return fail("only parents can create health reminders", 403);
+    }
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const studentId = text(body.student_id);
     if (!studentId) return fail("student_id required");
@@ -244,8 +378,6 @@ export async function handleHealthReminders(
     if (!(await parentCanAccessStudent(svc, user, studentId))) {
       return fail("student not linked to parent", 403);
     }
-    const recipients = await resolveStudentRecipients(svc, school, studentId);
-    if (!recipients) return fail("student not found", 404);
     const payload = {
       school_id: school,
       student_id: studentId,
@@ -261,17 +393,19 @@ export async function handleHealthReminders(
     const { data, error } = await svc.from("health_reminders").insert(payload)
       .select("*").single();
     if (error) return fail(error.message);
-    try {
-      await notifyHealthRecipients(
-        svc,
-        school,
-        data as Record<string, unknown>,
-        recipients.studentName,
-        recipients.sectionId,
-        recipients.recipients,
-      );
-    } catch (error) {
-      return fail(error instanceof Error ? error.message : `${error}`);
+
+    // The scheduled 4 PM IST job creates the notifications. A parent adding a
+    // same-day reminder after that time receives the same delivery immediately,
+    // so the class team does not miss an already-open school day.
+    if (payload.reminder_date === todayIso() && isAfterFourPmIndia()) {
+      try {
+        await deliverHealthReminders(svc, school, payload.reminder_date);
+      } catch (deliveryError) {
+        console.error(
+          "health reminder saved but 4 PM delivery failed",
+          deliveryError,
+        );
+      }
     }
     return ok(normalize(data as Record<string, unknown>));
   }

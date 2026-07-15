@@ -21,6 +21,9 @@ declare
     'users',
     'username_aliases'
   ];
+  v_tables_to_delete text[];
+  v_has_remaining_tables boolean;
+  v_pass_deleted_any boolean;
 begin
   if p_school_id is null then
     raise exception 'A school id is required for a data wipe';
@@ -45,27 +48,60 @@ begin
     raise exception 'Wipe blocked: this school has no principal login to preserve';
   end if;
 
-  -- All rows with school_id are deleted unless they require a retained login.
-  -- Dependent rows without school_id are removed by FK
-  -- cascades when their school-scoped parent is deleted.
-  for v_table_name in
-    select c.relname
-    from pg_catalog.pg_attribute a
-    join pg_catalog.pg_class c on c.oid = a.attrelid
-    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public'
-      and c.relkind in ('r', 'p')
-      and a.attname = 'school_id'
-      and a.attnum > 0
-      and not a.attisdropped
-      and c.relname <> all (v_preserved_tables)
-    order by c.relname
-  loop
-    execute format('delete from public.%I where school_id = $1', v_table_name)
-      using p_school_id;
-    get diagnostics v_deleted_rows = row_count;
-    v_deleted_total := v_deleted_total + v_deleted_rows;
-    v_counts := v_counts || jsonb_build_object(v_table_name, v_deleted_rows);
+  -- 1. Gather all public tables that have school_id and are not preserved
+  select array_agg(c.relname)
+    into v_tables_to_delete
+  from pg_catalog.pg_attribute a
+  join pg_catalog.pg_class c on c.oid = a.attrelid
+  join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+    and c.relkind in ('r', 'p')
+    and a.attname = 'school_id'
+    and a.attnum > 0
+    and not a.attisdropped
+    and c.relname <> all (v_preserved_tables);
+
+  -- 2. Multi-pass deletion loop to resolve foreign key constraints dynamically
+  -- Run up to 6 passes to delete dependent tables first
+  for i in 1..6 loop
+    v_pass_deleted_any := false;
+    v_has_remaining_tables := false;
+
+    foreach v_table_name in array v_tables_to_delete loop
+      -- Skip tables we already successfully deleted/processed
+      if v_counts ? v_table_name then
+        continue;
+      end if;
+
+      begin
+        execute format('delete from public.%I where school_id = $1', v_table_name)
+          using p_school_id;
+        get diagnostics v_deleted_rows = row_count;
+        v_deleted_total := v_deleted_total + v_deleted_rows;
+        v_counts := v_counts || jsonb_build_object(v_table_name, v_deleted_rows);
+        v_pass_deleted_any := true;
+      exception when foreign_key_violation then
+        -- Skip for now, try again in next pass once child tables are deleted
+        v_has_remaining_tables := true;
+      end;
+    end loop;
+
+    -- Break early if we made no progress but still have tables remaining to avoid infinite loops
+    if not v_pass_deleted_any and v_has_remaining_tables then
+      exit;
+    end if;
+  end loop;
+
+  -- 3. Final pass: run deletes without exception handling so that any remaining unresolved
+  -- constraint errors are raised back to the caller for visibility
+  foreach v_table_name in array v_tables_to_delete loop
+    if not (v_counts ? v_table_name) then
+      execute format('delete from public.%I where school_id = $1', v_table_name)
+        using p_school_id;
+      get diagnostics v_deleted_rows = row_count;
+      v_deleted_total := v_deleted_total + v_deleted_rows;
+      v_counts := v_counts || jsonb_build_object(v_table_name, v_deleted_rows);
+    end if;
   end loop;
 
   delete from public.username_aliases

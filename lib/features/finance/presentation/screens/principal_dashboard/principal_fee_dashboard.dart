@@ -282,7 +282,10 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 1.5,
+      // Keep the overview compact: these cards are navigation summaries, not
+      // large dashboard panels. A wider ratio also keeps the next actions
+      // visible without an unnecessary scroll on a phone.
+      childAspectRatio: 1.82,
       children: [
         _buildKpiCard(
           title: 'Outstanding Due',
@@ -359,7 +362,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -369,18 +372,18 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
                     Text(
                       title,
                       style: GoogleFonts.ibmPlexSans(
-                        fontSize: 11,
+                        fontSize: 10,
                         color: Colors.white.withOpacity(0.85),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Icon(icon, color: Colors.white, size: 16),
+                      child: Icon(icon, color: Colors.white, size: 15),
                     ),
                   ],
                 ),
@@ -388,7 +391,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
                 Text(
                   value,
                   style: GoogleFonts.ibmPlexSans(
-                    fontSize: 18,
+                    fontSize: 17,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -399,7 +402,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
                     Text(
                       subtitle,
                       style: GoogleFonts.ibmPlexSans(
-                        fontSize: 10,
+                        fontSize: 9,
                         color: Colors.white70,
                       ),
                     ),
@@ -514,7 +517,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 2.2,
+      childAspectRatio: 2.3,
       children: actions
           .map((a) => _actionButton(a.label, a.icon, a.route, a.color))
           .toList(),
@@ -530,12 +533,19 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
       child: Ink(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [color.withOpacity(0.18), color.withOpacity(0.06)],
+            colors: [color.withOpacity(0.22), color.withOpacity(0.09)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withOpacity(0.28)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         padding: const EdgeInsets.all(12),
         child: Row(
@@ -543,7 +553,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withOpacity(0.20),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color, size: 18),

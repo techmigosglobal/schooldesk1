@@ -486,7 +486,11 @@ class StaffModel {
   String get fullName => '$firstName $lastName'.trim();
 
   factory StaffModel.fromJson(Map<String, dynamic> json) {
-    final documents = _listMapValue(json['documents']);
+    // Older API deployments returned this relation under its database name,
+    // while current responses expose the UI-facing `documents` alias.
+    final documents = _listMapValue(
+      json['documents'] ?? json['staff_documents'],
+    );
     return StaffModel(
       id: json['id'] as String,
       schoolId: json['school_id'] as String,
