@@ -92,6 +92,7 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
     final notesCtrl = TextEditingController();
     DateTime reminderDate = DateTime.now();
     bool active = true;
+    bool saving = false;
 
     showModalBottomSheet(
       context: context,
@@ -222,7 +223,8 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(
-                      onPressed: () async {
+                      onPressed: saving ? null : () async {
+                        setModalState(() => saving = true);
                         final payload = {
                           'student_id': student['id'],
                           'reminder_date': _dateValue(reminderDate),
@@ -251,6 +253,7 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                           }
                         } on Object catch (_) {
                           if (mounted) {
+                            setModalState(() => saving = false);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: const Text(
@@ -264,8 +267,14 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                           }
                         }
                       },
-                      icon: const Icon(Icons.save_rounded),
-                      label: const Text('Save Reminder'),
+                      icon: saving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_rounded),
+                      label: Text(saving ? 'Saving...' : 'Save Reminder'),
                     ),
                   ],
                 ),

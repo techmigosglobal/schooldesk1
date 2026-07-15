@@ -779,7 +779,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
         ...row,
         'submission_id': _text(submission['id']),
         'submission_status': submissionStatus,
-        'submission_remarks': _text(submission['remarks']),
+        'submission_remarks': _text(submission['teacher_feedback']),
         'submission_attachment_url': _text(submission['attachment_url']),
         'submission_attachment_urls': submission['attachment_urls'] ?? const [],
         'status': submissionStatus == 'needs_revision'

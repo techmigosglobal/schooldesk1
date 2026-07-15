@@ -959,10 +959,14 @@ class _TeacherHomeworkSubmissionsScreenState
       submission['student_name'] ?? submission['student_id'],
       fallback: 'Student',
     );
-    final answerText = teacherFlowText(
-      submission['answer_text'] ?? submission['remarks'],
+    final rawAnswer = teacherFlowText(
+      submission['parent_comment'] ?? submission['answer_text'] ?? submission['remarks'],
       fallback: '',
     );
+    final teacherFeedback = teacherFlowText(submission['teacher_feedback']);
+    final answerText = (rawAnswer == teacherFeedback && teacherFeedback.isNotEmpty)
+        ? ''
+        : rawAnswer;
     final status = teacherFlowText(submission['status'], fallback: 'submitted');
     final submittedRaw = teacherFlowText(
       submission['submitted_at'] ?? submission['created_at'],

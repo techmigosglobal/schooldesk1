@@ -719,6 +719,22 @@ function getNotificationTemplate(
         },
       };
 
+    case "health_reminder":
+      return {
+        title: String(eventData.title || "Health Reminder"),
+        body: String(eventData.message || "A parent added a health reminder."),
+        data: {
+          event_type: "health_reminder",
+          reference_type: "health_reminder",
+          reference_id: String(eventData.reference_id || ""),
+          health_reminder_id: String(eventData.health_reminder_id || ""),
+          student_id: String(eventData.student_id || ""),
+          section_id: String(eventData.section_id || ""),
+          teacher_id: String(eventData.teacher_id || ""),
+          route: "/notification-center-screen",
+        },
+      };
+
     default:
       return {
         title: "SchoolDesk Notification",

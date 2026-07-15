@@ -99,11 +99,12 @@ async function resolveStudentRecipients(
 
   const recipients: Recipient[] = [];
   if (staffIds.size > 0) {
+    const ids = [...staffIds].join(",");
     const { data: teachers, error: teacherError } = await svc.from("users")
       .select("id, linked_id, role_name")
       .eq("school_id", school)
       .eq("is_active", true)
-      .in("linked_id", [...staffIds]);
+      .or(`linked_id.in.(${ids}),id.in.(${ids})`);
     if (teacherError) throw teacherError;
     for (const teacher of teachers ?? []) {
       const userId = text(teacher.id);
@@ -111,7 +112,7 @@ async function resolveStudentRecipients(
         recipients.push({
           userId,
           targetRole: "teacher",
-          teacherId: text(teacher.linked_id),
+          teacherId: text(teacher.linked_id) || userId,
         });
       }
     }
@@ -394,18 +395,25 @@ export async function handleHealthReminders(
       .select("*").single();
     if (error) return fail(error.message);
 
-    // The scheduled 4 PM IST job creates the notifications. A parent adding a
-    // same-day reminder after that time receives the same delivery immediately,
-    // so the class team does not miss an already-open school day.
-    if (payload.reminder_date === todayIso() && isAfterFourPmIndia()) {
-      try {
-        await deliverHealthReminders(svc, school, payload.reminder_date);
-      } catch (deliveryError) {
-        console.error(
-          "health reminder saved but 4 PM delivery failed",
-          deliveryError,
+    // Always immediately deliver notifications for this specific new reminder
+    // so the class team and principal are notified right when it is created.
+    try {
+      const resolved = await resolveStudentRecipients(svc, school, studentId);
+      if (resolved) {
+        await notifyHealthRecipients(
+          svc,
+          school,
+          data as Record<string, unknown>,
+          resolved.studentName,
+          resolved.sectionId,
+          resolved.recipients,
         );
       }
+    } catch (deliveryError) {
+      console.error(
+        "immediate delivery failed",
+        deliveryError,
+      );
     }
     return ok(normalize(data as Record<string, unknown>));
   }
