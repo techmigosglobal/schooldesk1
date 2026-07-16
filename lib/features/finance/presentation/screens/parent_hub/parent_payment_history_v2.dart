@@ -68,36 +68,38 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       for (final inv in invoices) {
         final payments = inv['payments'];
         if (payments is List) {
-            for (final p in payments.whereType<Map>()) {
-              final payment = Map<String, dynamic>.from(p);
-              final amount =
-                  (payment['amount_paid'] as num?)?.toDouble() ?? 0.0;
-              historyList.add({
-                'id': payment['id'] ?? '',
-                'invoiceId': inv['id'] ?? '',
-                'component': 'Invoice ${inv['invoice_number'] ?? ''}',
-                'amount': amount,
+          for (final p in payments.whereType<Map>()) {
+            final payment = Map<String, dynamic>.from(p);
+            final amount = (payment['amount_paid'] as num?)?.toDouble() ?? 0.0;
+            historyList.add({
+              'id': payment['id'] ?? '',
+              'invoiceId': inv['id'] ?? '',
+              'component': 'Invoice ${inv['invoice_number'] ?? ''}',
+              'amount': amount,
               'date': (payment['payment_date'] ?? '').toString(),
-              'method': (payment['payment_mode'] ?? '').toString(),
+              'method':
+                  (payment['payment_method'] ?? payment['payment_mode'] ?? '')
+                      .toString(),
               'receiptNo': (payment['receipt_number'] ?? '').toString(),
               'student': _studentName(child),
               'class': _studentClass(child),
               'rollNo': _studentRoll(child),
-                'status': 'Paid',
-                'rawStatus': 'completed',
-                'paymentRequest': {
-                  ...payment,
-                  'amount': amount,
-                  'payment_mode': payment['payment_mode'],
-                  'payment_date': payment['payment_date'],
-                  'transaction_ref': payment['reference_number'],
-                  'receipt': {
-                    'receipt_number': payment['receipt_number'],
-                  },
-                  'invoice': inv,
-                  'student': child,
-                },
-              });
+              'status': 'Paid',
+              'rawStatus': 'completed',
+              'paymentRequest': {
+                ...payment,
+                'amount': amount,
+                'payment_method':
+                    payment['payment_method'] ?? payment['payment_mode'],
+                'payment_mode':
+                    payment['payment_method'] ?? payment['payment_mode'],
+                'payment_date': payment['payment_date'],
+                'transaction_ref': payment['reference_number'],
+                'receipt': {'receipt_number': payment['receipt_number']},
+                'invoice': inv,
+                'student': child,
+              },
+            });
           }
         }
       }
@@ -117,7 +119,8 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
           'amount': (request['amount'] as num?)?.toDouble() ?? 0.0,
           'date': (request['payment_date'] ?? request['created_at'] ?? '')
               .toString(),
-          'method': (request['payment_mode'] ?? '').toString(),
+          'method': (request['payment_method'] ?? request['payment_mode'] ?? '')
+              .toString(),
           'receiptNo': (request['request_reference'] ?? '').toString(),
           'student': _studentName(child),
           'class': _studentClass(child),

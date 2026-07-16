@@ -733,6 +733,9 @@ class _AdminFeeStructureFormScreenState
   }
 
   String _initialFrequency(Map<String, dynamic> fee) {
+    if (_selectedCategoryName.toLowerCase().contains('tuition')) {
+      return 'monthly';
+    }
     final raw = _textValue(fee['frequency'] ?? fee['billing_mode']);
     if (raw.isNotEmpty) return _feeFrequencyPayload(raw);
     return _defaultFrequencyForCategory(_selectedCategoryName);
@@ -1669,7 +1672,7 @@ String _defaultFrequencyForCategory(String categoryName, {String? fallback}) {
     RegExp(r'[^a-z0-9]+'),
     ' ',
   );
-  if (text.contains('tuition')) return 'yearly';
+  if (text.contains('tuition')) return 'monthly';
   if (text.contains('book') || text.contains('kit')) return 'one_time';
   return _feeFrequencyPayload(fallback ?? 'term');
 }

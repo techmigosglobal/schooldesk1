@@ -4,8 +4,6 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 /// Parent Health Update screen — parents can set pill/medication reminders
 /// for their children. These reminders are visible to teachers and principals
@@ -223,50 +221,52 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(
-                      onPressed: saving ? null : () async {
-                        setModalState(() => saving = true);
-                        final payload = {
-                          'student_id': student['id'],
-                          'reminder_date': _dateValue(reminderDate),
-                          'condition': conditionCtrl.text.trim(),
-                          'medication': medicationCtrl.text.trim(),
-                          'dosage': dosageCtrl.text.trim(),
-                          'reminder_time': '4:00 PM',
-                          'notes': notesCtrl.text.trim(),
-                          'is_active': active,
-                        };
-                        try {
-                          await BackendApiClient.instance.dio.post(
-                            '/health-reminders',
-                            data: payload,
-                          );
-                          if (mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Health reminder saved. It will appear for the class team and principal at 4:00 PM on the selected date.',
-                                ),
-                              ),
-                            );
-                            _loadHealthRecords(student['id'].toString());
-                          }
-                        } on Object catch (_) {
-                          if (mounted) {
-                            setModalState(() => saving = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text(
-                                  'Could not save the health reminder. Please try again.',
-                                ),
-                                backgroundColor: Theme.of(
-                                  context,
-                                ).colorScheme.error,
-                              ),
-                            );
-                          }
-                        }
-                      },
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              setModalState(() => saving = true);
+                              final payload = {
+                                'student_id': student['id'],
+                                'reminder_date': _dateValue(reminderDate),
+                                'condition': conditionCtrl.text.trim(),
+                                'medication': medicationCtrl.text.trim(),
+                                'dosage': dosageCtrl.text.trim(),
+                                'reminder_time': '4:00 PM',
+                                'notes': notesCtrl.text.trim(),
+                                'is_active': active,
+                              };
+                              try {
+                                await BackendApiClient.instance.dio.post(
+                                  '/health-reminders',
+                                  data: payload,
+                                );
+                                if (mounted) {
+                                  Navigator.pop(ctx);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Health reminder saved. It will appear for the class team and principal at 4:00 PM on the selected date.',
+                                      ),
+                                    ),
+                                  );
+                                  _loadHealthRecords(student['id'].toString());
+                                }
+                              } on Object catch (_) {
+                                if (mounted) {
+                                  setModalState(() => saving = false);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text(
+                                        'Could not save the health reminder. Please try again.',
+                                      ),
+                                      backgroundColor: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
                       icon: saving
                           ? const SizedBox(
                               width: 16,
@@ -288,62 +288,6 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = DesktopBreakpoints.isDesktopWidth(
-      MediaQuery.sizeOf(context).width,
-    );
-
-    if (isDesktop) {
-      return DesktopScreenWrapper(
-        breadcrumbs: ['Health', 'Update'],
-
-        title: 'Health Update',
-
-        actions: const [],
-
-        child: Card(
-          elevation: 0,
-
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-
-                children: [
-                  Icon(
-                    Icons.desktop_windows_rounded,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  Text(
-                    'Health Update',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Text(
-                    'Desktop view coming soon',
-                    style: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.color?.withOpacity(0.5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
     return SchoolDeskModuleScaffold(
       title: 'Health Updates',
       subtitle: 'Set pill reminders for your child',

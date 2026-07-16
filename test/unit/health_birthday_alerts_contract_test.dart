@@ -67,13 +67,12 @@ void main() {
       expect(handler, contains('x-school-id'));
       expect(handler, contains('date_of_birth'));
       expect(handler, contains('birthday_wish'));
-      expect(handler, contains('parent_student_links'));
-      expect(handler, contains('class_teacher_id'));
-      expect(handler, contains('co_teacher_id'));
-      expect(handler, contains('.in("role_name", ["principal", "Principal"])'));
-      expect(handler, contains('upsert('));
-      expect(handler, contains('onConflict: "user_id,entity_type,entity_id"'));
-      expect(handler, contains('onConflict: "dedupe_key"'));
+      expect(handler, contains('whole-school celebration'));
+      expect(handler, contains('schoolRecipients'));
+      expect(handler, contains('targetRole !== "parent"'));
+      expect(handler, contains('existingLogKeys'));
+      expect(handler, contains('existingDedupeKeys'));
+      expect(handler, contains('dedupe_key: `birthday:'));
       expect(handler, contains('delivery_window'));
     });
 

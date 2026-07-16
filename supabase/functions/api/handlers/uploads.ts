@@ -216,6 +216,66 @@ async function notifyUser(
   if (eventRow?.id) triggerPushProcessing(eventRow.id);
 }
 
+async function notifyStudentDocumentParents(
+  svc: SupabaseClient,
+  school: string,
+  studentId: string,
+  documentId: string,
+  documentTitle: string,
+) {
+  const { data: links, error: linkError } = await svc.from(
+    "parent_student_links",
+  ).select("parent_user_id").eq("school_id", school).eq(
+    "student_id",
+    studentId,
+  );
+  if (linkError) throw linkError;
+  const parentIds = [
+    ...new Set(
+      (links ?? []).map((row) => textValue(row.parent_user_id)).filter(Boolean),
+    ),
+  ];
+  if (parentIds.length === 0) return;
+  const title = "New student document";
+  const body = `${documentTitle || "A document"} was added by the school.`;
+  const logs = parentIds.map((parentId) => ({
+    school_id: school,
+    user_id: parentId,
+    target_role: "parent",
+    title,
+    body,
+    type: "document",
+    entity_type: "student_document",
+    entity_id: documentId,
+    route: "/parent-documents-screen",
+    student_id: studentId,
+    is_read: false,
+  }));
+  const { error: logError } = await svc.from("notification_logs").insert(logs);
+  if (logError) throw logError;
+  const { data: events, error: eventError } = await svc.from(
+    "notification_events",
+  ).insert(logs.map((log) => ({
+    school_id: log.school_id,
+    user_id: log.user_id,
+    event_type: "student_document_uploaded",
+    event_data: {
+      title: log.title,
+      message: log.body,
+      reference_type: log.entity_type,
+      reference_id: log.entity_id,
+      route: log.route,
+      student_id: log.student_id,
+    },
+    processed: false,
+  }))).select("id");
+  if (eventError) throw eventError;
+  const eventIds = (events ?? []).map((row) => textValue(row.id)).filter(
+    Boolean,
+  );
+  if (eventIds.length > 0) triggerPushProcessing(eventIds);
+}
+
 let eventPostSchemaReady = false;
 let eventPostSchemaPromise: Promise<void> | null = null;
 
@@ -275,9 +335,62 @@ async function parentCanAccessStudent(
   if (!studentId) return false;
   const { data, error } = await svc.from("parent_student_links").select(
     "student_id",
-  ).eq("parent_user_id", user.id).eq("student_id", studentId).maybeSingle();
+  ).eq("school_id", sid(user)).eq("parent_user_id", user.id).eq(
+    "student_id",
+    studentId,
+  ).maybeSingle();
   if (error) throw error;
   return Boolean(data);
+}
+
+function canManageStudentDocuments(role: string) {
+  return ["principal", "admin", "super_admin"].includes(role);
+}
+
+async function teacherAssignedSectionIds(
+  svc: SupabaseClient,
+  school: string,
+  staffId: string,
+) {
+  const sectionIds = new Set<string>();
+  if (!staffId) return sectionIds;
+
+  const { data: classSections, error: classSectionsError } = await svc.from(
+    "sections",
+  ).select("id").eq("school_id", school).or(
+    `class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`,
+  );
+  if (classSectionsError) throw classSectionsError;
+  for (const section of classSections ?? []) {
+    const sectionId = textValue(section.id);
+    if (sectionId) sectionIds.add(sectionId);
+  }
+
+  const { data: subjectSections, error: subjectSectionsError } = await svc.from(
+    "staff_subjects",
+  ).select("section_id").eq("school_id", school).eq("staff_id", staffId);
+  if (subjectSectionsError) throw subjectSectionsError;
+  for (const section of subjectSections ?? []) {
+    const sectionId = textValue(section.section_id);
+    if (sectionId) sectionIds.add(sectionId);
+  }
+  return sectionIds;
+}
+
+async function teacherCanAccessStudentDocument(
+  svc: SupabaseClient,
+  school: string,
+  staffId: string,
+  studentId: string,
+) {
+  if (!staffId || !studentId) return false;
+  const { data: student, error } = await svc.from("students").select(
+    "current_section_id",
+  ).eq("school_id", school).eq("id", studentId).maybeSingle();
+  if (error) throw error;
+  if (!student) return false;
+  const sectionIds = await teacherAssignedSectionIds(svc, school, staffId);
+  return sectionIds.has(textValue(student.current_section_id));
 }
 
 function documentRow(row: Record<string, unknown>) {
@@ -1002,9 +1115,14 @@ export async function handleDocuments(
     if (userRole === "parent") {
       const { data: links, error: linkErr } = await svc.from(
         "parent_student_links",
-      ).select("student_id").eq("parent_user_id", user.id);
+      ).select("student_id").eq("school_id", school).eq(
+        "parent_user_id",
+        user.id,
+      );
       if (linkErr) return fail(linkErr.message);
-      const parentStudentIds = (links ?? []).map((l) => l.student_id);
+      const parentStudentIds = (links ?? []).map((l) => textValue(l.student_id))
+        .filter(Boolean);
+      if (parentStudentIds.length === 0) return ok([]);
       if (studentId) {
         if (!parentStudentIds.includes(studentId)) {
           return fail("student not linked to parent", 403);
@@ -1013,18 +1131,51 @@ export async function handleDocuments(
       } else {
         query = query.in("student_id", parentStudentIds);
       }
-    } else {
+    } else if (userRole === "teacher") {
+      const staffId = textValue(user.app_metadata?.linked_id);
+      if (!staffId) return fail("teacher profile is not linked", 403);
+      const sectionIds = await teacherAssignedSectionIds(svc, school, staffId);
+      if (sectionIds.size === 0) return ok([]);
+      const sectionId = textValue(url.searchParams.get("section_id"));
+      if (sectionId && !sectionIds.has(sectionId)) {
+        return fail("section is not assigned to teacher", 403);
+      }
+      if (studentId) {
+        if (!(await teacherCanAccessStudentDocument(svc, school, staffId, studentId))) {
+          return fail("student is not assigned to teacher", 403);
+        }
+        query = query.eq("student_id", studentId);
+      } else {
+        const permittedSections = sectionId ? [sectionId] : [...sectionIds];
+        const { data: students, error: studentsError } = await svc.from(
+          "students",
+        ).select("id").eq("school_id", school).in(
+          "current_section_id",
+          permittedSections,
+        );
+        if (studentsError) return fail(studentsError.message);
+        const studentIds = (students ?? []).map((row) => textValue(row.id))
+          .filter(Boolean);
+        if (studentIds.length === 0) return ok([]);
+        query = query.in("student_id", studentIds);
+      }
+    } else if (canManageStudentDocuments(userRole)) {
       if (studentId) {
         query = query.eq("student_id", studentId);
       }
       const sectionId = textValue(url.searchParams.get("section_id"));
       if (sectionId) {
         const { data: students, error: studErr } = await svc.from("students")
-          .select("id").eq("current_section_id", sectionId);
+          .select("id").eq("school_id", school).eq(
+            "current_section_id",
+            sectionId,
+          );
         if (studErr) return fail(studErr.message);
         const ids = (students ?? []).map((s) => s.id);
         query = query.in("student_id", ids);
       }
+    } else {
+      return fail("unauthorized", 403);
     }
 
     const { data, error } = await query.order("created_at", {
@@ -1044,6 +1195,14 @@ export async function handleDocuments(
     ) {
       return fail("student not linked to parent", 403);
     }
+    if (userRole === "teacher") {
+      const staffId = textValue(user.app_metadata?.linked_id);
+      if (!(await teacherCanAccessStudentDocument(svc, school, staffId, studentId))) {
+        return fail("student is not assigned to teacher", 403);
+      }
+    } else if (userRole !== "parent" && !canManageStudentDocuments(userRole)) {
+      return fail("unauthorized", 403);
+    }
     const docType = textValue(body.doc_type || body.type, "other");
     const fileUrl = textValue(body.file_url);
     const title = textValue(body.title);
@@ -1057,6 +1216,22 @@ export async function handleDocuments(
       title: title,
     }).select().single();
     if (error) return fail(error.message);
+    if (canManageStudentDocuments(userRole)) {
+      try {
+        await notifyStudentDocumentParents(
+          svc,
+          school,
+          studentId,
+          textValue(data.id),
+          title || docType,
+        );
+      } catch (notificationError) {
+        console.error(
+          "Failed to notify parent about student document",
+          notificationError,
+        );
+      }
+    }
     return ok(data);
   }
 
@@ -1064,7 +1239,7 @@ export async function handleDocuments(
   if (studentDocMatch && method === "DELETE") {
     const docId = studentDocMatch[1];
     const userRole = roleValue(user);
-    if (userRole === "principal") {
+    if (canManageStudentDocuments(userRole)) {
       const { error } = await svc.from("student_documents").delete().eq(
         "id",
         docId,
@@ -1073,11 +1248,17 @@ export async function handleDocuments(
       return ok({ success: true });
     } else if (userRole === "parent") {
       const { data: doc, error: getErr } = await svc.from("student_documents")
-        .select("student_id").eq("id", docId).maybeSingle();
+        .select("student_id, doc_type").eq("id", docId).eq(
+          "school_id",
+          school,
+        ).maybeSingle();
       if (getErr) return fail(getErr.message);
       if (!doc) return fail("not found", 404);
       if (!(await parentCanAccessStudent(svc, user, doc.student_id))) {
         return fail("unauthorized", 403);
+      }
+      if (textValue(doc.doc_type).toLowerCase() === "fee_receipt") {
+        return fail("fee receipts cannot be deleted by parents", 403);
       }
       const { error } = await svc.from("student_documents").delete().eq(
         "id",

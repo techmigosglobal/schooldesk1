@@ -20,11 +20,31 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
   bool _sharing = false;
   String? _error;
   Map<String, dynamic> _receiptData = const {};
+  Map<String, dynamic> _school = const {};
+  String _parentName = '';
 
   @override
   void initState() {
     super.initState();
     _loadReceipt();
+    _loadIdentity();
+  }
+
+  Future<void> _loadIdentity() async {
+    try {
+      final api = BackendApiClient.instance;
+      final results = await Future.wait([
+        api.getCurrentSchool(),
+        api.getProfile(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _school = Map<String, dynamic>.from(results[0] as Map);
+        _parentName = (results[1] as UserResponse).name.trim();
+      });
+    } on Object {
+      // The receipt remains shareable with its embedded invoice metadata.
+    }
   }
 
   Future<void> _loadReceipt() async {
@@ -49,7 +69,11 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
               '',
           'school_name': invoice['school_name'] ?? 'School',
           'amount': (pr['amount'] as num?)?.toDouble() ?? 0.0,
-          'payment_mode': pr['payment_mode'] ?? 'UPI',
+          'payment_mode':
+              receipt['payment_method'] ??
+              pr['payment_method'] ??
+              pr['payment_mode'] ??
+              'UPI',
           'paid_at':
               pr['reviewed_at'] ?? pr['updated_at'] ?? pr['created_at'] ?? '',
           'student_name':
@@ -95,7 +119,11 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                 '',
             'school_name': invoice['school_name'] ?? 'School',
             'amount': (prMatch['amount'] as num?)?.toDouble() ?? 0.0,
-            'payment_mode': prMatch['payment_mode'] ?? 'UPI',
+            'payment_mode':
+                receipt['payment_method'] ??
+                prMatch['payment_method'] ??
+                prMatch['payment_mode'] ??
+                'UPI',
             'paid_at':
                 prMatch['reviewed_at'] ??
                 prMatch['updated_at'] ??
@@ -375,16 +403,28 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         student['class'] ?? student['class_name'] ?? student['grade_name'],
       );
       final rollNo = _text(
-        student['rollNo'] ?? student['roll_number'] ?? student['admission_number'],
+        student['rollNo'] ??
+            student['roll_number'] ??
+            student['admission_number'],
       );
-      final paidAt = DateTime.tryParse(_text(_receiptData['paid_at'])) ??
-          DateTime.now();
+      final paidAt =
+          DateTime.tryParse(_text(_receiptData['paid_at'])) ?? DateTime.now();
+      final schoolName = _text(
+        _school['name'] ?? _receiptData['school_name'],
+        fallback: 'School',
+      );
+      final schoolAddress = [
+        _school['address'],
+        _school['city'],
+        _school['state'],
+        _school['postal_code'],
+      ].map(_text).where((value) => value.isNotEmpty).toSet().join(', ');
       final pdf = await PdfService.getInstance().generateFeeReceipt(
         receiptNo: receiptNo,
         studentName: _text(_receiptData['student_name'], fallback: 'Student'),
         className: className,
         rollNo: rollNo,
-        parentName: '',
+        parentName: _parentName,
         feeItems: [
           {
             'description': _text(
@@ -399,8 +439,8 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         balance: 0,
         paymentMode: _text(_receiptData['payment_mode'], fallback: 'UPI'),
         paymentDate: paidAt,
-        schoolName: _text(_receiptData['school_name'], fallback: 'School'),
-        schoolAddress: '',
+        schoolName: schoolName,
+        schoolAddress: schoolAddress,
       );
       if (!mounted) return;
       await const ShareExportService().shareBytes(
@@ -471,10 +511,7 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: valWidget,
-          ),
+          child: Align(alignment: Alignment.centerRight, child: valWidget),
         ),
       ],
     );

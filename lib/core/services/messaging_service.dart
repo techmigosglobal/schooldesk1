@@ -1,10 +1,6 @@
-import 'dart:developer' as developer;
-
 import 'package:flutter/material.dart';
 
-import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/notification_service.dart';
 
 /// Two-way messaging service backed by the API.
 class MessagingService extends ChangeNotifier {
@@ -207,43 +203,8 @@ class MessagingService extends ChangeNotifier {
         'last_message_time': now.toIso8601String(),
       });
       _sortConversations();
-      await _triggerNotification(conv, sender, text);
     }
     notifyListeners();
-  }
-
-  Future<void> _triggerNotification(
-    Map<String, dynamic> conv,
-    String sender,
-    String text,
-  ) async {
-    try {
-      final notifService = await NotificationService.getInstance();
-      final targetRole = sender == 'teacher' ? 'parent' : 'teacher';
-      await notifService.addNotification(
-        AppNotification(
-          id: 'msg_notif_${DateTime.now().millisecondsSinceEpoch}',
-          title: sender == 'teacher'
-              ? 'Homework Feedback: ${conv['homeworkTitle']}'
-              : 'Parent Reply: ${conv['studentName']}',
-          body: sender == 'teacher'
-              ? '${conv['teacherName']}: $text'
-              : '${conv['parentName']}: $text',
-          category: NotificationCategory.general,
-          role: targetRole,
-          timestamp: DateTime.now(),
-          isRead: false,
-          priority: NotificationPriority.medium,
-        ),
-      );
-    } on Object catch (error) {
-      if (EnvConfig.enableLogging) {
-        developer.log(
-          'Failed to trigger notification: $error',
-          name: 'MessagingService',
-        );
-      }
-    }
   }
 
   Future<void> markConversationRead(String conversationId, String role) async {

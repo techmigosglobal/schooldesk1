@@ -113,9 +113,11 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         final student = request['student'] is Map
             ? Map<String, dynamic>.from(request['student'] as Map)
             : const <String, dynamic>{};
-        final studentName = '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
+        final studentName =
+            '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
+                .trim();
         final finalName = studentName.isEmpty ? 'your child' : studentName;
-        
+
         String prettyStatus = decision;
         if (decision == 'approved') {
           prettyStatus = 'Approved';
@@ -125,10 +127,12 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
           prettyStatus = 'Clarification Required';
         }
 
-        NotificationService.getInstance().then((s) => s.triggerFeeApprovalAlert(
-          studentName: finalName,
-          status: prettyStatus,
-        ));
+        NotificationService.getInstance().then(
+          (s) => s.triggerFeeApprovalAlert(
+            studentName: finalName,
+            status: prettyStatus,
+          ),
+        );
       } on Object catch (_) {}
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -356,7 +360,9 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
     final invoiceNumber = '${invoice['invoice_number'] ?? ''}';
     final amount = (r['amount'] as num?)?.toDouble() ?? 0.0;
     final dateStr = _formatDate(_text(r['payment_date']));
-    final method = _text(r['payment_mode']).toUpperCase();
+    final method = _text(
+      r['payment_method'] ?? r['payment_mode'],
+    ).toUpperCase();
     final utr = _text(r['transaction_id']);
     final ref = _text(r['request_reference']);
     final remarks = _text(r['remarks']);

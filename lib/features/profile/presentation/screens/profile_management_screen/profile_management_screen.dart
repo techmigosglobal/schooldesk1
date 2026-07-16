@@ -9,8 +9,6 @@ import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class ProfileManagementScreen extends StatefulWidget {
   final String role;
@@ -210,91 +208,6 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Profile'],
-
-
-          title: 'Profile',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Profile', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     final tokens = Theme.of(context).schoolDesk;
     final roleColor = tokens.roleColor(_roleEnum);
     final rawBottomPadding = MediaQuery.viewPaddingOf(context).bottom;
@@ -308,132 +221,132 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
     return Theme(
       data: Theme.of(context).copyWith(
         primaryColor: roleColor,
-        colorScheme: Theme.of(context).colorScheme.copyWith(
-          primary: roleColor,
-        ),
+        colorScheme: Theme.of(context).colorScheme.copyWith(primary: roleColor),
       ),
       child: Scaffold(
         backgroundColor: context.appTheme.background,
         appBar: AppBar(
-        title: Text(
-          'My Profile',
-          style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+          title: Text(
+            'My Profile',
+            style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: context.appTheme.surface,
+          actions: [
+            if (!_loading && _error == null)
+              TextButton.icon(
+                onPressed: _saving
+                    ? null
+                    : _isEditing
+                    ? _save
+                    : () => setState(() => _isEditing = true),
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        _isEditing ? Icons.check_rounded : Icons.edit_rounded,
+                      ),
+                label: Text(_isEditing ? 'Save' : 'Edit'),
+              ),
+          ],
         ),
-        backgroundColor: context.appTheme.surface,
-        actions: [
-          if (!_loading && _error == null)
-            TextButton.icon(
-              onPressed: _saving
-                  ? null
-                  : _isEditing
-                  ? _save
-                  : () => setState(() => _isEditing = true),
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(_isEditing ? Icons.check_rounded : Icons.edit_rounded),
-              label: Text(_isEditing ? 'Save' : 'Edit'),
-            ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? _buildError()
-          : Padding(
-              padding: EdgeInsets.only(bottom: bottomSafePadding),
-              child: RefreshIndicator(
-                onRefresh: _load,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 12),
-                    _buildSection(
-                      title: 'Personal Information',
-                      children: [
-                        _field('Full Name', _nameCtrl, Icons.person_rounded),
-                        _field(
-                          'Email Address',
-                          _emailCtrl,
-                          Icons.email_rounded,
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        _field(
-                          'Phone Number',
-                          _phoneCtrl,
-                          Icons.phone_rounded,
-                          keyboardType: TextInputType.phone,
-                        ),
-                        _avatarAttachmentControl(),
-                      ],
-                    ),
-                    if (_isPrincipal) ...[
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? _buildError()
+            : Padding(
+                padding: EdgeInsets.only(bottom: bottomSafePadding),
+                child: RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                    children: [
+                      _buildHeader(),
                       const SizedBox(height: 12),
                       _buildSection(
-                        title: 'School Basic Details',
+                        title: 'Personal Information',
                         children: [
+                          _field('Full Name', _nameCtrl, Icons.person_rounded),
                           _field(
-                            'School Name',
-                            _schoolNameCtrl,
-                            Icons.apartment_rounded,
-                          ),
-                          _field(
-                            'School Type',
-                            _schoolTypeCtrl,
-                            Icons.category_rounded,
-                          ),
-                          _field(
-                            'Affiliation Board',
-                            _boardCtrl,
-                            Icons.verified_rounded,
-                          ),
-                          _field(
-                            'School Email',
-                            _schoolEmailCtrl,
-                            Icons.alternate_email_rounded,
+                            'Email Address',
+                            _emailCtrl,
+                            Icons.email_rounded,
                             keyboardType: TextInputType.emailAddress,
                           ),
                           _field(
-                            'School Phone',
-                            _schoolPhoneCtrl,
-                            Icons.call_rounded,
+                            'Phone Number',
+                            _phoneCtrl,
+                            Icons.phone_rounded,
                             keyboardType: TextInputType.phone,
                           ),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _field(
-                                  'City',
-                                  _cityCtrl,
-                                  Icons.location_city_rounded,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _field(
-                                  'State',
-                                  _stateCtrl,
-                                  Icons.map_rounded,
-                                ),
-                              ),
-                            ],
-                          ),
+                          _avatarAttachmentControl(),
                         ],
                       ),
+                      if (_isPrincipal) ...[
+                        const SizedBox(height: 12),
+                        _buildSection(
+                          title: 'School Basic Details',
+                          children: [
+                            _field(
+                              'School Name',
+                              _schoolNameCtrl,
+                              Icons.apartment_rounded,
+                            ),
+                            _field(
+                              'School Type',
+                              _schoolTypeCtrl,
+                              Icons.category_rounded,
+                            ),
+                            _field(
+                              'Affiliation Board',
+                              _boardCtrl,
+                              Icons.verified_rounded,
+                            ),
+                            _field(
+                              'School Email',
+                              _schoolEmailCtrl,
+                              Icons.alternate_email_rounded,
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+                            _field(
+                              'School Phone',
+                              _schoolPhoneCtrl,
+                              Icons.call_rounded,
+                              keyboardType: TextInputType.phone,
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _field(
+                                    'City',
+                                    _cityCtrl,
+                                    Icons.location_city_rounded,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _field(
+                                    'State',
+                                    _stateCtrl,
+                                    Icons.map_rounded,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (_isTeacher) ...[
+                        const SizedBox(height: 12),
+                        _buildTeacherStaffDetails(),
+                      ],
+                      _buildAccountActions(),
                     ],
-                    if (_isTeacher) ...[
-                      const SizedBox(height: 12),
-                      _buildTeacherStaffDetails(),
-                    ],
-                    _buildAccountActions(),
-                  ],
+                  ),
                 ),
               ),
-            ),
       ),
     );
   }

@@ -8,8 +8,6 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/desktop_form_wrapper.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 @immutable
 class StaffFormArgs {
@@ -95,91 +93,6 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['People', 'Staff', 'Form'],
-
-
-          title: 'Staff Form',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Staff Form', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     final title = _isEdit ? 'Edit Staff' : 'Add Staff';
     final drawer = _isAdminOwner
         ? PrincipalDrawer(
@@ -236,7 +149,9 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
                     decoration: BoxDecoration(
                       color: context.appTheme.surface,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: context.appTheme.outlineVariant),
+                      border: Border.all(
+                        color: context.appTheme.outlineVariant,
+                      ),
                     ),
                     child: DesktopFormWrapper(
                       padding: const EdgeInsets.all(16),
@@ -296,7 +211,6 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
       ),
     );
   }
-
 
   Widget _buildNameField() {
     return TextFormField(

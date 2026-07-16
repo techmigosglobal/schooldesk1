@@ -267,15 +267,20 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       }
       if (!mounted) return;
       try {
-        final studentName = _text(widget.args.student?['name'], fallback: 'A student');
+        final studentName = _text(
+          widget.args.student?['name'],
+          fallback: 'A student',
+        );
         final amount = _totalAmount.toString();
-        NotificationService.getInstance().then((s) => s.triggerFeePaymentAlert(
-          studentName: studentName,
-          amount: amount,
-          paymentMode: 'UPI',
-        ));
+        NotificationService.getInstance().then(
+          (s) => s.triggerFeePaymentAlert(
+            studentName: studentName,
+            amount: amount,
+            paymentMode: 'UPI',
+          ),
+        );
       } on Object catch (_) {}
-      
+
       setState(() {
         _submitting = false;
         _currentStep = 3;
@@ -519,26 +524,46 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               fontWeight: FontWeight.w700,
             ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            'Installments must be paid continuously from the first unpaid month.',
+            style: GoogleFonts.ibmPlexSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
+          ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: _unpaidMonthNames.map((month) {
               final isSelected = _selectedMonthNames.contains(month);
+              final selectedInOrder = _unpaidMonthNames
+                  .where(_selectedMonthNames.contains)
+                  .toList(growable: false);
+              final nextMonth =
+                  selectedInOrder.length < _unpaidMonthNames.length
+                  ? _unpaidMonthNames[selectedInOrder.length]
+                  : null;
+              final canAdd = !isSelected && month == nextMonth;
+              final canRemove =
+                  isSelected &&
+                  selectedInOrder.length > 1 &&
+                  selectedInOrder.last == month;
               return FilterChip(
                 selected: isSelected,
                 label: Text(month),
-                onSelected: (val) {
-                  setState(() {
-                    if (val) {
-                      _selectedMonthNames.add(month);
-                    } else {
-                      if (_selectedMonthNames.length > 1) {
-                        _selectedMonthNames.remove(month);
+                onSelected: canAdd || canRemove
+                    ? (val) {
+                        setState(() {
+                          if (val) {
+                            _selectedMonthNames.add(month);
+                          } else if (canRemove) {
+                            _selectedMonthNames.remove(month);
+                          }
+                        });
                       }
-                    }
-                  });
-                },
+                    : null,
                 selectedColor: const Color(0xFF1A6B4A).withOpacity(0.15),
                 checkmarkColor: const Color(0xFF1A6B4A),
                 labelStyle: GoogleFonts.ibmPlexSans(

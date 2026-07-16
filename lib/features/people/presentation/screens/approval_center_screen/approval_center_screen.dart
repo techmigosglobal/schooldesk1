@@ -10,8 +10,6 @@ import 'package:schooldesk1/features/people/presentation/screens/approval_center
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_item_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 enum ApprovalType {
   account,
@@ -580,14 +578,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           approval.actionDate = today;
           approval.remarks = 'Approved';
         });
-        // Notify the teacher
-        NotificationService.getInstance().then((svc) {
-          svc.triggerLeaveStatusAlert(
-            status: 'Approved',
-            dates: '${approval.requesterName}\'s leave request',
-            role: 'teacher',
-          );
-        });
       } on Object catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -683,14 +673,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           approval.status = 'rejected';
           approval.actionDate = today;
           approval.remarks = remarks;
-        });
-        // Notify the teacher
-        NotificationService.getInstance().then((svc) {
-          svc.triggerLeaveStatusAlert(
-            status: 'Rejected',
-            dates: '${approval.requesterName}\'s leave request',
-            role: 'teacher',
-          );
         });
       } on Object catch (_) {
         if (mounted) {
@@ -858,91 +840,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['People', 'Approvals'],
-
-
-          title: 'Approval Center',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Approval Center', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     final pendingCount = _allApprovals
         .where((a) => a.status == 'pending')
         .length;

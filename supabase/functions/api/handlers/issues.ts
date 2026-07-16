@@ -1,7 +1,7 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
 
-const allowedRoles = new Set(["principal", "teacher"]);
+const allowedRoles = new Set(["principal", "teacher", "parent"]);
 const allowedMimeTypes = new Set([
   "image/jpeg",
   "image/png",
@@ -23,6 +23,24 @@ function schoolId(user: User): string {
 }
 function safeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "attachment";
+}
+
+function attachmentMime(file: File): string {
+  const provided = text(file.type).toLowerCase();
+  if (provided && provided !== "application/octet-stream") return provided;
+  const name = file.name.toLowerCase();
+  if (/\.jpe?g$/.test(name)) return "image/jpeg";
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".pdf")) return "application/pdf";
+  if (name.endsWith(".doc")) return "application/msword";
+  if (name.endsWith(".docx")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+  if (name.endsWith(".mp4")) return "video/mp4";
+  if (name.endsWith(".webm")) return "video/webm";
+  if (name.endsWith(".mov")) return "video/quicktime";
+  return provided;
 }
 
 async function roleOf(svc: SupabaseClient, user: User): Promise<string> {
@@ -93,6 +111,32 @@ async function issueForAccess(
   ).eq("id", issueId).maybeSingle();
 }
 
+async function notifySuperAdminsOfIssue(
+  svc: SupabaseClient,
+  school: string,
+  role: string,
+  issue: Record<string, unknown>,
+) {
+  const { data: admins } = await svc.from("users").select("id").eq(
+    "school_id",
+    school,
+  ).eq("role_name", "super_admin").eq("is_active", true);
+  const reporter = role === "principal"
+    ? "Principal"
+    : role === "teacher"
+    ? "Teacher"
+    : "Parent";
+  await notify(
+    svc,
+    school,
+    (admins ?? []).map((row: Record<string, unknown>) => text(row.id)),
+    "New issue raised",
+    `${reporter}: ${text(issue.title)}`,
+    text(issue.id),
+    "super_admin",
+  );
+}
+
 export async function handleIssues(
   req: Request,
   path: string,
@@ -107,6 +151,88 @@ export async function handleIssues(
   const isSuperAdmin = role == "super_admin";
   const canRaise = allowedRoles.has(role);
   if (!school || (!isSuperAdmin && !canRaise)) return fail("forbidden", 403);
+
+  if (path == "/issues/with-attachments" && method == "POST") {
+    if (!canRaise) return fail("this role cannot raise issues", 403);
+    const form = await req.formData().catch(() => null);
+    if (!form) return fail("multipart form required", 400);
+    const title = text(form.get("title"));
+    const description = text(form.get("description"));
+    if (!title || !description) {
+      return fail("title and description are required", 420);
+    }
+    const files = form.getAll("files").filter((value): value is File =>
+      value instanceof File
+    );
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    if (
+      files.length > 5 || totalBytes > maxAttachmentBytes ||
+      files.some((file) => !allowedMimeTypes.has(attachmentMime(file)))
+    ) {
+      return fail(
+        "Choose up to five image, PDF, Word, or supported video files totaling 50 MB",
+        420,
+      );
+    }
+    const { data: issue, error: issueError } = await svc.from("issues").insert({
+      school_id: school,
+      raised_by: user.id,
+      raised_by_role: role,
+      title,
+      description,
+      category: text(form.get("category")) || "other",
+      priority: text(form.get("priority")) || "medium",
+    }).select("*, issue_attachments(*)").single();
+    if (issueError) return fail(issueError.message);
+
+    const uploadedPaths: string[] = [];
+    try {
+      for (const file of files) {
+        const mime = attachmentMime(file);
+        const storagePath = `${school}/${issue.id}/${crypto.randomUUID()}-${
+          safeName(file.name)
+        }`;
+        const { error: uploadError } = await svc.storage.from(
+          "issue-attachments",
+        ).upload(storagePath, file, {
+          contentType: mime,
+          upsert: false,
+        });
+        if (uploadError) throw uploadError;
+        uploadedPaths.push(storagePath);
+        const { error: attachmentError } = await svc.from("issue_attachments")
+          .insert({
+            issue_id: issue.id,
+            school_id: school,
+            storage_path: storagePath,
+            file_name: file.name,
+            mime_type: mime,
+            file_size: file.size,
+          });
+        if (attachmentError) throw attachmentError;
+      }
+    } catch (attachmentError) {
+      if (uploadedPaths.length) {
+        await svc.storage.from("issue-attachments").remove(uploadedPaths);
+      }
+      await svc.from("issues").delete().eq("id", issue.id).eq(
+        "school_id",
+        school,
+      );
+      return fail(
+        attachmentError instanceof Error
+          ? attachmentError.message
+          : "attachment upload failed; issue was not created",
+      );
+    }
+    await notifySuperAdminsOfIssue(svc, school, role, issue);
+    const { data: savedIssue } = await issueForAccess(
+      svc,
+      school,
+      text(issue.id),
+    );
+    return ok(savedIssue ?? issue);
+  }
 
   if (path == "/issues" && method == "GET") {
     let query = svc.from("issues").select("*, issue_attachments(*)", {
@@ -124,7 +250,7 @@ export async function handleIssues(
 
   if (path == "/issues" && method == "POST") {
     if (!canRaise) {
-      return fail("only principals and teachers can raise issues", 403);
+      return fail("principals, teachers, and parents can raise issues", 403);
     }
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const title = text(body.title), description = text(body.description);
@@ -141,19 +267,7 @@ export async function handleIssues(
       priority: text(body.priority) || "medium",
     }).select("*, issue_attachments(*)").single();
     if (error) return fail(error.message);
-    const { data: admins } = await svc.from("users").select("id").eq(
-      "school_id",
-      school,
-    ).eq("role_name", "super_admin").eq("is_active", true);
-    await notify(
-      svc,
-      school,
-      (admins ?? []).map((row: Record<string, unknown>) => text(row.id)),
-      "New issue raised",
-      `${role == "principal" ? "Principal" : "Teacher"}: ${title}`,
-      text(data.id),
-      "super_admin",
-    );
+    await notifySuperAdminsOfIssue(svc, school, role, data);
     return ok(data);
   }
 
@@ -171,7 +285,7 @@ export async function handleIssues(
     const form = await req.formData().catch(() => null);
     const file = form?.get("file");
     if (
-      !(file instanceof File) || !allowedMimeTypes.has(file.type) ||
+      !(file instanceof File) || !allowedMimeTypes.has(attachmentMime(file)) ||
       file.size > maxAttachmentBytes
     ) {
       return fail(
@@ -195,7 +309,10 @@ export async function handleIssues(
       safeName(file.name)
     }`;
     const { error: uploadError } = await svc.storage.from("issue-attachments")
-      .upload(storagePath, file, { contentType: file.type, upsert: false });
+      .upload(storagePath, file, {
+        contentType: attachmentMime(file),
+        upsert: false,
+      });
     if (uploadError) return fail(uploadError.message);
     const { data, error: insertError } = await svc.from("issue_attachments")
       .insert({
@@ -203,7 +320,7 @@ export async function handleIssues(
         school_id: school,
         storage_path: storagePath,
         file_name: file.name,
-        mime_type: file.type,
+        mime_type: attachmentMime(file),
         file_size: file.size,
       }).select().single();
     if (insertError) {

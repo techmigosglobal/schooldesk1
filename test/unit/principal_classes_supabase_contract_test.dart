@@ -25,14 +25,9 @@ void main() {
 
     expect(principal, contains('function uuidText'));
     expect(principal, contains('function uuidList'));
-    expect(
-      principal,
-      contains('await resolveStaffId(svc, school, body.class_teacher_id)'),
-    );
-    expect(
-      principal,
-      contains('await resolveStaffId(svc, school, body.co_teacher_id)'),
-    );
+    expect(principal, contains('const classTeacherId = await resolveStaffId('));
+    expect(principal, contains('body.class_teacher_id,'));
+    expect(principal, contains('body.co_teacher_id'));
     expect(
       principal,
       contains('const explicitId = uuidText(row.academic_year_id)'),

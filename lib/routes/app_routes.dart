@@ -350,7 +350,8 @@ class AppRoutes {
       args: _parentHomeworkSubmissionArgs(context),
     ),
     parentTeacherChat: (context) => const ParentTeacherChatScreen(),
-    parentComplaints: (context) => const ParentComplaintScreen(),
+    parentComplaints: (context) =>
+        const IssueScreen(role: IssueScreenRole.parent),
     parentFees: (context) => const ParentFeeHub(),
     '/parent/fees': (context) => const ParentFeeHub(),
     parentPaymentRequestForm: (context) =>

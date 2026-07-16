@@ -639,6 +639,18 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
       onDestinationSelected: widget.onDestinationSelected,
       sections: const [
         SchoolDeskNavigationSection(
+          label: 'Overview',
+          items: [
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.dashboard,
+              icon: Icons.dashboard_outlined,
+              activeIcon: Icons.dashboard_rounded,
+              label: 'Dashboard',
+              route: AppRoutes.superAdminDashboard,
+            ),
+          ],
+        ),
+        SchoolDeskNavigationSection(
           label: 'System Administration',
           items: [
             SchoolDeskNavigationItem(

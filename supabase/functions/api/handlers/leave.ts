@@ -353,6 +353,39 @@ export async function handleLeave(
           is_read: false,
         });
       }
+      const teacherUserId = await resolveUserId(svc, school, staffId);
+      if (teacherUserId) {
+        const fromDate = text(data.start_date).split("T")[0] ?? "";
+        const toDate = text(data.end_date).split("T")[0] ?? "";
+        const dateRange = fromDate && toDate
+          ? ` (${fromDate} to ${toDate})`
+          : "";
+        const message =
+          `Your leave request${dateRange} was recalled successfully.`;
+        const { data: teacherEvent } = await svc.from("notification_events")
+          .insert({
+            school_id: school,
+            user_id: teacherUserId,
+            event_type: "leave_recalled",
+            event_data: {
+              leave_id: recallMatch[1],
+              message,
+              reference_type: "leave",
+            },
+          }).select("id").maybeSingle();
+        if (teacherEvent?.id) triggerPushProcessing(teacherEvent.id);
+        await svc.from("notification_logs").insert({
+          school_id: school,
+          user_id: teacherUserId,
+          title: "Leave Recall Confirmed",
+          body: message,
+          type: "leave",
+          entity_type: "leave",
+          entity_id: recallMatch[1],
+          target_role: "teacher",
+          is_read: false,
+        });
+      }
     } catch (notifErr) {
       console.error(`Failed to create recall notification: ${notifErr}`);
     }
@@ -371,7 +404,8 @@ export async function handleLeave(
       reviewed_by: user.id,
       review_note: body.note ?? null,
       updated_at: new Date().toISOString(),
-    }).eq("id", leaveId).eq("school_id", school).select().single();
+    }).eq("id", leaveId).eq("school_id", school).eq("status", "pending")
+      .select().single();
     if (error) return fail(error.message);
     // Create notification_events so the processor sends a push to the teacher
     try {
@@ -438,7 +472,10 @@ export async function handleLeave(
       reviewed_by: user.id,
       review_note: body.reason ?? body.note ?? null,
       updated_at: new Date().toISOString(),
-    }).eq("id", approveAliasMatch[1]).eq("school_id", school).select().single();
+    }).eq("id", approveAliasMatch[1]).eq("school_id", school).eq(
+      "status",
+      "pending",
+    ).select().single();
     if (error) return fail(error.message);
     // Create notification_events so the processor sends a push to the teacher
     try {

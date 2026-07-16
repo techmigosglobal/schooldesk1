@@ -26,6 +26,7 @@ class DesktopHoverInkWell extends StatefulWidget {
 
 class _DesktopHoverInkWellState extends State<DesktopHoverInkWell> {
   bool _hovering = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +40,9 @@ class _DesktopHoverInkWellState extends State<DesktopHoverInkWell> {
         color: DesktopPlatform.isDesktop && _hovering
             ? hoverColor
             : Colors.transparent,
+        border: _focused && widget.onTap != null
+            ? Border.all(color: Theme.of(context).colorScheme.primary)
+            : null,
       ),
       child: widget.child,
     );
@@ -58,10 +62,29 @@ class _DesktopHoverInkWellState extends State<DesktopHoverInkWell> {
       cursor: widget.onTap != null
           ? SystemMouseCursors.click
           : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        onDoubleTap: widget.onDoubleTap,
-        child: content,
+      child: FocusableActionDetector(
+        enabled: widget.onTap != null,
+        mouseCursor: widget.onTap != null
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onTap?.call();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          onTap: widget.onTap,
+          onDoubleTap: widget.onDoubleTap,
+          child: Semantics(
+            button: widget.onTap != null,
+            enabled: widget.onTap != null,
+            child: content,
+          ),
+        ),
       ),
     );
   }

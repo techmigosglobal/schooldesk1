@@ -50,7 +50,7 @@ void main() {
       expect(healthReminders, contains('svc.from("notification_events")'));
       expect(healthReminders, contains('event_type: "health_reminder"'));
       expect(birthdays, contains('svc.from("notification_events")'));
-      expect(uploads, contains('svc.from("notification_events")'));
+      expect(uploads, contains('"notification_events"'));
       expect(principal, contains('svc.from("notification_events")'));
       expect(migration, contains('insert into public.notification_devices'));
       expect(migration, contains('from public.notification_device_tokens'));

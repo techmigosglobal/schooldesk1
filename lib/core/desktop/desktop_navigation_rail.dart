@@ -58,7 +58,8 @@ class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 1150;
-    final expanded = _userExpanded ?? (isNarrow ? false : widget.initiallyExpanded);
+    final expanded =
+        _userExpanded ?? (isNarrow ? false : widget.initiallyExpanded);
 
     final width = expanded
         ? DesktopBreakpoints.sidebarExpanded
@@ -121,7 +122,7 @@ class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
                       item: item,
                       roleColor: roleColor,
                       isSelected: widget.selectedIndex == item.index,
-                      onTap: () => widget.onDestinationSelected(item.index),
+                      onDestinationSelected: widget.onDestinationSelected,
                     ),
                 ],
               ],
@@ -179,14 +180,21 @@ class _DesktopRailHeader extends StatelessWidget {
         ),
       ),
       child: Row(
+        mainAxisAlignment: expanded
+            ? MainAxisAlignment.start
+            : MainAxisAlignment.spaceBetween,
         children: [
           if (organizationLogo != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(tokens.radius.control),
-              child: SizedBox(width: 36, height: 36, child: organizationLogo),
+              child: SizedBox(
+                width: expanded ? 36 : 24,
+                height: expanded ? 36 : 24,
+                child: organizationLogo,
+              ),
             )
           else
-            Icon(portalIcon, color: Colors.white, size: 28),
+            Icon(portalIcon, color: Colors.white, size: expanded ? 28 : 24),
           if (expanded) ...[
             SizedBox(width: tokens.spacing.sm),
             Expanded(
@@ -222,6 +230,7 @@ class _DesktopRailHeader extends StatelessWidget {
             tooltip: expanded ? 'Collapse sidebar' : 'Expand sidebar',
             onPressed: onToggle,
             color: Colors.white,
+            size: 18,
           ),
         ],
       ),
@@ -234,14 +243,14 @@ class _DesktopRailItem extends StatelessWidget {
   final SchoolDeskNavigationItem item;
   final Color roleColor;
   final bool isSelected;
-  final VoidCallback onTap;
+  final ValueChanged<int> onDestinationSelected;
 
   const _DesktopRailItem({
     required this.expanded,
     required this.item,
     required this.roleColor,
     required this.isSelected,
-    required this.onTap,
+    required this.onDestinationSelected,
   });
 
   @override
@@ -253,7 +262,7 @@ class _DesktopRailItem extends StatelessWidget {
     final tile = Material(
       color: Colors.transparent,
       child: DesktopHoverInkWell(
-        onTap: item.enabled ? onTap : null,
+        onTap: item.enabled ? () => _activate(context) : null,
         borderRadius: BorderRadius.circular(tokens.radius.control),
         child: AnimatedContainer(
           duration: tokens.motion.fast,
@@ -272,8 +281,9 @@ class _DesktopRailItem extends StatelessWidget {
                 : null,
           ),
           child: Row(
-            mainAxisAlignment:
-                expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+            mainAxisAlignment: expanded
+                ? MainAxisAlignment.start
+                : MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
@@ -288,8 +298,9 @@ class _DesktopRailItem extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
                       color: isSelected ? roleColor : tokens.onSurface,
                     ),
                   ),
@@ -322,6 +333,24 @@ class _DesktopRailItem extends StatelessWidget {
     if (expanded) return tile;
     return Tooltip(message: item.label, child: tile);
   }
+
+  void _activate(BuildContext context) {
+    onDestinationSelected(item.index);
+    final route = item.route;
+    if (route == null || ModalRoute.of(context)?.settings.name == route) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    if (item.resetStack) {
+      navigator.pushNamedAndRemoveUntil(
+        route,
+        (existing) => false,
+        arguments: item.arguments,
+      );
+      return;
+    }
+    navigator.pushNamed(route, arguments: item.arguments);
+  }
 }
 
 class _DesktopRailFooter extends StatelessWidget {
@@ -340,19 +369,55 @@ class _DesktopRailFooter extends StatelessWidget {
           Divider(color: tokens.panelBorder, height: 1),
           SizedBox(height: tokens.spacing.sm),
           for (final action in actions)
-            ListTile(
-              dense: true,
-              leading: Icon(action.icon, size: 20, color: action.color),
-              title: expanded
-                  ? Text(action.label, style: Theme.of(context).textTheme.bodySmall)
-                  : null,
-              onTap: action.onPressed != null
-                  ? () => action.onPressed!(context)
-                  : null,
+            Tooltip(
+              message: expanded ? '' : action.label,
+              child: Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: expanded ? tokens.spacing.xs : 0,
+                  ),
+                  minLeadingWidth: 0,
+                  horizontalTitleGap: expanded ? tokens.spacing.sm : 0,
+                  leading: Icon(action.icon, size: 20, color: action.color),
+                  title: expanded
+                      ? Text(
+                          action.label,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )
+                      : null,
+                  onTap: () => _activate(context, action),
+                ),
+              ),
             ),
         ],
       ),
     );
+  }
+
+  void _activate(
+    BuildContext context,
+    SchoolDeskNavigationFooterAction action,
+  ) {
+    if (action.onPressed != null) {
+      action.onPressed!(context);
+      return;
+    }
+    final route = action.route;
+    if (route == null || ModalRoute.of(context)?.settings.name == route) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    if (action.resetStack) {
+      navigator.pushNamedAndRemoveUntil(
+        route,
+        (existing) => false,
+        arguments: action.arguments,
+      );
+      return;
+    }
+    navigator.pushNamed(route, arguments: action.arguments);
   }
 }
 
@@ -387,7 +452,8 @@ class _DesktopRailUserFooter extends StatelessWidget {
           CircleAvatar(
             radius: 18,
             backgroundColor: theme.colorScheme.primaryContainer,
-            child: userAvatar ??
+            child:
+                userAvatar ??
                 Text(
                   initials,
                   style: theme.textTheme.labelMedium?.copyWith(

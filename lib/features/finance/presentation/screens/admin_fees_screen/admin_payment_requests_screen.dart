@@ -64,58 +64,53 @@ class _AdminPaymentRequestsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
 
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-        return DesktopScreenWrapper(
-          breadcrumbs: const ['Finance', 'Payments'],
-          title: 'Payment Requests',
-          actions: [
-            IconButton(
-              tooltip: 'Refresh payment requests',
-              onPressed: _loading ? null : () => _loadRequests(showSpinner: false),
-              icon: const Icon(Icons.refresh_rounded),
-            ),
-          ],
-          maxWidth: 800,
-          child: _loading
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(40),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_error != null) ...[
-                      _buildErrorState(),
-                      const SizedBox(height: 16),
-                    ],
-                    _buildSummary(),
-                    const SizedBox(height: 14),
-                    _buildStatusFilters(),
-                    const SizedBox(height: 14),
-                    if (_visibleRequests.isEmpty)
-                      const SchoolDeskStatusPanel.empty(
-                        title: 'No payment requests',
-                        message: 'Parent payment requests will appear here.',
-                      )
-                    else
-                      ..._visibleRequests.map(_requestCard),
-                  ],
+    if (isDesktop) {
+      return DesktopScreenWrapper(
+        breadcrumbs: const ['Finance', 'Payments'],
+        title: 'Payment Requests',
+        actions: [
+          IconButton(
+            tooltip: 'Refresh payment requests',
+            onPressed: _loading
+                ? null
+                : () => _loadRequests(showSpinner: false),
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+        maxWidth: 800,
+        child: _loading
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(40),
+                  child: CircularProgressIndicator(),
                 ),
-        );
-      }
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_error != null) ...[
+                    _buildErrorState(),
+                    const SizedBox(height: 16),
+                  ],
+                  _buildSummary(),
+                  const SizedBox(height: 14),
+                  _buildStatusFilters(),
+                  const SizedBox(height: 14),
+                  if (_visibleRequests.isEmpty)
+                    const SchoolDeskStatusPanel.empty(
+                      title: 'No payment requests',
+                      message: 'Parent payment requests will appear here.',
+                    )
+                  else
+                    ..._visibleRequests.map(_requestCard),
+                ],
+              ),
+      );
+    }
 
     return SchoolDeskModuleScaffold(
       title: 'Payment Requests',
@@ -357,7 +352,13 @@ class _AdminPaymentRequestsScreenState
             _detailRow('Reference', _text(request['request_reference'])),
           _detailRow('Amount', _money(_num(request['amount']))),
           _detailRow('Paid on', _date(request['payment_date'])),
-          _detailRow('Mode', _text(request['payment_mode'], fallback: '-')),
+          _detailRow(
+            'Mode',
+            _text(
+              request['payment_method'] ?? request['payment_mode'],
+              fallback: '-',
+            ),
+          ),
           if (_num(request['selected_months']) > 0)
             _detailRow(
               'Selected',

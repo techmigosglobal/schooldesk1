@@ -11,8 +11,6 @@ import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/features/leave/presentation/screens/parent_leave_screen/parent_leave_request_form_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class ParentLeaveScreen extends StatefulWidget {
   const ParentLeaveScreen({super.key});
@@ -79,62 +77,6 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = DesktopBreakpoints.isDesktopWidth(
-      MediaQuery.sizeOf(context).width,
-    );
-
-    if (isDesktop) {
-      return DesktopScreenWrapper(
-        breadcrumbs: ['Leave'],
-
-        title: 'Leave Requests',
-
-        actions: const [],
-
-        child: Card(
-          elevation: 0,
-
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-
-                children: [
-                  Icon(
-                    Icons.desktop_windows_rounded,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  Text(
-                    'Leave Requests',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Text(
-                    'Desktop view coming soon',
-                    style: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.color?.withOpacity(0.5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
     final drawer = ParentDrawer(
       selectedIndex: _selectedNavIndex,
       onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),

@@ -634,6 +634,10 @@ function serializeClassRow(
   room: Record<string, any> | null,
   studentCount = 0,
   feeDues: { amount: number; students: number } = { amount: 0, students: 0 },
+  pendingFeeProofs: { amount: number; students: number } = {
+    amount: 0,
+    students: 0,
+  },
   todayAttendancePct: number | null = null,
 ) {
   const sectionName = text(section["section_name"]);
@@ -672,6 +676,8 @@ function serializeClassRow(
     total_students: studentCount,
     fees_due_amount: feeDues.amount,
     fees_due_students: feeDues.students,
+    fees_pending_verification_amount: pendingFeeProofs.amount,
+    fees_pending_verification_students: pendingFeeProofs.students,
     today_attendance_pct: todayAttendancePct,
     pending_issues: pendingIssues,
   };
@@ -719,6 +725,57 @@ async function feeDuesBySection(
       studentIds: new Set<string>(),
     };
     current.amount += Number(row.balance ?? 0);
+    const studentId = text(row.student_id);
+    if (studentId) current.studentIds.add(studentId);
+    totals.set(sectionId, current);
+  }
+  const result = new Map<string, { amount: number; students: number }>();
+  for (const [sectionId, total] of totals.entries()) {
+    result.set(sectionId, {
+      amount: Math.round(total.amount * 100) / 100,
+      students: total.studentIds.size,
+    });
+  }
+  return result;
+}
+
+async function pendingFeeProofsBySection(
+  svc: SupabaseClient,
+  school: string,
+  sectionYears: Map<string, string>,
+) {
+  const { data, error } = await svc.from("parent_payment_requests").select(
+    "student_id, amount, status, student:students(current_section_id), invoice:fee_invoices(academic_year_id)",
+  ).eq("school_id", school).in("status", [
+    "pending",
+    "submitted",
+    "pending_verification",
+  ]);
+  if (error) throw new Error(error.message);
+  const totals = new Map<string, { amount: number; studentIds: Set<string> }>();
+  for (const row of data ?? []) {
+    const studentValue = row.student as unknown;
+    const invoiceValue = row.invoice as unknown;
+    const student =
+      (Array.isArray(studentValue) ? studentValue[0] : studentValue) as
+        | Record<string, unknown>
+        | null
+        | undefined;
+    const invoice =
+      (Array.isArray(invoiceValue) ? invoiceValue[0] : invoiceValue) as
+        | Record<string, unknown>
+        | null
+        | undefined;
+    const sectionId = text(student?.current_section_id);
+    if (!sectionId) continue;
+    if (sectionYears.get(sectionId) !== text(invoice?.academic_year_id)) {
+      continue;
+    }
+    const current = totals.get(sectionId) ?? {
+      amount: 0,
+      studentIds: new Set<string>(),
+    };
+    current.amount += Number(row.amount ?? 0);
     const studentId = text(row.student_id);
     if (studentId) current.studentIds.add(studentId);
     totals.set(sectionId, current);
@@ -1261,6 +1318,11 @@ export async function handlePrincipal(
         ) => [text(row.id), text(row.academic_year_id)]),
       );
       const dues = await feeDuesBySection(svc, school, sectionYears);
+      const pendingFeeProofs = await pendingFeeProofsBySection(
+        svc,
+        school,
+        sectionYears,
+      );
       const attendancePct = await attendanceBySection(svc, school);
       const classes = (data ?? []).map((row: any) =>
         serializeClassRow(
@@ -1269,6 +1331,7 @@ export async function handlePrincipal(
           (row["room"] ?? null) as Record<string, any> | null,
           counts.get(text(row["id"])) ?? 0,
           dues.get(text(row["id"])),
+          pendingFeeProofs.get(text(row["id"])),
           attendancePct.get(text(row["id"])) ?? null,
         )
       );
@@ -1312,7 +1375,11 @@ export async function handlePrincipal(
     try {
       const grade = await resolveGrade(svc, school, body);
       const room = await resolveRoom(svc, school, body);
-      const classTeacherId = await resolveStaffId(svc, school, body.class_teacher_id);
+      const classTeacherId = await resolveStaffId(
+        svc,
+        school,
+        body.class_teacher_id,
+      );
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
       const academicYearId = await resolveAcademicYearId(
         svc,
@@ -1417,7 +1484,11 @@ export async function handlePrincipal(
     try {
       const grade = await resolveGrade(svc, school, body);
       const room = await resolveRoom(svc, school, body);
-      const classTeacherId = await resolveStaffId(svc, school, body.class_teacher_id);
+      const classTeacherId = await resolveStaffId(
+        svc,
+        school,
+        body.class_teacher_id,
+      );
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
       const academicYearId = await resolveAcademicYearId(
         svc,

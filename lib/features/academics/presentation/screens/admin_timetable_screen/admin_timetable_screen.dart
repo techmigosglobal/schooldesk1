@@ -4,8 +4,6 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 enum _ManualTimetableStage { selectClass, settings, editor, preview }
 
@@ -114,91 +112,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Academics', 'Timetable'],
-
-
-          title: 'Timetable',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Timetable', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: _bg,
@@ -270,7 +183,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       padding: const EdgeInsets.fromLTRB(8, 10, 12, 8),
       child: Row(
         children: [
-          if (!DesktopPlatform.isDesktopLayout(context) || _stage != _ManualTimetableStage.selectClass)
+          if (!DesktopPlatform.isDesktopLayout(context) ||
+              _stage != _ManualTimetableStage.selectClass)
             IconButton(
               tooltip: _stage == _ManualTimetableStage.selectClass
                   ? 'Menu'
@@ -402,9 +316,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 onSecondaryPressed: _deleteWholeTimetable,
               ),
               const SizedBox(height: 12),
-              _panel(
-                child: _buildSavedTimetablePreview(selectedSlots),
-              ),
+              _panel(child: _buildSavedTimetablePreview(selectedSlots)),
             ],
           ),
       ],
@@ -412,21 +324,21 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   }
 
   Widget _buildSavedTimetablePreview(List<Map<String, dynamic>> slots) {
-    final availableDays = slots
-        .map((slot) => _int(slot['day_of_week']))
-        .where((day) => day >= 1 && day <= _dayShortLabels.length)
-        .toSet()
-        .toList()
-      ..sort();
+    final availableDays =
+        slots
+            .map((slot) => _int(slot['day_of_week']))
+            .where((day) => day >= 1 && day <= _dayShortLabels.length)
+            .toSet()
+            .toList()
+          ..sort();
     if (availableDays.isEmpty) return const SizedBox.shrink();
 
     final activeDay = availableDays.contains(_selectedOverviewDay)
         ? _selectedOverviewDay
         : availableDays.first;
-    final daySlots = slots
-        .where((slot) => _int(slot['day_of_week']) == activeDay)
-        .toList()
-      ..sort(_slotSort);
+    final daySlots =
+        slots.where((slot) => _int(slot['day_of_week']) == activeDay).toList()
+          ..sort(_slotSort);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

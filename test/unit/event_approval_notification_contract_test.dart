@@ -60,7 +60,8 @@ void main() {
         expect(source, contains('_startEditingPost'));
         expect(source, contains('_deletePost'));
         expect(source, contains('Resubmit'));
-        expect(source, contains("'mp4'"));
+        expect(source, contains('Images only.'));
+        expect(source, isNot(contains("'mp4'")));
         expect(source, contains('EventPostMediaItem.parseList'));
       },
     );

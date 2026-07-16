@@ -136,6 +136,13 @@ extension BackendFeesApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
+        await _deleteCachedPaths([
+          r'/fees/structures',
+          r'/fees/invoices',
+          r'/students',
+          r'/principal/classes',
+          r'/dashboard/',
+        ]);
         return Map<String, dynamic>.from(data['data'] as Map? ?? {});
       }
       throw ServerException(
@@ -291,6 +298,13 @@ extension BackendFeesApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
+        await _deleteCachedPaths([
+          r'/fees/structures',
+          r'/fees/invoices',
+          r'/students',
+          r'/principal/classes',
+          r'/dashboard/',
+        ]);
         return Map<String, dynamic>.from(data['data'] as Map? ?? {});
       }
       throw ServerException(

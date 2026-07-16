@@ -43,93 +43,89 @@ class _AdminPaymentRequestDecisionScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
 
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-        final request = widget.args.request;
-        return DesktopScreenWrapper(
-          breadcrumbs: const ['Finance', 'Payments', 'Decision'],
-          title: 'Payment Decision',
-          actions: const [],
-          maxWidth: 600,
-          child: Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: context.appTheme.outlineVariant),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildDetails(request),
-                    const SizedBox(height: 16),
-                    _buildDecisionSelector(),
-                    const SizedBox(height: 14),
-                    TextFormField(
-                      controller: _remarksController,
-                      enabled: !_submitting,
-                      minLines: 3,
-                      maxLines: 5,
-                      decoration: InputDecoration(
-                        labelText: _decision == 'approved'
-                            ? 'Payment approval note'
-                            : _decision == 'clarification_required'
-                            ? 'Clarification note'
-                            : 'Rejection reason',
-                        alignLabelWithHint: true,
-                      ),
+    if (isDesktop) {
+      final request = widget.args.request;
+      return DesktopScreenWrapper(
+        breadcrumbs: const ['Finance', 'Payments', 'Decision'],
+        title: 'Payment Decision',
+        actions: const [],
+        maxWidth: 600,
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: context.appTheme.outlineVariant),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildDetails(request),
+                  const SizedBox(height: 16),
+                  _buildDecisionSelector(),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _remarksController,
+                    enabled: !_submitting,
+                    minLines: 3,
+                    maxLines: 5,
+                    decoration: InputDecoration(
+                      labelText: _decision == 'approved'
+                          ? 'Payment approval note'
+                          : _decision == 'clarification_required'
+                          ? 'Clarification note'
+                          : 'Rejection reason',
+                      alignLabelWithHint: true,
                     ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: FilledButton.icon(
-                        onPressed: _submitting ? null : _submit,
-                        icon: _submitting
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : Icon(
-                                _decision == 'approved'
-                                    ? Icons.check_circle_rounded
-                                    : _decision == 'clarification_required'
-                                    ? Icons.help_outline_rounded
-                                    : Icons.cancel_rounded,
-                                size: 18,
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton.icon(
+                      onPressed: _submitting ? null : _submit,
+                      icon: _submitting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
                               ),
-                        label: Text(
-                          _submitting
-                              ? 'Submitting...'
-                              : _decision == 'approved'
-                              ? 'Approve Payment'
-                              : _decision == 'clarification_required'
-                              ? 'Request Clarification'
-                              : 'Reject Payment',
-                          style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
-                        ),
+                            )
+                          : Icon(
+                              _decision == 'approved'
+                                  ? Icons.check_circle_rounded
+                                  : _decision == 'clarification_required'
+                                  ? Icons.help_outline_rounded
+                                  : Icons.cancel_rounded,
+                              size: 18,
+                            ),
+                      label: Text(
+                        _submitting
+                            ? 'Submitting...'
+                            : _decision == 'approved'
+                            ? 'Approve Payment'
+                            : _decision == 'clarification_required'
+                            ? 'Request Clarification'
+                            : 'Reject Payment',
+                        style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-        );
-      }
+        ),
+      );
+    }
 
     final request = widget.args.request;
     return SchoolDeskModuleScaffold(
@@ -240,7 +236,13 @@ class _AdminPaymentRequestDecisionScreenState
           ),
           _detailRow('Amount', _money(_num(request['amount']))),
           _detailRow('Payment date', _date(request['payment_date'])),
-          _detailRow('Mode', _text(request['payment_mode'], fallback: '-')),
+          _detailRow(
+            'Mode',
+            _text(
+              request['payment_method'] ?? request['payment_mode'],
+              fallback: '-',
+            ),
+          ),
           if (_text(request['transaction_id']).isNotEmpty)
             _detailRow('Transaction', _text(request['transaction_id'])),
           if (_text(request['proof_url']).isNotEmpty) ...[

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
@@ -47,11 +50,43 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   List<Map<String, dynamic>> _staffSubjects = [];
   List<Map<String, dynamic>> _events = [];
   int _unreadNotifications = 0;
+  NotificationService? _notificationService;
+  String _lastNotificationSignal = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+    unawaited(_bindFeeNotifications());
+  }
+
+  @override
+  void dispose() {
+    _notificationService?.removeListener(_onNotificationsChanged);
+    super.dispose();
+  }
+
+  Future<void> _bindFeeNotifications() async {
+    final service = await NotificationService.getInstance();
+    if (!mounted) return;
+    _notificationService = service;
+    _lastNotificationSignal = service.notifications.isEmpty
+        ? ''
+        : service.notifications.first.id;
+    service.addListener(_onNotificationsChanged);
+  }
+
+  void _onNotificationsChanged() {
+    final service = _notificationService;
+    if (!mounted || service == null || service.notifications.isEmpty) return;
+    final latest = service.notifications.first;
+    if (latest.id == _lastNotificationSignal) return;
+    _lastNotificationSignal = latest.id;
+    final isFeeUpdate =
+        latest.referenceType == 'fee' ||
+        latest.category.contains('fee') ||
+        latest.title.toLowerCase().contains('fee payment');
+    if (isFeeUpdate) unawaited(_load());
   }
 
   @override
@@ -204,7 +239,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     assert(
       _legacyNavigationContract.isNotEmpty && _legacyScreenLabels.length == 5,
     );
-    final isDesktop = DesktopBreakpoints.isDesktopWidth(MediaQuery.sizeOf(context).width);
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
     if (isDesktop) {
       return _buildDesktopLayout();
     }
@@ -279,8 +316,10 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                         students: _int(_summary['total_students']),
                         attendance: _num(_summary['average_attendance']),
                         issues: _int(_summary['classes_with_issues']),
-                        onClassesTap: () => setState(() => _capacityFilter = 'All'),
-                        onIssuesTap: () => setState(() => _capacityFilter = 'Issues'),
+                        onClassesTap: () =>
+                            setState(() => _capacityFilter = 'All'),
+                        onIssuesTap: () =>
+                            setState(() => _capacityFilter = 'Issues'),
                       ),
                       const SizedBox(height: 16),
                       _ClassesTodayCard(
@@ -914,9 +953,10 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         .trim()
         .toLowerCase();
     if (readAt.isNotEmpty || isRead == 'true' || isRead == '1') return false;
-    final role = '${notification['role'] ?? notification['target_role'] ?? 'all'}'
-        .trim()
-        .toLowerCase();
+    final role =
+        '${notification['role'] ?? notification['target_role'] ?? 'all'}'
+            .trim()
+            .toLowerCase();
     return role == 'all' || role == 'principal';
   }
 
@@ -992,14 +1032,20 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
                   child: _ClassesDirectorySearchField(
                     onChanged: (value) => setState(() => _search = value),
                     onFilter: _showClassFilterSheet,
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 4.0,
+                  ),
                   child: _ClassesDirectoryMetricStrip(
                     classes: _int(
                       _summary['total_classes'],
@@ -1009,7 +1055,8 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                     attendance: _num(_summary['average_attendance']),
                     issues: _int(_summary['classes_with_issues']),
                     onClassesTap: () => setState(() => _capacityFilter = 'All'),
-                    onIssuesTap: () => setState(() => _capacityFilter = 'Issues'),
+                    onIssuesTap: () =>
+                        setState(() => _capacityFilter = 'Issues'),
                   ),
                 ),
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
@@ -1017,55 +1064,66 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
                       : _error != null
-                          ? _ClassesDirectoryErrorCard(
-                              message: _error!,
-                              onRetry: _load,
-                            )
-                          : rows.isEmpty
-                              ? _ClassesDirectoryEmptyCard(onAdd: _openClassForm)
-                              : RefreshIndicator(
-                                  onRefresh: _load,
-                                  color: const Color(0xFF1478F2),
-                                  child: ListView.builder(
-                                    padding: const EdgeInsets.all(16),
-                                    itemCount: rows.length,
-                                    itemBuilder: (context, index) {
-                                      final row = rows[index];
-                                      final isSelected = _selectedSectionId == _text(row['section_id']);
-                                      return Padding(
-                                        padding: const EdgeInsets.only(bottom: 12),
-                                        child: InkWell(
-                                          onTap: () {
-                                            setState(() {
-                                              _selectedSectionId = _text(row['section_id']);
-                                            });
-                                          },
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              border: isSelected
-                                                  ? Border.all(color: const Color(0xFF1478F2), width: 2)
-                                                  : Border.all(color: Colors.transparent),
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: _ClassesDirectoryClassCard(
-                                              row: row,
-                                              subjects: _subjectsForClass(row),
-                                              healthLabel: _healthLabel(row),
-                                              healthColor: _healthColor(row),
-                                              onTap: () {
-                                                setState(() {
-                                                  _selectedSectionId = _text(row['section_id']);
-                                                });
-                                              },
-                                              onAction: (action) =>
-                                                  _handleClassAction(action, row),
-                                            ),
-                                          ),
-                                        ),
+                      ? _ClassesDirectoryErrorCard(
+                          message: _error!,
+                          onRetry: _load,
+                        )
+                      : rows.isEmpty
+                      ? _ClassesDirectoryEmptyCard(onAdd: _openClassForm)
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          color: const Color(0xFF1478F2),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: rows.length,
+                            itemBuilder: (context, index) {
+                              final row = rows[index];
+                              final isSelected =
+                                  _selectedSectionId ==
+                                  _text(row['section_id']);
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedSectionId = _text(
+                                        row['section_id'],
                                       );
-                                    },
+                                    });
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: isSelected
+                                          ? Border.all(
+                                              color: const Color(0xFF1478F2),
+                                              width: 2,
+                                            )
+                                          : Border.all(
+                                              color: Colors.transparent,
+                                            ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: _ClassesDirectoryClassCard(
+                                      row: row,
+                                      subjects: _subjectsForClass(row),
+                                      healthLabel: _healthLabel(row),
+                                      healthColor: _healthColor(row),
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedSectionId = _text(
+                                            row['section_id'],
+                                          );
+                                        });
+                                      },
+                                      onAction: (action) =>
+                                          _handleClassAction(action, row),
+                                    ),
                                   ),
                                 ),
+                              );
+                            },
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -1128,7 +1186,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
           // Basic Info
           Card(
             color: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             elevation: 0,
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -1138,20 +1198,30 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: healthColor.withAlpha(24),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           healthLabel,
-                          style: TextStyle(color: healthColor, fontWeight: FontWeight.bold, fontSize: 12),
+                          style: TextStyle(
+                            color: healthColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                       const Spacer(),
                       Text(
                         'Room: ${_text(row['room_number'], fallback: 'N/A')}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -1161,7 +1231,8 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                       Expanded(
                         child: _DetailRow(
                           label: 'Students / Capacity',
-                          value: '${_int(row['student_count'])} / ${_int(row['capacity'])}',
+                          value:
+                              '${_int(row['student_count'])} / ${_int(row['capacity'])}',
                         ),
                       ),
                       Expanded(
@@ -1178,13 +1249,19 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                       Expanded(
                         child: _DetailRow(
                           label: 'Class Teacher',
-                          value: _text(row['class_teacher_name'], fallback: 'Not assigned'),
+                          value: _text(
+                            row['class_teacher_name'],
+                            fallback: 'Not assigned',
+                          ),
                         ),
                       ),
                       Expanded(
                         child: _DetailRow(
                           label: 'Co-Teacher',
-                          value: _text(row['co_teacher_name'], fallback: 'Not assigned'),
+                          value: _text(
+                            row['co_teacher_name'],
+                            fallback: 'Not assigned',
+                          ),
                         ),
                       ),
                     ],
@@ -1197,7 +1274,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
           // Class Subjects
           Card(
             color: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             elevation: 0,
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -1208,7 +1287,10 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                     children: [
                       const Text(
                         'Subjects & Tutors',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                       const Spacer(),
                       TextButton.icon(
@@ -1224,7 +1306,10 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                       padding: EdgeInsets.symmetric(vertical: 12.0),
                       child: Text(
                         'No subjects assigned to this class yet.',
-                        style: TextStyle(color: Color(0xFF64748B), fontStyle: FontStyle.italic),
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
                     )
                   else
@@ -1233,9 +1318,16 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                       final teacherName = _teacherForSubject(row, sub);
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.menu_book_rounded, color: Colors.blue),
+                        leading: const Icon(
+                          Icons.menu_book_rounded,
+                          color: Colors.blue,
+                        ),
                         title: Text(subName),
-                        subtitle: Text(teacherName.isEmpty ? 'No teacher assigned' : teacherName),
+                        subtitle: Text(
+                          teacherName.isEmpty
+                              ? 'No teacher assigned'
+                              : teacherName,
+                        ),
                       );
                     }),
                 ],
@@ -1246,7 +1338,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
           // Observation Action Card
           Card(
             color: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             elevation: 0,
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -1263,18 +1357,23 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                     runSpacing: 10,
                     children: [
                       ElevatedButton.icon(
-                        onPressed: () => _openRoute(AppRoutes.studentOversight, row),
+                        onPressed: () =>
+                            _openRoute(AppRoutes.studentOversight, row),
                         icon: const Icon(Icons.groups_rounded, size: 16),
                         label: const Text('Students List'),
                       ),
                       ElevatedButton.icon(
-                        onPressed: () => _openRoute(AppRoutes.principalAttendance, row),
+                        onPressed: () =>
+                            _openRoute(AppRoutes.principalAttendance, row),
                         icon: const Icon(Icons.fact_check_rounded, size: 16),
                         label: const Text('Attendance'),
                       ),
                       ElevatedButton.icon(
                         onPressed: () => _openFeesModule(row),
-                        icon: const Icon(Icons.account_balance_wallet_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.account_balance_wallet_rounded,
+                          size: 16,
+                        ),
                         label: const Text('Fees Monitoring'),
                       ),
                       ElevatedButton.icon(
@@ -2029,6 +2128,12 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
     final students = _classInt(row['total_students']);
     final capacity = _classInt(row['capacity']);
     final dueFees = _classNum(row['fees_due_amount']);
+    final pendingProofAmount = _classNum(
+      row['fees_pending_verification_amount'],
+    );
+    final pendingProofStudents = _classInt(
+      row['fees_pending_verification_students'],
+    );
     final compact = _classesCompact(context);
     return Material(
       color: context.appTheme.surface,
@@ -2190,6 +2295,29 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                   },
                 ),
               ),
+              if (pendingProofAmount > 0) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.hourglass_top_rounded,
+                      size: 16,
+                      color: Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '${_formatCurrencyCompact(pendingProofAmount)} proof pending review for $pendingProofStudents student${pendingProofStudents == 1 ? '' : 's'}',
+                        style: GoogleFonts.dmSans(
+                          color: const Color(0xFF92400E),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -3165,10 +3293,18 @@ class _ClassMetricTile extends StatelessWidget {
 
 List<_ClassIssueItem> _classIssueBreakdown(Map<String, dynamic> row) {
   final teacherPending = _classText(row['class_teacher_id']).isEmpty;
-  final studentsCount = _classInt(row['student_count'] ?? row['total_students']);
+  final studentsCount = _classInt(
+    row['student_count'] ?? row['total_students'],
+  );
   final capacity = _classInt(row['capacity']);
   final feeDueStudents = _classInt(row['fees_due_students']);
   final feeDueAmount = _classNum(row['fees_due_amount']);
+  final pendingFeeProofStudents = _classInt(
+    row['fees_pending_verification_students'],
+  );
+  final pendingFeeProofAmount = _classNum(
+    row['fees_pending_verification_amount'],
+  );
 
   final practicePending = _classInt(row['homework_pending']);
   final disciplineNotes = _classInt(row['discipline_issues']);
@@ -3206,6 +3342,15 @@ List<_ClassIssueItem> _classIssueBreakdown(Map<String, dynamic> row) {
         value: _formatCurrencyCompact(feeDueAmount),
         note: '$feeDueStudents student${feeDueStudents == 1 ? '' : 's'}',
         color: const Color(0xFFDC2626),
+      ),
+    if (pendingFeeProofStudents > 0 || pendingFeeProofAmount > 0)
+      _ClassIssueItem(
+        icon: Icons.hourglass_top_rounded,
+        label: 'Proof pending',
+        value: _formatCurrencyCompact(pendingFeeProofAmount),
+        note:
+            '$pendingFeeProofStudents student${pendingFeeProofStudents == 1 ? '' : 's'} awaiting verification',
+        color: const Color(0xFFD97706),
       ),
     if (practicePending > 0)
       _ClassIssueItem(

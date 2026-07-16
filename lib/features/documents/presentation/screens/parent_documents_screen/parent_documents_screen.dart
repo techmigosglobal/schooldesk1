@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:printing/printing.dart';
@@ -8,6 +10,7 @@ import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -15,8 +18,6 @@ import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class ParentDocumentsScreen extends StatefulWidget {
   const ParentDocumentsScreen({super.key});
@@ -35,6 +36,10 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
   final Map<String, List<Map<String, dynamic>>> _docsByStudent = {};
   bool _loading = true;
   String? _error;
+  Map<String, dynamic> _school = const {};
+  String _parentName = '';
+  NotificationService? _notificationService;
+  String _lastNotificationSignal = '';
 
   String? get _activeStudentId => _children.isEmpty
       ? null
@@ -56,11 +61,51 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
   void initState() {
     super.initState();
     _loadData();
+    unawaited(_bindDocumentNotifications());
+  }
+
+  @override
+  void dispose() {
+    _notificationService?.removeListener(_onNotificationsChanged);
+    super.dispose();
+  }
+
+  Future<void> _bindDocumentNotifications() async {
+    final service = await NotificationService.getInstance();
+    if (!mounted) return;
+    _notificationService = service;
+    _lastNotificationSignal = service.notifications.isEmpty
+        ? ''
+        : service.notifications.first.id;
+    service.addListener(_onNotificationsChanged);
+  }
+
+  void _onNotificationsChanged() {
+    final service = _notificationService;
+    if (!mounted || service == null || service.notifications.isEmpty) return;
+    final latest = service.notifications.first;
+    if (latest.id == _lastNotificationSignal) return;
+    _lastNotificationSignal = latest.id;
+    if (latest.referenceType == 'student_document' ||
+        latest.category == 'document') {
+      unawaited(_loadData());
+    }
   }
 
   Future<void> _loadData() async {
     try {
-      final children = await BackendApiClient.instance.getMyStudents();
+      final api = BackendApiClient.instance;
+      final children = await api.getMyStudents(
+        refreshNonce: DateTime.now().millisecondsSinceEpoch,
+      );
+      Map<String, dynamic> school = const {};
+      String parentName = '';
+      try {
+        school = await api.getCurrentSchool();
+      } on Object catch (_) {}
+      try {
+        parentName = (await api.getProfile()).name.trim();
+      } on Object catch (_) {}
       final docs = <String, List<Map<String, dynamic>>>{};
       for (final child in children) {
         final studentId = (child['id'] ?? '').toString();
@@ -81,6 +126,12 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
                 'size': '',
                 'docType': row['doc_type'] ?? 'document',
                 'fileUrl': row['file_url'] ?? '',
+                'amount': row['amount'] ?? 0,
+                'receiptNo': row['receipt_number'] ?? row['receipt_no'],
+                'paymentMethod':
+                    row['payment_method'] ?? row['payment_mode'] ?? '',
+                'paymentDate':
+                    row['paid_at'] ?? row['payment_date'] ?? row['created_at'],
                 'studentName':
                     child['name'] ??
                     '${child['first_name'] ?? ''} ${child['last_name'] ?? ''}'
@@ -96,6 +147,8 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
       if (!mounted) return;
       setState(() {
         _children = children;
+        _school = school;
+        _parentName = parentName;
         _activeChildIndex = selectedIndex;
         _docsByStudent
           ..clear()
@@ -166,23 +219,41 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
     final childName = _activeChildName.isEmpty ? 'Student' : _activeChildName;
     final amount = (doc['amount'] as num?)?.toDouble() ?? 0.0;
     final termLabel = doc['name'] as String? ?? 'Fee Receipt';
+    final rollNo =
+        '${_activeChild['rollNo'] ?? _activeChild['roll_number'] ?? _activeChild['admission_number'] ?? _activeChild['student_code'] ?? ''}'
+            .trim();
+    final schoolName = '${_school['name'] ?? 'School'}'.trim();
+    final schoolAddress =
+        [
+              _school['address'],
+              _school['address_line1'],
+              _school['city'],
+              _school['state'],
+              _school['postal_code'],
+            ]
+            .map((value) => '${value ?? ''}'.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .join(', ');
+    final paymentDate =
+        DateTime.tryParse('${doc['paymentDate'] ?? ''}') ?? DateTime.now();
 
     final pdfBytes = await pdfService.generateFeeReceipt(
       receiptNo: doc['receiptNo'] as String? ?? '${doc['id'] ?? ''}',
       studentName: childName,
       className: _activeClassName,
-      rollNo: '',
-      parentName: '',
+      rollNo: rollNo,
+      parentName: _parentName,
       feeItems: [
         {'description': termLabel, 'amount': amount},
       ],
       totalAmount: amount,
       paidAmount: amount,
       balance: 0.0,
-      paymentMode: '',
-      paymentDate: DateTime.now(),
-      schoolName: '',
-      schoolAddress: '',
+      paymentMode: '${doc['paymentMethod'] ?? 'UPI'}'.trim(),
+      paymentDate: paymentDate,
+      schoolName: schoolName.isEmpty ? 'School' : schoolName,
+      schoolAddress: schoolAddress,
     );
 
     await Printing.layoutPdf(
@@ -346,91 +417,6 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Documents'],
-
-
-          title: 'Documents',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Documents', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     return SchoolDeskModuleScaffold(
       title: 'Documents',
       subtitle: 'Access child documents and generated records',

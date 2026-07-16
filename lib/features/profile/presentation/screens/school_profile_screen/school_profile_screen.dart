@@ -11,8 +11,6 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class SchoolProfileScreen extends StatefulWidget {
   const SchoolProfileScreen({super.key});
@@ -218,263 +216,182 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Settings', 'School Profile'],
-
-
-          title: 'School Profile',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('School Profile', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     final principalColor = context.appTheme.roleColor(SchoolDeskRole.principal);
     return Theme(
       data: Theme.of(context).copyWith(
         primaryColor: principalColor,
-        colorScheme: Theme.of(context).colorScheme.copyWith(
-          primary: principalColor,
-        ),
+        colorScheme: Theme.of(
+          context,
+        ).colorScheme.copyWith(primary: principalColor),
       ),
       child: SchoolDeskModuleScaffold(
         title: 'School Profile',
-        subtitle: 'Maintain trusted institution identity, contacts, and branding',
+        subtitle:
+            'Maintain trusted institution identity, contacts, and branding',
         drawer: PrincipalDrawer(
           selectedIndex: PrincipalNav.schoolProfile,
           onDestinationSelected: (_) {},
         ),
-      actions: [
-        if (!_loading && _error == null)
-          TextButton.icon(
-            onPressed: _saving
-                ? null
-                : _editing
-                ? _save
-                : () => setState(() => _editing = true),
-            icon: _saving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(_editing ? Icons.check_rounded : Icons.edit_rounded),
-            label: Text(_editing ? 'Save' : 'Edit'),
-          ),
-      ],
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? _errorState()
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: Form(
-                key: _formKey,
-                autovalidateMode: _editing
-                    ? _autovalidateMode
-                    : AutovalidateMode.disabled,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                  children: [
-                    _identityHeader(),
-                    const SizedBox(height: 12),
-                    _section('Basic Details', [
-                      _field(
-                        'School Name',
-                        _nameCtrl,
-                        Icons.apartment_rounded,
-                        validator: (value) =>
-                            _requiredText(value, 'School name', max: 120),
-                      ),
-                      _field(
-                        'School Type',
-                        _typeCtrl,
-                        Icons.category_rounded,
-                        validator: (value) =>
-                            _requiredText(value, 'School type', max: 80),
-                      ),
-                      _field(
-                        'Affiliation Board',
-                        _boardCtrl,
-                        Icons.verified_rounded,
-                        validator: (value) =>
-                            _requiredText(value, 'Affiliation board', max: 80),
-                      ),
-                      _field(
-                        'Established Year',
-                        _establishedCtrl,
-                        Icons.event_available_rounded,
-                        keyboardType: TextInputType.number,
-                        validator: _requiredEstablishedYear,
-                      ),
-                      _field(
-                        'Principal Name',
-                        _principalCtrl,
-                        Icons.admin_panel_settings_rounded,
-                        validator: (value) =>
-                            _requiredText(value, 'Principal name', max: 120),
-                      ),
-                      _field(
-                        'Motto',
-                        _mottoCtrl,
-                        Icons.format_quote_rounded,
-                        validator: (value) =>
-                            _optionalText(value, 'Motto', max: 180),
-                      ),
-                    ]),
-                    _section('Contact', [
-                      _field(
-                        'School Email',
-                        _emailCtrl,
-                        Icons.alternate_email_rounded,
-                        keyboardType: TextInputType.emailAddress,
-                        validator: _requiredEmail,
-                      ),
-                      _field(
-                        'School Phone',
-                        _phoneCtrl,
-                        Icons.call_rounded,
-                        keyboardType: TextInputType.phone,
-                        validator: _requiredPhone,
-                      ),
-                      _field(
-                        'Website',
-                        _websiteCtrl,
-                        Icons.language_rounded,
-                        keyboardType: TextInputType.url,
-                        validator: _optionalWebsite,
-                      ),
-                    ]),
-                    _section('Address', [
-                      _field(
-                        'Address Line 1',
-                        _address1Ctrl,
-                        Icons.location_on_rounded,
-                        validator: (value) =>
-                            _requiredText(value, 'Address line 1', max: 160),
-                      ),
-                      _field(
-                        'Address Line 2',
-                        _address2Ctrl,
-                        Icons.add_location_alt_rounded,
-                        validator: (value) =>
-                            _optionalText(value, 'Address line 2', max: 160),
-                      ),
-                      _field(
-                        'City',
-                        _cityCtrl,
-                        Icons.location_city_rounded,
-                        validator: (value) =>
-                            _requiredText(value, 'City', max: 80),
-                      ),
-                      _field(
-                        'State',
-                        _stateCtrl,
-                        Icons.map_rounded,
-                        validator: (value) =>
-                            _requiredText(value, 'State', max: 80),
-                      ),
-                      _field(
-                        'Postal Code',
-                        _postalCtrl,
-                        Icons.local_post_office_rounded,
-                        keyboardType: TextInputType.text,
-                        validator: _requiredPostalCode,
-                      ),
-                    ]),
-                    _section('Regional Preferences', [
-                      _field(
-                        'Timezone',
-                        _timezoneCtrl,
-                        Icons.schedule_rounded,
-                        validator: _requiredTimezone,
-                      ),
-                      _field(
-                        'Currency',
-                        _currencyCtrl,
-                        Icons.currency_rupee_rounded,
-                        validator: _requiredCurrency,
-                      ),
-                    ]),
-                    _bottomActionPanel(),
-                  ],
+        actions: [
+          if (!_loading && _error == null)
+            TextButton.icon(
+              onPressed: _saving
+                  ? null
+                  : _editing
+                  ? _save
+                  : () => setState(() => _editing = true),
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(_editing ? Icons.check_rounded : Icons.edit_rounded),
+              label: Text(_editing ? 'Save' : 'Edit'),
+            ),
+        ],
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? _errorState()
+            : RefreshIndicator(
+                onRefresh: _load,
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode: _editing
+                      ? _autovalidateMode
+                      : AutovalidateMode.disabled,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                    children: [
+                      _identityHeader(),
+                      const SizedBox(height: 12),
+                      _section('Basic Details', [
+                        _field(
+                          'School Name',
+                          _nameCtrl,
+                          Icons.apartment_rounded,
+                          validator: (value) =>
+                              _requiredText(value, 'School name', max: 120),
+                        ),
+                        _field(
+                          'School Type',
+                          _typeCtrl,
+                          Icons.category_rounded,
+                          validator: (value) =>
+                              _requiredText(value, 'School type', max: 80),
+                        ),
+                        _field(
+                          'Affiliation Board',
+                          _boardCtrl,
+                          Icons.verified_rounded,
+                          validator: (value) => _requiredText(
+                            value,
+                            'Affiliation board',
+                            max: 80,
+                          ),
+                        ),
+                        _field(
+                          'Established Year',
+                          _establishedCtrl,
+                          Icons.event_available_rounded,
+                          keyboardType: TextInputType.number,
+                          validator: _requiredEstablishedYear,
+                        ),
+                        _field(
+                          'Principal Name',
+                          _principalCtrl,
+                          Icons.admin_panel_settings_rounded,
+                          validator: (value) =>
+                              _requiredText(value, 'Principal name', max: 120),
+                        ),
+                        _field(
+                          'Motto',
+                          _mottoCtrl,
+                          Icons.format_quote_rounded,
+                          validator: (value) =>
+                              _optionalText(value, 'Motto', max: 180),
+                        ),
+                      ]),
+                      _section('Contact', [
+                        _field(
+                          'School Email',
+                          _emailCtrl,
+                          Icons.alternate_email_rounded,
+                          keyboardType: TextInputType.emailAddress,
+                          validator: _requiredEmail,
+                        ),
+                        _field(
+                          'School Phone',
+                          _phoneCtrl,
+                          Icons.call_rounded,
+                          keyboardType: TextInputType.phone,
+                          validator: _requiredPhone,
+                        ),
+                        _field(
+                          'Website',
+                          _websiteCtrl,
+                          Icons.language_rounded,
+                          keyboardType: TextInputType.url,
+                          validator: _optionalWebsite,
+                        ),
+                      ]),
+                      _section('Address', [
+                        _field(
+                          'Address Line 1',
+                          _address1Ctrl,
+                          Icons.location_on_rounded,
+                          validator: (value) =>
+                              _requiredText(value, 'Address line 1', max: 160),
+                        ),
+                        _field(
+                          'Address Line 2',
+                          _address2Ctrl,
+                          Icons.add_location_alt_rounded,
+                          validator: (value) =>
+                              _optionalText(value, 'Address line 2', max: 160),
+                        ),
+                        _field(
+                          'City',
+                          _cityCtrl,
+                          Icons.location_city_rounded,
+                          validator: (value) =>
+                              _requiredText(value, 'City', max: 80),
+                        ),
+                        _field(
+                          'State',
+                          _stateCtrl,
+                          Icons.map_rounded,
+                          validator: (value) =>
+                              _requiredText(value, 'State', max: 80),
+                        ),
+                        _field(
+                          'Postal Code',
+                          _postalCtrl,
+                          Icons.local_post_office_rounded,
+                          keyboardType: TextInputType.text,
+                          validator: _requiredPostalCode,
+                        ),
+                      ]),
+                      _section('Regional Preferences', [
+                        _field(
+                          'Timezone',
+                          _timezoneCtrl,
+                          Icons.schedule_rounded,
+                          validator: _requiredTimezone,
+                        ),
+                        _field(
+                          'Currency',
+                          _currencyCtrl,
+                          Icons.currency_rupee_rounded,
+                          validator: _requiredCurrency,
+                        ),
+                      ]),
+                      _bottomActionPanel(),
+                    ],
+                  ),
                 ),
               ),
-            ),
       ),
     );
   }
@@ -562,7 +479,10 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                     disabledForegroundColor: principalColor.withAlpha(128),
                     disabledBackgroundColor: Colors.white.withAlpha(180),
                     elevation: 1,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                   ),
                 ),
               ],
@@ -691,7 +611,6 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     }
     return null;
   }
-
 
   String? _requiredEstablishedYear(String? value) {
     final requiredError = _requiredText(value, 'Established year', max: 4);

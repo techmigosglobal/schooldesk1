@@ -26,7 +26,7 @@ void main() {
       );
       expect(
         source,
-        contains('if (!staffId) return fail("staff_id required", 400);'),
+        contains('if (!staffId) return fail("staff profile required", 403);'),
       );
     },
   );

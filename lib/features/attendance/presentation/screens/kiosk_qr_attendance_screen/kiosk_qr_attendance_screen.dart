@@ -5,14 +5,13 @@ import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/widgets/staff_qr_attendance_panel.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class KioskQrAttendanceScreen extends StatefulWidget {
   const KioskQrAttendanceScreen({super.key});
 
   @override
-  State<KioskQrAttendanceScreen> createState() => _KioskQrAttendanceScreenState();
+  State<KioskQrAttendanceScreen> createState() =>
+      _KioskQrAttendanceScreenState();
 }
 
 class _KioskQrAttendanceScreenState extends State<KioskQrAttendanceScreen> {
@@ -25,8 +24,7 @@ class _KioskQrAttendanceScreenState extends State<KioskQrAttendanceScreen> {
     if (role != 'kiosk') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          final target =
-              RouteAccessGuard.dashboardForRole(role) ?? '/';
+          final target = RouteAccessGuard.dashboardForRole(role) ?? '/';
           Navigator.of(context).pushReplacementNamed(target);
         }
       });
@@ -35,91 +33,6 @@ class _KioskQrAttendanceScreenState extends State<KioskQrAttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Attendance', 'QR'],
-
-
-          title: 'QR Attendance',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('QR Attendance', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     final wide = MediaQuery.of(context).size.width >= 900;
     final role =
         BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';

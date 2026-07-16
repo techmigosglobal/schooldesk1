@@ -7,8 +7,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class TeacherMyAttendanceScreen extends StatefulWidget {
   const TeacherMyAttendanceScreen({super.key});
@@ -130,91 +128,6 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Attendance', 'My Attendance'],
-
-
-          title: 'My Attendance',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('My Attendance', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     return TeacherFlowScaffold(
       title: 'My Attendance',
       subtitle: 'QR Punch-in',

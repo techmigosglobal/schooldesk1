@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -7,8 +8,6 @@ import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
 class ParentCalendarScreen extends StatefulWidget {
   const ParentCalendarScreen({super.key});
@@ -25,6 +24,8 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
   String? _error;
   List<Map<String, dynamic>> _events = [];
   List<Map<String, dynamic>> _holidays = [];
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
 
   @override
   void initState() {
@@ -87,91 +88,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Calendar'],
-
-
-          title: 'Calendar',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Calendar', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     return SchoolDeskModuleScaffold(
       title: 'Calendar',
       subtitle: 'See school events, holidays, and PTM schedules',
@@ -207,7 +123,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
   }
 
   Widget _buildEventsTab() {
-    return _tabList(
+    return _calendarTab(
       rows: _events,
       emptyTitle: 'No events',
       emptyMessage: 'School events and PTM slots will appear here.',
@@ -216,11 +132,99 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
   }
 
   Widget _buildHolidaysTab() {
-    return _tabList(
+    return _calendarTab(
       rows: _holidays,
       emptyTitle: 'No holidays',
       emptyMessage: 'Published school holidays will appear here.',
       itemBuilder: _holidayCard,
+    );
+  }
+
+  Widget _calendarTab({
+    required List<Map<String, dynamic>> rows,
+    required String emptyTitle,
+    required String emptyMessage,
+    required Widget Function(Map<String, dynamic>) itemBuilder,
+  }) {
+    final selectedRows = _selectedDay == null
+        ? rows
+        : rows
+              .where(
+                (row) => _sameDay(row['dateSort'] as DateTime?, _selectedDay),
+              )
+              .toList();
+    final label = _selectedDay == null
+        ? 'All published dates'
+        : 'Items on ${_fullDate(_selectedDay)}';
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: TableCalendar<Map<String, dynamic>>(
+            firstDay: DateTime(2020),
+            lastDay: DateTime(2035, 12, 31),
+            focusedDay: _focusedDay,
+            selectedDayPredicate: (day) => _sameDay(day, _selectedDay),
+            eventLoader: (day) => rows
+                .where((row) => _sameDay(row['dateSort'] as DateTime?, day))
+                .toList(),
+            calendarFormat: CalendarFormat.month,
+            availableCalendarFormats: const {CalendarFormat.month: 'Month'},
+            onDaySelected: (selectedDay, focusedDay) {
+              setState(() {
+                _selectedDay = selectedDay;
+                _focusedDay = focusedDay;
+              });
+            },
+            onPageChanged: (focusedDay) => _focusedDay = focusedDay,
+            calendarStyle: CalendarStyle(
+              markerDecoration: BoxDecoration(
+                color: context.appTheme.primary,
+                shape: BoxShape.circle,
+              ),
+              selectedDecoration: BoxDecoration(
+                color: context.appTheme.primary,
+                shape: BoxShape.circle,
+              ),
+              todayDecoration: BoxDecoration(
+                color: context.appTheme.primary.withAlpha(90),
+                shape: BoxShape.circle,
+              ),
+            ),
+            headerStyle: const HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+          child: Row(
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              if (_selectedDay != null)
+                TextButton(
+                  onPressed: () => setState(() => _selectedDay = null),
+                  child: const Text('Show all'),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _tabList(
+            rows: selectedRows,
+            emptyTitle: _selectedDay == null ? emptyTitle : 'Nothing scheduled',
+            emptyMessage: _selectedDay == null
+                ? emptyMessage
+                : 'There are no published items on this date.',
+            itemBuilder: itemBuilder,
+          ),
+        ),
+      ],
     );
   }
 

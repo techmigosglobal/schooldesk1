@@ -50,7 +50,7 @@ void main() {
     expect(deferIndex, lessThan(roleInitIndex));
     expect(deferIndex, lessThan(pushInitIndex));
     expect(main, contains('WidgetsBinding.instance.addPostFrameCallback'));
-    expect(main, contains('restoreStoredSession()'));
+    expect(main, contains('BackendApiClient.instance.restoreStoredSession'));
     expect(
       main,
       isNot(contains('await FcmService().initialize()')),

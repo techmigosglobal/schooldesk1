@@ -191,6 +191,13 @@ class _ParentDrawerState extends State<ParentDrawer> {
               label: 'Messages',
               route: AppRoutes.parentTeacherChat,
             ),
+            const SchoolDeskNavigationItem(
+              index: ParentNav.complaints,
+              icon: Icons.support_agent_outlined,
+              activeIcon: Icons.support_agent_rounded,
+              label: 'Raise an Issue',
+              route: AppRoutes.parentComplaints,
+            ),
             // Show PTM only when backend feature is available
             if (FeatureAvailabilityService.stateFor(
               SchoolDeskFeature.teacherParentMeetings,

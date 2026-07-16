@@ -675,6 +675,170 @@ async function invoiceIdsForFeeStructure(
   return [...ids].filter(Boolean);
 }
 
+type FeeInvoiceSyncRow = {
+  invoice: Record<string, unknown>;
+  nextTotal: number;
+  nextNet: number;
+  nextBalance: number;
+  nextStatus: string;
+  feeType: string;
+  billingMode: string;
+  priority: number;
+  categoryName: string;
+};
+
+async function feeInvoiceSyncPlan(
+  svc: SupabaseClient,
+  school: string,
+  structureId: string,
+  includePartiallyPaid: boolean,
+) {
+  const { data: structure, error: structureError } = await svc.from(
+    "fee_structures",
+  ).select("*").eq("id", structureId).eq("school_id", school).maybeSingle();
+  if (structureError) throw new Error(structureError.message);
+  if (!structure) throw new Error("Fee structure not found");
+
+  const hydrated =
+    (await attachFeeCategories(svc, school, [structure]))[0] as Record<
+      string,
+      unknown
+    >;
+  const category = hydrated.fee_category &&
+      typeof hydrated.fee_category === "object"
+    ? hydrated.fee_category as Record<string, unknown>
+    : hydrated.category && typeof hydrated.category === "object"
+    ? hydrated.category as Record<string, unknown>
+    : {};
+  const feeType = normalizeFeeType(
+    hydrated.fee_type ?? category.name ?? category.category_name,
+  );
+  const billingMode = feeType === "tuition" ? "monthly" : "one_time";
+  const priority = parseInt(
+    text(hydrated.priority, feeType === "tuition" ? "2" : "1"),
+  ) || (feeType === "tuition" ? 2 : 1);
+  const categoryName = text(
+    category.name ?? category.category_name,
+    feeType === "tuition" ? "Tuition Fee" : "Fee",
+  );
+  const nextTotal = money(hydrated.amount);
+
+  // Sync only invoices explicitly linked to this structure. Scope-based
+  // orphan matching is intentionally excluded here because a class may have
+  // several fee components and an orphan cannot be attributed safely.
+  const direct = await svc.from("fee_invoices").select("id").eq(
+    "school_id",
+    school,
+  ).eq("fee_structure_id", structureId);
+  if (direct.error) throw new Error(direct.error.message);
+  const itemLinks = await svc.from("fee_invoice_items").select("invoice_id")
+    .eq("fee_structure_id", structureId);
+  if (itemLinks.error) throw new Error(itemLinks.error.message);
+  const invoiceIds = [
+    ...new Set([
+      ...(direct.data ?? []).map((row) => text(row.id)),
+      ...(itemLinks.data ?? []).map((row) => text(row.invoice_id)),
+    ].filter(Boolean)),
+  ];
+
+  if (invoiceIds.length === 0) {
+    return {
+      structure: hydrated,
+      eligible: [] as FeeInvoiceSyncRow[],
+      skippedPaid: 0,
+      skippedPartial: 0,
+      skippedBelowPaid: 0,
+    };
+  }
+
+  const { data: invoices, error: invoiceError } = await svc.from(
+    "fee_invoices",
+  ).select("*").eq("school_id", school).in("id", invoiceIds);
+  if (invoiceError) throw new Error(invoiceError.message);
+
+  const eligible: FeeInvoiceSyncRow[] = [];
+  let skippedPaid = 0;
+  let skippedPartial = 0;
+  let skippedBelowPaid = 0;
+  for (const invoice of invoices ?? []) {
+    const status = text(invoice.status).toLowerCase();
+    const paidAmount = money(invoice.paid_amount);
+    if (["paid", "settled", "void", "cancelled"].includes(status)) {
+      skippedPaid++;
+      continue;
+    }
+    if (paidAmount > 0 && !includePartiallyPaid) {
+      skippedPartial++;
+      continue;
+    }
+    const discount = money(invoice.discount_amount);
+    const proposedNet = Math.max(0, money(nextTotal - discount));
+    if (proposedNet < paidAmount) {
+      skippedBelowPaid++;
+      continue;
+    }
+    const nextBalance = money(proposedNet - paidAmount);
+    const nextStatus = nextBalance <= 0
+      ? "paid"
+      : paidAmount > 0
+      ? "partial"
+      : "pending";
+    eligible.push({
+      invoice,
+      nextTotal,
+      nextNet: proposedNet,
+      nextBalance,
+      nextStatus,
+      feeType,
+      billingMode,
+      priority,
+      categoryName,
+    });
+  }
+  return {
+    structure: hydrated,
+    eligible,
+    skippedPaid,
+    skippedPartial,
+    skippedBelowPaid,
+  };
+}
+
+async function applyFeeInvoiceSyncPlan(
+  svc: SupabaseClient,
+  school: string,
+  structureId: string,
+  rows: FeeInvoiceSyncRow[],
+) {
+  let synced = 0;
+  for (const row of rows) {
+    const invoiceId = text(row.invoice.id);
+    const invoiceUpdate = await svc.from("fee_invoices").update({
+      total_amount: row.nextTotal,
+      net_amount: row.nextNet,
+      balance: row.nextBalance,
+      status: row.nextStatus,
+      fee_type: row.feeType,
+      billing_mode: row.billingMode,
+      priority: row.priority,
+      monthly_amount: row.billingMode === "monthly"
+        ? money(row.nextNet / 10)
+        : 0,
+      allowed_month_names: row.billingMode === "monthly" ? monthNames : [],
+      updated_at: new Date().toISOString(),
+    }).eq("id", invoiceId).eq("school_id", school);
+    if (invoiceUpdate.error) throw new Error(invoiceUpdate.error.message);
+
+    const itemUpdate = await svc.from("fee_invoice_items").update({
+      amount: row.nextTotal,
+      category_name: row.categoryName,
+    }).eq("invoice_id", invoiceId).eq("fee_structure_id", structureId);
+    if (itemUpdate.error) throw new Error(itemUpdate.error.message);
+    synced++;
+  }
+  return synced;
+}
+
 async function deleteInvoiceWorkflowRows(
   svc: SupabaseClient,
   school: string,
@@ -877,6 +1041,9 @@ export async function handleFees(
     const feeType = normalizeFeeType(
       input.fee_type ?? input.category_name ?? input.name,
     );
+    const normalizedFrequency = feeType === "tuition"
+      ? "monthly"
+      : normalizeFrequency(input.frequency ?? input.billing_mode);
     return {
       school_id: school,
       academic_year_id: input.academic_year_id,
@@ -888,12 +1055,14 @@ export async function handleFees(
       due_date: input.due_date ?? null,
       due_day: input.due_day ?? 10,
       late_fine_per_day: input.late_fine_per_day ?? 0,
-      frequency: normalizeFrequency(input.frequency ?? input.billing_mode),
+      // Tuition is always the June-March monthly ledger in this product. Keep
+      // the stored frequency aligned with the billing mode so admins never see
+      // a misleading "yearly" structure that is actually billed monthly.
+      frequency: normalizedFrequency,
       fee_type: feeType,
-      billing_mode: text(
-        input.billing_mode,
-        feeType === "tuition" ? "monthly" : "one_time",
-      ),
+      billing_mode: feeType === "tuition"
+        ? "monthly"
+        : text(input.billing_mode, "one_time"),
       priority:
         parseInt(text(input.priority, feeType === "tuition" ? "2" : "1")) ||
         (feeType === "tuition" ? 2 : 1),
@@ -1074,43 +1243,67 @@ export async function handleFees(
       seg && parts[1] === "invoice-sync" && parts[2] === "preview" &&
       method === "POST"
     ) {
-      const { data: structure, error } = await svc.from("fee_structures")
-        .select(
-          "*",
-        ).eq("id", seg).eq("school_id", school).maybeSingle();
-      if (error) return fail(error.message);
-      let hydratedStructure = structure;
-      if (structure) {
-        try {
-          hydratedStructure =
-            (await attachFeeCategories(svc, school, [structure]))[0];
-        } catch (error) {
-          return fail(
-            error instanceof Error
-              ? error.message
-              : "failed to load fee category",
-          );
-        }
+      const includePartiallyPaid = body.include_partially_paid === true;
+      try {
+        const plan = await feeInvoiceSyncPlan(
+          svc,
+          school,
+          seg,
+          includePartiallyPaid,
+        );
+        return ok({
+          structure_id: seg,
+          structure: plan.structure,
+          affected_invoice_count: plan.eligible.length,
+          skipped_paid_count: plan.skippedPaid,
+          skipped_partial_count: plan.skippedPartial,
+          skipped_below_paid_count: plan.skippedBelowPaid,
+          include_partially_paid: includePartiallyPaid,
+          mode: "preview",
+        });
+      } catch (error) {
+        return fail(
+          error instanceof Error
+            ? error.message
+            : "failed to preview invoice sync",
+        );
       }
-      return ok({
-        structure_id: seg,
-        structure: hydratedStructure,
-        affected_invoice_count: 0,
-        include_partially_paid: false,
-        mode: "preview",
-      });
     }
 
     if (
       seg && parts[1] === "invoice-sync" && parts[2] === "apply" &&
       method === "POST"
     ) {
-      return ok({
-        structure_id: seg,
-        synced_invoice_count: 0,
-        include_partially_paid: body.include_partially_paid ?? false,
-        mode: "apply",
-      });
+      const includePartiallyPaid = body.include_partially_paid === true;
+      try {
+        const plan = await feeInvoiceSyncPlan(
+          svc,
+          school,
+          seg,
+          includePartiallyPaid,
+        );
+        const synced = await applyFeeInvoiceSyncPlan(
+          svc,
+          school,
+          seg,
+          plan.eligible,
+        );
+        return ok({
+          structure_id: seg,
+          synced_invoice_count: synced,
+          skipped_paid_count: plan.skippedPaid,
+          skipped_partial_count: plan.skippedPartial,
+          skipped_below_paid_count: plan.skippedBelowPaid,
+          include_partially_paid: includePartiallyPaid,
+          mode: "apply",
+        });
+      } catch (error) {
+        return fail(
+          error instanceof Error
+            ? error.message
+            : "failed to apply invoice sync",
+        );
+      }
     }
 
     if (seg && method === "PUT") {
@@ -2064,24 +2257,22 @@ export async function handleFees(
               : "failed to validate approved fee selection",
           );
         }
-        const { data: payment, error: paymentError } = await svc.rpc(
-          "record_fee_payment",
-          {
-            p_school_id: school,
-            p_invoice_id: existing.invoice_id,
-            p_student_id: existing.student_id,
-            p_amount: existing.amount,
-            p_payment_method: existing.payment_method ?? "upi",
-            p_reference_number: existing.transaction_ref ??
-              existing.transaction_id ?? existing.request_reference,
-            p_paid_at: existing.payment_date ?? new Date().toISOString(),
-            p_notes: existing.remarks ?? "",
-            p_created_by: user.id,
-            p_selected_month_names: selection.selectedMonthNames,
-            p_selected_months: selection.selectedMonths,
-            p_request_id: seg,
-          },
-        ).single();
+        const paymentResponse = await svc.rpc("record_fee_payment", {
+          p_school_id: school,
+          p_invoice_id: existing.invoice_id,
+          p_student_id: existing.student_id,
+          p_amount: existing.amount,
+          p_payment_method: existing.payment_method ?? "upi",
+          p_reference_number: existing.transaction_ref ??
+            existing.transaction_id ?? existing.request_reference,
+          p_paid_at: existing.payment_date ?? new Date().toISOString(),
+          p_notes: existing.remarks ?? "",
+          p_created_by: user.id,
+          p_selected_month_names: selection.selectedMonthNames,
+          p_selected_months: selection.selectedMonths,
+          p_request_id: seg,
+        }).single();
+        const { data: payment, error: paymentError } = paymentResponse;
         if (paymentError) return fail(paymentError.message);
         const atomicPayment = payment as Record<string, unknown>;
         paymentId = text(atomicPayment.payment_id);

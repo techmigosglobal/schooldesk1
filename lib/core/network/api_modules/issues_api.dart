@@ -33,6 +33,40 @@ extension IssuesApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> createIssueWithAttachments(
+    Map<String, dynamic> body,
+    List<Map<String, dynamic>> files,
+  ) async {
+    try {
+      final attachments = <MultipartFile>[];
+      for (final file in files) {
+        final name = '${file['name'] ?? 'attachment'}';
+        final bytes = file['bytes'];
+        final path = '${file['path'] ?? ''}'.trim();
+        if (bytes is Uint8List) {
+          attachments.add(MultipartFile.fromBytes(bytes, filename: name));
+        } else if (path.isNotEmpty) {
+          attachments.add(await MultipartFile.fromFile(path, filename: name));
+        } else {
+          throw const ServerException(
+            message: 'Attachment data is unavailable. Please choose it again.',
+          );
+        }
+      }
+      final response = await _dio.post(
+        '/issues/with-attachments',
+        data: FormData.fromMap({...body, 'files': attachments}),
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['message'] ?? data['error'] ?? 'Unable to raise issue',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> uploadIssueAttachment(
     String issueId,
     String path,

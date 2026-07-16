@@ -7,8 +7,13 @@ void main() {
     final source = File(
       'supabase/functions/api/handlers/issues.ts',
     ).readAsStringSync();
-    expect(source, contains('only principals and teachers can raise issues'));
+    expect(
+      source,
+      contains('principals, teachers, and parents can raise issues'),
+    );
     expect(source, contains('only super_admin can resolve issues'));
+    expect(source, contains('/issues/with-attachments'));
+    expect(source, contains('uploadedPaths'));
     expect(source, contains('existing.length >= 5'));
     expect(source, contains('maxAttachmentBytes'));
     expect(source, contains('createSignedUrl'));
@@ -28,7 +33,8 @@ void main() {
     expect(routes, contains('superAdminIssues'));
     expect(screen, contains('Raise an Issue'));
     expect(screen, contains('Issue Management'));
-    expect(screen, contains('FileType.image'));
+    expect(screen, contains('FileType.custom'));
+    expect(screen, contains("'pdf'"));
     expect(screen, contains('withData: true'));
     expect(screen, contains('_IssueAttachmentPreviewScreen'));
     expect(screen, contains('_IssueAttachmentThumbnail'));

@@ -147,7 +147,9 @@ async function runPushDiagnostics(
     return fail(preferencesError.message, 500);
   }
 
-  const processorHealth = await invokeNotificationProcessor({ healthcheck: true });
+  const processorHealth = await invokeNotificationProcessor({
+    healthcheck: true,
+  });
 
   const canonicalDevices = (currentDevices ?? []).map((device) => ({
     id: device.id,
@@ -227,9 +229,8 @@ async function runPushDiagnostics(
   const summary = {
     has_canonical_device: canonicalDevices.length > 0,
     canonical_device_count: canonicalDevices.length,
-    active_canonical_device_count: canonicalDevices.filter((device) =>
-      device.is_active
-    ).length,
+    active_canonical_device_count:
+      canonicalDevices.filter((device) => device.is_active).length,
     legacy_device_count: legacyTokenRows.length,
     push_enabled: preferences?.enable_push ?? true,
     processor_health_ok: processorHealth.ok,
@@ -1099,14 +1100,16 @@ async function lessonPlannerParentSectionIds(
     .eq("parent_user_id", user.id)
     .eq("school_id", school);
 
-  const studentIds = (links ?? []).map((l: any) => l.student_id).filter(Boolean);
-  
+  const studentIds = (links ?? []).map((l: any) => l.student_id).filter(
+    Boolean,
+  );
+
   if (studentIds.length > 0) {
     const { data: students } = await svc.from("students")
       .select("current_section_id")
       .eq("school_id", school)
       .in("id", studentIds);
-      
+
     for (const student of students ?? []) {
       const sectionId = text(student.current_section_id);
       if (sectionId) sectionIds.add(sectionId);
@@ -1785,25 +1788,28 @@ export async function handleCommunications(
             const studentName = student
               ? `${student.first_name ?? ""} ${student.last_name ?? ""}`.trim()
               : "a student";
-            const notifBody = `A parent booked a PTM slot on ${slotDate} at ${slotTime} regarding ${studentName}.`;
-            const { data: ptmEvent } = await svc.from("notification_events").insert({
-              school_id: school,
-              user_id: teacherUserRow.id,
-              event_type: "ptm_booked",
-              event_data: {
-                ptm_id: meetingId,
-                message: notifBody,
-                reference_type: "ptm",
-                slot_date: slotDate,
-                slot_time: slotTime,
-              },
-            }).select("id").maybeSingle();
+            const notifBody =
+              `A parent booked a PTM slot on ${slotDate} at ${slotTime} regarding ${studentName}.`;
+            const { data: ptmEvent } = await svc.from("notification_events")
+              .insert({
+                school_id: school,
+                user_id: teacherUserRow.id,
+                event_type: "ptm_booked",
+                event_data: {
+                  ptm_id: meetingId,
+                  message: notifBody,
+                  reference_type: "ptm",
+                  slot_date: slotDate,
+                  slot_time: slotTime,
+                },
+              }).select("id").maybeSingle();
             if (ptmEvent?.id) triggerPushProcessing(ptmEvent.id);
           }
         }
       } else {
         // Teacher/principal changed status → notify the parent
-        const newStatus = `${payload.status ?? data.status ?? ""}`.toLowerCase();
+        const newStatus = `${payload.status ?? data.status ?? ""}`
+          .toLowerCase();
         if (["confirmed", "cancelled", "rescheduled"].includes(newStatus)) {
           const parentUserId = `${data.booked_by_parent_user_id ?? ""}`.trim();
           if (parentUserId) {
@@ -1812,12 +1818,18 @@ export async function handleCommunications(
               ? `${teacher.first_name ?? ""} ${teacher.last_name ?? ""}`.trim()
               : "your child's teacher";
             const statusMessages: Record<string, string> = {
-              confirmed: `Your PTM meeting with ${teacherName} on ${slotDate} at ${slotTime} has been confirmed.`,
-              cancelled: `Your PTM meeting with ${teacherName} on ${slotDate} at ${slotTime} has been cancelled.`,
-              rescheduled: `Your PTM meeting with ${teacherName} has been rescheduled. Please check new details.`,
+              confirmed:
+                `Your PTM meeting with ${teacherName} on ${slotDate} at ${slotTime} has been confirmed.`,
+              cancelled:
+                `Your PTM meeting with ${teacherName} on ${slotDate} at ${slotTime} has been cancelled.`,
+              rescheduled:
+                `Your PTM meeting with ${teacherName} has been rescheduled. Please check new details.`,
             };
-            const notifBody = statusMessages[newStatus] ?? `Your PTM meeting status has been updated to ${newStatus}.`;
-            const { data: ptmStatusEvent } = await svc.from("notification_events").insert({
+            const notifBody = statusMessages[newStatus] ??
+              `Your PTM meeting status has been updated to ${newStatus}.`;
+            const { data: ptmStatusEvent } = await svc.from(
+              "notification_events",
+            ).insert({
               school_id: school,
               user_id: parentUserId,
               event_type: "ptm_status_updated",
@@ -1834,7 +1846,9 @@ export async function handleCommunications(
           }
         }
       }
-    } catch (_) { /* best-effort notifications — PTM update was already saved */ }
+    } catch (_) {
+      /* best-effort notifications — PTM update was already saved */
+    }
 
     return ok(data);
   }
@@ -1853,11 +1867,36 @@ export async function handleCommunications(
     return ok(data ?? []);
   }
   if (path === "/message-conversations" && method === "POST") {
+    let teacherId = text(body.teacher_id);
+    let parentId = text(body.parent_id);
+    const currentRole = role(user);
+    if (currentRole === "teacher") teacherId = linkedStaffId(user);
+    if (currentRole === "parent") parentId = user.id;
+    if (teacherId) {
+      const { data: teacher } = await svc.from("staff").select("id").eq(
+        "school_id",
+        school,
+      ).eq("id", teacherId).maybeSingle();
+      if (!teacher) teacherId = "";
+    }
+    if (parentId) {
+      const { data: parent } = await svc.from("users").select("id").eq(
+        "school_id",
+        school,
+      ).eq("id", parentId).ilike("role_name", "parent").maybeSingle();
+      if (!parent) parentId = "";
+    }
     const { data, error } = await svc.from("message_conversations").insert({
       school_id: school,
       title: body.title ?? null,
       student_id: body.student_id ?? null,
       participant_ids: body.participant_ids ?? [],
+      type: body.type ?? "parent_teacher",
+      teacher_id: teacherId || null,
+      parent_id: parentId || null,
+      created_by: user.id,
+      last_message: body.last_message ?? "",
+      last_message_at: body.last_message_time ?? new Date().toISOString(),
     }).select().single();
     if (error) return fail(error.message);
     return ok(data);
@@ -1884,15 +1923,51 @@ export async function handleCommunications(
       }).select().single();
       convId = conv?.id;
     }
+    const sentAt = text(body.sent_at) || new Date().toISOString();
+    const messageText = text(body.body ?? body.message ?? message_body);
     const { data, error } = await svc.from("messages").insert({
       school_id: school,
       conversation_id: convId,
       sender_id: body.sender_id ?? user.id,
-      body: body.body ?? body.message ?? message_body ?? "",
+      sender_role: role(user) || text(body.sender_role) || "user",
+      sender_name: body.sender_name ?? user.user_metadata?.name ?? user.email,
+      body: messageText,
       attachments: attachments ?? null,
       read_by: body.is_read == true ? [user.id] : null,
+      sent_at: sentAt,
+      delivered_at: sentAt,
     }).select().single();
     if (error) return fail(error.message);
+    const { data: conversation } = await svc.from("message_conversations")
+      .select("*").eq("id", convId).eq("school_id", school).maybeSingle();
+    if (conversation) {
+      await svc.from("message_conversations").update({
+        last_message: messageText,
+        last_message_at: sentAt,
+        last_sender_id: user.id,
+        updated_at: sentAt,
+      }).eq("id", convId).eq("school_id", school);
+      const targetUserId = await resolveChatNotificationTarget(
+        svc,
+        school,
+        conversation,
+        user,
+      );
+      if (targetUserId && targetUserId !== user.id) {
+        const targetRole = targetUserId === text(conversation.parent_id)
+          ? "parent"
+          : "teacher";
+        await appendNotification(
+          svc,
+          school,
+          targetUserId,
+          "New homework message",
+          messageText,
+          text(convId),
+          targetRole,
+        );
+      }
+    }
     return ok(data);
   }
   const messageMatch = path.match(/^\/messages\/([^/]+)$/);
@@ -2158,7 +2233,9 @@ async function notifyLessonPlannerUploaded(
       .maybeSingle();
     const sectionData = data as any;
     const className = sectionData
-      ? `${sectionData.grade?.grade_name ?? ""} - ${sectionData.section_name ?? ""}`
+      ? `${sectionData.grade?.grade_name ?? ""} - ${
+        sectionData.section_name ?? ""
+      }`
       : "Assigned Class";
     const { data: teacher } = await svc
       .from("staff")
@@ -2190,7 +2267,8 @@ async function notifyLessonPlannerUploaded(
           user_id: p.id,
           target_role: "principal",
           title: "New Lesson Planner",
-          body: `${resolvedTeacherName} uploaded a weekly lesson plan for Class ${className}.`,
+          body:
+            `${resolvedTeacherName} uploaded a weekly lesson plan for Class ${className}.`,
           type: "lesson_planner",
           entity_type: "lesson_planner",
           entity_id: lessonPlannerId,
@@ -2205,7 +2283,8 @@ async function notifyLessonPlannerUploaded(
           event_type: "lesson_planner",
           event_data: {
             title: "New Lesson Planner",
-            message: `${resolvedTeacherName} uploaded a weekly lesson plan for Class ${className}.`,
+            message:
+              `${resolvedTeacherName} uploaded a weekly lesson plan for Class ${className}.`,
             reference_type: "lesson_planner",
             reference_id: lessonPlannerId,
             route: "/principal-lesson-planner-screen",
@@ -2235,7 +2314,9 @@ async function notifyLessonPlannerUploaded(
         .in("student_id", studentIds);
 
       const parentUserIds = Array.from(
-        new Set((links ?? []).map((l: any) => l.parent_user_id).filter(Boolean)),
+        new Set(
+          (links ?? []).map((l: any) => l.parent_user_id).filter(Boolean),
+        ),
       );
 
       for (const pid of parentUserIds) {
@@ -2244,7 +2325,8 @@ async function notifyLessonPlannerUploaded(
           user_id: pid,
           target_role: "parent",
           title: "New Lesson Planner",
-          body: `A new lesson planner has been uploaded for Class ${className} for this week.`,
+          body:
+            `A new lesson planner has been uploaded for Class ${className} for this week.`,
           type: "lesson_planner",
           entity_type: "lesson_planner",
           entity_id: lessonPlannerId,
@@ -2259,7 +2341,8 @@ async function notifyLessonPlannerUploaded(
           event_type: "lesson_planner",
           event_data: {
             title: "New Lesson Planner",
-            message: `A new lesson planner has been uploaded for Class ${className} for this week.`,
+            message:
+              `A new lesson planner has been uploaded for Class ${className} for this week.`,
             reference_type: "lesson_planner",
             reference_id: lessonPlannerId,
             route: "/parent-lesson-planner-screen",

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -27,6 +28,8 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
   Timer? _autoRefreshTimer;
+  NotificationService? _notificationService;
+  String _lastNotificationSignal = '';
 
   List<Map<String, dynamic>> _childrenData = [];
   List<Map<String, dynamic>> _feeStructure = [];
@@ -60,6 +63,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadData(forceRefresh: true);
+    unawaited(_bindFeeNotifications());
     _autoRefreshTimer = Timer.periodic(
       _autoRefreshInterval,
       (_) => _loadData(forceRefresh: true, showSpinner: false),
@@ -77,7 +81,33 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
+    _notificationService?.removeListener(_onNotificationsChanged);
     super.dispose();
+  }
+
+  Future<void> _bindFeeNotifications() async {
+    final service = await NotificationService.getInstance();
+    if (!mounted) return;
+    _notificationService = service;
+    _lastNotificationSignal = service.notifications.isEmpty
+        ? ''
+        : service.notifications.first.id;
+    service.addListener(_onNotificationsChanged);
+  }
+
+  void _onNotificationsChanged() {
+    final service = _notificationService;
+    if (!mounted || service == null || service.notifications.isEmpty) return;
+    final latest = service.notifications.first;
+    if (latest.id == _lastNotificationSignal) return;
+    _lastNotificationSignal = latest.id;
+    final isFeeUpdate =
+        latest.referenceType == 'fee' ||
+        latest.category.contains('fee') ||
+        latest.title.toLowerCase().contains('fee payment');
+    if (!isFeeUpdate) return;
+    _lastRefreshAt = null;
+    unawaited(_loadData(forceRefresh: true, showSpinner: false));
   }
 
   Future<void> _loadData({
@@ -179,14 +209,19 @@ class _ParentFeeHubState extends State<ParentFeeHub>
             for (final p in payments.whereType<Map>()) {
               final payment = Map<String, dynamic>.from(p);
               final amount =
-                  (payment['amount_paid'] as num?)?.toDouble() ?? 0.0;
+                  (payment['amount'] as num?)?.toDouble() ??
+                  (payment['amount_paid'] as num?)?.toDouble() ??
+                  0.0;
               historyList.add({
                 'id': payment['id'] ?? '',
                 'invoiceId': inv['id'] ?? '',
                 'component': 'Invoice ${inv['invoice_number'] ?? ''}',
                 'amount': amount,
-                'date': (payment['payment_date'] ?? '').toString(),
-                'method': (payment['payment_mode'] ?? '').toString(),
+                'date': (payment['paid_at'] ?? payment['payment_date'] ?? '')
+                    .toString(),
+                'method':
+                    (payment['payment_method'] ?? payment['payment_mode'] ?? '')
+                        .toString(),
                 'receiptNo': (payment['receipt_number'] ?? '').toString(),
                 'student': _studentName(child),
                 'class': _studentClass(child),
@@ -197,12 +232,13 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 'paymentRequest': {
                   ...payment,
                   'amount': amount,
-                  'payment_mode': payment['payment_mode'],
-                  'payment_date': payment['payment_date'],
+                  'payment_method':
+                      payment['payment_method'] ?? payment['payment_mode'],
+                  'payment_mode':
+                      payment['payment_method'] ?? payment['payment_mode'],
+                  'payment_date': payment['paid_at'] ?? payment['payment_date'],
                   'transaction_ref': payment['reference_number'],
-                  'receipt': {
-                    'receipt_number': payment['receipt_number'],
-                  },
+                  'receipt': {'receipt_number': payment['receipt_number']},
                   'invoice': inv,
                   'student': child,
                 },
@@ -226,7 +262,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
             'amount': (request['amount'] as num?)?.toDouble() ?? 0.0,
             'date': (request['payment_date'] ?? request['created_at'] ?? '')
                 .toString(),
-            'method': (request['payment_mode'] ?? '').toString(),
+            'method':
+                (request['payment_method'] ?? request['payment_mode'] ?? '')
+                    .toString(),
             'receiptNo': (request['request_reference'] ?? '').toString(),
             'student': _studentName(child),
             'class': _studentClass(child),
@@ -883,9 +921,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         'payment_mode': '-',
         'created_at': DateTime.now().toIso8601String(),
         'transaction_ref': '-',
-        'invoice': {
-          'invoice_number': fee['invoiceNumber'],
-        },
+        'invoice': {'invoice_number': fee['invoiceNumber']},
         'student': _childrenData[_activeChildIndex],
       };
     }

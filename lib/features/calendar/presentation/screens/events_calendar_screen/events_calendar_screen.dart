@@ -88,7 +88,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       final events = [
         ...rows.map(_PrincipalEvent.fromApi),
         ...ptmRows.map(_PrincipalEvent.fromPtmApi),
-        ..._getBuiltInHolidays(selectedYearId),
+        ..._getBuiltInHolidays(selectedYearId, years),
       ]..sort((a, b) => a.start.compareTo(b.start));
       if (!mounted) return;
       // Derive the display year from the selected academic year's start date so
@@ -137,39 +137,54 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return years.isNotEmpty ? years.first.id : '';
   }
 
-  List<_PrincipalEvent> _getBuiltInHolidays(String academicYearId) {
-    final holidays = [
-      (DateTime(2026, 1, 14), 'Makar Sankranti'),
-      (DateTime(2026, 1, 26), 'Republic Day'),
-      (DateTime(2026, 2, 14), 'Vasant Panchami'),
-      (DateTime(2026, 2, 15), 'Maha Shivaratri'),
-      (DateTime(2026, 3, 4), 'Holi'),
-      (DateTime(2026, 3, 20), 'Eid-ul-Fitr'),
-      (DateTime(2026, 4, 3), 'Good Friday'),
-      (DateTime(2026, 8, 15), 'Independence Day'),
-      (DateTime(2026, 8, 28), 'Raksha Bandhan'),
-      (DateTime(2026, 9, 5), 'Teachers\' Day'),
-      (DateTime(2026, 10, 2), 'Gandhi Jayanti'),
-      (DateTime(2026, 10, 19), 'Dussehra'),
-      (DateTime(2026, 11, 8), 'Diwali'),
-      (DateTime(2026, 12, 25), 'Christmas'),
-    ];
+  List<_PrincipalEvent> _getBuiltInHolidays(
+    String academicYearId,
+    List<AcademicYearModel> academicYears,
+  ) {
+    AcademicYearModel? selectedYear;
+    for (final year in academicYears) {
+      if (year.id == academicYearId) {
+        selectedYear = year;
+        break;
+      }
+    }
+    final rangeStart = DateTime.tryParse(selectedYear?.startDate ?? '');
+    final rangeEnd = DateTime.tryParse(selectedYear?.endDate ?? '');
+    final firstYear = rangeStart?.year ?? DateTime.now().year;
+    final lastYear = rangeEnd?.year ?? firstYear;
+    final holidays = <(DateTime, String)>[];
+    for (var year = firstYear; year <= lastYear; year++) {
+      holidays.addAll([
+        (DateTime(year, 1, 26), 'Republic Day'),
+        (DateTime(year, 8, 15), 'Independence Day'),
+        (DateTime(year, 10, 2), 'Gandhi Jayanti'),
+        (DateTime(year, 12, 25), 'Christmas'),
+      ]);
+    }
 
-    return holidays.map((h) {
-      return _PrincipalEvent(
-        id: 'builtin_${h.$1.millisecondsSinceEpoch}',
-        academicYearId: academicYearId,
-        title: h.$2,
-        type: 'festival',
-        status: 'scheduled',
-        description: 'National holiday / Festival',
-        venue: 'All',
-        audienceValue: 'all',
-        isHoliday: true,
-        start: h.$1,
-        end: h.$1.add(const Duration(hours: 23, minutes: 59)),
-      );
-    }).toList();
+    return holidays
+        .where((holiday) {
+          final date = holiday.$1;
+          if (rangeStart != null && date.isBefore(rangeStart)) return false;
+          if (rangeEnd != null && date.isAfter(rangeEnd)) return false;
+          return true;
+        })
+        .map((h) {
+          return _PrincipalEvent(
+            id: 'builtin_${h.$1.millisecondsSinceEpoch}',
+            academicYearId: academicYearId,
+            title: h.$2,
+            type: 'festival',
+            status: 'scheduled',
+            description: 'National holiday / Festival',
+            venue: 'All',
+            audienceValue: 'all',
+            isHoliday: true,
+            start: h.$1,
+            end: h.$1.add(const Duration(hours: 23, minutes: 59)),
+          );
+        })
+        .toList();
   }
 
   bool get _canManageEvents {
@@ -720,10 +735,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   Widget _buildCalendarSummary() {
     final today = DateTime.now();
-    final upcoming = _events.where((event) =>
-      !event.isCancelled &&
-      !event.start.isBefore(DateTime(today.year, today.month, today.day))
-    ).length;
+    final upcoming = _events
+        .where(
+          (event) =>
+              !event.isCancelled &&
+              !event.start.isBefore(
+                DateTime(today.year, today.month, today.day),
+              ),
+        )
+        .length;
     final holidays = _events.where((event) => event.isHoliday).length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
@@ -731,10 +751,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              context.appTheme.primary,
-              context.appTheme.secondary,
-            ],
+            colors: [context.appTheme.primary, context.appTheme.secondary],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -749,14 +766,20 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.calendar_month_rounded, color: Colors.white, size: 30),
+            const Icon(
+              Icons.calendar_month_rounded,
+              color: Colors.white,
+              size: 30,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    DateFormat('MMMM y').format(_monthDateForAcademicYear(_selectedMonth)),
+                    DateFormat(
+                      'MMMM y',
+                    ).format(_monthDateForAcademicYear(_selectedMonth)),
                     style: GoogleFonts.dmSans(
                       color: Colors.white,
                       fontSize: 16,

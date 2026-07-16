@@ -9,10 +9,9 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
-import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
-import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
+import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 
-enum IssueScreenRole { principal, teacher, superAdmin }
+enum IssueScreenRole { principal, teacher, parent, superAdmin }
 
 class IssueScreen extends StatefulWidget {
   const IssueScreen({super.key, required this.role});
@@ -93,17 +92,18 @@ class _IssueScreenState extends State<IssueScreen>
     if (draft == null) return;
     setState(() => _loading = true);
     try {
-      final issue = await BackendApiClient.instance.createIssue(draft.payload);
-      for (final file in draft.files) {
-        if (file.path == null) {
-          throw Exception('Attachment path is unavailable');
-        }
-        await BackendApiClient.instance.uploadIssueAttachment(
-          '${issue['id']}',
-          file.path!,
-          file.name,
-        );
-      }
+      await BackendApiClient.instance.createIssueWithAttachments(
+        draft.payload,
+        draft.files
+            .map(
+              (file) => {
+                'name': file.name,
+                'path': file.path,
+                'bytes': file.bytes,
+              },
+            )
+            .toList(),
+      );
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -204,91 +204,6 @@ class _IssueScreenState extends State<IssueScreen>
 
   @override
   Widget build(BuildContext context) {
-
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-
-
-        return DesktopScreenWrapper(
-
-
-          breadcrumbs: ['Communication', 'Issues'],
-
-
-          title: 'Issues',
-
-
-          actions: const [],
-
-
-          child: Card(
-
-
-            elevation: 0,
-
-
-            child: Padding(
-
-
-              padding: const EdgeInsets.all(32),
-
-
-              child: Center(
-
-
-                child: Column(
-
-
-                  mainAxisSize: MainAxisSize.min,
-
-
-                  children: [
-
-
-                    Icon(Icons.desktop_windows_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-
-
-                    const SizedBox(height: 16),
-
-
-                    Text('Issues', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-
-
-                    const SizedBox(height: 8),
-
-
-                    Text('Desktop view coming soon', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5))),
-
-
-                  ],
-
-
-                ),
-
-
-              ),
-
-
-            ),
-
-
-          ),
-
-
-        );
-
-
-      }
-
     final drawer = switch (widget.role) {
       IssueScreenRole.principal => PrincipalDrawer(
         selectedIndex: PrincipalNav.guardians,
@@ -296,6 +211,10 @@ class _IssueScreenState extends State<IssueScreen>
       ),
       IssueScreenRole.teacher => TeacherDrawer(
         selectedIndex: TeacherNav.complaints,
+        onDestinationSelected: (_) {},
+      ),
+      IssueScreenRole.parent => ParentDrawer(
+        selectedIndex: ParentNav.complaints,
         onDestinationSelected: (_) {},
       ),
       IssueScreenRole.superAdmin => SuperAdminDrawer(
@@ -310,7 +229,7 @@ class _IssueScreenState extends State<IssueScreen>
     return SchoolDeskModuleScaffold(
       title: title,
       subtitle: _isSuperAdmin
-          ? 'Review and resolve issues raised by principals and teachers'
+          ? 'Review and resolve issues raised by school users'
           : 'Submit and track issues with Super Admin',
       drawer: drawer,
       floatingActionButton: _isSuperAdmin
@@ -524,16 +443,16 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
     final result = await FilePicker.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx'],
       withData: true,
     );
     if (result == null) return;
-    
+
     setState(() {
       final combined = [..._files, ...result.files];
       _files = combined.take(5).toList();
       final bytes = _files.fold<int>(0, (sum, file) => sum + file.size);
-      _error = _files.length > 5 || bytes > 50 * 1024 * 1024
+      _error = combined.length > 5 || bytes > 50 * 1024 * 1024
           ? 'Choose up to five files totaling 50 MB.'
           : null;
     });
@@ -613,9 +532,15 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
                           ),
                         ),
                         clipBehavior: Clip.antiAlias,
-                        child: (file.bytes == null ||
-                                !['jpg', 'jpeg', 'png', 'webp', 'gif']
-                                    .contains(file.extension?.toLowerCase()))
+                        child:
+                            (file.bytes == null ||
+                                ![
+                                  'jpg',
+                                  'jpeg',
+                                  'png',
+                                  'webp',
+                                  'gif',
+                                ].contains(file.extension?.toLowerCase()))
                             ? const Icon(Icons.insert_drive_file_outlined)
                             : Image.memory(file.bytes!, fit: BoxFit.cover),
                       ),
@@ -632,7 +557,7 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
                               (sum, selected) => sum + selected.size,
                             );
                             _error = total > 50 * 1024 * 1024
-                                ? 'Choose up to five images totaling 50 MB.'
+                                ? 'Choose up to five files totaling 50 MB.'
                                 : null;
                           }),
                           icon: const Icon(Icons.close_rounded, size: 16),
@@ -644,7 +569,7 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
               ),
               const SizedBox(height: 6),
               Text(
-                '${_files.length} image${_files.length == 1 ? '' : 's'} ready to attach',
+                '${_files.length} file${_files.length == 1 ? '' : 's'} ready to attach',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -697,7 +622,7 @@ class _IssueAttachmentThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = '${attachment['file_name'] ?? 'Image'}';
+    final name = '${attachment['file_name'] ?? 'Attachment'}';
     final mime = '${attachment['mime_type'] ?? ''}';
     final image = EventPostMediaItem.fromUrl(name, mimeType: mime).isImage;
     return Semantics(

@@ -25,7 +25,12 @@ class DesktopPlaceholderCard extends StatelessWidget {
               const SizedBox(height: 16),
               Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
-              Text('Desktop view coming soon', style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.5))),
+              Text(
+                'No data is available yet.',
+                style: TextStyle(
+                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.5),
+                ),
+              ),
             ],
           ),
         ),

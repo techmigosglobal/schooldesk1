@@ -1,5 +1,5 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok } from "../index.ts";
+import { fail, ok, triggerPushProcessing } from "../index.ts";
 
 function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -17,6 +17,72 @@ function parseId(path: string, prefix: string): string | null {
 
 function query(url: URL, key: string): string | null {
   return url.searchParams.get(key);
+}
+
+async function notifyEventAudience(
+  svc: SupabaseClient,
+  school: string,
+  event: Record<string, unknown>,
+) {
+  const audience = `${event.audience_type ?? "all"}`.trim().toLowerCase();
+  const roles = ["parents", "students"].includes(audience)
+    ? ["parent"]
+    : ["staff", "teachers"].includes(audience)
+    ? ["teacher"]
+    : ["parent", "teacher"];
+  const { data: recipients, error } = await svc.from("users").select(
+    "id, role_name",
+  ).eq("school_id", school).eq("is_active", true).in("role_name", roles);
+  if (error || !recipients?.length) return;
+  const title = `${
+    event.event_title ?? event.event_name ?? "New school event"
+  }`;
+  const start =
+    `${event.start_datetime ?? event.start_date ?? event.event_date ?? ""}`
+      .split("T")[0];
+  const body = start
+    ? `${title} is scheduled for ${start}. Open the school calendar for details.`
+    : `${title} was added to the school calendar.`;
+  const logs = recipients.map((recipient: Record<string, unknown>) => {
+    const targetRole = `${recipient.role_name ?? ""}`.toLowerCase();
+    return {
+      school_id: school,
+      user_id: recipient.id,
+      target_role: targetRole,
+      title: "New school event",
+      body,
+      type: "event",
+      entity_type: "event",
+      entity_id: event.id,
+      route: targetRole === "parent"
+        ? "/parent-calendar-screen"
+        : "/teacher-calendar-screen",
+      priority: "medium",
+      is_read: false,
+    };
+  });
+  const { error: logError } = await svc.from("notification_logs").insert(logs);
+  if (logError) return;
+  const { data: pushRows, error: pushError } = await svc.from(
+    "notification_events",
+  ).insert(logs.map((log) => ({
+    school_id: log.school_id,
+    user_id: log.user_id,
+    event_type: "event_created",
+    event_data: {
+      title: log.title,
+      message: log.body,
+      reference_type: "event",
+      reference_id: event.id,
+      route: log.route,
+    },
+    processed: false,
+  }))).select("id");
+  if (pushError) return;
+  const ids = (pushRows ?? []).map((row: Record<string, unknown>) =>
+    `${row.id ?? ""}`.trim()
+  ).filter(Boolean);
+  if (ids.length) triggerPushProcessing(ids);
 }
 
 export async function handleCalendar(
@@ -69,6 +135,11 @@ export async function handleCalendar(
       const { data, error } = await svc.from("events").insert(payload).select()
         .single();
       if (error) return fail(error.message);
+      try {
+        await notifyEventAudience(svc, sid, data as Record<string, unknown>);
+      } catch (notificationError) {
+        console.error("Failed to notify event audience", notificationError);
+      }
       return ok(data);
     }
     if (id && method === "PUT") {

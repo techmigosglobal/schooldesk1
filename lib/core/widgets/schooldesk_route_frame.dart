@@ -120,81 +120,149 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
   int? _getSelectedIndexForRoute(String route, String portal) {
     if (portal == 'principal') {
       switch (route) {
-        case AppRoutes.principalDashboard: return PrincipalNav.dashboard;
-        case AppRoutes.principalSchoolProfile: return PrincipalNav.schoolProfile;
-        case AppRoutes.principalUserManagement: return PrincipalNav.access;
-        case AppRoutes.staffManagement: return PrincipalNav.staff;
-        case AppRoutes.studentOversight: return PrincipalNav.students;
-        case AppRoutes.guardianDirectory: return PrincipalNav.guardians;
-        case AppRoutes.approvalCenter: return PrincipalNav.approvals;
-        case AppRoutes.principalAttendance: return PrincipalNav.attendance;
-        case AppRoutes.principalClasses: return PrincipalNav.classes;
-        case AppRoutes.principalSubjects: return PrincipalNav.subjects;
-        case AppRoutes.principalAcademicInfo: return PrincipalNav.academics;
-        case AppRoutes.principalTimetable: return PrincipalNav.timetable;
-        case AppRoutes.principalLessonPlanner: return PrincipalNav.lessonPlanner;
-        case AppRoutes.feeMonitoring: return PrincipalNav.fees;
-        case AppRoutes.principalChatCommunications: return PrincipalNav.messages;
-        case AppRoutes.principalEventApprovals: return PrincipalNav.eventApprovals;
-        case AppRoutes.complaintManagement: return PrincipalNav.complaints;
-        case AppRoutes.eventsCalendar: return PrincipalNav.calendar;
-        case AppRoutes.principalDocuments: return PrincipalNav.documents;
-        case AppRoutes.reportsAnalytics: return PrincipalNav.reports;
-        case AppRoutes.principalAnalytics: return PrincipalNav.analytics;
-        case AppRoutes.schoolGallery: return PrincipalNav.gallery;
-        default: return null;
+        case AppRoutes.principalDashboard:
+          return PrincipalNav.dashboard;
+        case AppRoutes.principalSchoolProfile:
+          return PrincipalNav.schoolProfile;
+        case AppRoutes.principalUserManagement:
+          return PrincipalNav.access;
+        case AppRoutes.staffManagement:
+          return PrincipalNav.staff;
+        case AppRoutes.studentOversight:
+          return PrincipalNav.students;
+        case AppRoutes.guardianDirectory:
+          return PrincipalNav.guardians;
+        case AppRoutes.approvalCenter:
+          return PrincipalNav.approvals;
+        case AppRoutes.principalAttendance:
+          return PrincipalNav.attendance;
+        case AppRoutes.principalClasses:
+          return PrincipalNav.classes;
+        case AppRoutes.principalSubjects:
+          return PrincipalNav.subjects;
+        case AppRoutes.principalAcademicInfo:
+          return PrincipalNav.academics;
+        case AppRoutes.academicManagement:
+          return PrincipalNav.academics;
+        case AppRoutes.principalTimetable:
+          return PrincipalNav.timetable;
+        case AppRoutes.principalLessonPlanner:
+          return PrincipalNav.lessonPlanner;
+        case AppRoutes.feeMonitoring:
+          return PrincipalNav.fees;
+        case AppRoutes.principalChatCommunications:
+          return PrincipalNav.messages;
+        case AppRoutes.principalEventApprovals:
+          return PrincipalNav.eventApprovals;
+        case AppRoutes.complaintManagement:
+          return PrincipalNav.complaints;
+        case AppRoutes.eventsCalendar:
+          return PrincipalNav.calendar;
+        case AppRoutes.principalDocuments:
+          return PrincipalNav.documents;
+        case AppRoutes.reportsAnalytics:
+          return PrincipalNav.reports;
+        case AppRoutes.principalAnalytics:
+          return PrincipalNav.analytics;
+        case AppRoutes.schoolGallery:
+          return PrincipalNav.gallery;
+        default:
+          return null;
       }
     } else if (portal == 'teacher') {
       switch (route) {
-        case AppRoutes.teacherDashboard: return TeacherNav.dashboard;
-        case AppRoutes.teacherClasses: return TeacherNav.classes;
-        case AppRoutes.teacherTimetable: return TeacherNav.timetable;
-        case AppRoutes.teacherCalendar: return TeacherNav.calendar;
-        case AppRoutes.teacherMyAttendance: return TeacherNav.myAttendance;
-        case AppRoutes.teacherAttendance: return TeacherNav.attendance;
-        case AppRoutes.teacherAttendanceHistory: return TeacherNav.attendanceHistory;
-        case AppRoutes.teacherEventPosts: return TeacherNav.eventPosts;
-        case AppRoutes.teacherLessonPlanner: return TeacherNav.lessonPlanner;
-        case AppRoutes.teacherStudentNotes: return TeacherNav.studentNotes;
-        case AppRoutes.schoolGallery: return TeacherNav.gallery;
-        case AppRoutes.teacherCommunication: return TeacherNav.communication;
-        case AppRoutes.teacherParentInteraction: return TeacherNav.ptm;
-        case AppRoutes.teacherLeave: return TeacherNav.leave;
-        case AppRoutes.teacherDocuments: return TeacherNav.documents;
-        case AppRoutes.teacherHomework: return TeacherNav.homework;
-        case AppRoutes.teacherComplaints: return TeacherNav.complaints;
-        default: return null;
+        case AppRoutes.teacherDashboard:
+          return TeacherNav.dashboard;
+        case AppRoutes.teacherClasses:
+          return TeacherNav.classes;
+        case AppRoutes.teacherTimetable:
+          return TeacherNav.timetable;
+        case AppRoutes.teacherCalendar:
+          return TeacherNav.calendar;
+        case AppRoutes.teacherMyAttendance:
+          return TeacherNav.myAttendance;
+        case AppRoutes.teacherAttendance:
+          return TeacherNav.attendance;
+        case AppRoutes.teacherAttendanceHistory:
+          return TeacherNav.attendanceHistory;
+        case AppRoutes.teacherEventPosts:
+          return TeacherNav.eventPosts;
+        case AppRoutes.teacherLessonPlanner:
+          return TeacherNav.lessonPlanner;
+        case AppRoutes.teacherStudentNotes:
+          return TeacherNav.studentNotes;
+        case AppRoutes.schoolGallery:
+          return TeacherNav.gallery;
+        case AppRoutes.teacherCommunication:
+          return TeacherNav.communication;
+        case AppRoutes.teacherParentInteraction:
+          return TeacherNav.ptm;
+        case AppRoutes.teacherLeave:
+          return TeacherNav.leave;
+        case AppRoutes.teacherDocuments:
+          return TeacherNav.documents;
+        case AppRoutes.teacherHomework:
+          return TeacherNav.homework;
+        case AppRoutes.teacherComplaints:
+          return TeacherNav.complaints;
+        default:
+          return null;
       }
     } else if (portal == 'parent') {
       switch (route) {
-        case AppRoutes.parentDashboard: return ParentNav.dashboard;
-        case AppRoutes.parentAttendance: return ParentNav.attendance;
-        case AppRoutes.parentHomework: return ParentNav.homework;
-        case AppRoutes.parentTimetable: return ParentNav.timetable;
-        case AppRoutes.parentLessonPlanner: return ParentNav.lessonPlanner;
-        case AppRoutes.parentTeacherChat: return ParentNav.chat;
-        case AppRoutes.parentPTMBooking: return ParentNav.ptm;
-        case AppRoutes.parentFees: return ParentNav.fees;
-        case AppRoutes.parentLeave: return ParentNav.leave;
-        case AppRoutes.parentCalendar: return ParentNav.calendar;
-        case AppRoutes.parentDocuments: return ParentNav.documents;
-        case AppRoutes.schoolGallery: return ParentNav.gallery;
-        case AppRoutes.parentHealth: return ParentNav.health;
-        case AppRoutes.parentComplaints: return ParentNav.complaints;
-        default: return null;
+        case AppRoutes.parentDashboard:
+          return ParentNav.dashboard;
+        case AppRoutes.parentAttendance:
+          return ParentNav.attendance;
+        case AppRoutes.parentHomework:
+          return ParentNav.homework;
+        case AppRoutes.parentTimetable:
+          return ParentNav.timetable;
+        case AppRoutes.parentLessonPlanner:
+          return ParentNav.lessonPlanner;
+        case AppRoutes.parentTeacherChat:
+          return ParentNav.chat;
+        case AppRoutes.parentPTMBooking:
+          return ParentNav.ptm;
+        case AppRoutes.parentFees:
+          return ParentNav.fees;
+        case AppRoutes.parentLeave:
+          return ParentNav.leave;
+        case AppRoutes.parentCalendar:
+          return ParentNav.calendar;
+        case AppRoutes.parentDocuments:
+          return ParentNav.documents;
+        case AppRoutes.schoolGallery:
+          return ParentNav.gallery;
+        case AppRoutes.parentHealth:
+          return ParentNav.health;
+        case AppRoutes.parentComplaints:
+          return ParentNav.complaints;
+        default:
+          return null;
       }
     } else if (portal == 'super_admin') {
       switch (route) {
-        case AppRoutes.superAdminDashboard: return SuperAdminNav.dashboard;
-        case AppRoutes.superAdminAuditLogs: return SuperAdminNav.auditLogs;
-        case AppRoutes.superAdminSystemMonitor: return SuperAdminNav.systemMonitor;
-        case AppRoutes.idCardGeneration: return SuperAdminNav.idCards;
-        case AppRoutes.principalSchoolProfile: return SuperAdminNav.schoolProfile;
-        case AppRoutes.superAdminAccess: return SuperAdminNav.access;
-        case AppRoutes.staffManagement: return SuperAdminNav.staff;
-        case AppRoutes.studentOversight: return SuperAdminNav.students;
-        case AppRoutes.superAdminIssues: return SuperAdminNav.complaints;
-        default: return null;
+        case AppRoutes.superAdminDashboard:
+          return SuperAdminNav.dashboard;
+        case AppRoutes.superAdminAuditLogs:
+          return SuperAdminNav.auditLogs;
+        case AppRoutes.superAdminSystemMonitor:
+          return SuperAdminNav.systemMonitor;
+        case AppRoutes.idCardGeneration:
+          return SuperAdminNav.idCards;
+        case AppRoutes.principalSchoolProfile:
+          return SuperAdminNav.schoolProfile;
+        case AppRoutes.superAdminAccess:
+          return SuperAdminNav.access;
+        case AppRoutes.staffManagement:
+          return SuperAdminNav.staff;
+        case AppRoutes.studentOversight:
+          return SuperAdminNav.students;
+        case AppRoutes.superAdminIssues:
+          return SuperAdminNav.complaints;
+        default:
+          return null;
       }
     }
     return null;
@@ -203,16 +271,19 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).schoolDesk;
-    
+
     Widget content = widget.child;
-    
+
     final bool isDesktop = DesktopPlatform.shouldUsePersistentSidebar(context);
     final bool isPublic = widget.metadata.isPublic;
     final bool isKiosk = widget.metadata.portal == 'kiosk';
-    
+
     if (isDesktop && !isPublic && !isKiosk) {
-      final selectedIndex = _getSelectedIndexForRoute(widget.metadata.route, widget.metadata.portal);
-      
+      final selectedIndex = _getSelectedIndexForRoute(
+        widget.metadata.route,
+        widget.metadata.portal,
+      );
+
       Widget sidebar;
       switch (widget.metadata.portal) {
         case 'principal':
@@ -240,7 +311,9 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
           );
           break;
         case 'shared':
-          final currentRole = BackendApiClient.instance.currentRoleName?.trim().toLowerCase();
+          final currentRole = BackendApiClient.instance.currentRoleName
+              ?.trim()
+              .toLowerCase();
           switch (currentRole) {
             case 'principal':
             case 'admin':
@@ -274,15 +347,13 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
         default:
           sidebar = const SizedBox.shrink();
       }
-      
+
       content = Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           sidebar,
           const VerticalDivider(width: 1, thickness: 1),
-          Expanded(
-            child: widget.child,
-          ),
+          Expanded(child: widget.child),
         ],
       );
     }
