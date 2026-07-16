@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
+import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/academic_management_screen/academic_management_form_screens.dart';
@@ -960,7 +961,9 @@ class _AyPageShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: principalDirectoryBackground,
-      bottomNavigationBar: const PrincipalShellBottomBar(),
+      bottomNavigationBar: DesktopPlatform.isDesktopLayout(context)
+          ? null
+          : const PrincipalShellBottomBar(),
       body: SafeArea(
         child: Column(
           children: [

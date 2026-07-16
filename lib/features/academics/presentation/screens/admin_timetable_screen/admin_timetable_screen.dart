@@ -112,19 +112,22 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopPlatform.isDesktopLayout(context);
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: _bg,
-      drawer: PrincipalDrawer(
-        selectedIndex: PrincipalNav.timetable,
-        onDestinationSelected: (_) {},
-      ),
-      bottomNavigationBar: const PrincipalShellBottomBar(),
+      drawer: isDesktop
+          ? null
+          : PrincipalDrawer(
+              selectedIndex: PrincipalNav.timetable,
+              onDestinationSelected: (_) {},
+            ),
+      bottomNavigationBar: isDesktop ? null : const PrincipalShellBottomBar(),
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
+            constraints: BoxConstraints(maxWidth: isDesktop ? 980 : 460),
             child: RefreshIndicator(
               color: _accent,
               onRefresh: _loadData,

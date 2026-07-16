@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
@@ -111,7 +112,9 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFAFCFF),
-      bottomNavigationBar: const PrincipalShellBottomBar(),
+      bottomNavigationBar: DesktopPlatform.isDesktopLayout(context)
+          ? null
+          : const PrincipalShellBottomBar(),
       body: SafeArea(
         child: RefreshIndicator(
           color: const Color(0xFF6C4CFF),
