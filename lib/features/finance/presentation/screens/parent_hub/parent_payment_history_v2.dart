@@ -54,9 +54,11 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       final child = children[_activeChildIndex];
       final studentId = (child['id'] ?? child['student_id'] ?? '').toString();
 
+      // Payment history must use the same linked-child scope as My Fees. The
+      // global invoice list is a principal-only finance endpoint.
       final invoices = studentId.isEmpty
           ? <Map<String, dynamic>>[]
-          : await BackendApiClient.instance.getInvoices(studentId: studentId);
+          : await BackendApiClient.instance.getParentStudentFees(studentId);
       final paymentRequests = studentId.isEmpty
           ? <Map<String, dynamic>>[]
           : await BackendApiClient.instance.getParentPaymentRequests(
@@ -64,28 +66,62 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
             );
 
       final List<Map<String, dynamic>> historyList = [];
+      final completedPaymentIds = <String>{};
+      final completedPaymentSignatures = <String>{};
 
       for (final inv in invoices) {
         final payments = inv['payments'];
         if (payments is List) {
           for (final p in payments.whereType<Map>()) {
             final payment = Map<String, dynamic>.from(p);
-            final amount = (payment['amount_paid'] as num?)?.toDouble() ?? 0.0;
+            final paymentStatus = _text(
+              payment['status'],
+              fallback: 'completed',
+            ).toLowerCase();
+            if (!{'completed', 'approved', 'paid'}.contains(paymentStatus)) {
+              continue;
+            }
+            final amount =
+                (payment['amount'] as num?)?.toDouble() ??
+                (payment['amount_paid'] as num?)?.toDouble() ??
+                0.0;
+            final paymentId = _text(payment['id']);
+            final invoiceId = _text(inv['id']);
+            final signature = '$invoiceId:${amount.toStringAsFixed(2)}';
+            if (paymentId.isNotEmpty && !completedPaymentIds.add(paymentId)) {
+              continue;
+            }
+            // Separate successful installments may legitimately have the same
+            // amount. Keep every distinct payment, but remember the signature
+            // so its approved proof request is not rendered a second time.
+            completedPaymentSignatures.add(signature);
+            final receipt = payment['receipt'] is Map
+                ? Map<String, dynamic>.from(payment['receipt'] as Map)
+                : const <String, dynamic>{};
             historyList.add({
               'id': payment['id'] ?? '',
               'invoiceId': inv['id'] ?? '',
-              'component': 'Invoice ${inv['invoice_number'] ?? ''}',
+              'component': _text(
+                inv['fee_item_name'],
+                fallback: 'Invoice ${inv['invoice_number'] ?? ''}',
+              ),
+              'invoiceNumber': inv['invoice_number'] ?? '',
               'amount': amount,
-              'date': (payment['payment_date'] ?? '').toString(),
+              'date': (payment['paid_at'] ?? payment['payment_date'] ?? '')
+                  .toString(),
               'method':
                   (payment['payment_method'] ?? payment['payment_mode'] ?? '')
                       .toString(),
-              'receiptNo': (payment['receipt_number'] ?? '').toString(),
+              'receiptNo': _text(
+                receipt['receipt_number'] ??
+                    payment['receipt_number'] ??
+                    payment['reference_number'],
+              ),
               'student': _studentName(child),
               'class': _studentClass(child),
               'rollNo': _studentRoll(child),
               'status': 'Paid',
-              'rawStatus': 'completed',
+              'rawStatus': paymentStatus,
               'paymentRequest': {
                 ...payment,
                 'amount': amount,
@@ -93,9 +129,10 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
                     payment['payment_method'] ?? payment['payment_mode'],
                 'payment_mode':
                     payment['payment_method'] ?? payment['payment_mode'],
-                'payment_date': payment['payment_date'],
-                'transaction_ref': payment['reference_number'],
-                'receipt': {'receipt_number': payment['receipt_number']},
+                'payment_date': payment['paid_at'] ?? payment['payment_date'],
+                'transaction_ref':
+                    receipt['transaction_ref'] ?? payment['reference_number'],
+                'receipt': receipt,
                 'invoice': inv,
                 'student': child,
               },
@@ -105,28 +142,52 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       }
 
       for (final request in paymentRequests) {
+        final requestStatus = _text(request['status']).toLowerCase();
+        if (!{'approved', 'completed', 'paid'}.contains(requestStatus)) {
+          continue;
+        }
+        final linkedPaymentId = _text(request['payment_id']);
+        final amount = (request['amount'] as num?)?.toDouble() ?? 0.0;
+        final signature =
+            '${_text(request['invoice_id'])}:${amount.toStringAsFixed(2)}';
+        if ((linkedPaymentId.isNotEmpty &&
+                completedPaymentIds.contains(linkedPaymentId)) ||
+            completedPaymentSignatures.contains(signature)) {
+          continue;
+        }
         final invoice = request['invoice'] is Map
             ? Map<String, dynamic>.from(request['invoice'] as Map)
             : invoices.firstWhere(
                 (inv) => '${inv['id']}' == '${request['invoice_id']}',
                 orElse: () => const <String, dynamic>{},
               );
+        final receipt = request['receipt'] is Map
+            ? Map<String, dynamic>.from(request['receipt'] as Map)
+            : const <String, dynamic>{};
         historyList.add({
           'id': request['id'] ?? '',
           'invoiceId': request['invoice_id'] ?? '',
-          'component':
-              'Invoice ${invoice['invoice_number'] ?? request['invoice_id'] ?? ''}',
-          'amount': (request['amount'] as num?)?.toDouble() ?? 0.0,
+          'component': _text(
+            invoice['fee_item_name'],
+            fallback:
+                'Invoice ${invoice['invoice_number'] ?? request['invoice_id'] ?? ''}',
+          ),
+          'invoiceNumber': invoice['invoice_number'] ?? '',
+          'amount': amount,
           'date': (request['payment_date'] ?? request['created_at'] ?? '')
               .toString(),
           'method': (request['payment_method'] ?? request['payment_mode'] ?? '')
               .toString(),
-          'receiptNo': (request['request_reference'] ?? '').toString(),
+          'receiptNo': _text(
+            receipt['receipt_number'] ??
+                request['transaction_ref'] ??
+                request['request_reference'],
+          ),
           'student': _studentName(child),
           'class': _studentClass(child),
           'rollNo': _studentRoll(child),
           'status': _paymentStatusLabel(request['status']),
-          'rawStatus': '${request['status'] ?? ''}'.toLowerCase(),
+          'rawStatus': requestStatus,
           'paymentRequest': Map<String, dynamic>.from(request),
         });
       }
@@ -255,7 +316,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Once you initiate payments or submit screenshot proofs, they will appear in this timeline.',
+              'Approved payments and their receipts will appear here.',
               textAlign: TextAlign.center,
               style: GoogleFonts.ibmPlexSans(color: context.appTheme.muted),
             ),
@@ -272,6 +333,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
     final dateStr = _formatDate(_text(item['date']));
     final reference = _text(item['receiptNo']);
     final method = _text(item['method'], fallback: 'UPI');
+    final hasLinkedReceipt = _hasLinkedReceipt(item);
 
     Color statusColor = context.appTheme.warning;
     Color statusBg = context.appTheme.warningContainer;
@@ -357,9 +419,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
                   color: context.appTheme.muted,
                 ),
               ),
-              if (rawStatus == 'completed' ||
-                  rawStatus == 'approved' ||
-                  status == 'Paid')
+              if (hasLinkedReceipt)
                 OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pushNamed(
@@ -412,6 +472,14 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         ],
       ),
     );
+  }
+
+  bool _hasLinkedReceipt(Map<String, dynamic> item) {
+    final rawStatus = _text(item['rawStatus']).toLowerCase();
+    if (!{'completed', 'approved', 'paid'}.contains(rawStatus)) return false;
+    final request = item['paymentRequest'];
+    if (request is! Map || request['receipt'] is! Map) return false;
+    return _text((request['receipt'] as Map)['receipt_number']).isNotEmpty;
   }
 
   Future<void> _openClarificationResubmit(Map<String, dynamic> payment) async {

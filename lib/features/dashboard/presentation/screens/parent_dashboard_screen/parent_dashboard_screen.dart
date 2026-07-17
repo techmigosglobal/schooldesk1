@@ -1190,41 +1190,52 @@ class _ParentSummaryGrid extends StatelessWidget {
     final metrics = dashboard['metrics'] is Map
         ? Map<String, dynamic>.from(dashboard['metrics'] as Map)
         : const <String, dynamic>{};
-    return SchoolDeskResponsiveGrid(
-      minTileWidth: 140,
-      spacing: 12,
-      children: [
-        _StatCard(
-          icon: Icons.how_to_reg_rounded,
-          label: 'Attendance',
-          value: _percentage(child['attendance_pct']),
-          gradientColors: const [Color(0xFF0F766E), Color(0xFF14B8A6)],
-          route: AppRoutes.parentAttendance,
+    final cards = <Widget>[
+      _StatCard(
+        icon: Icons.how_to_reg_rounded,
+        label: 'Attendance',
+        value: _percentage(child['attendance_pct']),
+        gradientColors: const [Color(0xFF0F766E), Color(0xFF14B8A6)],
+        route: AppRoutes.parentAttendance,
+      ),
+      _StatCard(
+        icon: Icons.assignment_turned_in_rounded,
+        label: 'Homework Due',
+        value: _metricNumber(child['homework_due']),
+        gradientColors: const [Color(0xFF7C3AED), Color(0xFFA78BFA)],
+        route: AppRoutes.parentHomework,
+      ),
+      _StatCard(
+        icon: Icons.account_balance_wallet_rounded,
+        label: 'Fees Due',
+        value: _money(
+          child['pending_fee_balance'] ?? metrics['pending_fee_balance'],
         ),
-        _StatCard(
-          icon: Icons.assignment_turned_in_rounded,
-          label: 'Homework Due',
-          value: _metricNumber(child['homework_due']),
-          gradientColors: const [Color(0xFF7C3AED), Color(0xFFA78BFA)],
-          route: AppRoutes.parentHomework,
-        ),
-        _StatCard(
-          icon: Icons.account_balance_wallet_rounded,
-          label: 'Fees Due',
-          value: _money(
-            child['pending_fee_balance'] ?? metrics['pending_fee_balance'],
-          ),
-          gradientColors: const [Color(0xFFEA580C), Color(0xFFFB923C)],
-          route: AppRoutes.parentFees,
-        ),
-        _StatCard(
-          icon: Icons.chat_bubble_rounded,
-          label: 'Unread Messages',
-          value: _metricNumber(metrics['unread_messages']),
-          gradientColors: const [Color(0xFF1D4ED8), Color(0xFF60A5FA)],
-          route: AppRoutes.parentTeacherChat,
-        ),
-      ],
+        gradientColors: const [Color(0xFFEA580C), Color(0xFFFB923C)],
+        route: AppRoutes.parentFees,
+      ),
+      _StatCard(
+        icon: Icons.chat_bubble_rounded,
+        label: 'Unread Messages',
+        value: _metricNumber(metrics['unread_messages']),
+        gradientColors: const [Color(0xFF1D4ED8), Color(0xFF60A5FA)],
+        route: AppRoutes.parentTeacherChat,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        final columns = constraints.maxWidth >= 700 ? 4 : 2;
+        final width =
+            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: cards
+              .map((card) => SizedBox(width: width, child: card))
+              .toList(),
+        );
+      },
     );
   }
 }
@@ -1251,59 +1262,73 @@ class _StatCard extends StatelessWidget {
 
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         onTap: () => Navigator.pushNamed(context, route),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 124, maxHeight: 132),
-          padding: const EdgeInsets.all(16),
+          height: 72,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: gradientColors,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
+            color: tokens.isDark
+                ? gradientColors[0].withAlpha(38)
+                : Colors.white.withAlpha(235),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: gradientColors[0].withAlpha(45)),
             boxShadow: [
               BoxShadow(
-                color: gradientColors[0].withAlpha(tokens.isDark ? 60 : 50),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+                color: gradientColors[0].withAlpha(tokens.isDark ? 28 : 18),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(35),
-                  borderRadius: BorderRadius.circular(10),
+                  gradient: LinearGradient(
+                    colors: gradientColors,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(11),
                 ),
-                child: Icon(icon, color: Colors.white, size: 20),
+                child: Icon(icon, color: Colors.white, size: 18),
               ),
-              const SizedBox(height: 12),
-              SchoolDeskAdaptiveText(
-                value,
-                maxLines: 1,
-                minFontSize: 16,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SchoolDeskAdaptiveText(
+                      value,
+                      maxLines: 1,
+                      minFontSize: 13,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: tokens.onSurface,
+                      ),
+                    ),
+                    SchoolDeskAdaptiveText(
+                      label,
+                      maxLines: 1,
+                      minFontSize: 9,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: tokens.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 2),
-              SchoolDeskAdaptiveText(
-                label,
-                maxLines: 1,
-                minFontSize: 10,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: Colors.white.withAlpha(210),
-                  fontWeight: FontWeight.w600,
-                ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 16,
+                color: gradientColors[0].withAlpha(150),
               ),
             ],
           ),

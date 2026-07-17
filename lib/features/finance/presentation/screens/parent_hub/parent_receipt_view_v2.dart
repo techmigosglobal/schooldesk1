@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -59,14 +60,18 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
       final student = pr['student'] is Map
           ? Map<String, dynamic>.from(pr['student'] as Map)
           : const <String, dynamic>{};
+      final receiptNo = _text(receipt['receipt_number']);
+      if (receiptNo.isEmpty) {
+        setState(() {
+          _error = 'Receipt is not available for this finalized payment yet.';
+          _loading = false;
+        });
+        return;
+      }
 
       setState(() {
         _receiptData = {
-          'receipt_no':
-              receipt['receipt_number'] ??
-              pr['receipt_number'] ??
-              pr['request_reference'] ??
-              '',
+          'receipt_no': receiptNo,
           'school_name': invoice['school_name'] ?? 'School',
           'amount': (pr['amount'] as num?)?.toDouble() ?? 0.0,
           'payment_mode':
@@ -75,11 +80,19 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
               pr['payment_mode'] ??
               'UPI',
           'paid_at':
-              pr['reviewed_at'] ?? pr['updated_at'] ?? pr['created_at'] ?? '',
+              pr['paid_at'] ??
+              pr['payment_date'] ??
+              receipt['created_at'] ??
+              pr['reviewed_at'] ??
+              pr['created_at'] ??
+              '',
           'student_name':
               '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
                   .trim(),
-          'invoice_number': invoice['invoice_number'] ?? '',
+          'fee_component':
+              invoice['fee_item_name'] ??
+              invoice['category_name'] ??
+              'Fee payment',
           'transaction_ref':
               pr['transaction_ref'] ?? pr['transaction_id'] ?? '',
         };
@@ -88,68 +101,10 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
       return;
     }
 
-    // fallback load
     setState(() {
-      _loading = true;
-      _error = null;
+      _error = 'Open a receipt from a finalized payment.';
+      _loading = false;
     });
-
-    try {
-      final list = await BackendApiClient.instance.getParentPaymentRequests(
-        studentId: widget.args.student?['id'],
-      );
-      if (list.isNotEmpty) {
-        final prMatch = list.first;
-        final receipt = prMatch['receipt'] is Map
-            ? Map<String, dynamic>.from(prMatch['receipt'] as Map)
-            : const <String, dynamic>{};
-        final invoice = prMatch['invoice'] is Map
-            ? Map<String, dynamic>.from(prMatch['invoice'] as Map)
-            : const <String, dynamic>{};
-        final student = prMatch['student'] is Map
-            ? Map<String, dynamic>.from(prMatch['student'] as Map)
-            : const <String, dynamic>{};
-
-        setState(() {
-          _receiptData = {
-            'receipt_no':
-                receipt['receipt_number'] ??
-                prMatch['receipt_number'] ??
-                prMatch['request_reference'] ??
-                '',
-            'school_name': invoice['school_name'] ?? 'School',
-            'amount': (prMatch['amount'] as num?)?.toDouble() ?? 0.0,
-            'payment_mode':
-                receipt['payment_method'] ??
-                prMatch['payment_method'] ??
-                prMatch['payment_mode'] ??
-                'UPI',
-            'paid_at':
-                prMatch['reviewed_at'] ??
-                prMatch['updated_at'] ??
-                prMatch['created_at'] ??
-                '',
-            'student_name':
-                '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
-                    .trim(),
-            'invoice_number': invoice['invoice_number'] ?? '',
-            'transaction_ref':
-                prMatch['transaction_ref'] ?? prMatch['transaction_id'] ?? '',
-          };
-          _loading = false;
-        });
-      } else {
-        setState(() {
-          _error = 'Receipt not found.';
-          _loading = false;
-        });
-      }
-    } on Object catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
   }
 
   @override
@@ -216,7 +171,7 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
     final mode = _text(_receiptData['payment_mode'], fallback: 'UPI');
     final paidAt = _formatDateTime(_text(_receiptData['paid_at']));
     final studentName = _text(_receiptData['student_name']);
-    final invoiceNo = _text(_receiptData['invoice_number']);
+    final feeComponent = _text(_receiptData['fee_component']);
     final transactionRef = _text(_receiptData['transaction_ref']);
 
     return SingleChildScrollView(
@@ -294,8 +249,8 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                         _receiptRow('Student Name', studentName),
                         const Divider(height: 24),
                       ],
-                      if (invoiceNo.isNotEmpty) ...[
-                        _receiptRow('Invoice No', invoiceNo),
+                      if (feeComponent.isNotEmpty) ...[
+                        _receiptRow('Fee Component', feeComponent),
                         const Divider(height: 24),
                       ],
                       _receiptRow('Date & Time', paidAt),
@@ -336,15 +291,7 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                       bottom: Radius.circular(16),
                     ),
                   ),
-                  child: Text(
-                    'This is a computer generated receipt and does not require a physical signature.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 11,
-                      color: context.appTheme.muted,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
+                  child: _receiptAuthorizationFooter(),
                 ),
               ],
             ),
@@ -403,9 +350,11 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         student['class'] ?? student['class_name'] ?? student['grade_name'],
       );
       final rollNo = _text(
-        student['rollNo'] ??
+        student['student_id_number'] ??
+            student['admission_number'] ??
+            student['rollNo'] ??
             student['roll_number'] ??
-            student['admission_number'],
+            '—',
       );
       final paidAt =
           DateTime.tryParse(_text(_receiptData['paid_at'])) ?? DateTime.now();
@@ -415,11 +364,18 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
       );
       final schoolAddress = [
         _school['address'],
+        _school['address_line1'],
+        _school['address_line2'],
         _school['city'],
         _school['state'],
         _school['postal_code'],
       ].map(_text).where((value) => value.isNotEmpty).toSet().join(', ');
+      final assets = await Future.wait([
+        _networkImageBytes(_text(_school['logo_url'])),
+        _networkImageBytes(_text(_school['authorized_signature_url'])),
+      ]);
       final pdf = await PdfService.getInstance().generateFeeReceipt(
+        documentKind: FeeDocumentKind.paymentReceipt,
         receiptNo: receiptNo,
         studentName: _text(_receiptData['student_name'], fallback: 'Student'),
         className: className,
@@ -428,7 +384,7 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         feeItems: [
           {
             'description': _text(
-              _receiptData['invoice_number'],
+              _receiptData['fee_component'],
               fallback: 'Fee payment',
             ),
             'amount': amount,
@@ -441,6 +397,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         paymentDate: paidAt,
         schoolName: schoolName,
         schoolAddress: schoolAddress,
+        schoolLogo: assets[0],
+        authorizedSignature: assets[1],
+        authorizedSignatoryName: _text(_school['principal_name']),
       );
       if (!mounted) return;
       await const ShareExportService().shareBytes(
@@ -461,6 +420,56 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
       );
     } finally {
       if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  Widget _receiptAuthorizationFooter() {
+    final signatureUrl = _text(_school['authorized_signature_url']);
+    if (signatureUrl.isEmpty) {
+      return Text(
+        'This is a computer generated receipt and does not require a physical signature.',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.ibmPlexSans(
+          fontSize: 11,
+          color: context.appTheme.muted,
+          fontStyle: FontStyle.italic,
+        ),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.network(
+          signatureUrl,
+          width: 112,
+          height: 42,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
+        if (_text(_school['principal_name']).isNotEmpty)
+          Text(
+            _text(_school['principal_name']),
+            style: GoogleFonts.ibmPlexSans(fontSize: 10),
+          ),
+        Text(
+          'Authorised Signatory',
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<Uint8List?> _networkImageBytes(String url) async {
+    if (url.isEmpty) return null;
+    try {
+      return (await NetworkAssetBundle(
+        Uri.parse(url),
+      ).load(url)).buffer.asUint8List();
+    } on Object {
+      return null;
     }
   }
 

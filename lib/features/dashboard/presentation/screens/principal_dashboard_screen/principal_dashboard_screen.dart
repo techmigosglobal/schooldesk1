@@ -976,7 +976,7 @@ class _PrincipalHomeData {
     final schoolName = _text(school['name'], fallback: 'School');
     final registered =
         _text(school['id']).isNotEmpty ||
-        _text(school['registration_number']).isNotEmpty;
+        _text(school['registration_no']).isNotEmpty;
     final profileReady =
         schoolName.trim().isNotEmpty &&
         _text(school['school_type']).isNotEmpty &&

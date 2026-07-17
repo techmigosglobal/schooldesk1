@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 class ParentPaymentFlow extends StatefulWidget {
@@ -45,7 +47,12 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   Map<String, dynamic> get _selectedFee =>
       _fees.isEmpty ? const <String, dynamic>{} : _fees.first;
 
-  bool get _isTuition => _text(_selectedFee['fee_type']) == 'tuition';
+  bool get _isTuition => isTuitionInvoice(_selectedFee);
+
+  String get _selectedFeeLabel => _text(
+    _selectedFee['component'],
+    fallback: _isTuition ? 'Tuition' : 'Fee',
+  );
 
   static const List<String> _monthNames = [
     'June',
@@ -100,8 +107,19 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   }
 
   String get _upiId => _text(_paymentConfig['upi_id']);
+  String get _qrImageUrl => _text(_paymentConfig['qr_image_url']);
+  String get _qrNote => _text(_paymentConfig['qr_note']);
   String get _payeeName =>
       _text(_paymentConfig['payee_name'], fallback: 'School');
+
+  String _absoluteUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
+    return '${EnvConfig.apiOrigin}/$trimmed';
+  }
 
   Map<String, dynamic> get _resubmissionRequest =>
       widget.args.paymentRequest == null
@@ -146,7 +164,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       _configError = null;
     });
     try {
-      final invoiceId = _fees.isEmpty ? '' : _text(_fees.first['id']);
+      final invoiceId = _text(_selectedFee['id']);
       final config = await BackendApiClient.instance.getPaymentConfig(
         invoiceId: invoiceId,
         refreshNonce: forceRefresh
@@ -154,8 +172,15 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
             : null,
       );
       if (!mounted) return;
+      final upiId = _text(config['upi_id']);
+      final qrImageUrl = _text(config['qr_image_url']);
+      final isEnabled = config['upi_enabled'] != false;
       setState(() {
         _paymentConfig = config;
+        if (!isEnabled || (upiId.isEmpty && qrImageUrl.isEmpty)) {
+          _configError =
+              'The principal has not configured an active UPI ID or QR code.';
+        }
         _loadingConfig = false;
       });
     } on Object catch (e) {
@@ -207,6 +232,21 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         );
       }
     }
+  }
+
+  Future<void> _copyUpiId() async {
+    final upiId = _upiId.trim();
+    if (upiId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('UPI ID is not configured yet.')),
+      );
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: upiId));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Copied UPI ID: $upiId')));
   }
 
   Future<void> _pickProofFile() async {
@@ -479,7 +519,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   }
 
   Widget _buildStep1() {
-    final componentName = _selectedFee['component'] ?? 'Fee Component';
+    final componentName = _selectedFeeLabel;
     final amountDue = (_selectedFee['amount'] as num?)?.toDouble() ?? 0.0;
 
     return Column(
@@ -595,7 +635,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '${_selectedFee['component'] ?? 'This fee'} is payable as one full amount. Month selection is only available for tuition.',
+                    '$_selectedFeeLabel is payable as one full amount. Month selection is only available for tuition.',
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 12,
                       height: 1.35,
@@ -621,7 +661,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               Text(
                 _isTuition
                     ? 'Paying for ${_selectedMonthNames.length} month(s)'
-                    : 'Book & Kit: one-time payment',
+                    : '$_selectedFeeLabel: one-time payment',
                 style: GoogleFonts.ibmPlexSans(
                   fontWeight: FontWeight.w600,
                   color: context.appTheme.primary,
@@ -715,13 +755,80 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         Center(
           child: Column(
             children: [
-              const Icon(Icons.account_balance_wallet_outlined, size: 54),
-              const SizedBox(height: 12),
+              if (_qrImageUrl.isNotEmpty) ...[
+                Container(
+                  key: const Key('payment-config-qr-container'),
+                  width: 224,
+                  height: 224,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: context.appTheme.outlineVariant),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 18,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      _absoluteUrl(_qrImageUrl),
+                      key: const Key('payment-config-qr-image'),
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.broken_image_outlined,
+                            size: 42,
+                            color: context.appTheme.error,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'QR image could not be loaded',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Scan this QR in your UPI app',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ] else ...[
+                Icon(
+                  Icons.qr_code_2_rounded,
+                  size: 54,
+                  color: context.appTheme.muted,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'QR code is not configured. Use the UPI ID below.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 12,
+                    color: context.appTheme.muted,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
               SelectableText(
-                _upiId,
+                _upiId.isEmpty ? 'UPI ID not configured' : _upiId,
+                key: const Key('payment-config-upi-id'),
                 style: GoogleFonts.ibmPlexSans(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
+                  color: _upiId.isEmpty ? context.appTheme.error : null,
                 ),
               ),
               const SizedBox(height: 4),
@@ -735,16 +842,8 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: _upiId));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'UPI ID copied. Complete payment manually in your UPI app.',
-                      ),
-                    ),
-                  );
-                },
+                key: const Key('copy-payment-upi-id'),
+                onPressed: _upiId.isEmpty ? null : _copyUpiId,
                 icon: const Icon(Icons.copy_rounded, size: 16),
                 label: const Text('Copy UPI ID'),
                 style: OutlinedButton.styleFrom(
@@ -752,6 +851,17 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                   side: const BorderSide(color: Color(0xFF1A6B4A)),
                 ),
               ),
+              if (_qrNote.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _qrNote,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 12,
+                    color: context.appTheme.muted,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

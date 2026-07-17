@@ -222,6 +222,13 @@ extension BackendStudentsApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
+        await _deleteCachedPaths([
+          r'/students',
+          r'/fees/structures',
+          r'/fees/invoices',
+          r'/principal/classes',
+          r'/dashboard/',
+        ]);
         return StudentModel.fromJson(data['data'] as Map<String, dynamic>);
       }
       throw ServerException(
@@ -326,11 +333,19 @@ extension BackendStudentsApi on BackendApiClient {
       }
       final response = await _dio.put('/students/$id', data: payload);
       final data = response.data as Map<String, dynamic>;
-      if (data['success'] != true) {
-        throw ServerException(
-          message: data['error'] ?? 'Failed to update student',
-        );
+      if (data['success'] == true) {
+        await _deleteCachedPaths([
+          r'/students',
+          r'/fees/structures',
+          r'/fees/invoices',
+          r'/principal/classes',
+          r'/dashboard/',
+        ]);
+        return;
       }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to update student',
+      );
     } on DioException catch (e) {
       throw _handleError(e);
     }

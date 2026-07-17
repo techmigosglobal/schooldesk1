@@ -216,7 +216,8 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     'section_id': _textValue(
       section['id'] ?? student['current_section_id'] ?? row['section_id'],
     ),
-    'total': _numValue(row['total_amount'] ?? row['net_amount']),
+    'total': _numValue(row['net_amount'] ?? row['total_amount']),
+    'discount': _numValue(row['discount_amount']),
     'paid': _numValue(row['paid_amount']),
     'balance': _numValue(row['balance']),
     'due_date': row['due_date'],
@@ -262,13 +263,18 @@ List<String> invoiceMonthList(Map<String, dynamic>? invoice, String key) {
 }
 
 bool isTuitionInvoice(Map<String, dynamic>? invoice) {
-  final label = _textValue(invoice?['fee_item_name']).toLowerCase();
+  final label = [
+    invoice?['fee_item_name'],
+    invoice?['component'],
+    invoice?['category_name'],
+  ].map(_textValue).join(' ').toLowerCase();
   if (label.contains('book') ||
       label.contains('kit') ||
       label.contains('uniform')) {
     return false;
   }
-  return _textValue(invoice?['fee_type']) == 'tuition';
+  final feeType = _textValue(invoice?['fee_type']).toLowerCase();
+  return feeType.contains('tuition') || label.contains('tuition');
 }
 
 List<String> allowedInvoiceMonths(Map<String, dynamic>? invoice) =>
@@ -322,3 +328,15 @@ String displayDate(Object? value) {
 
 String studentFullName(Map<String, dynamic> student) =>
     _studentName(student, fallback: 'Student');
+
+/// A stable student-facing identifier for documents. Invoice numbers are
+/// transaction identifiers, never student roll/admission numbers.
+String studentIdentifier(
+  Map<String, dynamic> student, {
+  String fallback = '—',
+}) {
+  return _textValue(
+    student['student_id_number'] ?? student['admission_number'],
+    fallback: fallback,
+  );
+}

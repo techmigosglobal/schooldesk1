@@ -67,6 +67,28 @@ extension BackendSchoolApi on BackendApiClient {
     }
   }
 
+  Future<String> uploadCurrentSchoolSignature(String filePath) async {
+    try {
+      final formData = FormData.fromMap({
+        'signature': await MultipartFile.fromFile(filePath),
+      });
+      final response = await _dio.post(
+        '/schools/current/signature',
+        data: formData,
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        final payload = Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        return '${payload['authorized_signature_url'] ?? ''}';
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to upload authorization signature',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   // ─── Academic Years ─────────────────────────────────────────────────────────
 
   Future<List<AcademicYearModel>> getAcademicYears({

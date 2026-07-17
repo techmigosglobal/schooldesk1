@@ -163,6 +163,21 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
     return grouped;
   }
 
+  int get _eligibleAssignments => _filtered.fold(
+    0,
+    (sum, row) => sum + (row['eligible_student_count'] as num? ?? 0).toInt(),
+  );
+
+  int get _completedAssignments => _filtered.fold(
+    0,
+    (sum, row) => sum + (row['invoiced_student_count'] as num? ?? 0).toInt(),
+  );
+
+  int get _missingAssignments => _filtered.fold(
+    0,
+    (sum, row) => sum + (row['missing_invoice_count'] as num? ?? 0).toInt(),
+  );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -341,6 +356,11 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
 
                   const SizedBox(height: 16),
 
+                  if (_filtered.isNotEmpty) ...[
+                    _buildAssignmentSummary(),
+                    const SizedBox(height: 14),
+                  ],
+
                   // Hint when no class selected
                   if (_selectedGradeId.isEmpty && _gradeOptions.isNotEmpty)
                     Container(
@@ -410,6 +430,71 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
 
   // ── Category Section Header ───────────────────────────────────────────────
 
+  Widget _buildAssignmentSummary() {
+    final isSynced = _missingAssignments == 0;
+    final accent = isSynced ? const Color(0xFF15803D) : const Color(0xFFD97706);
+    final surface = isSynced
+        ? const Color(0xFFECFDF3)
+        : const Color(0xFFFFF7ED);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withAlpha(48)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isSynced ? Icons.sync_rounded : Icons.sync_problem_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isSynced
+                      ? 'All student fees are synced'
+                      : '$_missingAssignments fee assignment${_missingAssignments == 1 ? '' : 's'} pending',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: accent,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$_completedAssignments of $_eligibleAssignments assignments across ${_filtered.length} structure${_filtered.length == 1 ? '' : 's'}',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: context.appTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Refresh assignment status',
+            onPressed: _loadData,
+            icon: Icon(Icons.refresh_rounded, color: accent, size: 20),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _categoryHeader(String categoryName) {
     final meta = _categoryMeta(categoryName);
     return Row(
@@ -445,6 +530,10 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
       s['frequency'],
       fallback: 'term',
     ).replaceAll('_', ' ');
+    final eligible = (s['eligible_student_count'] as num? ?? 0).toInt();
+    final assigned = (s['invoiced_student_count'] as num? ?? 0).toInt();
+    final missing = (s['missing_invoice_count'] as num? ?? 0).toInt();
+    final isSynced = missing == 0;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -519,6 +608,43 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
               ],
             ),
             const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSynced
+                    ? const Color(0xFFECFDF3)
+                    : const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isSynced
+                        ? Icons.check_circle_rounded
+                        : Icons.sync_problem_rounded,
+                    size: 14,
+                    color: isSynced
+                        ? const Color(0xFF15803D)
+                        : const Color(0xFFD97706),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    isSynced
+                        ? '$assigned/$eligible students synced'
+                        : '$missing student${missing == 1 ? '' : 's'} pending',
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: isSynced
+                          ? const Color(0xFF15803D)
+                          : const Color(0xFFD97706),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             const Divider(height: 1),
             const SizedBox(height: 8),
             Row(
@@ -535,6 +661,15 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
                   context.appTheme.muted,
                 ),
                 const Spacer(),
+                IconButton(
+                  tooltip: 'Edit structure',
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  color: meta.color,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _openEditForm(s),
+                ),
+                const SizedBox(width: 14),
                 IconButton(
                   tooltip: 'Delete structure',
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
@@ -584,6 +719,26 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
         feeCategories: _feeCategories,
         ownerRole: 'principal',
         feeStructure: seedStructure,
+      ),
+    );
+    if (!mounted || result is! AdminFeeStructureFormResult) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
+    await _loadData();
+  }
+
+  Future<void> _openEditForm(Map<String, dynamic> structure) async {
+    final result = await Navigator.pushNamed(
+      context,
+      AppRoutes.principalFeeStructureForm,
+      arguments: AdminFeeStructureFormArgs(
+        academicYears: _academicYears,
+        grades: _grades,
+        sections: _sections,
+        feeCategories: _feeCategories,
+        ownerRole: 'principal',
+        feeStructure: structure,
       ),
     );
     if (!mounted || result is! AdminFeeStructureFormResult) return;

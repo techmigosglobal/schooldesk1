@@ -28,6 +28,36 @@ enum ApprovalType {
   academicInfo,
 }
 
+class ApprovalCenterRouteArgs {
+  final String initialApprovalId;
+  final String referenceType;
+  final String initialTab;
+
+  const ApprovalCenterRouteArgs({
+    this.initialApprovalId = '',
+    this.referenceType = '',
+    this.initialTab = '',
+  });
+
+  static ApprovalCenterRouteArgs fromRoute(Object? raw) {
+    if (raw is ApprovalCenterRouteArgs) return raw;
+    if (raw is Map) {
+      return ApprovalCenterRouteArgs(
+        initialApprovalId: (raw['referenceId'] ?? raw['reference_id'] ?? '')
+            .toString()
+            .trim(),
+        referenceType: (raw['referenceType'] ?? raw['reference_type'] ?? '')
+            .toString()
+            .trim(),
+        initialTab: (raw['initialTab'] ?? raw['initial_tab'] ?? '')
+            .toString()
+            .trim(),
+      );
+    }
+    return const ApprovalCenterRouteArgs();
+  }
+}
+
 class ApprovalModel {
   final String id;
   final ApprovalType type;
@@ -128,7 +158,12 @@ class ApprovalModel {
 }
 
 class ApprovalCenterScreen extends StatefulWidget {
-  const ApprovalCenterScreen({super.key});
+  final ApprovalCenterRouteArgs args;
+
+  const ApprovalCenterScreen({
+    super.key,
+    this.args = const ApprovalCenterRouteArgs(),
+  });
 
   @override
   State<ApprovalCenterScreen> createState() => _ApprovalCenterScreenState();
@@ -169,7 +204,11 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabLabels.length, vsync: this);
+    _tabController = TabController(
+      length: _tabLabels.length,
+      initialIndex: _initialTabIndex(widget.args.initialTab),
+      vsync: this,
+    );
     _loadData();
     // Store the service reference synchronously so dispose() can always
     // call removeListener without a second async gap.
@@ -182,6 +221,24 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
 
   void _onNotificationChanged() {
     if (mounted) _loadData();
+  }
+
+  int _initialTabIndex(String initialTab) {
+    return switch (initialTab.trim().toLowerCase()) {
+      'leave' || 'student_leave' => 2,
+      'accounts' || 'account' => 1,
+      'admission' => 3,
+      'fee' || 'fee_concession' => 4,
+      'tc' => 5,
+      'classes' || 'class' => 6,
+      'students' || 'student' => 7,
+      'fees' => 8,
+      'timetable' => 9,
+      'documents' || 'document' => 10,
+      'communication' => 11,
+      'event_posts' || 'event' => 12,
+      _ => 0,
+    };
   }
 
   @override
@@ -225,17 +282,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           ),
         ),
         _loadApprovalSource(
-          'Classes',
-          () => _loadGenericApprovals(path: '/class-approvals', type: 'class'),
-        ),
-        _loadApprovalSource(
-          'Students',
-          () => _loadGenericApprovals(
-            path: '/student-approvals',
-            type: 'student',
-          ),
-        ),
-        _loadApprovalSource(
           'Events',
           // The dedicated approval endpoint for event posts is /event-posts/pending
           // (principal-only). We transform each post into the generic approval map
@@ -265,13 +311,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
               };
             }).toList();
           },
-        ),
-        _loadApprovalSource(
-          'Timetable',
-          () => _loadGenericApprovals(
-            path: '/timetable/approvals',
-            type: 'timetable',
-          ),
         ),
       ]);
       final approvals = sources.expand((source) => source.rows).toList();
@@ -361,8 +400,8 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     final parent = _asMap(row['parent_user']);
     final section = _asMap(student['current_section']);
     final grade = _asMap(section['grade']);
-    final fromDate = _dateOnly(row['from_date']);
-    final toDate = _dateOnly(row['to_date']);
+    final fromDate = _dateOnly(row['start_date'] ?? row['from_date']);
+    final toDate = _dateOnly(row['end_date'] ?? row['to_date']);
     final days = _text(row['total_days'], fallback: '1');
     final status = _text(row['status'], fallback: 'pending').toLowerCase();
     final studentName = _joinNonEmpty([
@@ -380,7 +419,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       'requesterName': studentName,
       'requesterRole': 'Parent: $parentName',
       'requesterClass': classLabel,
-      'submittedDate': _dateOnly(row['applied_at']),
+      'submittedDate': _dateOnly(row['created_at'] ?? row['applied_at']),
       'summary':
           '${_text(row['leave_type'], fallback: 'Leave')} — $days day(s)',
       'details':
@@ -389,7 +428,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       'remarks': _text(row['rejection_reason']).isEmpty
           ? null
           : _text(row['rejection_reason']),
-      'actionDate': _dateOnly(row['decided_at']),
+      'actionDate': _dateOnly(row['decided_at'] ?? row['updated_at']),
       'decisionPath':
           '/student-leave/applications/${_text(row['id'])}/decision',
     };
@@ -506,7 +545,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
 
   List<ApprovalModel> _getVisibleApprovals(int tabIndex) {
     final query = _searchController.text.trim().toLowerCase();
-    return _getTypeFilteredApprovals(tabIndex).where((approval) {
+    final visible = _getTypeFilteredApprovals(tabIndex).where((approval) {
       final matchesStatus = switch (_statusFilter) {
         'all' => true,
         'resolved' => approval.status != 'pending',
@@ -524,6 +563,16 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       ].join(' ').toLowerCase();
       return searchable.contains(query);
     }).toList();
+    final initialApprovalId = widget.args.initialApprovalId.trim();
+    if (initialApprovalId.isNotEmpty) {
+      visible.sort((left, right) {
+        final leftMatch = left.id == initialApprovalId;
+        final rightMatch = right.id == initialApprovalId;
+        if (leftMatch == rightMatch) return 0;
+        return leftMatch ? -1 : 1;
+      });
+    }
+    return visible;
   }
 
   int _getPendingCount(int tabIndex) {

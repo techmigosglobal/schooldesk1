@@ -299,7 +299,7 @@ class _BirthdayAlertSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text('🎂', style: TextStyle(fontSize: 16)),
+            const Icon(Icons.cake_rounded, size: 18, color: Color(0xFFE91E63)),
             const SizedBox(width: 6),
             Text(
               'Birthdays (${notifications.length})',
@@ -348,26 +348,18 @@ class _BirthdayAlertTile extends StatelessWidget {
         color: acknowledged
             ? theme.colorScheme.surface.withAlpha(100)
             : theme.colorScheme.surface.withAlpha(180),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: acknowledged
             ? null
             : Border.all(color: pink.withAlpha(50), width: 1),
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: pink.withAlpha(25),
-            foregroundImage: notification.studentPhotoUrl.isNotEmpty
-                ? NetworkImage(notification.studentPhotoUrl)
-                : null,
-            child: Icon(
-              acknowledged ? Icons.check_circle_rounded : Icons.cake_rounded,
-              size: 18,
-              color: acknowledged ? Colors.green : pink,
-            ),
+          _BirthdayStudentAvatar(
+            notification: notification,
+            acknowledged: acknowledged,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -377,6 +369,7 @@ class _BirthdayAlertTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                     decoration: acknowledged
                         ? TextDecoration.lineThrough
@@ -389,10 +382,11 @@ class _BirthdayAlertTile extends StatelessWidget {
                 if (notification.body.isNotEmpty)
                   Text(
                     notification.body,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      fontSize: 11,
+                      fontSize: 12,
+                      height: 1.25,
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -410,6 +404,98 @@ class _BirthdayAlertTile extends StatelessWidget {
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: Colors.green,
                   fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BirthdayStudentAvatar extends StatelessWidget {
+  final AppNotification notification;
+  final bool acknowledged;
+
+  const _BirthdayStudentAvatar({
+    required this.notification,
+    required this.acknowledged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const pink = Color(0xFFE91E63);
+    final photoUrl = notification.studentPhotoUrl.trim();
+    final identity = notification.studentId.isNotEmpty
+        ? notification.studentId
+        : notification.id;
+
+    Widget fallback() => Container(
+      key: ValueKey('birthday-cake-$identity'),
+      width: 56,
+      height: 56,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: pink.withAlpha(24),
+      ),
+      child: const Icon(Icons.cake_rounded, size: 27, color: pink),
+    );
+
+    return SizedBox.square(
+      dimension: 62,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: theme.colorScheme.surface,
+              border: Border.all(color: pink.withAlpha(70), width: 1.5),
+            ),
+            child: ClipOval(
+              child: photoUrl.isEmpty
+                  ? fallback()
+                  : Image.network(
+                      photoUrl,
+                      key: ValueKey('birthday-photo-$identity'),
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      semanticLabel: 'Birthday student profile photo',
+                      frameBuilder: (context, child, frame, loadedSync) {
+                        if (loadedSync || frame != null) return child;
+                        return fallback();
+                      },
+                      errorBuilder: (context, error, stackTrace) => fallback(),
+                    ),
+            ),
+          ),
+          if (acknowledged)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.green,
+                  border: Border.all(
+                    color: theme.colorScheme.surface,
+                    width: 2,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  size: 12,
+                  color: Colors.white,
                 ),
               ),
             ),

@@ -11,7 +11,6 @@ import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/fee_assignment_utils.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
 
@@ -642,15 +641,6 @@ class _AdminFeeStructureFormScreenState
           await BackendApiClient.instance.applyFeeInvoiceSync(
             createdId,
             includePartiallyPaid: true,
-          );
-          await BackendApiClient.instance.generateFeeInvoices(
-            academicYearId: _selectedYearId,
-            gradeId: _selectedGradeId,
-            sectionId: _selectedSectionId,
-            dueDate: defaultAssignmentDueDate(),
-            invoiceLabel: 'Auto-generated from fee structure',
-            includeOneTime: true,
-            includeYearly: true,
           );
         }
       }

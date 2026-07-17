@@ -123,6 +123,25 @@ void main() {
       expect(target.route, AppRoutes.parentAttendance);
     });
 
+    test('routes principal student leave notifications to the Leave tab', () {
+      final inAppTarget = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'student_leave', 'reference_id': 'leave-123'},
+        currentRole: 'principal',
+      );
+      final pushTarget = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'leave'},
+        currentRole: 'principal',
+      );
+
+      expect(inAppTarget.route, AppRoutes.approvalCenter);
+      final inAppArgs = inAppTarget.arguments! as Map<String, dynamic>;
+      expect(inAppArgs['referenceId'], 'leave-123');
+      expect(inAppArgs['initialTab'], 'leave');
+      expect(pushTarget.route, AppRoutes.approvalCenter);
+      final pushArgs = pushTarget.arguments! as Map<String, dynamic>;
+      expect(pushArgs['initialTab'], 'leave');
+    });
+
     test('passes event post reference context into principal approvals', () {
       final target = NotificationRouteResolver.resolve(
         data: {

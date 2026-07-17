@@ -277,6 +277,9 @@ export async function handleLeave(
               leave_id: data.id,
               message: notifBody,
               reference_type: "leave",
+              reference_id: data.id,
+              route: "/approval-center-screen",
+              action: "review",
             },
           },
         ).select("id").maybeSingle();
@@ -289,6 +292,7 @@ export async function handleLeave(
           type: "leave",
           entity_type: "leave",
           entity_id: data.id,
+          route: "/approval-center-screen",
           target_role: "principal",
           is_read: false,
         });
@@ -617,6 +621,9 @@ export async function handleLeave(
               leave_id: data.id,
               message: notifBody,
               reference_type: "leave",
+              reference_id: data.id,
+              route: "/approval-center-screen",
+              action: "review",
             },
           },
         ).select("id").maybeSingle();
@@ -629,6 +636,7 @@ export async function handleLeave(
           type: "leave",
           entity_type: "student_leave",
           entity_id: data.id,
+          route: "/approval-center-screen",
           target_role: "principal",
           is_read: false,
         });
@@ -653,8 +661,11 @@ export async function handleLeave(
     const { data, error } = await svc.from("student_leave_applications").update(
       {
         status: nextStatus,
-        rejection_reason: body.rejection_reason ?? null,
+        rejection_reason: nextStatus === "rejected"
+          ? text(body.rejection_reason) || null
+          : null,
         reviewed_by: user.id,
+        decided_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
     ).eq("id", studentDecisionMatch[1]).eq("school_id", school).select()

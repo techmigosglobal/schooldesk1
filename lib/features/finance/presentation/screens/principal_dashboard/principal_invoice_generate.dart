@@ -5,6 +5,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 
 class PrincipalInvoiceGenerate extends StatefulWidget {
   final AdminInvoiceGenerationFormArgs args;
@@ -30,7 +31,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
 
   List<Map<String, dynamic>> _terms = [];
   bool _loadingTerms = false;
-  bool _includeOneTime = false;
+  bool _includeOneTime = true;
   bool _includeYearly = false;
   bool _generating = false;
   int _selectedInstallmentCount = 3;
@@ -165,7 +166,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
             'grade_id': _selectedGradeId,
             if (_scope == 'section') 'section_id': _selectedSectionId,
             if (_scope == 'student') 'student_id': _selectedStudentId,
-            'term_id': _selectedTermId,
+            if (_selectedTermId.isNotEmpty) 'term_id': _selectedTermId,
             'installment_count': _selectedInstallmentCount,
             'include_one_time': _includeOneTime,
             'include_yearly': _includeYearly,
@@ -174,6 +175,23 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
           });
       if (!mounted) return;
       final createdCount = (result['created'] as num?)?.toInt() ?? 0;
+      final skippedCount = (result['skipped'] as num?)?.toInt() ?? 0;
+      final existingPaid =
+          (result['existing_paid_count'] as num?)?.toInt() ?? 0;
+      final existingUnpaid =
+          (result['existing_unpaid_count'] as num?)?.toInt() ?? 0;
+      if (createdCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              skippedCount > 0
+                  ? 'No duplicate invoices were created. $existingPaid paid and $existingUnpaid unpaid existing invoice(s) were kept.'
+                  : 'No eligible fee components or students were found for this selection.',
+            ),
+          ),
+        );
+        return;
+      }
       if (createdCount > 0) {
         try {
           final gradeLabel =
@@ -193,7 +211,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
         context,
         AdminInvoiceGenerationFormResult(
           created: createdCount,
-          skipped: (result['skipped'] as num?)?.toInt() ?? 0,
+          skipped: skippedCount,
         ),
       );
     } on Object catch (e) {
@@ -215,6 +233,22 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
       (year) => year.isCurrent,
     );
     return '${_monthName(now.month)} ${current?.yearLabel ?? '${now.year}'}';
+  }
+
+  String _feeComponentName(Map<String, dynamic> fee) {
+    final direct = textValue(fee['category_name'] ?? fee['fee_item_name']);
+    if (direct.isNotEmpty) return direct;
+    final category = fee['fee_category'] ?? fee['category'];
+    if (category is Map) {
+      final nested = textValue(category['category_name'] ?? category['name']);
+      if (nested.isNotEmpty) return nested;
+    } else {
+      final value = textValue(category);
+      if (value.isNotEmpty && !RegExp(r'^[0-9a-f-]{36}$').hasMatch(value)) {
+        return value;
+      }
+    }
+    return isTuitionInvoice(fee) ? 'Tuition' : 'Fee';
   }
 
   String _defaultDueDate({int? dueDay}) {
@@ -433,6 +467,20 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                   children: [
                     if (_loadingTerms)
                       const Center(child: CircularProgressIndicator())
+                    else if (_terms.isEmpty)
+                      InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Installment Term (Optional)',
+                          prefixIcon: Icon(Icons.info_outline_rounded),
+                        ),
+                        child: Text(
+                          'No terms configured — invoices will use the selected due date.',
+                          style: GoogleFonts.ibmPlexSans(
+                            fontSize: 12,
+                            color: context.appTheme.muted,
+                          ),
+                        ),
+                      )
                     else
                       DropdownButtonFormField<String>(
                         value: _selectedTermId.isEmpty ? null : _selectedTermId,
@@ -453,9 +501,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                             _labelController.text = _defaultInvoiceLabel();
                           });
                         },
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Please select a term'
-                            : null,
+                        validator: (_) => null,
                       ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -683,9 +729,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
               child: Row(
                 children: [
                   () {
-                    final meta = feeColor(
-                      '${fee['category_name'] ?? fee['category'] ?? fee['fee_item_name'] ?? 'Fee'}',
-                    );
+                    final meta = feeColor(_feeComponentName(fee));
                     return Container(
                       padding: const EdgeInsets.all(5),
                       decoration: BoxDecoration(
@@ -701,7 +745,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${fee['category_name'] ?? fee['category'] ?? fee['fee_item_name'] ?? 'Fee'}',
+                          _feeComponentName(fee),
                           style: GoogleFonts.ibmPlexSans(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,

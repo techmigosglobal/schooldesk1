@@ -5143,8 +5143,6 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
   static const _primary = _CreateClassSetupPageState._primary;
 
   final _structureName = TextEditingController();
-  final _invoiceLabelController = TextEditingController();
-  final _dueDateController = TextEditingController();
   final List<_FeeComponentDraft> _components = [];
   final List<String> _deletedStructureIds = [];
 
@@ -5152,11 +5150,8 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
   bool _saving = false;
   bool _useExisting = false;
   bool _reviewingExisting = false;
-  bool _includeOneTime = true;
-  bool _includeYearly = true;
   int _stage = 0;
   String? _error;
-  Map<String, dynamic>? _invoiceGenerationResult;
   List<Map<String, dynamic>> _existingStructures = [];
   List<Map<String, dynamic>> _feeCategories = [];
 
@@ -5177,10 +5172,6 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
   void initState() {
     super.initState();
     _structureName.text = _defaultFeeStructureName(_academicYearLabel);
-    _invoiceLabelController.text = _defaultInvoiceLabel();
-    _dueDateController.text = _formatBackendDate(
-      DateTime.now().add(const Duration(days: 30)),
-    );
     _resetComponents(_defaultFeeComponents());
     _load();
   }
@@ -5188,8 +5179,6 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
   @override
   void dispose() {
     _structureName.dispose();
-    _invoiceLabelController.dispose();
-    _dueDateController.dispose();
     for (final component in _components) {
       component.dispose();
     }
@@ -5348,7 +5337,6 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
       if (!mounted) return;
       setState(() {
         _deletedStructureIds.clear();
-        _invoiceGenerationResult = null;
         _stage = 3;
       });
       await _load();
@@ -5382,35 +5370,6 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
     );
     _feeCategories.add(created);
     return _classText(created['id']);
-  }
-
-  Future<void> _generateInvoices() async {
-    if (_saving) return;
-    if (_dueDateController.text.trim().isEmpty) {
-      _showFeeError('Due date is required.');
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      final result = await BackendApiClient.instance.generateFeeInvoices(
-        academicYearId: _academicYearId,
-        gradeId: _gradeId,
-        sectionId: _sectionId,
-        dueDate: _dueDateController.text.trim(),
-        invoiceLabel: _invoiceLabelController.text.trim(),
-        includeOneTime: _includeOneTime,
-        includeYearly: _includeYearly,
-        installmentCount: _maxInstallmentCount,
-      );
-      if (!mounted) return;
-      setState(() => _invoiceGenerationResult = result);
-      await _load();
-    } on Object catch (error) {
-      if (!mounted) return;
-      _showFeeError('Unable to generate invoices: $error');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
   }
 
   Future<void> _addComponent() async {
@@ -5682,7 +5641,10 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
           yearlyTotal: _yearlyTotal,
         ),
         const SizedBox(height: 20),
-        _buildGenerateInvoicesPanel(),
+        const _FeeInfoPanel(
+          message:
+              'Student fee accounts are assigned automatically from these fee structures.',
+        ),
         const SizedBox(height: 20),
         _SetupPrimaryButton(
           label: 'Back to Class Hub',
@@ -5691,79 +5653,6 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
           onPressed: () => Navigator.pop(context, true),
         ),
       ],
-    );
-  }
-
-  Widget _buildGenerateInvoicesPanel() {
-    final result = _invoiceGenerationResult;
-    return _SetupPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const _SetupPanelTitle(
-            icon: Icons.receipt_long_rounded,
-            title: 'Generate Invoices',
-          ),
-          const SizedBox(height: 14),
-          _ClassSetupTwoColumnRow(
-            children: [
-              _ClassSetupInputField(
-                label: 'Invoice Label',
-                controller: _invoiceLabelController,
-                hint: 'Term 1',
-                icon: Icons.label_outline_rounded,
-                iconColor: _primary,
-                iconTone: const Color(0xFFEAF2FF),
-                enabled: !_saving,
-              ),
-              _ClassSetupInputField(
-                label: 'Due Date',
-                required: true,
-                controller: _dueDateController,
-                hint: 'YYYY-MM-DD',
-                icon: Icons.event_outlined,
-                iconColor: const Color(0xFF16A34A),
-                iconTone: const Color(0xFFEAFBF0),
-                enabled: !_saving,
-                keyboardType: TextInputType.datetime,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          CheckboxListTile(
-            value: _includeOneTime,
-            onChanged: _saving
-                ? null
-                : (value) => setState(() => _includeOneTime = value ?? false),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Include one-time components'),
-            controlAffinity: ListTileControlAffinity.leading,
-          ),
-          CheckboxListTile(
-            value: _includeYearly,
-            onChanged: _saving
-                ? null
-                : (value) => setState(() => _includeYearly = value ?? false),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Include yearly components'),
-            controlAffinity: ListTileControlAffinity.leading,
-          ),
-          if (result != null) ...[
-            const SizedBox(height: 8),
-            _FeeInfoPanel(
-              message:
-                  'Created ${_classInt(result['created'])} invoices, skipped ${_classInt(result['skipped'])}. Per student total ${_formatCurrency(_classNum(result['per_student_total']))}.',
-            ),
-          ],
-          const SizedBox(height: 14),
-          _SetupPrimaryButton(
-            label: 'Generate Invoices',
-            icon: Icons.receipt_long_rounded,
-            saving: _saving,
-            onPressed: _saving ? null : _generateInvoices,
-          ),
-        ],
-      ),
     );
   }
 
@@ -5801,18 +5690,6 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
       if (year.id == _academicYearId) return year.yearLabel;
     }
     return _academicYearId.isEmpty ? '-' : _academicYearId;
-  }
-
-  int get _maxInstallmentCount => _components.fold<int>(
-    0,
-    (max, component) => _installmentCountFor(component) > max
-        ? _installmentCountFor(component)
-        : max,
-  );
-
-  String _defaultInvoiceLabel() {
-    final year = _academicYearLabel == '-' ? '' : _academicYearLabel;
-    return [_className, year].where((part) => part.trim().isNotEmpty).join(' ');
   }
 }
 
@@ -8673,12 +8550,6 @@ String _defaultFeeStructureName(String academicYear) {
 String _formatAmountInput(double amount) {
   if (amount == amount.roundToDouble()) return amount.round().toString();
   return amount.toStringAsFixed(2);
-}
-
-String _formatBackendDate(DateTime value) {
-  final month = value.month.toString().padLeft(2, '0');
-  final day = value.day.toString().padLeft(2, '0');
-  return '${value.year}-$month-$day';
 }
 
 String _formatCurrency(num value) {

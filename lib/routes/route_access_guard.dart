@@ -126,6 +126,8 @@ class RouteAccessGuard {
     AppRoutes.parentReceipt: {'parent'},
     AppRoutes.parentHealth: {'parent'},
     AppRoutes.principalFees: {'principal'},
+    AppRoutes.principalFeeConcessions: {'principal'},
+    AppRoutes.feePaymentConfig: {'principal'},
     AppRoutes.legacyParentFees: {'parent'},
     AppRoutes.legacyPrincipalPaymentRequests: {'principal'},
     AppRoutes.legacyPrincipalFeeStructures: {'principal'},

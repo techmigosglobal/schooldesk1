@@ -382,21 +382,21 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         const SizedBox(height: 14),
 
         // ── Payment QR ───────────────────────────────────────
-        if (_paymentConfig.isNotEmpty)
-          FeeActionRow(
-            icon: Icons.qr_code_2_rounded,
-            iconColor: const Color(0xFF2563EB),
-            title: 'Parent Payment QR',
-            subtitle: textValue(
-              _paymentConfig['upi_id'],
-              fallback: textValue(
-                _paymentConfig['payee_name'],
-                fallback: 'Not configured',
-              ),
-            ),
-            onTap: () =>
-                Navigator.pushNamed(context, AppRoutes.feePaymentConfig),
-          ),
+        FeeActionRow(
+          icon: Icons.qr_code_2_rounded,
+          iconColor: const Color(0xFF2563EB),
+          title: 'Parent Payment Setup',
+          subtitle: _paymentConfig.isEmpty
+              ? 'Set UPI ID and upload QR code'
+              : textValue(
+                  _paymentConfig['upi_id'],
+                  fallback: textValue(
+                    _paymentConfig['payee_name'],
+                    fallback: 'Upload or replace payment QR',
+                  ),
+                ),
+          onTap: () => Navigator.pushNamed(context, AppRoutes.feePaymentConfig),
+        ),
 
         // ── Pending requests badge ───────────────────────────
         if (_paymentRequests.isNotEmpty)

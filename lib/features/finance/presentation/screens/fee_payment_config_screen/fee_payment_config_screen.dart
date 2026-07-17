@@ -44,7 +44,9 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
       _loading = true;
     });
     try {
-      final config = await BackendApiClient.instance.getPaymentConfig();
+      final config = await BackendApiClient.instance.getPaymentConfig(
+        refreshNonce: DateTime.now().millisecondsSinceEpoch,
+      );
       if (!mounted) return;
       setState(() {
         _config = config;

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/chat_message_merge.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -178,9 +179,13 @@ class _PrincipalChatCommunicationsScreenState
       List<Map<String, dynamic>> messages;
       DateTime? cursor;
       if (selected != null && !_isContactPlaceholder(selected)) {
-        messages = await _safeChatRows(
-          () =>
-              api.getUnifiedChatMessages(conversationId: _text(selected['id'])),
+        messages = mergeChatMessagesByIdentity(
+          const [],
+          await _safeChatRows(
+            () => api.getUnifiedChatMessages(
+              conversationId: _text(selected['id']),
+            ),
+          ),
         );
         cursor = messages.isNotEmpty
             ? _date(messages.last['sent_at'] ?? messages.last['created_at'])
@@ -310,7 +315,7 @@ class _PrincipalChatCommunicationsScreenState
                 confirmedBodies.contains(_text(p['body'] ?? p['message'])),
           );
           final current = _messagesFor(monitorMode);
-          final updated = [...current, ...newMessages];
+          final updated = mergeChatMessagesByIdentity(current, newMessages);
           if (monitorMode) {
             _monitorMessages = updated;
           } else {

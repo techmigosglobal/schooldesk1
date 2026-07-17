@@ -18,7 +18,9 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 enum _FinanceView { structures, invoices, payments, concessions, reports }
 
 class AdminFeesScreen extends StatefulWidget {
-  const AdminFeesScreen({super.key});
+  const AdminFeesScreen({super.key, this.initialSection = 'invoices'});
+
+  final String initialSection;
 
   @override
   State<AdminFeesScreen> createState() => _AdminFeesScreenState();
@@ -27,7 +29,7 @@ class AdminFeesScreen extends StatefulWidget {
 class _AdminFeesScreenState extends State<AdminFeesScreen> {
   bool _loading = true;
   String? _error;
-  _FinanceView _view = _FinanceView.invoices;
+  late _FinanceView _view;
 
   List<Map<String, dynamic>> _feeStructures = [];
   List<Map<String, dynamic>> _pendingDues = [];
@@ -37,7 +39,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   List<AcademicYearModel> _academicYears = [];
   List<GradeModel> _grades = [];
   List<SectionModel> _sections = [];
-  List<StudentModel> _students = [];
   Map<String, dynamic> _paymentConfig = const {};
   List<Map<String, dynamic>> _paymentConfigs = [];
   final _upiIdController = TextEditingController();
@@ -56,6 +57,13 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   @override
   void initState() {
     super.initState();
+    _view = switch (widget.initialSection.toLowerCase()) {
+      'structures' => _FinanceView.structures,
+      'payments' => _FinanceView.payments,
+      'concessions' => _FinanceView.concessions,
+      'reports' => _FinanceView.reports,
+      _ => _FinanceView.invoices,
+    };
     _loadData();
   }
 
@@ -84,7 +92,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final academicYears = await api.getAcademicYears();
       final grades = await api.getGrades();
       final sections = await api.getSections();
-      final students = await api.getStudents(page: 1, pageSize: 500);
       final normalizedInvoices = invoices.map(_normalizeInvoice).toList();
       if (!mounted) return;
       setState(() {
@@ -99,7 +106,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _academicYears = academicYears;
         _grades = grades;
         _sections = sections;
-        _students = students.data;
         _pendingDues = normalizedInvoices
             .where((invoice) => _numValue(invoice['balance']) > 0)
             .toList();
@@ -136,11 +142,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           tooltip: 'Create Fee Structure',
           icon: const Icon(Icons.add_card_outlined),
           onPressed: _openCreateFeeStructureForm,
-        ),
-        IconButton(
-          tooltip: 'Generate Invoices',
-          icon: const Icon(Icons.receipt_long_outlined),
-          onPressed: () => _openGenerateInvoiceForm(),
         ),
         IconButton(
           tooltip: 'Refresh finance',
@@ -558,11 +559,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       title: 'Invoices And Outstanding',
       subtitle:
           'Pending dues are derived from backend balance, not local status labels',
-      trailing: FilledButton.icon(
-        onPressed: () => _openGenerateInvoiceForm(),
-        icon: const Icon(Icons.receipt_long_outlined),
-        label: const Text('Generate Invoices'),
-      ),
       child: _pendingDues.isEmpty
           ? const OpsListRow(
               icon: Icons.verified_outlined,
@@ -801,6 +797,11 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       title: 'Concessions',
       subtitle:
           'Review fee concessions — $pendingCount pending · ₹${totalAmount.toStringAsFixed(0)} total',
+      trailing: FilledButton.icon(
+        onPressed: _pendingDues.isEmpty ? null : _openAddConcessionDialog,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Assign concession'),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -890,9 +891,211 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
               color: Colors.red,
             ),
           ],
+          if (id.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Remove concession',
+              onPressed: saving ? null : () => _deleteConcession(concession),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              color: context.appTheme.error,
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _openAddConcessionDialog() async {
+    final invoices = _pendingDues
+        .where(
+          (invoice) =>
+              _textValue(invoice['id']).isNotEmpty &&
+              _textValue(invoice['fee_structure_id']).isNotEmpty &&
+              _numValue(invoice['balance']) > 0,
+        )
+        .toList();
+    if (invoices.isEmpty) {
+      _snack('No outstanding fee invoices are available for a concession.');
+      return;
+    }
+    final amountController = TextEditingController();
+    final reasonController = TextEditingController();
+    var selectedInvoiceId = _textValue(invoices.first['id']);
+    var usePercentage = false;
+    final payload = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Assign fee concession'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: selectedInvoiceId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Student fee',
+                      prefixIcon: Icon(Icons.person_search_rounded),
+                    ),
+                    items: invoices.map((invoice) {
+                      final component = _textValue(
+                        invoice['fee_item_name'],
+                        fallback: _textValue(
+                          invoice['invoice_number'],
+                          fallback: 'Fee',
+                        ),
+                      );
+                      return DropdownMenuItem(
+                        value: _textValue(invoice['id']),
+                        child: Text(
+                          '${_textValue(invoice['name'], fallback: 'Student')} — $component (${_money(_numValue(invoice['balance']))} due)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => selectedInvoiceId = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(
+                        value: false,
+                        label: Text('Fixed amount'),
+                        icon: Icon(Icons.currency_rupee_rounded),
+                      ),
+                      ButtonSegment(
+                        value: true,
+                        label: Text('Percentage'),
+                        icon: Icon(Icons.percent_rounded),
+                      ),
+                    ],
+                    selected: {usePercentage},
+                    onSelectionChanged: (selection) => setDialogState(() {
+                      usePercentage = selection.first;
+                      amountController.clear();
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: usePercentage
+                          ? 'Concession percentage'
+                          : 'Concession amount',
+                      prefixIcon: Icon(
+                        usePercentage
+                            ? Icons.percent_rounded
+                            : Icons.currency_rupee_rounded,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Reason',
+                      prefixIcon: Icon(Icons.notes_rounded),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = double.tryParse(amountController.text.trim());
+                final reason = reasonController.text.trim();
+                if (value == null || value <= 0 || reason.isEmpty) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Enter a valid value and reason.'),
+                    ),
+                  );
+                  return;
+                }
+                if (usePercentage && value > 100) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Percentage cannot exceed 100.'),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, {
+                  'invoice_id': selectedInvoiceId,
+                  if (usePercentage) 'percentage': value else 'amount': value,
+                  'reason': reason,
+                });
+              },
+              child: const Text('Apply concession'),
+            ),
+          ],
+        ),
+      ),
+    );
+    amountController.dispose();
+    reasonController.dispose();
+    if (payload == null || !mounted) return;
+    try {
+      await BackendApiClient.instance.createRaw('/fees/concessions', payload);
+      if (!mounted) return;
+      await _loadData();
+      _snack('Concession applied and student balance updated.', success: true);
+    } on Object catch (error) {
+      _snack('Unable to apply concession: $error');
+    }
+  }
+
+  Future<void> _deleteConcession(Map<String, dynamic> concession) async {
+    final id = _textValue(concession['id']);
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove concession?'),
+        content: const Text(
+          'The concession will be removed and the outstanding fee balance will be recalculated.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _updatingConcessionIds.add(id));
+    try {
+      await BackendApiClient.instance.deleteRaw('/fees/concessions/$id');
+      if (!mounted) return;
+      await _loadData();
+      _snack('Concession removed and balance restored.', success: true);
+    } on Object catch (error) {
+      _snack('Unable to remove concession: $error');
+    } finally {
+      if (mounted) setState(() => _updatingConcessionIds.remove(id));
+    }
   }
 
   Future<void> _updateConcessionStatus(
@@ -1211,27 +1414,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     if (!mounted || result is! AdminFeeStructureFormResult) return;
     await _loadData();
     _snack(result.message, success: true);
-  }
-
-  Future<void> _openGenerateInvoiceForm({Map<String, dynamic>? seed}) async {
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.principalInvoiceGenerationForm,
-      arguments: AdminInvoiceGenerationFormArgs(
-        academicYears: _academicYears,
-        grades: _grades,
-        sections: _sections,
-        students: _students,
-        feeStructures: _feeStructures,
-        seedStructure: seed,
-      ),
-    );
-    if (!mounted || result is! AdminInvoiceGenerationFormResult) return;
-    await _loadData();
-    _snack(
-      'Generated ${result.created} invoice(s), skipped ${result.skipped}.',
-      success: true,
-    );
   }
 
   Future<void> _openRecordPaymentForm({Map<String, dynamic>? invoice}) async {
@@ -1613,7 +1795,8 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       'class': classLabel.isEmpty
           ? _textValue(invoice['class'], fallback: 'Class pending')
           : classLabel,
-      'total': _numValue(invoice['total_amount'] ?? invoice['net_amount']),
+      'total': _numValue(invoice['net_amount'] ?? invoice['total_amount']),
+      'discount': _numValue(invoice['discount_amount']),
       'paid': _numValue(invoice['paid_amount']),
       'balance': _numValue(invoice['balance']),
       'due_date': invoice['due_date'],

@@ -7,6 +7,11 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+/// The two fee documents have deliberately different semantics. An account
+/// statement describes a student's entire fee position; a payment receipt is
+/// evidence for one finalized payment.
+enum FeeDocumentKind { accountStatement, paymentReceipt }
+
 /// PDF generation service for receipts, marksheets, ID cards, and reports.
 class PdfService {
   static PdfService? _instance;
@@ -202,6 +207,7 @@ class PdfService {
   // ─── Fee Receipt ─────────────────────────────────────────────────────────
 
   Future<Uint8List> generateFeeReceipt({
+    FeeDocumentKind documentKind = FeeDocumentKind.paymentReceipt,
     required String receiptNo,
     required String studentName,
     required String className,
@@ -216,8 +222,17 @@ class PdfService {
     String schoolName = 'Public School',
     String schoolAddress = '123 Education Lane, Knowledge City - 400001',
     Uint8List? schoolLogo,
+    Uint8List? authorizedSignature,
+    String authorizedSignatoryName = '',
   }) async {
     final pdf = await _createDocument();
+    final isAccountStatement = documentKind == FeeDocumentKind.accountStatement;
+    final documentTitle = isAccountStatement
+        ? 'FEE ACCOUNT STATEMENT'
+        : 'FEE PAYMENT RECEIPT';
+    final documentNumberLabel = isAccountStatement
+        ? 'Statement No.'
+        : 'Receipt No.';
 
     pdf.addPage(
       pw.Page(
@@ -234,7 +249,7 @@ class PdfService {
               pw.SizedBox(height: 8),
               pw.Center(
                 child: pw.Text(
-                  'FEE RECEIPT',
+                  documentTitle,
                   style: pw.TextStyle(
                     fontSize: 16,
                     fontWeight: pw.FontWeight.bold,
@@ -249,7 +264,7 @@ class PdfService {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildInfoPair('Receipt No.', receiptNo),
+                  _buildInfoPair(documentNumberLabel, receiptNo),
                   _buildInfoPair(
                     'Date',
                     DateFormat('dd MMM yyyy').format(paymentDate),
@@ -285,10 +300,20 @@ class PdfService {
                     pw.SizedBox(height: 4),
                     pw.Row(
                       children: [
-                        pw.Expanded(child: _buildInfoPair('Roll No.', rollNo)),
                         pw.Expanded(
-                          child: _buildInfoPair('Parent', parentName),
+                          child: _buildInfoPair(
+                            isAccountStatement
+                                ? 'Student ID / Roll No.'
+                                : 'Roll No.',
+                            rollNo,
+                          ),
                         ),
+                        if (!isAccountStatement)
+                          pw.Expanded(
+                            child: _buildInfoPair('Parent', parentName),
+                          )
+                        else
+                          pw.Spacer(),
                       ],
                     ),
                   ],
@@ -338,27 +363,57 @@ class PdfService {
                   ],
                 ),
               ),
-              pw.SizedBox(height: 12),
-              _buildInfoPair('Payment Mode', paymentMode),
+              if (!isAccountStatement) ...[
+                pw.SizedBox(height: 12),
+                _buildInfoPair('Payment Method', paymentMode),
+              ],
               pw.SizedBox(height: 24),
               _buildDivider(),
               pw.SizedBox(height: 8),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'This is a computer-generated receipt.',
+              if (authorizedSignature == null)
+                pw.Center(
+                  child: pw.Text(
+                    'This is a computer-generated receipt and does not require a physical signature.',
+                    textAlign: pw.TextAlign.center,
                     style: const pw.TextStyle(fontSize: 9, color: _mutedText),
                   ),
-                  pw.Text(
-                    'Authorised Signatory',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontWeight: pw.FontWeight.bold,
+                )
+              else
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'This is a computer-generated receipt.',
+                      style: const pw.TextStyle(fontSize: 9, color: _mutedText),
                     ),
-                  ),
-                ],
-              ),
+                    pw.Column(
+                      children: [
+                        pw.Image(
+                          pw.MemoryImage(authorizedSignature),
+                          width: 104,
+                          height: 42,
+                          fit: pw.BoxFit.contain,
+                        ),
+                        if (authorizedSignatoryName.trim().isNotEmpty) ...[
+                          pw.SizedBox(height: 2),
+                          pw.Text(
+                            authorizedSignatoryName.trim(),
+                            style: const pw.TextStyle(fontSize: 8),
+                          ),
+                        ],
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'Authorised Signatory',
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
             ],
           );
         },

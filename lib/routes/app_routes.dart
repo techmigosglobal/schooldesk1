@@ -173,6 +173,7 @@ class AppRoutes {
   static const String parentPaymentHistory = '/parent/payment-history';
   static const String parentReceipt = '/parent/receipt';
   static const String principalFees = '/principal/fees';
+  static const String principalFeeConcessions = '/principal/fee-concessions';
   static const String parentLeave = '/parent-leave-screen';
   static const String parentLeaveRequestForm = '/parent-leave-screen/request';
   static const String parentCalendar = '/parent-calendar-screen';
@@ -205,10 +206,16 @@ class AppRoutes {
     staffManagement: (context) => const StaffManagementScreen(),
     staffForm: (context) => StaffFormScreen(args: _staffFormArgs(context)),
     studentOversight: (context) => const StudentOversightScreen(),
-    approvalCenter: (context) => const ApprovalCenterScreen(),
+    approvalCenter: (context) => ApprovalCenterScreen(
+      args: ApprovalCenterRouteArgs.fromRoute(
+        ModalRoute.of(context)?.settings.arguments,
+      ),
+    ),
     feeMonitoring: (context) => const PrincipalFeeDashboard(),
     feeHome: (context) => const PrincipalFeeDashboard(),
     principalFees: (context) => const PrincipalFeeDashboard(),
+    principalFeeConcessions: (context) =>
+        const AdminFeesScreen(initialSection: 'concessions'),
     feeStructures: (context) => const PrincipalFeeStructures(),
     '/principal/fee-structures': (context) => const PrincipalFeeStructures(),
     feeCollect: (context) => const PrincipalCollectFee(),

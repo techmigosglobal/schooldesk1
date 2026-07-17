@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/chat_message_merge.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -161,8 +162,11 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       List<Map<String, dynamic>> messages;
       DateTime? cursor;
       if (selected?.conversationId.isNotEmpty == true) {
-        messages = await api.getUnifiedChatMessages(
-          conversationId: selected!.conversationId,
+        messages = mergeChatMessagesByIdentity(
+          const [],
+          await api.getUnifiedChatMessages(
+            conversationId: selected!.conversationId,
+          ),
         );
         cursor = messages.isNotEmpty
             ? _date(messages.last['sent_at'] ?? messages.last['created_at'])
@@ -280,7 +284,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
                 p['_pending'] == true &&
                 confirmedBodies.contains(_text(p['body'] ?? p['message'])),
           );
-          _messages = [..._messages, ...newMessages];
+          _messages = mergeChatMessagesByIdentity(_messages, newMessages);
           _messagesCursor =
               _date(
                 newMessages.last['sent_at'] ?? newMessages.last['created_at'],

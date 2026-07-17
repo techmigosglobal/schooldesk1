@@ -124,8 +124,6 @@ function monthNamesEqual(left: string[], right: string[]) {
 }
 
 function invoiceFeeType(invoice: Record<string, unknown>) {
-  const direct = normalizeFeeType(invoice.fee_type, "");
-  if (direct) return direct;
   const items = Array.isArray(invoice.fee_invoice_items)
     ? invoice.fee_invoice_items
     : [];
@@ -137,14 +135,17 @@ function invoiceFeeType(invoice: Record<string, unknown>) {
       if (categoryName) return normalizeFeeType(categoryName);
     }
   }
+  const direct = normalizeFeeType(invoice.fee_type, "");
+  if (direct) return direct;
   return "tuition";
 }
 
 function invoiceBillingMode(invoice: Record<string, unknown>) {
+  if (invoiceFeeType(invoice) === "tuition") return "monthly";
   const direct = text(invoice.billing_mode).toLowerCase().replaceAll("-", "_")
     .replaceAll(" ", "_");
   if (direct) return direct;
-  return invoiceFeeType(invoice) === "tuition" ? "monthly" : "one_time";
+  return "one_time";
 }
 
 function invoiceAllowedMonthNames(invoice: Record<string, unknown>) {
@@ -429,7 +430,14 @@ async function resolveScopedPaymentConfig(
   ].filter(Boolean);
   for (const recordId of candidates) {
     const data = await loadPaymentConfigRecord(svc, school, recordId);
-    if (data?.data) return data;
+    const config = data?.data as Record<string, unknown> | null;
+    const isEnabled = config?.upi_enabled !== false;
+    const hasPaymentDestination = Boolean(
+      text(config?.upi_id) || text(config?.qr_image_url),
+    );
+    // An empty or disabled section/grade record must not hide a valid
+    // school-wide payment destination from parents.
+    if (config && isEnabled && hasPaymentDestination) return data;
   }
   return null;
 }
@@ -503,7 +511,93 @@ async function attachFeeCategories(
   return rows.map((row) => {
     const category = byId.get(text(row.fee_category_id ?? row.category_id)) ??
       null;
-    return { ...row, category, fee_category: category };
+    const categoryName = text(
+      category?.category_name ?? category?.name ?? row.category_name,
+      "Fee",
+    );
+    return {
+      ...row,
+      category,
+      fee_category: category,
+      category_name: categoryName,
+      fee_item_name: categoryName,
+    };
+  });
+}
+
+async function attachStructureAssignmentStats(
+  svc: SupabaseClient,
+  school: string,
+  rows: Record<string, unknown>[],
+) {
+  const structureIds = rows.map((row) => text(row.id)).filter(Boolean);
+  if (structureIds.length === 0) return rows;
+
+  const [sectionsResult, studentsResult, invoicesResult] = await Promise.all([
+    svc.from("sections").select("id, grade_id, academic_year_id").eq(
+      "school_id",
+      school,
+    ),
+    svc.from("students").select("id, current_section_id").eq(
+      "school_id",
+      school,
+    ).eq("status", "active"),
+    svc.from("fee_invoices").select("fee_structure_id, student_id").eq(
+      "school_id",
+      school,
+    ).in("fee_structure_id", structureIds),
+  ]);
+  if (sectionsResult.error) throw sectionsResult.error;
+  if (studentsResult.error) throw studentsResult.error;
+  if (invoicesResult.error) throw invoicesResult.error;
+
+  const sectionById = new Map(
+    (sectionsResult.data ?? []).map((section: Record<string, unknown>) => [
+      text(section.id),
+      section,
+    ]),
+  );
+  const activeStudents = studentsResult.data ?? [];
+  const invoiceStudentsByStructure = new Map<string, Set<string>>();
+  for (const invoice of invoicesResult.data ?? []) {
+    const structureId = text(invoice.fee_structure_id);
+    const studentId = text(invoice.student_id);
+    if (!structureId || !studentId) continue;
+    const studentIds = invoiceStudentsByStructure.get(structureId) ??
+      new Set<string>();
+    studentIds.add(studentId);
+    invoiceStudentsByStructure.set(structureId, studentIds);
+  }
+
+  return rows.map((row) => {
+    const structureId = text(row.id);
+    const gradeId = text(row.grade_id);
+    const academicYearId = text(row.academic_year_id);
+    const sectionId = text(row.section_id);
+    const eligibleStudentIds = new Set(
+      activeStudents.filter((student: Record<string, unknown>) => {
+        const studentSectionId = text(student.current_section_id);
+        const section = sectionById.get(studentSectionId);
+        if (!section) return false;
+        return text(section.grade_id) === gradeId &&
+          text(section.academic_year_id) === academicYearId &&
+          (!sectionId || studentSectionId === sectionId);
+      }).map((student: Record<string, unknown>) => text(student.id)),
+    );
+    const invoicedStudentIds = invoiceStudentsByStructure.get(structureId) ??
+      new Set<string>();
+    const assignedCount = [...eligibleStudentIds].filter((studentId) =>
+      invoicedStudentIds.has(studentId)
+    ).length;
+    return {
+      ...row,
+      eligible_student_count: eligibleStudentIds.size,
+      invoiced_student_count: assignedCount,
+      missing_invoice_count: Math.max(
+        0,
+        eligibleStudentIds.size - assignedCount,
+      ),
+    };
   });
 }
 
@@ -985,6 +1079,32 @@ export async function handleFees(
     "/payments/submit",
   ].includes(feesPath) ||
     /^\/payments\/[^/]+\/resubmit$/.test(feesPath);
+  const requestedInvoiceStudentId = text(url.searchParams.get("student_id"));
+  let isParentLinkedInvoiceRead = false;
+  if (isParent && method === "GET" && feesPath === "/invoices") {
+    if (!requestedInvoiceStudentId) {
+      return fail("parent invoice access requires a linked student", 403);
+    }
+    try {
+      if (
+        !await parentCanAccessStudent(
+          svc,
+          school,
+          user,
+          requestedInvoiceStudentId,
+        )
+      ) {
+        return fail("Student does not belong to a linked child", 403);
+      }
+      isParentLinkedInvoiceRead = true;
+    } catch (error) {
+      return fail(
+        error instanceof Error
+          ? error.message
+          : "failed to verify parent access",
+      );
+    }
+  }
   const isFinanceManagementPath = path.startsWith("/fee-categories") ||
     path.startsWith("/fee-structures") ||
     path.startsWith("/fee-invoices") ||
@@ -1001,7 +1121,10 @@ export async function handleFees(
     feesPath.startsWith("/payment-configs") ||
     (feesPath === "/payment-config" && method !== "GET") ||
     feesPath === "/reports/exports";
-  if (isFinanceManagementPath && !isAdminOrPrincipal(user)) {
+  if (
+    isFinanceManagementPath && !isAdminOrPrincipal(user) &&
+    !isParentLinkedInvoiceRead
+  ) {
     return fail("principal access required", 403);
   }
   if (isParentPaymentAction && !isParent) {
@@ -1153,7 +1276,10 @@ export async function handleFees(
       const { data, error } = await q;
       if (error) return fail(error.message);
       try {
-        return ok(await attachFeeCategories(svc, school, data ?? []));
+        const categorized = await attachFeeCategories(svc, school, data ?? []);
+        return ok(
+          await attachStructureAssignmentStats(svc, school, categorized),
+        );
       } catch (error) {
         return fail(
           error instanceof Error
@@ -1380,7 +1506,7 @@ export async function handleFees(
       const page = parseInt(url.searchParams.get("page") ?? "1");
       const size = parseInt(url.searchParams.get("page_size") ?? "50");
       let q = svc.from("fee_invoices").select(
-        "*, student:students(first_name, last_name, admission_number, student_id_number, current_section_id), fee_invoice_items(*), payments(*)",
+        "*, student:students(first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))), fee_invoice_items(*), payments(*)",
         { count: "exact" },
       ).eq("school_id", school).range((page - 1) * size, page * size - 1);
       if (url.searchParams.get("student_id")) {
@@ -1482,6 +1608,39 @@ export async function handleFees(
       const { data: students, error: studentsError } = await studentsQuery;
       if (studentsError) return fail(studentsError.message);
 
+      const studentIds = (students ?? []).map((student) => text(student.id))
+        .filter(Boolean);
+      const structureIds = structures.map((structure) => text(structure.id))
+        .filter(Boolean);
+      const existingInvoiceKeys = new Set<string>();
+      let existingPaid = 0;
+      let existingUnpaid = 0;
+      if (studentIds.length > 0 && structureIds.length > 0) {
+        const { data: existingInvoices, error: existingInvoicesError } =
+          await svc.from("fee_invoices")
+            .select("student_id, fee_structure_id, status, balance")
+            .eq("school_id", school)
+            .eq("academic_year_id", academicYearId)
+            .in("student_id", studentIds)
+            .in("fee_structure_id", structureIds);
+        if (existingInvoicesError) return fail(existingInvoicesError.message);
+        for (const existing of existingInvoices ?? []) {
+          const key = `${text(existing.student_id)}:${
+            text(existing.fee_structure_id)
+          }`;
+          if (!key || existingInvoiceKeys.has(key)) continue;
+          existingInvoiceKeys.add(key);
+          if (
+            text(existing.status).toLowerCase() === "paid" ||
+            money(existing.balance) <= 0
+          ) {
+            existingPaid++;
+          } else {
+            existingUnpaid++;
+          }
+        }
+      }
+
       let created = 0;
       let skipped = 0;
       const createdInvoices: Record<string, unknown>[] = [];
@@ -1494,9 +1653,21 @@ export async function handleFees(
           student.admission_number ?? student.student_id_number ?? student.id,
         ).replace(/[^A-Za-z0-9]+/g, "").slice(-8);
         for (const structure of structures) {
+          const invoiceKey = `${text(student.id)}:${text(structure.id)}`;
+          if (existingInvoiceKeys.has(invoiceKey)) {
+            skipped++;
+            continue;
+          }
+          const categoryName = text(
+            (structure.fee_category as Record<string, unknown> | null)
+              ?.category_name ??
+              (structure.fee_category as Record<string, unknown> | null)
+                ?.name ??
+              structure.category_name,
+            "Fee",
+          );
           const feeType = normalizeFeeType(
-            structure.fee_type ??
-              (structure.fee_category as Record<string, unknown> | null)?.name,
+            structure.fee_type ?? categoryName,
           );
           const billingMode = text(
             structure.billing_mode,
@@ -1507,16 +1678,13 @@ export async function handleFees(
             body.due_date ?? structure.due_date,
             structure.due_day,
           );
-          const structureTag = feeType !== "tuition" ? "ONE" : text(
-            (structure.fee_category as Record<string, unknown> | null)?.name,
-            "TUI",
-          )
+          const structureTag = categoryName
             .replace(/[^A-Za-z0-9]+/g, "")
-            .slice(0, 6)
-            .toUpperCase() || "TUI";
+            .slice(0, 12)
+            .toUpperCase() || (feeType === "tuition" ? "TUITION" : "FEE");
           const invoiceNumber = `FEE-${label}-${
             studentCode || text(student.id).slice(0, 8)
-          }-${structureTag}-${text(structure.id).slice(0, 4).toUpperCase()}`;
+          }-${structureTag}`;
           const { data: invoice, error: invoiceError } = await svc.from(
             "fee_invoices",
           ).insert({
@@ -1553,14 +1721,13 @@ export async function handleFees(
               invoice_id: invoice.id,
               fee_structure_id: structure.id,
               category_name: text(
-                (structure.fee_category as Record<string, unknown> | null)
-                  ?.name,
-                "Fee",
+                categoryName,
               ),
               amount: total,
             });
           if (itemError) return fail(itemError.message);
           created++;
+          existingInvoiceKeys.add(invoiceKey);
           createdInvoices.push(decorateInvoice(invoice));
         }
       }
@@ -1569,6 +1736,8 @@ export async function handleFees(
         skipped,
         generated_count: created,
         skipped_count: skipped,
+        existing_paid_count: existingPaid,
+        existing_unpaid_count: existingUnpaid,
         academic_year_id: academicYearId,
         section_id: sectionId || null,
         student_id: studentId || null,
@@ -1601,7 +1770,7 @@ export async function handleFees(
 
     if (seg && method === "GET") {
       const { data, error } = await svc.from("fee_invoices").select(
-        "*, student:students(first_name, last_name, admission_number, student_id_number, current_section_id), fee_invoice_items(*), payments(*)",
+        "*, student:students(first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))), fee_invoice_items(*), payments(*)",
       ).eq("id", seg).eq("school_id", school).maybeSingle();
       if (error) return fail(error.message);
       if (!data) return fail("not found", 404);
@@ -2125,17 +2294,50 @@ export async function handleFees(
           : "failed to verify parent access",
       );
     }
+    // This is the parent-safe invoice source. Include payments here so parent
+    // fee/history screens never need the principal-wide /fees/invoices route.
     const { data, error } = await svc.from("fee_invoices").select(
-      "*, fee_invoice_items(*)",
+      "*, student:students(first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))), fee_invoice_items(*), payments(*)",
     ).eq("school_id", school).eq("student_id", studentId).order(
       "invoice_date",
       { ascending: false },
     );
     if (error) return fail(error.message);
-    return ok((data ?? []).map((invoice: Record<string, unknown>) => {
+    const invoices = data ?? [];
+    const paymentIds = invoices.flatMap((invoice: Record<string, unknown>) =>
+      Array.isArray(invoice.payments)
+        ? (invoice.payments as Record<string, unknown>[]).map((payment) =>
+          text(payment.id)
+        ).filter(Boolean)
+        : []
+    );
+    const receiptsByPaymentId = new Map<string, Record<string, unknown>>();
+    if (paymentIds.length > 0) {
+      const { data: receipts, error: receiptsError } = await svc.from(
+        "fee_receipts",
+      ).select("*").eq("school_id", school).in("payment_id", paymentIds);
+      if (receiptsError) return fail(receiptsError.message);
+      for (const receipt of receipts ?? []) {
+        receiptsByPaymentId.set(text(receipt.payment_id), receipt);
+      }
+    }
+    return ok(invoices.map((invoice: Record<string, unknown>) => {
       const decorated = decorateInvoice(invoice);
+      const payments = Array.isArray(invoice.payments)
+        ? (invoice.payments as Record<string, unknown>[]).map((payment) => {
+          const receipt = receiptsByPaymentId.get(text(payment.id)) ?? null;
+          return {
+            ...payment,
+            receipt,
+            receipt_number: text(
+              receipt?.receipt_number ?? payment.receipt_number,
+            ),
+          };
+        })
+        : [];
       return {
         ...decorated,
+        payments,
         amount: money(
           invoice.balance ?? invoice.net_amount ?? invoice.total_amount,
         ),
@@ -2389,15 +2591,19 @@ export async function handleFees(
   }
 
   if (feesPath === "/payment-config" && method === "PUT") {
-    const payload = {
-      scope: "school",
-      upi_id: body.upi_id ?? "",
-      payee_name: body.payee_name ?? "",
-      merchant_code: body.merchant_code ?? "",
-      qr_note: body.qr_note ?? "",
-      qr_image_url: body.qr_image_url ?? "",
-      upi_enabled: body.upi_enabled ?? true,
-    };
+    const payload: Record<string, unknown> = { scope: "school" };
+    for (
+      const key of [
+        "upi_id",
+        "payee_name",
+        "merchant_code",
+        "qr_note",
+        "qr_image_url",
+        "upi_enabled",
+      ]
+    ) {
+      if (Object.hasOwn(body, key)) payload[key] = body[key];
+    }
     try {
       const data = await savePaymentConfigRecord(
         svc,
@@ -2506,22 +2712,24 @@ export async function handleFees(
       .maybeSingle();
     if (lookupError) return fail(lookupError.message);
     if (!existing) return fail("not found", 404);
-    const payload = {
-      scope: body.scope ??
-        ((existing.data as Record<string, unknown> | null)?.["scope"]) ??
-        "school",
-      grade_id: body.grade_id ??
-        ((existing.data as Record<string, unknown> | null)?.["grade_id"]) ?? "",
-      section_id: body.section_id ??
-        ((existing.data as Record<string, unknown> | null)?.["section_id"]) ??
-        "",
-      upi_id: body.upi_id ?? "",
-      payee_name: body.payee_name ?? "",
-      merchant_code: body.merchant_code ?? "",
-      qr_note: body.qr_note ?? "",
-      qr_image_url: body.qr_image_url ?? "",
-      upi_enabled: body.upi_enabled ?? true,
+    const current = (existing.data as Record<string, unknown> | null) ?? {};
+    const payload: Record<string, unknown> = {
+      scope: body.scope ?? current.scope ?? "school",
+      grade_id: body.grade_id ?? current.grade_id ?? "",
+      section_id: body.section_id ?? current.section_id ?? "",
     };
+    for (
+      const key of [
+        "upi_id",
+        "payee_name",
+        "merchant_code",
+        "qr_note",
+        "qr_image_url",
+        "upi_enabled",
+      ]
+    ) {
+      if (Object.hasOwn(body, key)) payload[key] = body[key];
+    }
     const { data, error } = await svc.from("frontend_records").update({
       data: {
         ...((existing.data as Record<string, unknown> | null) ?? {}),
@@ -2582,18 +2790,136 @@ export async function handleFees(
       Boolean,
     )[0];
     if (!seg && method === "GET") {
-      const { data, error } = await svc.from("fee_concessions").select("*").eq(
-        "school_id",
-        school,
-      ).order("created_at", { ascending: false });
+      const { data, error } = await svc.from("fee_concessions").select(
+        "*, student:students(first_name, last_name, admission_number, student_id_number), invoice:fee_invoices(invoice_number, total_amount, net_amount, paid_amount, balance), fee_structure:fee_structures(id, fee_category_id, category_id)",
+      ).eq("school_id", school).order("created_at", { ascending: false });
       if (error) return fail(error.message);
-      return ok(data ?? []);
+
+      // fee_structures keeps both category_id (legacy) and fee_category_id
+      // (current) so older schools remain compatible. Embedding
+      // fee_categories through PostgREST is therefore ambiguous. Hydrate the
+      // categories explicitly, using the same compatibility helper as the fee
+      // structures endpoint.
+      const rows = (data ?? []) as Record<string, unknown>[];
+      const rawStructures = rows.map((row) => row.fee_structure).filter(
+        (structure): structure is Record<string, unknown> =>
+          structure !== null && typeof structure === "object",
+      );
+      let hydratedStructures: Record<string, unknown>[];
+      try {
+        hydratedStructures = await attachFeeCategories(
+          svc,
+          school,
+          rawStructures,
+        );
+      } catch (categoryError) {
+        return fail(
+          categoryError instanceof Error
+            ? categoryError.message
+            : "failed to load concession fee categories",
+        );
+      }
+      const structuresById = new Map(
+        hydratedStructures.map((structure) => [text(structure.id), structure]),
+      );
+
+      return ok(rows.map((row: Record<string, unknown>) => {
+        const student = (row.student as Record<string, unknown> | null) ?? {};
+        const rawStructure =
+          (row.fee_structure as Record<string, unknown> | null) ??
+            {};
+        const structure = structuresById.get(text(rawStructure.id)) ??
+          rawStructure;
+        const category =
+          (structure.fee_category as Record<string, unknown> | null) ??
+            (structure.category as Record<string, unknown> | null) ??
+            {};
+        return {
+          ...row,
+          fee_structure: structure,
+          student_name: `${text(student.first_name)} ${text(student.last_name)}`
+            .trim() || "Student",
+          student_identifier: text(
+            student.student_id_number ?? student.admission_number,
+          ),
+          fee_item_name: text(category.name, "Fee"),
+        };
+      }));
     }
     if (!seg && method === "POST") {
+      const invoiceId = text(body.invoice_id);
+      const amount = money(body.amount);
+      const percentage = money(body.percentage);
+      const reason = text(body.reason);
+      if (!invoiceId) return fail("invoice_id is required");
+      if ((amount > 0) === (percentage > 0)) {
+        return fail("provide either a concession amount or percentage");
+      }
+      if (percentage > 100) return fail("percentage cannot exceed 100");
+      if (!reason) return fail("concession reason is required");
+      const { data: invoice, error: invoiceError } = await svc.from(
+        "fee_invoices",
+      ).select("id, student_id, fee_structure_id, total_amount, balance")
+        .eq("id", invoiceId).eq("school_id", school).maybeSingle();
+      if (invoiceError) return fail(invoiceError.message);
+      if (!invoice?.fee_structure_id) {
+        return fail("a fee-structure invoice is required", 404);
+      }
+      const effectiveAmount = amount > 0
+        ? amount
+        : money(money(invoice.total_amount) * percentage / 100);
+      if (effectiveAmount <= 0 || effectiveAmount > money(invoice.balance)) {
+        return fail("concession must not exceed the outstanding balance");
+      }
       const { data, error } = await svc.from("fee_concessions").insert({
-        ...body,
         school_id: school,
+        student_id: invoice.student_id,
+        fee_structure_id: invoice.fee_structure_id,
+        invoice_id: invoice.id,
+        amount: amount > 0 ? amount : null,
+        percentage: percentage > 0 ? percentage : null,
+        reason,
+        status: "approved",
+        approved_by: user.id,
       }).select().single();
+      if (error) return fail(error.message);
+      return ok(data);
+    }
+    if (seg && (method === "PATCH" || method === "PUT")) {
+      const { data: current, error: currentError } = await svc.from(
+        "fee_concessions",
+      ).select("*").eq("id", seg).eq("school_id", school).maybeSingle();
+      if (currentError) return fail(currentError.message);
+      if (!current) return fail("concession not found", 404);
+      const updates: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (Object.hasOwn(body, "amount")) {
+        updates.amount = money(body.amount) > 0 ? money(body.amount) : null;
+        updates.percentage = null;
+      } else if (Object.hasOwn(body, "percentage")) {
+        const percentage = money(body.percentage);
+        if (percentage <= 0 || percentage > 100) {
+          return fail("percentage must be between 0 and 100");
+        }
+        updates.percentage = percentage;
+        updates.amount = null;
+      }
+      if (Object.hasOwn(body, "reason")) {
+        const reason = text(body.reason);
+        if (!reason) return fail("concession reason is required");
+        updates.reason = reason;
+      }
+      if (Object.hasOwn(body, "status")) {
+        const status = text(body.status).toLowerCase();
+        if (!["pending", "approved", "rejected"].includes(status)) {
+          return fail("invalid concession status");
+        }
+        updates.status = status;
+        if (status === "approved") updates.approved_by = user.id;
+      }
+      const { data, error } = await svc.from("fee_concessions").update(updates)
+        .eq("id", seg).eq("school_id", school).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }

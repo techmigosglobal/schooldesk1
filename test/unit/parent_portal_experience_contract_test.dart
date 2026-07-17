@@ -29,9 +29,11 @@ void main() {
       'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
     );
 
-    expect(screen, contains('width >= 700 ? 500 : 440'));
-    expect(screen, contains('minTileWidth: 140'));
-    expect(screen, contains('minHeight: 124, maxHeight: 132'));
+    expect(
+      screen,
+      contains('final columns = constraints.maxWidth >= 700 ? 4 : 2'),
+    );
+    expect(screen, contains('height: 72'));
   });
 
   test('Book & Kit remains one-time while tuition keeps month selection', () {
@@ -41,7 +43,12 @@ void main() {
     final handler = source('supabase/functions/api/handlers/fees.ts');
 
     expect(paymentFlow, contains("if (_isTuition) ...["));
-    expect(paymentFlow, contains('Book & Kit: one-time payment'));
+    expect(
+      paymentFlow,
+      contains('bool get _isTuition => isTuitionInvoice(_selectedFee)'),
+    );
+    expect(paymentFlow, contains("'\$_selectedFeeLabel: one-time payment'"));
+    expect(paymentFlow, isNot(contains("'Book & Kit: one-time payment'")));
     expect(
       paymentFlow,
       contains('Month selection is only available for tuition.'),

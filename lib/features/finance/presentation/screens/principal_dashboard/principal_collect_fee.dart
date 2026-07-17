@@ -324,35 +324,66 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
     });
   }
 
+  /// Keeps every back affordance inside the collection wizard until the
+  /// section picker is reached.  Popping the route from a later step loses
+  /// the selected student/section and makes the flow feel broken.
+  void _handleWizardBack() {
+    if (_saving) return;
+    if (_selectedInvoiceId.isNotEmpty) {
+      _backToFeeTypes();
+      return;
+    }
+    if (_selectedStudentId.isNotEmpty) {
+      _backToStudents();
+      return;
+    }
+    if (_selectedSectionLabel.isNotEmpty) {
+      _backToSections();
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
   // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF0FDF4),
-      appBar: AppBar(
-        title: Text(
-          'Record Payment',
-          style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF1A6B4A),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadData,
+    return PopScope(
+      canPop: _currentStep == 0 && !_saving,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleWizardBack();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF0FDF4),
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: 'Back',
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: _handleWizardBack,
           ),
-        ],
+          title: Text(
+            'Record Payment',
+            style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: const Color(0xFF1A6B4A),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: _saving ? null : _loadData,
+            ),
+          ],
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? _buildErrorState()
+            : _dueInvoices.isEmpty
+            ? _buildEmptyState()
+            : _buildBody(),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? _buildErrorState()
-          : _dueInvoices.isEmpty
-          ? _buildEmptyState()
-          : _buildBody(),
     );
   }
 

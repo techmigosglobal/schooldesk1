@@ -111,6 +111,30 @@ void main() {
     },
   );
 
+  test(
+    'invoice generation fills missing student components without duplicating paid or unpaid invoices',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+
+      expect(source, contains('const existingInvoiceKeys = new Set<string>()'));
+      expect(source, contains('existingInvoiceKeys.has(invoiceKey)'));
+      expect(source, contains('existing_paid_count: existingPaid'));
+      expect(source, contains('existing_unpaid_count: existingUnpaid'));
+    },
+  );
+
+  test('parent fee endpoint enriches completed payments with receipts', () {
+    final source = File(
+      'supabase/functions/api/handlers/fees.ts',
+    ).readAsStringSync();
+
+    expect(source, contains('receiptsByPaymentId'));
+    expect(source, contains('receipt_number: text('));
+    expect(source, contains('"*, fee_invoice_items(*), payments(*)"'));
+  });
+
   test('fee structure delete clears generated dues and collection rows', () {
     final source = File(
       'supabase/functions/api/handlers/fees.ts',
@@ -193,6 +217,8 @@ void main() {
       expect(source, contains('section_id'));
       expect(source, contains('configRecordId("section", gradeId, sectionId)'));
       expect(source, contains('configRecordId("grade", gradeId)'));
+      expect(source, contains('hasPaymentDestination'));
+      expect(source, contains('config?.upi_enabled !== false'));
     },
   );
 
@@ -213,6 +239,50 @@ void main() {
       expect(section, contains('.insert({'));
       expect(section, isNot(contains('.upsert({')));
       expect(section, isNot(contains('onConflict')));
+    },
+  );
+
+  test(
+    'payment config partial updates preserve existing UPI and QR values',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+      final start = source.indexOf(
+        'if (feesPath === "/payment-config" && method === "PUT") {',
+      );
+      final end = source.indexOf(
+        'if (feesPath === "/payment-config/qr" && method === "POST") {',
+      );
+      final section = start >= 0 && end > start
+          ? source.substring(start, end)
+          : source;
+
+      expect(section, contains('Object.hasOwn(body, key)'));
+      expect(section, isNot(contains('body.upi_id ?? ""')));
+      expect(section, isNot(contains('body.qr_image_url ?? ""')));
+    },
+  );
+
+  test(
+    'fee structures and generated invoice numbers expose category names',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+
+      expect(source, contains('category_name: categoryName'));
+      expect(source, contains('fee_item_name: categoryName'));
+      expect(source, contains('const structureTag = categoryName'));
+      expect(source, contains(r'}-${structureTag}`'));
+      expect(
+        source,
+        isNot(
+          contains(
+            r'${structureTag}-${text(structure.id).slice(0, 4).toUpperCase()}',
+          ),
+        ),
+      );
     },
   );
 

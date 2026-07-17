@@ -67,7 +67,7 @@ class NotificationRouteResolver {
       'ptm' || 'parent_teacher_meeting' => _ptmRouteFor(role),
       'event' || 'event_post' => _eventRouteFor(role),
       'approval' => AppRoutes.approvalCenter,
-      'leave' => _leaveRouteFor(role),
+      'leave' || 'student_leave' => _leaveRouteFor(role),
       'staff_attendance' ||
       'staff_attendance_daily_report' ||
       'staff_attendance_monthly_report' => _attendanceRouteFor(role),
@@ -116,6 +116,15 @@ class NotificationRouteResolver {
                 '')
             .toString()
             .trim();
+    if (route == AppRoutes.approvalCenter || referenceType == 'approval') {
+      final isLeave =
+          referenceType == 'leave' || referenceType == 'student_leave';
+      return {
+        'referenceType': referenceType.isEmpty ? 'approval' : referenceType,
+        'referenceId': referenceId,
+        'initialTab': isLeave ? 'leave' : 'approvals',
+      };
+    }
     if (referenceId.isEmpty) return null;
     if (route == AppRoutes.principalEventApprovals &&
         (referenceType == 'event_post' || referenceType == 'event')) {
@@ -123,13 +132,6 @@ class NotificationRouteResolver {
         'referenceType': 'event_post',
         'referenceId': referenceId,
         'initialTab': 'event_posts',
-      };
-    }
-    if (route == AppRoutes.approvalCenter || referenceType == 'approval') {
-      return {
-        'referenceType': referenceType.isEmpty ? 'approval' : referenceType,
-        'referenceId': referenceId,
-        'initialTab': 'approvals',
       };
     }
     if (route == AppRoutes.teacherEventPosts &&

@@ -41,7 +41,9 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
       _loading = true;
     });
     try {
-      final config = await BackendApiClient.instance.getPaymentConfig();
+      final config = await BackendApiClient.instance.getPaymentConfig(
+        refreshNonce: DateTime.now().millisecondsSinceEpoch,
+      );
       if (!mounted) return;
       setState(() {
         _config = config;
@@ -167,7 +169,9 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
                             label: Text(
                               _uploading
                                   ? 'Uploading...'
-                                  : 'Upload New QR Code',
+                                  : _qrUrl.isEmpty
+                                  ? 'Upload QR Code'
+                                  : 'Replace QR Code',
                             ),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: const Color(0xFF1A6B4A),
@@ -295,10 +299,27 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
   }
 
   Future<void> _saveConfig() async {
+    final upiId = _upiController.text.trim();
+    if (upiId.isEmpty && _qrUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add a UPI ID or upload a QR code before saving.'),
+        ),
+      );
+      return;
+    }
+    if (upiId.isNotEmpty && !_isValidUpiId(upiId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid UPI ID, for example name@bank.'),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       final config = await BackendApiClient.instance.updatePaymentConfig(
-        upiId: _upiController.text,
+        upiId: upiId,
         payeeName: _payeeController.text,
         qrNote: _noteController.text,
         qrImageUrl: _qrUrl,
@@ -321,6 +342,14 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
         ),
       );
     }
+  }
+
+  bool _isValidUpiId(String value) {
+    if (value.contains(RegExp(r'\s'))) return false;
+    final separator = value.indexOf('@');
+    return separator > 0 &&
+        separator == value.lastIndexOf('@') &&
+        separator < value.length - 1;
   }
 
   Future<void> _pickQr() async {

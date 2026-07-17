@@ -9,7 +9,7 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
 class PrincipalFeeDashboard extends StatefulWidget {
   const PrincipalFeeDashboard({super.key});
@@ -120,38 +120,6 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
         _error = 'Unable to load dashboard data: $e';
         _loading = false;
       });
-    }
-  }
-
-  Future<void> _openInvoiceGenerator() async {
-    try {
-      final api = BackendApiClient.instance;
-      final results = await Future.wait([
-        api.getAcademicYears(),
-        api.getGrades(),
-        api.getSections(),
-        api.getStudents(page: 1, pageSize: 1000),
-        api.getFeeStructures(),
-      ]);
-      if (!mounted) return;
-      await Navigator.pushNamed(
-        context,
-        '/principal/invoice-generate',
-        arguments: AdminInvoiceGenerationFormArgs(
-          academicYears: results[0] as List<AcademicYearModel>,
-          grades: results[1] as List<GradeModel>,
-          sections: results[2] as List<SectionModel>,
-          students: (results[3] as PaginatedList<StudentModel>).data,
-          feeStructures: results[4] as List<Map<String, dynamic>>,
-          ownerRole: 'principal',
-        ),
-      );
-      _loadData();
-    } on Object catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to load invoice references: $error')),
-      );
     }
   }
 
@@ -276,51 +244,54 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
   }
 
   Widget _buildKpiGrid() {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      // Keep the overview compact: these cards are navigation summaries, not
-      // large dashboard panels. A wider ratio also keeps the next actions
-      // visible without an unnecessary scroll on a phone.
-      childAspectRatio: 1.82,
-      children: [
-        _buildKpiCard(
-          title: 'Outstanding Due',
-          value: _money(_outstandingTotal),
-          subtitle:
-              '${_invoices.where((i) => (i['balance'] as num?)?.toDouble() != 0).length} invoices',
-          icon: Icons.pending_actions_rounded,
-          gradientColors: [const Color(0xFFF97316), const Color(0xFFFB923C)],
-          route: '/principal/collect-fee',
-        ),
-        _buildKpiCard(
-          title: 'Collected',
-          value: _money(_collectedTotal),
-          subtitle: '${_recentPayments.length} receipts',
-          icon: Icons.check_circle_outline_rounded,
-          gradientColors: [const Color(0xFF16A34A), const Color(0xFF22C55E)],
-          route: '/principal/fee-reports',
-        ),
-        _buildKpiCard(
-          title: 'Fee Structures',
-          value: '${_feeStructures.length}',
-          subtitle: 'Active templates',
-          icon: Icons.schema_rounded,
-          gradientColors: [const Color(0xFF2563EB), const Color(0xFF3B82F6)],
-          route: '/principal/fee-structures',
-        ),
-        _buildKpiCard(
-          title: 'Concessions',
-          value: '${_concessions.length}',
-          subtitle: 'Assigned accounts',
-          icon: Icons.volunteer_activism_rounded,
-          gradientColors: [const Color(0xFF7C3AED), const Color(0xFF8B5CF6)],
-          route: null, // No dedicated route yet — show info
-        ),
-      ],
+    final cards = <Widget>[
+      _buildKpiCard(
+        title: 'Outstanding Due',
+        value: _money(_outstandingTotal),
+        subtitle:
+            '${_invoices.where((i) => (i['balance'] as num?)?.toDouble() != 0).length} invoices',
+        icon: Icons.pending_actions_rounded,
+        gradientColors: [const Color(0xFFF97316), const Color(0xFFFB923C)],
+        route: '/principal/collect-fee',
+      ),
+      _buildKpiCard(
+        title: 'Collected',
+        value: _money(_collectedTotal),
+        subtitle: '${_recentPayments.length} receipts',
+        icon: Icons.check_circle_outline_rounded,
+        gradientColors: [const Color(0xFF16A34A), const Color(0xFF22C55E)],
+        route: '/principal/fee-reports',
+      ),
+      _buildKpiCard(
+        title: 'Fee Structures',
+        value: '${_feeStructures.length}',
+        subtitle: 'Active templates',
+        icon: Icons.schema_rounded,
+        gradientColors: [const Color(0xFF2563EB), const Color(0xFF3B82F6)],
+        route: '/principal/fee-structures',
+      ),
+      _buildKpiCard(
+        title: 'Concessions',
+        value: '${_concessions.length}',
+        subtitle: 'Assigned accounts',
+        icon: Icons.volunteer_activism_rounded,
+        gradientColors: [const Color(0xFF7C3AED), const Color(0xFF8B5CF6)],
+        route: AppRoutes.principalFeeConcessions,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 720 ? 4 : 2;
+        return GridView.count(
+          crossAxisCount: columns,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          mainAxisExtent: 88,
+          children: cards,
+        );
+      },
     );
   }
 
@@ -362,7 +333,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -492,16 +463,16 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
         color: Color(0xFF2563EB),
       ),
       (
-        label: 'Generate Invoices',
-        icon: Icons.receipt_long_rounded,
-        route: '/principal/invoice-generate',
-        color: Color(0xFF7C3AED),
-      ),
-      (
         label: 'Collect Fee',
         icon: Icons.add_circle_outline_rounded,
         route: '/principal/collect-fee',
         color: Color(0xFF16A34A),
+      ),
+      (
+        label: 'Payment Setup',
+        icon: Icons.qr_code_2_rounded,
+        route: AppRoutes.feePaymentConfig,
+        color: Color(0xFF0891B2),
       ),
       (
         label: 'Reports',
@@ -511,24 +482,39 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
       ),
     ];
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 2.3,
-      children: actions
-          .map((a) => _actionButton(a.label, a.icon, a.route, a.color))
-          .toList(),
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFF5F9FF), Color(0xFFFFF9F3)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDCE7F5)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 720 ? 3 : 2;
+          return GridView.count(
+            crossAxisCount: columns,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            mainAxisExtent: 58,
+            children: actions
+                .map((a) => _actionButton(a.label, a.icon, a.route, a.color))
+                .toList(),
+          );
+        },
+      ),
     );
   }
 
   Widget _actionButton(String label, IconData icon, String route, Color color) {
     return InkWell(
-      onTap: route == '/principal/invoice-generate'
-          ? _openInvoiceGenerator
-          : () => Navigator.pushNamed(context, route),
+      onTap: () => Navigator.pushNamed(context, route),
       borderRadius: BorderRadius.circular(12),
       child: Ink(
         decoration: BoxDecoration(
@@ -547,24 +533,24 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
             ),
           ],
         ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.20),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, color: color, size: 18),
+              child: Icon(icon, color: color, size: 17),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 label,
                 style: GoogleFonts.ibmPlexSans(
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 11,
                   color: context.appTheme.onSurface,
                 ),
               ),

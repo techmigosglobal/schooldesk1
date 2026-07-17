@@ -194,8 +194,8 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
                           onAction: _loadData,
                         )
                       : _selectedInvoice == null
-                          ? _buildStudentPicker()
-                          : _buildPaymentForm(),
+                          ? _buildStudentPicker(embedded: true)
+                          : _buildPaymentForm(embedded: true),
             ),
           ),
         );
@@ -234,8 +234,11 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
     );
   }
 
-  Widget _buildStudentPicker() {
+  Widget _buildStudentPicker({bool embedded = false}) {
     return ListView(
+      shrinkWrap: embedded,
+      primary: !embedded,
+      physics: embedded ? const NeverScrollableScrollPhysics() : null,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         const FeeSectionTitle('Select Student with Due'),
@@ -297,9 +300,12 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
     );
   }
 
-  Widget _buildPaymentForm() {
+  Widget _buildPaymentForm({bool embedded = false}) {
     final inv = _selectedInvoice!;
     return ListView(
+      shrinkWrap: embedded,
+      primary: !embedded,
+      physics: embedded ? const NeverScrollableScrollPhysics() : null,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         FeeCard(

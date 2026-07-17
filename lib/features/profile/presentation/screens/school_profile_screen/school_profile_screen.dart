@@ -46,6 +46,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
   AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
   String? _error;
   String _logoPath = '';
+  String _signatureUrl = '';
 
   @override
   void initState() {
@@ -92,7 +93,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         _phoneCtrl.text = _text(school['phone']);
         _websiteCtrl.text = _text(school['website']);
         _principalCtrl.text = _text(school['principal_name']);
-        _registrationCtrl.text = _text(school['registration_number']);
+        _registrationCtrl.text = _text(school['registration_no']);
         _udiseCtrl.text = _text(school['udise_code']);
         _establishedCtrl.text = _text(school['established_year']);
         _address1Ctrl.text = _text(school['address_line1']);
@@ -104,6 +105,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         _currencyCtrl.text = _text(school['currency']);
         _mottoCtrl.text = _text(school['motto']);
         _logoPath = _text(school['logo_url']);
+        _signatureUrl = _text(school['authorized_signature_url']);
         _loading = false;
       });
     } on Object catch (e) {
@@ -134,7 +136,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         'phone': _phoneCtrl.text.trim(),
         'website': _websiteCtrl.text.trim(),
         'principal_name': _principalCtrl.text.trim(),
-        'registration_number': _registrationCtrl.text.trim(),
+        'registration_no': _registrationCtrl.text.trim(),
         'udise_code': _udiseCtrl.text.trim(),
         'established_year': _establishedCtrl.text.trim(),
         'address_line1': _address1Ctrl.text.trim(),
@@ -190,6 +192,30 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       _showSnack('Logo upload failed: $e', isError: true);
+    }
+  }
+
+  Future<void> _pickAuthorizationSignature() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        imageQuality: 90,
+      );
+      if (picked == null) return;
+      setState(() => _saving = true);
+      final signatureUrl = await BackendApiClient.instance
+          .uploadCurrentSchoolSignature(picked.path);
+      if (!mounted) return;
+      setState(() {
+        _signatureUrl = signatureUrl;
+        _saving = false;
+      });
+      _showSnack('Authorization signature uploaded.');
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      _showSnack('Signature upload failed: $e', isError: true);
     }
   }
 
@@ -266,6 +292,9 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                     children: [
                       _identityHeader(),
                       const SizedBox(height: 12),
+                      _section('Receipt Authorization', [
+                        _authorizationSignatureCard(),
+                      ]),
                       _section('Basic Details', [
                         _field(
                           'School Name',
@@ -516,6 +545,87 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
               border: Border.all(color: context.appTheme.outlineVariant),
             ),
             child: Column(children: children),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _authorizationSignatureCard() {
+    final hasSignature = _signatureUrl.trim().isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.appTheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.appTheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 112,
+            height: 58,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: context.appTheme.outlineVariant),
+            ),
+            child: hasSignature
+                ? Image.network(
+                    _assetUrl(_signatureUrl.trim()),
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) =>
+                        const Icon(Icons.draw_outlined, color: Colors.grey),
+                  )
+                : Icon(
+                    Icons.draw_outlined,
+                    color: context.appTheme.muted,
+                    size: 28,
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hasSignature
+                      ? 'Authorization signature ready'
+                      : 'No authorization signature',
+                  style: GoogleFonts.dmSans(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  hasSignature
+                      ? 'Used on official fee receipts and fee reports.'
+                      : 'Receipts will state that they are computer generated.',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    color: context.appTheme.muted,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _editing && !_saving
+                      ? _pickAuthorizationSignature
+                      : null,
+                  icon: const Icon(Icons.upload_file_rounded, size: 16),
+                  label: Text(hasSignature ? 'Replace' : 'Upload signature'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

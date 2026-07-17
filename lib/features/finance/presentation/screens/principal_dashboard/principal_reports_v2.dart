@@ -94,8 +94,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
     }
   }
 
-  Future<Uint8List?> _schoolLogoBytes() async {
-    final url = textValue(_school['logo_url']);
+  Future<Uint8List?> _networkImageBytes(String url) async {
     if (url.isEmpty) return null;
     try {
       return (await NetworkAssetBundle(
@@ -106,8 +105,21 @@ class _PrincipalReportsState extends State<PrincipalReports> {
     }
   }
 
+  Future<Uint8List?> _schoolLogoBytes() =>
+      _networkImageBytes(textValue(_school['logo_url']));
+
+  Future<Uint8List?> _schoolSignatureBytes() =>
+      _networkImageBytes(textValue(_school['authorized_signature_url']));
+
   String get _schoolName => textValue(_school['name'], fallback: 'School');
-  String get _schoolAddress => textValue(_school['address']);
+  String get _schoolAddress => [
+    _school['address'],
+    _school['address_line1'],
+    _school['address_line2'],
+    _school['city'],
+    _school['state'],
+    _school['postal_code'],
+  ].map(textValue).where((value) => value.isNotEmpty).toSet().join(', ');
 
   double get _totalExpected =>
       _invoices.fold<double>(0, (s, i) => s + numValue(i['total']));
@@ -117,6 +129,51 @@ class _PrincipalReportsState extends State<PrincipalReports> {
       _invoices.fold<double>(0, (s, i) => s + numValue(i['balance']));
   double get _collectionRate =>
       _totalExpected > 0 ? _totalCollected / _totalExpected : 0;
+
+  List<Map<String, dynamic>> get _studentAccounts {
+    final grouped = <String, Map<String, dynamic>>{};
+    for (final invoice in _invoices) {
+      final studentId = textValue(invoice['student_id']);
+      final key = studentId.isNotEmpty
+          ? studentId
+          : '${textValue(invoice['name'])}|${textValue(invoice['class'])}';
+      final account = grouped.putIfAbsent(
+        key,
+        () => <String, dynamic>{
+          ...invoice,
+          'student_id': studentId,
+          'total': 0.0,
+          'paid': 0.0,
+          'balance': 0.0,
+          'invoices': <Map<String, dynamic>>[],
+          'components': <String>[],
+        },
+      );
+      account['total'] =
+          numValue(account['total']) + numValue(invoice['total']);
+      account['paid'] = numValue(account['paid']) + numValue(invoice['paid']);
+      account['balance'] =
+          numValue(account['balance']) + numValue(invoice['balance']);
+      (account['invoices'] as List<Map<String, dynamic>>).add(invoice);
+      final component = _componentName(invoice);
+      final components = account['components'] as List<String>;
+      if (!components.contains(component)) components.add(component);
+    }
+    return grouped.values.toList()..sort(
+      (left, right) => textValue(
+        left['name'],
+      ).toLowerCase().compareTo(textValue(right['name']).toLowerCase()),
+    );
+  }
+
+  String _componentName(Map<String, dynamic> invoice) {
+    final name = textValue(
+      invoice['fee_item_name'] ?? invoice['category_name'],
+    );
+    if (name.isNotEmpty) return name;
+    final feeType = textValue(invoice['fee_type']).toLowerCase();
+    return feeType.contains('tuition') ? 'Tuition' : 'Books & Kit';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -405,7 +462,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => _StudentReportPickerSheet(
-        invoices: _invoices,
+        invoices: _studentAccounts,
         payments: _payments,
         onGenerate: (inv) {
           Navigator.pop(ctx);
@@ -418,28 +475,29 @@ class _PrincipalReportsState extends State<PrincipalReports> {
   Future<void> _generateStudentPdf(Map<String, dynamic> inv) async {
     setState(() => _generatingPdf = true);
     try {
-      // Build per-student items from the invoice data
-      final feeType = textValue(inv['fee_type'], fallback: 'Fee');
-      final items = <Map<String, dynamic>>[
-        {
-          'description': feeType.isEmpty ? 'Fee' : feeType,
-          'amount': numValue(inv['total']),
-          'status': 'Invoiced',
-        },
-        {
-          'description': 'Paid',
-          'amount': numValue(inv['paid']),
-          'status': 'Received',
-        },
-        {
-          'description': 'Balance Due',
-          'amount': numValue(inv['balance']),
-          'status': numValue(inv['balance']) > 0 ? 'Outstanding' : 'Cleared',
-        },
-      ];
+      final accountInvoices = inv['invoices'] is List
+          ? (inv['invoices'] as List)
+                .whereType<Map>()
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList()
+          : <Map<String, dynamic>>[inv];
+      final items = accountInvoices
+          .map(
+            (invoice) => <String, dynamic>{
+              'description': _componentName(invoice),
+              'amount': numValue(invoice['total']),
+              'status': numValue(invoice['balance']) > 0
+                  ? 'Paid ${money(numValue(invoice['paid']))} · Due ${money(numValue(invoice['balance']))}'
+                  : 'Cleared',
+            },
+          )
+          .toList();
 
       // Add paid months detail for tuition
-      final paidMonths = paidInvoiceMonths(inv);
+      final paidMonths = accountInvoices
+          .expand(paidInvoiceMonths)
+          .toSet()
+          .toList();
       if (paidMonths.isNotEmpty) {
         items.add({
           'description': 'Months Paid: ${paidMonths.join(', ')}',
@@ -449,28 +507,38 @@ class _PrincipalReportsState extends State<PrincipalReports> {
       }
 
       final pdfService = PdfService.getInstance();
-      final schoolLogo = await _schoolLogoBytes();
+      final assets = await Future.wait([
+        _schoolLogoBytes(),
+        _schoolSignatureBytes(),
+      ]);
+      final student = inv['student'] is Map
+          ? Map<String, dynamic>.from(inv['student'] as Map)
+          : const <String, dynamic>{};
       final bytes = await pdfService.generateFeeReceipt(
-        receiptNo: 'STU-${DateTime.now().millisecondsSinceEpoch}',
+        documentKind: FeeDocumentKind.accountStatement,
+        receiptNo:
+            'STMT-${textValue(inv['student_id'], fallback: 'STUDENT')}-${DateTime.now().millisecondsSinceEpoch}',
         studentName: textValue(inv['name'], fallback: 'Student'),
         className: textValue(inv['class'], fallback: '—'),
-        rollNo: textValue(inv['invoice_number'], fallback: 'N/A'),
-        parentName: 'Individual Report',
+        rollNo: studentIdentifier(student),
+        parentName: '',
         feeItems: items,
         totalAmount: numValue(inv['total']),
         paidAmount: numValue(inv['paid']),
         balance: numValue(inv['balance']),
-        paymentMode: 'Fee Statement',
+        paymentMode: '',
         paymentDate: DateTime.now(),
         schoolName: _schoolName,
         schoolAddress: _schoolAddress,
-        schoolLogo: schoolLogo,
+        schoolLogo: assets[0],
+        authorizedSignature: assets[1],
+        authorizedSignatoryName: textValue(_school['principal_name']),
       );
       if (!mounted) return;
       await pdfService.previewDocument(
         context,
         bytes,
-        '${textValue(inv['name'])} — Fee Report',
+        '${textValue(inv['name'])} — Fee Statement',
       );
     } on Object catch (e) {
       if (!mounted) return;
@@ -594,7 +662,10 @@ class _PrincipalReportsState extends State<PrincipalReports> {
       ];
 
       final pdfService = PdfService.getInstance();
-      final schoolLogo = await _schoolLogoBytes();
+      final assets = await Future.wait([
+        _schoolLogoBytes(),
+        _schoolSignatureBytes(),
+      ]);
       final bytes = await pdfService.generateFeeReceipt(
         receiptNo: 'RPT-${DateTime.now().millisecondsSinceEpoch}',
         studentName: 'All Students',
@@ -609,7 +680,9 @@ class _PrincipalReportsState extends State<PrincipalReports> {
         paymentDate: DateTime.now(),
         schoolName: _schoolName,
         schoolAddress: _schoolAddress,
-        schoolLogo: schoolLogo,
+        schoolLogo: assets[0],
+        authorizedSignature: assets[1],
+        authorizedSignatoryName: textValue(_school['principal_name']),
       );
       if (!mounted) return;
       await pdfService.previewDocument(context, bytes, 'Fee Collection Report');
@@ -796,7 +869,7 @@ class _StudentReportPickerSheetState extends State<_StudentReportPickerSheet> {
                       ),
                     ),
                     subtitle: Text(
-                      '${textValue(inv['class'])} • Paid: ${money(paid)}',
+                      '${textValue(inv['class'])} • ${(inv['components'] as List? ?? const []).join(' + ')} • Paid: ${money(paid)}',
                       style: GoogleFonts.ibmPlexSans(fontSize: 12),
                     ),
                     trailing: Column(

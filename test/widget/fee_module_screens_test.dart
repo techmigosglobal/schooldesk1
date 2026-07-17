@@ -10,6 +10,7 @@ import 'package:schooldesk1/features/finance/presentation/screens/fee_structures
 import 'package:schooldesk1/features/finance/presentation/screens/fee_collect_screen/fee_collect_screen.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_ledger_screen/fee_ledger_screen.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_reports_screen/fee_reports_screen.dart';
+import 'package:schooldesk1/features/finance/presentation/screens/principal_dashboard/principal_collect_fee.dart';
 
 import '../support/finance_test_helpers.dart';
 
@@ -83,7 +84,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsWidgets);
     });
 
-    testWidgets('shows payment QR action when config exists', (tester) async {
+    testWidgets('always shows parent payment setup action', (tester) async {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
@@ -91,7 +92,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Parent Payment QR'), findsOneWidget);
+      expect(find.text('Parent Payment Setup'), findsOneWidget);
     });
 
     testWidgets('shows pending payment requests badge', (tester) async {
@@ -325,6 +326,62 @@ void main() {
 
       expect(find.text('Collect Fee'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('PrincipalCollectFee', () {
+    testWidgets('keeps AppBar and system back inside the four-stage wizard', (
+      tester,
+    ) async {
+      _setLargeSurface(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const PrincipalCollectFee(),
+                    ),
+                  ),
+                  child: const Text('Open collector'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open collector'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Class 5 - A'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aarav Sharma'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tuition Fee').last);
+      await tester.pumpAndSettle();
+
+      // Payment -> Fee Type via the AppBar button.
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(find.text('Select Fee Type'), findsOneWidget);
+
+      // Fee Type -> Student via the AppBar button.
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(find.text('Search student name...'), findsOneWidget);
+
+      // Student -> Section via Android/system back.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Select Class & Section'), findsOneWidget);
+
+      // Section is the only stage that exits the collector route.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Open collector'), findsOneWidget);
     });
   });
 

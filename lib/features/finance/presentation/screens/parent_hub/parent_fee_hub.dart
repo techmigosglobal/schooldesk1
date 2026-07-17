@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
@@ -9,8 +10,10 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 
 class ParentFeeHub extends StatefulWidget {
   const ParentFeeHub({super.key});
@@ -150,12 +153,10 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 studentId,
                 refreshNonce: refreshNonce,
               );
-        final invoices = studentId.isEmpty
-            ? <Map<String, dynamic>>[]
-            : await BackendApiClient.instance.getInvoices(
-                studentId: studentId,
-                refreshNonce: refreshNonce,
-              );
+        // The linked-child endpoint returns the invoices and their payments.
+        // Do not call /fees/invoices here: that is intentionally restricted to
+        // principal finance management.
+        final invoices = feeRows;
         final paymentRequests = studentId.isEmpty
             ? <Map<String, dynamic>>[]
             : await BackendApiClient.instance.getParentPaymentRequests(
@@ -170,7 +171,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                   0.0;
               final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
               final total =
-                  (inv['total_amount'] as num?)?.toDouble() ?? balance + paid;
+                  (inv['net_amount'] as num?)?.toDouble() ??
+                  (inv['total_amount'] as num?)?.toDouble() ??
+                  balance + paid;
               final feeType = _text(inv['fee_type']);
               return {
                 'id': inv['id'],
@@ -196,6 +199,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 'unpaid_month_names': inv['unpaid_month_names'],
                 'rejection_reason': inv['rejection_reason'],
                 'items': _invoiceItems(inv),
+                'student': inv['student'],
               };
             }).toList()..sort((a, b) {
               final left = (a['priority'] as num?)?.toInt() ?? 99;
@@ -208,27 +212,44 @@ class _ParentFeeHubState extends State<ParentFeeHub>
           if (payments is List) {
             for (final p in payments.whereType<Map>()) {
               final payment = Map<String, dynamic>.from(p);
+              final paymentStatus = _text(
+                payment['status'],
+                fallback: 'completed',
+              ).toLowerCase();
+              if (!{'completed', 'approved', 'paid'}.contains(paymentStatus)) {
+                continue;
+              }
               final amount =
                   (payment['amount'] as num?)?.toDouble() ??
                   (payment['amount_paid'] as num?)?.toDouble() ??
                   0.0;
+              final receipt = payment['receipt'] is Map
+                  ? Map<String, dynamic>.from(payment['receipt'] as Map)
+                  : const <String, dynamic>{};
               historyList.add({
                 'id': payment['id'] ?? '',
                 'invoiceId': inv['id'] ?? '',
-                'component': 'Invoice ${inv['invoice_number'] ?? ''}',
+                'component': _text(
+                  inv['fee_item_name'],
+                  fallback: 'Invoice ${inv['invoice_number'] ?? ''}',
+                ),
                 'amount': amount,
                 'date': (payment['paid_at'] ?? payment['payment_date'] ?? '')
                     .toString(),
                 'method':
                     (payment['payment_method'] ?? payment['payment_mode'] ?? '')
                         .toString(),
-                'receiptNo': (payment['receipt_number'] ?? '').toString(),
+                'receiptNo': _text(
+                  receipt['receipt_number'] ??
+                      payment['receipt_number'] ??
+                      payment['reference_number'],
+                ),
                 'student': _studentName(child),
                 'class': _studentClass(child),
                 'rollNo': _studentRoll(child),
                 'parentName': '',
                 'status': 'Paid',
-                'rawStatus': 'completed',
+                'rawStatus': paymentStatus,
                 'paymentRequest': {
                   ...payment,
                   'amount': amount,
@@ -237,8 +258,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                   'payment_mode':
                       payment['payment_method'] ?? payment['payment_mode'],
                   'payment_date': payment['paid_at'] ?? payment['payment_date'],
-                  'transaction_ref': payment['reference_number'],
-                  'receipt': {'receipt_number': payment['receipt_number']},
+                  'transaction_ref':
+                      receipt['transaction_ref'] ?? payment['reference_number'],
+                  'receipt': receipt,
                   'invoice': inv,
                   'student': child,
                 },
@@ -248,6 +270,11 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         }
 
         for (final request in paymentRequests) {
+          final requestStatus = _text(request['status']).toLowerCase();
+          // Finalized payments come from the invoice's payments relation.
+          // Keep only actionable clarification requests in this hub so the
+          // parent can resubmit proof without duplicating receipt history.
+          if (requestStatus != 'clarification_required') continue;
           final invoice = request['invoice'] is Map
               ? Map<String, dynamic>.from(request['invoice'] as Map)
               : invoices.firstWhere(
@@ -271,7 +298,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
             'rollNo': _studentRoll(child),
             'parentName': '',
             'status': _paymentStatusLabel(request['status']),
-            'rawStatus': '${request['status'] ?? ''}'.toLowerCase(),
+            'rawStatus': requestStatus,
             'paymentRequest': Map<String, dynamic>.from(request),
           });
         }
@@ -358,75 +385,67 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: RefreshIndicator(
-        onRefresh: () => _loadData(forceRefresh: true, showSpinner: false),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildChildSelector(),
-              const SizedBox(height: 16),
-              _buildHeroBalanceCard(),
-              if (clarification != null) ...[
-                const SizedBox(height: 14),
-                _buildActionBanner(clarification),
-              ],
-              const SizedBox(height: 20),
-              Text(
-                'Fee Items',
-                style: GoogleFonts.ibmPlexSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: context.appTheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 10),
-              if (_feeStructure.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: context.appTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: context.appTheme.outlineVariant),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.receipt_long_rounded,
-                        color: context.appTheme.muted,
-                        size: 24,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF4FBF8), Color(0xFFF7F8FF)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: RefreshIndicator(
+          onRefresh: () => _loadData(forceRefresh: true, showSpinner: false),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 48),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildChildSelector(),
+                const SizedBox(height: 12),
+                _buildHeroBalanceCard(),
+                if (clarification != null) ...[
+                  const SizedBox(height: 12),
+                  _buildActionBanner(clarification),
+                ],
+                const SizedBox(height: 16),
+                _buildFeeSectionHeader(),
+                const SizedBox(height: 8),
+                if (_feeStructure.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: context.appTheme.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: context.appTheme.outlineVariant,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'No fee invoices published yet.',
-                          style: GoogleFonts.ibmPlexSans(
-                            fontSize: 14,
-                            color: context.appTheme.muted,
-                            fontWeight: FontWeight.w600,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.receipt_long_rounded,
+                          color: context.appTheme.muted,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'No fee invoices published yet.',
+                            style: GoogleFonts.ibmPlexSans(
+                              fontSize: 14,
+                              color: context.appTheme.muted,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                ..._feeStructure.map((fee) => _buildFeeItemCard(fee)),
-              const SizedBox(height: 24),
-              Text(
-                'Quick Access',
-                style: GoogleFonts.ibmPlexSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: context.appTheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildQuickAccess(),
-              const SizedBox(height: 48),
-            ],
+                      ],
+                    ),
+                  )
+                else
+                  ..._feeStructure.map((fee) => _buildFeeItemCard(fee)),
+              ],
+            ),
           ),
         ),
       ),
@@ -455,11 +474,11 @@ class _ParentFeeHubState extends State<ParentFeeHub>
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: pending > 0
-              ? [_headerColor, _headerColor.withRed(30).withGreen(120)]
+              ? [_headerColor, const Color(0xFF0F9F8D)]
               : [
                   context.appTheme.primary.withAlpha(200),
                   context.appTheme.primary,
@@ -467,11 +486,11 @@ class _ParentFeeHubState extends State<ParentFeeHub>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
             color: _headerColor.withOpacity(0.3),
-            blurRadius: 12,
+            blurRadius: 14,
             offset: const Offset(0, 4),
           ),
         ],
@@ -479,25 +498,59 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Balance Due',
-            style: GoogleFonts.ibmPlexSans(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.8),
-              fontWeight: FontWeight.w500,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(35),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Balance Due',
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 13,
+                  color: Colors.white.withOpacity(0.85),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(30),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${_feeStructure.length} item${_feeStructure.length == 1 ? '' : 's'}',
+                  style: GoogleFonts.ibmPlexSans(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
             _money(pending),
             style: GoogleFonts.ibmPlexSans(
-              fontSize: 32,
+              fontSize: 28,
               fontWeight: FontWeight.w800,
               color: Colors.white,
             ),
           ),
           if (pending > 0 && nextFee != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               'Next due: ${nextFee['dueDate']} (${_daysUntil(nextFee['dueDate'])} days left)',
               style: GoogleFonts.ibmPlexSans(
@@ -506,7 +559,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -514,7 +567,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: _headerColor,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -523,7 +576,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 child: Text(
                   'Pay Now — ${_money(nextFee['amount'])}',
                   style: GoogleFonts.ibmPlexSans(
-                    fontSize: 15,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -548,6 +601,50 @@ class _ParentFeeHubState extends State<ParentFeeHub>
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildFeeSectionHeader() {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 20,
+          decoration: BoxDecoration(
+            color: _headerColor,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Fee Items',
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: context.appTheme.onSurface,
+          ),
+        ),
+        const Spacer(),
+        TextButton.icon(
+          onPressed: _feeStructure.isEmpty ? null : _openFeeStatement,
+          icon: const Icon(Icons.description_outlined, size: 16),
+          label: const Text('Statement'),
+          style: TextButton.styleFrom(
+            foregroundColor: _headerColor,
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+        TextButton.icon(
+          onPressed: () =>
+              Navigator.pushNamed(context, '/parent/payment-history'),
+          icon: const Icon(Icons.history_rounded, size: 16),
+          label: const Text('History'),
+          style: TextButton.styleFrom(
+            foregroundColor: _headerColor,
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+      ],
     );
   }
 
@@ -627,6 +724,11 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     final paid = (fee['paidAmount'] as num?)?.toDouble() ?? 0.0;
     final status = fee['status'] as String;
     final isTuition = fee['fee_type'] == 'tuition';
+    final hasLinkedReceipt = _hasLinkedReceiptForInvoice(_text(fee['id']));
+    final accent = isTuition ? _headerColor : const Color(0xFF4F46E5);
+    final accentSurface = isTuition
+        ? const Color(0xFFE8F8F1)
+        : const Color(0xFFEEF2FF);
 
     Color badgeColor = context.appTheme.warning;
     Color badgeBg = context.appTheme.warningContainer;
@@ -646,8 +748,15 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.appTheme.outlineVariant),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: accent.withAlpha(38)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withAlpha(14),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,13 +764,27 @@ class _ParentFeeHubState extends State<ParentFeeHub>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: accentSurface,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  isTuition ? Icons.school_rounded : Icons.menu_book_rounded,
+                  color: accent,
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   fee['component'],
                   style: GoogleFonts.ibmPlexSans(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: context.appTheme.onSurface,
+                    color: accent,
                   ),
                 ),
               ),
@@ -714,7 +837,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
               child: LinearProgressIndicator(
                 value: total > 0 ? (paid / total) : 0,
                 backgroundColor: context.appTheme.surfaceVariant,
-                valueColor: const AlwaysStoppedAnimation<Color>(_headerColor),
+                valueColor: AlwaysStoppedAnimation<Color>(accent),
                 minHeight: 6,
               ),
             ),
@@ -743,39 +866,57 @@ class _ParentFeeHubState extends State<ParentFeeHub>
           ],
           if (balance > 0) ...[
             const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton(
-                onPressed: () => _openPaymentFlow(fee),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _headerColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  elevation: 0,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Pay Now',
-                      style: GoogleFonts.ibmPlexSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (hasLinkedReceipt) ...[
+                  OutlinedButton.icon(
+                    onPressed: () => _openReceiptForFee(fee),
+                    icon: const Icon(Icons.receipt_long, size: 14),
+                    label: const Text('Receipt'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _headerColor,
+                      side: const BorderSide(color: _headerColor),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.arrow_forward_rounded, size: 14),
-                  ],
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                ElevatedButton(
+                  onPressed: () => _openPaymentFlow(fee),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Pay Now',
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.arrow_forward_rounded, size: 14),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ] else ...[
+          ] else if (hasLinkedReceipt) ...[
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
@@ -808,51 +949,119 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     );
   }
 
-  Widget _buildQuickAccess() {
-    return Row(
-      children: [
-        Expanded(
-          child: InkWell(
-            onTap: () {
-              Navigator.pushNamed(context, '/parent/payment-history');
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              decoration: BoxDecoration(
-                color: context.appTheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.appTheme.outlineVariant),
-              ),
-              child: Column(
-                children: [
-                  const Icon(
-                    Icons.history_rounded,
-                    color: _headerColor,
-                    size: 24,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Payment History',
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: context.appTheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   int _daysUntil(String dateStr) {
     final parsed = DateTime.tryParse(dateStr);
     if (parsed == null) return 0;
     return parsed.difference(DateTime.now()).inDays;
+  }
+
+  Future<Uint8List?> _networkImageBytes(String url) async {
+    if (url.isEmpty) return null;
+    try {
+      return (await NetworkAssetBundle(
+        Uri.parse(url),
+      ).load(url)).buffer.asUint8List();
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Produces one account-wide statement for the currently selected child.
+  /// It uses the parent-scoped invoice data already loaded for this child.
+  Future<void> _openFeeStatement() async {
+    if (_childrenData.isEmpty || _feeStructure.isEmpty) return;
+    try {
+      final child = Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
+      final statementStudent = _feeStructure
+          .map((fee) => fee['student'])
+          .whereType<Map>()
+          .map((student) => Map<String, dynamic>.from(student))
+          .firstWhere((student) => student.isNotEmpty, orElse: () => child);
+      final statementSection = statementStudent['current_section'] is Map
+          ? Map<String, dynamic>.from(
+              statementStudent['current_section'] as Map,
+            )
+          : const <String, dynamic>{};
+      final statementGrade = statementSection['grade'] is Map
+          ? Map<String, dynamic>.from(statementSection['grade'] as Map)
+          : const <String, dynamic>{};
+      final statementClass = [
+        _text(statementGrade['grade_name']),
+        _text(statementSection['section_name']),
+      ].where((part) => part.isNotEmpty).join(' - ');
+      final school = await BackendApiClient.instance.getCurrentSchool();
+      final total = _feeStructure.fold<double>(
+        0,
+        (sum, fee) => sum + ((fee['totalAmount'] as num?)?.toDouble() ?? 0),
+      );
+      final paid = _feeStructure.fold<double>(
+        0,
+        (sum, fee) => sum + ((fee['paidAmount'] as num?)?.toDouble() ?? 0),
+      );
+      final items = <Map<String, dynamic>>[
+        for (final fee in _feeStructure)
+          {
+            'description': _text(fee['component'], fallback: 'Fee'),
+            'amount': (fee['totalAmount'] as num?)?.toDouble() ?? 0,
+            'status':
+                'Paid ${_money((fee['paidAmount'] as num?)?.toDouble() ?? 0)} · Due ${_money((fee['amount'] as num?)?.toDouble() ?? 0)}',
+          },
+        for (final fee in _feeStructure)
+          if (fee['paid_month_names'] is List &&
+              (fee['paid_month_names'] as List).isNotEmpty)
+            {
+              'description':
+                  'Months Paid: ${(fee['paid_month_names'] as List).join(', ')}',
+              'amount': 0.0,
+              'status': _text(fee['component']),
+            },
+      ];
+      final schoolMap = Map<String, dynamic>.from(school);
+      final assets = await Future.wait([
+        _networkImageBytes(_text(schoolMap['logo_url'])),
+        _networkImageBytes(_text(schoolMap['authorized_signature_url'])),
+      ]);
+      final bytes = await PdfService.getInstance().generateFeeReceipt(
+        documentKind: FeeDocumentKind.accountStatement,
+        receiptNo:
+            'STMT-${_text(child['id'] ?? child['student_id'], fallback: 'STUDENT')}-${DateTime.now().millisecondsSinceEpoch}',
+        studentName: _studentName(child),
+        className: statementClass.isEmpty
+            ? _studentClass(child)
+            : statementClass,
+        rollNo: studentIdentifier(statementStudent),
+        parentName: '',
+        feeItems: items,
+        totalAmount: total,
+        paidAmount: paid,
+        balance: _pendingAmount,
+        paymentMode: '',
+        paymentDate: DateTime.now(),
+        schoolName: _text(schoolMap['name'], fallback: 'School'),
+        schoolAddress: [
+          schoolMap['address'],
+          schoolMap['address_line1'],
+          schoolMap['address_line2'],
+          schoolMap['city'],
+          schoolMap['state'],
+          schoolMap['postal_code'],
+        ].map(_text).where((value) => value.isNotEmpty).toSet().join(', '),
+        schoolLogo: assets[0],
+        authorizedSignature: assets[1],
+        authorizedSignatoryName: _text(schoolMap['principal_name']),
+      );
+      if (!mounted) return;
+      await PdfService.getInstance().previewDocument(
+        context,
+        bytes,
+        '${_studentName(child)} — Fee Statement',
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to generate fee statement: $error')),
+      );
+    }
   }
 
   Future<void> _openPaymentFlow(Map<String, dynamic> fee) async {
@@ -905,26 +1114,13 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     final paidRecord = _paymentHistory.firstWhere(
       (payment) =>
           _text(payment['invoiceId']) == invoiceId &&
-          _receiptIsAvailable(_text(payment['rawStatus'])),
+          _hasLinkedReceipt(payment),
       orElse: () => const <String, dynamic>{},
     );
 
-    Map<String, dynamic>? pr;
-    if (paidRecord.isNotEmpty) {
-      pr = paidRecord['paymentRequest'] is Map
-          ? Map<String, dynamic>.from(paidRecord['paymentRequest'] as Map)
-          : null;
-    } else if (fee['status'] == 'Paid' || fee['status'] == 'Partial') {
-      pr = {
-        'receipt_number': fee['invoiceNumber'],
-        'amount': fee['paidAmount'] ?? fee['amount'] ?? 0.0,
-        'payment_mode': '-',
-        'created_at': DateTime.now().toIso8601String(),
-        'transaction_ref': '-',
-        'invoice': {'invoice_number': fee['invoiceNumber']},
-        'student': _childrenData[_activeChildIndex],
-      };
-    }
+    final pr = paidRecord['paymentRequest'] is Map
+        ? Map<String, dynamic>.from(paidRecord['paymentRequest'] as Map)
+        : null;
 
     if (pr == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -947,8 +1143,20 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     if (mounted) await _loadData(forceRefresh: true, showSpinner: false);
   }
 
-  bool _receiptIsAvailable(String status) =>
-      status == 'completed' || status == 'approved' || status == 'paid';
+  bool _hasLinkedReceiptForInvoice(String invoiceId) => _paymentHistory.any(
+    (payment) =>
+        _text(payment['invoiceId']) == invoiceId && _hasLinkedReceipt(payment),
+  );
+
+  bool _hasLinkedReceipt(Map<String, dynamic> payment) {
+    final status = _text(payment['rawStatus']).toLowerCase();
+    if (!{'completed', 'approved', 'paid'}.contains(status)) return false;
+    final request = payment['paymentRequest'];
+    if (request is! Map) return false;
+    final receipt = request['receipt'];
+    if (receipt is! Map) return false;
+    return _text(receipt['receipt_number']).isNotEmpty;
+  }
 
   String _studentClass(Map<String, dynamic> student) =>
       parentChildClassAndSectionLabel(student);

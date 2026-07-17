@@ -109,7 +109,8 @@ void main() {
       'lib/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart',
     ).readAsStringSync();
 
-    expect(service, contains('Supabase.instance.client.realtime.setAuth'));
+    expect(service, contains('final client = Supabase.instance.client;'));
+    expect(service, contains('client.realtime.setAuth(token)'));
     expect(service, contains('onPostgresChanges'));
     expect(service, contains("table: 'messages'"));
     expect(service, contains("table: 'message_conversations'"));
@@ -207,6 +208,31 @@ void main() {
     expect(principalScreen, contains('_selectRetainedConversation('));
     expect(principalScreen, contains('_clearMessagesFor('));
     expect(principalScreen, isNot(contains('orElse: () => source.first')));
+  });
+
+  test('chat screens deduplicate overlapping realtime message batches', () {
+    final principalScreen = File(
+      'lib/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart',
+    ).readAsStringSync();
+    final parentScreen = File(
+      'lib/features/communication/presentation/screens/parent_teacher_chat_screen/parent_teacher_chat_screen.dart',
+    ).readAsStringSync();
+    final teacherScreen = File(
+      'lib/features/communication/presentation/screens/teacher_communication_screen/teacher_communication_screen.dart',
+    ).readAsStringSync();
+
+    expect(
+      principalScreen,
+      contains('mergeChatMessagesByIdentity(current, newMessages)'),
+    );
+    expect(
+      parentScreen,
+      contains('mergeChatMessagesByIdentity(_messages, newMessages)'),
+    );
+    expect(
+      teacherScreen,
+      contains('mergeChatMessagesByIdentity(_messages, newMessages)'),
+    );
   });
 
   test(
