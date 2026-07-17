@@ -704,10 +704,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         _buildEditorActions(preview: false),
         const SizedBox(height: 12),
         _hintText(
-          'Class teacher stays fixed: $classTeacherName. Subjects use the class teacher or co-teacher.',
+          'Class teacher stays fixed: $classTeacherName. Choose a subject and set each row\'s own start and end time.',
         ),
-        const SizedBox(height: 10),
-        _buildTimingQuickControls(),
         const SizedBox(height: 12),
         _buildDayWiseEditor(subjectOptions),
         const SizedBox(height: 14),
@@ -763,43 +761,39 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   Widget _buildEditorActions({required bool preview}) {
     return _panel(
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          if (preview)
-            OutlinedButton.icon(
-              onPressed: _saving
-                  ? null
-                  : () => setState(() => _stage = _ManualTimetableStage.editor),
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              label: const Text('Edit'),
-            )
-          else
-            OutlinedButton.icon(
-              onPressed: _saving ? null : _resetDraft,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Reset'),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 620;
+          final editAction = OutlinedButton.icon(
+            onPressed: _saving
+                ? null
+                : preview
+                ? () => setState(() => _stage = _ManualTimetableStage.editor)
+                : _resetDraft,
+            icon: Icon(
+              preview ? Icons.edit_outlined : Icons.refresh_rounded,
+              size: 18,
             ),
-          if (!preview)
-            OutlinedButton.icon(
-              onPressed: _draftCells.isEmpty
-                  ? null
-                  : () =>
-                        setState(() => _stage = _ManualTimetableStage.preview),
-              icon: const Icon(Icons.visibility_outlined, size: 18),
-              label: const Text('Preview'),
-            ),
-          OutlinedButton.icon(
+            label: Text(preview ? 'Continue Editing' : 'Reset Draft'),
+          );
+          final previewAction = OutlinedButton.icon(
+            onPressed: _draftCells.isEmpty
+                ? null
+                : () => setState(() => _stage = _ManualTimetableStage.preview),
+            icon: const Icon(Icons.visibility_outlined, size: 18),
+            label: const Text('Preview'),
+          );
+          final deleteAction = OutlinedButton.icon(
             onPressed: _saving || _selectedSectionId.isEmpty
                 ? null
                 : _deleteWholeTimetable,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFB42318),
+            ),
             icon: const Icon(Icons.delete_outline_rounded, size: 18),
             label: const Text('Delete Whole Timetable'),
-          ),
-          FilledButton.icon(
+          );
+          final saveAction = FilledButton.icon(
             onPressed: _saving || _draftCells.isEmpty
                 ? null
                 : _saveManualTimetable,
@@ -810,86 +804,44 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.save_rounded, size: 18),
-            label: Text(preview ? 'Save Timetable' : 'Save'),
-          ),
-        ],
-      ),
-    );
-  }
+            label: const Text('Save Timetable'),
+          );
 
-  Widget _buildTimingQuickControls() {
-    return _panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _sectionTitle('Timing & Period Count'),
-          const SizedBox(height: 10),
-          Row(
+          if (!compact) {
+            return Row(
+              children: [
+                editAction,
+                if (!preview) ...[const SizedBox(width: 8), previewAction],
+                const Spacer(),
+                deleteAction,
+                const SizedBox(width: 8),
+                saveAction,
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: _timeField(
-                  label: 'Day start',
-                  value: _settings.startTime,
-                  onTap: () => _pickTime(
-                    initial: _settings.startTime,
-                    onPicked: (value) =>
-                        setState(() => _settings.startTime = value),
-                  ),
+              _sectionTitle(preview ? 'Review timetable' : 'Edit timetable'),
+              const SizedBox(height: 10),
+              if (preview)
+                SizedBox(width: double.infinity, child: editAction)
+              else
+                Row(
+                  children: [
+                    Expanded(child: editAction),
+                    const SizedBox(width: 8),
+                    Expanded(child: previewAction),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  initialValue: _settings.periodDurationMinutes,
-                  decoration: const InputDecoration(labelText: 'Interval'),
-                  items: const [30, 35, 40, 45, 50, 60]
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text('$value mins'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _settings.periodDurationMinutes = value);
-                  },
-                ),
-              ),
+              const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: deleteAction),
+              const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: saveAction),
             ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  initialValue: _settings.gapDurationMinutes,
-                  decoration: const InputDecoration(labelText: 'Gap'),
-                  items: const [0, 5, 10, 15]
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text('$value mins'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _settings.gapDurationMinutes = value);
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _dayCells.isEmpty ? null : _reflowSelectedDay,
-                  icon: const Icon(Icons.schedule_rounded, size: 18),
-                  label: const Text('Reflow Day'),
-                ),
-              ),
-            ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -1055,92 +1007,190 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.all(10),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 74,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 390;
+            final timing = _dayRowTimingEditor(cell, editable: editable);
+            final subject = _dayRowSubjectEditor(
+              cell,
+              subjectOptions,
+              validSubject: validSubject,
+              editable: editable,
+            );
+            final actions = editable
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Add period after $title',
+                        onPressed: () => _addPeriodAfter(cell),
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                      ),
+                      IconButton(
+                        tooltip: 'Delete $title',
+                        onPressed: () => _deleteDayCell(cell),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink();
+
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: _ink,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${cell.startTime} - ${cell.endTime}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: _muted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: cell.isBreak || !editable
-                  ? Text(
-                      _subjectLabel(cell, subjectOptions),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: _ink,
-                      ),
-                    )
-                  : DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: validSubject ? cell.subjectId : '',
-                        isExpanded: true,
-                        items: [
-                          const DropdownMenuItem(
-                            value: '',
-                            child: Text('Free Period'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: _ink,
                           ),
-                          for (final subject in subjectOptions)
-                            DropdownMenuItem(
-                              value: subject.id,
-                              child: Text(
-                                subject.name,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            final newSubjectId = value ?? '';
-                            // Apply to all selected days for this period
-                            for (final day in _selectedEditorDays) {
-                              final target = _cellFor(day, cell.periodNumber);
-                              if (target != null) {
-                                target.subjectId = newSubjectId;
-                                target.staffId = _teacherIdForSubject(
-                                  newSubjectId,
-                                );
-                                target.slotType = newSubjectId.isEmpty
-                                    ? 'free'
-                                    : 'regular';
-                              }
-                            }
-                          });
-                        },
+                        ),
                       ),
-                    ),
-            ),
-            if (editable)
-              IconButton(
-                tooltip:
-                    'Delete ${cell.isBreak ? cell.label : 'P${cell.periodNumber}'}',
-                onPressed: () => _deleteDayCell(cell),
-                icon: const Icon(Icons.delete_outline_rounded),
-              ),
-          ],
+                      actions,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  timing,
+                  const SizedBox(height: 8),
+                  subject,
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                SizedBox(
+                  width: 122,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: _ink,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      timing,
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: subject),
+                actions,
+              ],
+            );
+          },
         ),
+      ),
+    );
+  }
+
+  Widget _dayRowTimingEditor(
+    _ManualTimetableCell cell, {
+    required bool editable,
+  }) {
+    if (!editable) {
+      return Text(
+        '${cell.startTime} - ${cell.endTime}',
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: _muted,
+        ),
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: _compactTimeButton(
+            tooltip: 'Start time for P${cell.periodNumber}',
+            value: cell.startTime,
+            onPressed: () => _pickDayCellTime(cell, isStart: true),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 3),
+          child: Text('–', style: TextStyle(color: _muted)),
+        ),
+        Expanded(
+          child: _compactTimeButton(
+            tooltip: 'End time for P${cell.periodNumber}',
+            value: cell.endTime,
+            onPressed: () => _pickDayCellTime(cell, isStart: false),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _compactTimeButton({
+    required String tooltip,
+    required String value,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 34),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          visualDensity: VisualDensity.compact,
+        ),
+        child: Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.fade,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+        ),
+      ),
+    );
+  }
+
+  Widget _dayRowSubjectEditor(
+    _ManualTimetableCell cell,
+    List<_ClassSubjectOption> subjectOptions, {
+    required bool validSubject,
+    required bool editable,
+  }) {
+    if (cell.isBreak || !editable) {
+      return Text(
+        _subjectLabel(cell, subjectOptions),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w800, color: _ink),
+      );
+    }
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: validSubject ? cell.subjectId : '',
+        isExpanded: true,
+        items: [
+          const DropdownMenuItem(value: '', child: Text('Free Period')),
+          for (final subject in subjectOptions)
+            DropdownMenuItem(
+              value: subject.id,
+              child: Text(subject.name, overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: (value) {
+          setState(() {
+            final newSubjectId = value ?? '';
+            for (final day in _selectedEditorDays) {
+              final target = _cellFor(day, cell.periodNumber);
+              if (target == null || target.isBreak) continue;
+              target.subjectId = newSubjectId;
+              target.staffId = _teacherIdForSubject(newSubjectId);
+              target.slotType = newSubjectId.isEmpty ? 'free' : 'regular';
+            }
+          });
+        },
       ),
     );
   }
@@ -1741,6 +1791,11 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       _showSnack('Select class and academic year before saving.');
       return;
     }
+    final validation = _validateDraftCells();
+    if (validation != null) {
+      _showSnack(validation);
+      return;
+    }
     setState(() => _saving = true);
     try {
       final api = BackendApiClient.instance;
@@ -1804,6 +1859,90 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     });
   }
 
+  Future<void> _pickDayCellTime(
+    _ManualTimetableCell cell, {
+    required bool isStart,
+  }) async {
+    await _pickTime(
+      initial: isStart ? cell.startTime : cell.endTime,
+      onPicked: (value) {
+        final selectedValue = _clockMinutes(value);
+        if (selectedValue == null) return;
+        final targets = [
+          for (final day in _selectedEditorDays)
+            if (_cellFor(day, cell.periodNumber) case final target?) target,
+        ];
+        final hasInvalidRange = targets.any((target) {
+          final otherValue = _clockMinutes(
+            isStart ? target.endTime : target.startTime,
+          );
+          return otherValue == null ||
+              (isStart
+                  ? selectedValue >= otherValue
+                  : selectedValue <= otherValue);
+        });
+        if (hasInvalidRange) {
+          _showSnack(
+            isStart
+                ? 'Start time must be before the end time.'
+                : 'End time must be after the start time.',
+          );
+          return;
+        }
+        setState(() {
+          for (final target in targets) {
+            if (isStart) {
+              target.startTime = value;
+            } else {
+              target.endTime = value;
+            }
+          }
+          _draftCells.sort(_cellSort);
+        });
+      },
+    );
+  }
+
+  void _addPeriodAfter(_ManualTimetableCell cell) {
+    var added = 0;
+    setState(() {
+      for (final day in _selectedEditorDays.toList()..sort()) {
+        final anchor = _cellFor(day, cell.periodNumber);
+        if (anchor == null) continue;
+        final start = _clockMinutes(anchor.endTime) ?? 9 * 60;
+        final duration =
+            (_clockMinutes(anchor.endTime) ?? start) -
+            (_clockMinutes(anchor.startTime) ?? start);
+        final newPeriod = anchor.periodNumber + 1;
+        for (final existing in _draftCells) {
+          if (existing.day == day && existing.periodNumber >= newPeriod) {
+            existing.periodNumber++;
+          }
+        }
+        _draftCells.add(
+          _ManualTimetableCell(
+            day: day,
+            periodNumber: newPeriod,
+            startTime: _formatMinutes(start),
+            endTime: _formatMinutes(
+              start +
+                  (duration > 0 ? duration : _settings.periodDurationMinutes),
+            ),
+            slotType: 'free',
+            subjectId: '',
+            staffId: '',
+            label: 'Free Period',
+          ),
+        );
+        added++;
+      }
+      _draftCells.sort(_cellSort);
+    });
+    if (added > 0) {
+      _showSnack('New row added. Set its start and end time as needed.');
+    }
+  }
+
   void _renumberDay(int day) {
     final dayCells = _draftCells.where((cell) => cell.day == day).toList()
       ..sort((a, b) {
@@ -1816,28 +1955,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       dayCells[index].periodNumber = index + 1;
     }
     _draftCells.sort(_cellSort);
-  }
-
-  void _reflowSelectedDay() {
-    final start = _clockMinutes(_settings.startTime);
-    if (start == null) return;
-    setState(() {
-      for (final day in _selectedEditorDays) {
-        final dayCells = _draftCells
-            .where((c) => c.day == day && !c.isBreak)
-            .toList();
-        var cursor = start;
-        for (final cell in dayCells) {
-          cell.startTime = _formatMinutes(cursor);
-          cell.endTime = _formatMinutes(
-            cursor + _settings.periodDurationMinutes,
-          );
-          cursor +=
-              _settings.periodDurationMinutes + _settings.gapDurationMinutes;
-        }
-      }
-      _draftCells.sort(_cellSort);
-    });
   }
 
   void _goBack() {
@@ -1870,6 +1987,33 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       final breakStart = _clockMinutes(item.startTime);
       if (breakStart == null || item.durationMinutes <= 0) {
         return 'Complete break timings before creating timetable.';
+      }
+    }
+    return null;
+  }
+
+  String? _validateDraftCells() {
+    for (final day in _draftCells.map((cell) => cell.day).toSet()) {
+      final dayCells = _draftCells.where((cell) => cell.day == day).toList()
+        ..sort((a, b) {
+          final startCompare = (_clockMinutes(a.startTime) ?? -1).compareTo(
+            _clockMinutes(b.startTime) ?? -1,
+          );
+          return startCompare != 0
+              ? startCompare
+              : a.periodNumber.compareTo(b.periodNumber);
+        });
+      var previousEnd = -1;
+      for (final cell in dayCells) {
+        final start = _clockMinutes(cell.startTime);
+        final end = _clockMinutes(cell.endTime);
+        if (start == null || end == null || end <= start) {
+          return 'Set a valid start and end time for ${_dayFullLabels[day - 1]} P${cell.periodNumber}.';
+        }
+        if (start < previousEnd) {
+          return 'Period timings overlap on ${_dayFullLabels[day - 1]}. Adjust the row times before saving.';
+        }
+        previousEnd = end;
       }
     }
     return null;

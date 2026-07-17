@@ -854,6 +854,9 @@ export async function handleEvents(
     );
   }
   if (!seg && method === "GET") {
+    if (!["principal", "admin", "super_admin"].includes(roleValue(user))) {
+      return fail("forbidden", 403);
+    }
     let q = svc.from("event_posts").select("*, created_by:users(name)").eq(
       "school_id",
       school,
@@ -1459,19 +1462,40 @@ export async function handleParent(
   if (path === "/me/students" && method === "GET") {
     const { data, error } = await svc.from("parent_student_links").select(
       "student:students(*, section:sections(*, grade:grades(*)), enrollments(*))",
-    ).eq("parent_user_id", user.id);
+    ).eq("school_id", school).eq("parent_user_id", user.id);
     if (error) return fail(error.message);
     return ok((data ?? []).map((l: Record<string, unknown>) => l.student));
   }
   const parentMatch = path.match(/^\/parents\/([^/]+)\/students$/);
   if (parentMatch && method === "GET") {
+    const parentUserId = parentMatch[1];
+    const canManageParentLinks = ["principal", "admin", "super_admin"].includes(
+      roleValue(user),
+    );
+    if (!canManageParentLinks && parentUserId !== user.id) {
+      return fail("forbidden", 403);
+    }
     const { data, error } = await svc.from("parent_student_links").select(
-      "student:students(*)",
-    ).eq("parent_user_id", parentMatch[1]);
+      "student_id, student:students(id, admission_number, student_code, first_name, last_name)",
+    ).eq("school_id", school).eq("parent_user_id", parentUserId);
     if (error) return fail(error.message);
-    return ok((data ?? []).map((l: Record<string, unknown>) => l.student));
+    return ok((data ?? []).map((link: Record<string, unknown>) => {
+      const student = (link.student ?? {}) as Record<string, unknown>;
+      return {
+        ...student,
+        student_id: textValue(link.student_id ?? student.id),
+        student_admission_number: textValue(
+          student.admission_number ?? student.student_code,
+        ),
+        student_first_name: textValue(student.first_name),
+        student_last_name: textValue(student.last_name),
+      };
+    }).filter((student: Record<string, unknown>) => textValue(student.student_id)));
   }
   if (parentMatch && method === "POST") {
+    if (!["principal", "admin", "super_admin"].includes(roleValue(user))) {
+      return fail("forbidden", 403);
+    }
     const body = await req.json().catch(() => ({}));
     const studentIds = Array.isArray(body.student_ids)
       ? body.student_ids.map((value: unknown) => `${value ?? ""}`.trim())

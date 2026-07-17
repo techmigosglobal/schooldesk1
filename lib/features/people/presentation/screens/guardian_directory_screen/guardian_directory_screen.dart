@@ -179,20 +179,46 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     final byId = {
       for (final student in students) student.id.toLowerCase().trim(): student,
     };
-    return rows.map((row) {
-      final id = _stringValue(row['student_id']);
-      final admission = _stringValue(row['student_admission_number']);
+    final links = <GuardianStudentLink>[];
+    final seenStudentIds = <String>{};
+    for (final row in rows) {
+      // The parent endpoint returns flattened student rows, while older
+      // deployments can still return a nested `student` object. Support both
+      // shapes so a valid parent_student_links row is never shown as zero
+      // children just because its response aliases differ.
+      final nested = row['student'] is Map
+          ? Map<String, dynamic>.from(row['student'] as Map)
+          : const <String, dynamic>{};
+      final source = nested.isEmpty ? row : nested;
+      final id = _firstNonEmpty([
+        row['student_id'],
+        source['id'],
+        source['student_id'],
+      ]);
+      final admission = _firstNonEmpty([
+        row['student_admission_number'],
+        source['admission_number'],
+        source['student_code'],
+      ]);
       final student =
           byId[id.toLowerCase()] ?? byAdmission[admission.toLowerCase()];
-      return GuardianStudentLink(
-        studentId: student?.id ?? id,
-        admissionNumber: _studentLookupCode(student) ?? admission,
-        studentName: student?.fullName.trim().isNotEmpty == true
-            ? student!.fullName.trim()
-            : '${row['student_first_name'] ?? ''} ${row['student_last_name'] ?? ''}'
-                  .trim(),
+      final resolvedId = student?.id ?? id;
+      if (resolvedId.isEmpty || !seenStudentIds.add(resolvedId)) continue;
+      final name = student?.fullName.trim().isNotEmpty == true
+          ? student!.fullName.trim()
+          : _firstNonEmpty([
+              source['full_name'],
+              '${source['first_name'] ?? source['student_first_name'] ?? ''} ${source['last_name'] ?? source['student_last_name'] ?? ''}',
+            ]);
+      links.add(
+        GuardianStudentLink(
+          studentId: resolvedId,
+          admissionNumber: _studentLookupCode(student) ?? admission,
+          studentName: name,
+        ),
       );
-    }).toList();
+    }
+    return links;
   }
 
   String? _studentLookupCode(api.StudentModel? student) {
@@ -1060,6 +1086,14 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   }
 
   static String _stringValue(dynamic value) => (value ?? '').toString().trim();
+
+  static String _firstNonEmpty(List<Object?> values) {
+    for (final value in values) {
+      final text = _stringValue(value);
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
 }
 
 class GuardianDirectoryEntry {

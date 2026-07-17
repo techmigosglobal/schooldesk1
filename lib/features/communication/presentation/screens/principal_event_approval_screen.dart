@@ -122,7 +122,7 @@ class _PrincipalEventApprovalScreenState
     }
 
     try {
-      final pending = await BackendApiClient.instance.getPendingEventPosts();
+      final posts = await BackendApiClient.instance.getPrincipalEventPosts();
       Map<String, dynamic>? target;
       final keepPostId = keepPost?['id']?.toString().trim() ?? '';
       final targetPostId = initialPostId.isNotEmpty
@@ -137,7 +137,7 @@ class _PrincipalEventApprovalScreenState
       }
 
       final merged = <Map<String, dynamic>>[
-        ...pending.map((row) => Map<String, dynamic>.from(row)),
+        ...posts.map((row) => Map<String, dynamic>.from(row)),
       ];
       if (target != null &&
           !merged.any(
@@ -581,7 +581,7 @@ class _PrincipalEventApprovalScreenState
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Event Approvals',
+      title: 'School Posts',
       actions: [
         IconButton(
           tooltip: 'Refresh',
@@ -604,14 +604,11 @@ class _PrincipalEventApprovalScreenState
 
   Widget _buildApprovalBody() {
     final selectedId = _selectedPost?['id']?.toString();
-    final pending = _posts
-        .where(
-          (post) => (post['approval_status'] ?? '').toString() == 'pending',
-        )
+    final remainingPosts = _posts
         .where((post) => post['id']?.toString() != selectedId)
         .toList();
 
-    if (_selectedPost == null && pending.isEmpty) {
+    if (_selectedPost == null && remainingPosts.isEmpty) {
       return _buildEmptyState();
     }
 
@@ -633,20 +630,20 @@ class _PrincipalEventApprovalScreenState
             const SizedBox(height: 20),
           ],
           Text(
-            'Pending requests',
+            _selectedPost == null ? 'All school posts' : 'Other school posts',
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 10),
-          if (pending.isEmpty)
+          if (remainingPosts.isEmpty)
             _buildInlineNotice(
               _selectedPost == null
-                  ? 'No event approvals pending.'
-                  : 'No other event approvals pending.',
+                  ? 'No school posts have been created yet.'
+                  : 'No other school posts are available.',
             )
           else
-            ...pending.map(_buildPostCard),
+            ...remainingPosts.map(_buildPostCard),
         ],
       ),
     );
@@ -797,10 +794,9 @@ class _PrincipalEventApprovalScreenState
   }
 
   Widget _buildDecisionActions(Map<String, dynamic> post) {
-    if ((post['approval_status'] ?? '').toString() != 'pending') {
-      return const SizedBox.shrink();
-    }
     final id = (post['id'] ?? '').toString();
+    final status = (post['approval_status'] ?? '').toString().toLowerCase();
+    final requiresDecision = status == 'pending' || status == 'submitted';
     final attachments = EventPostMediaItem.parseList(post['media_urls']);
     final requiresView = attachments.isNotEmpty;
     final hasViewed = !requiresView || _viewedAttachmentPostIds.contains(id);
@@ -819,25 +815,38 @@ class _PrincipalEventApprovalScreenState
           label: const Text('Edit'),
         ),
         OutlinedButton.icon(
-          onPressed: id.isEmpty ? null : () => _rejectStatus(id),
+          onPressed: id.isEmpty ? null : () => _deletePost(post),
           style: OutlinedButton.styleFrom(
             foregroundColor: context.appTheme.error,
             side: BorderSide(color: context.appTheme.error),
           ),
-          icon: const Icon(Icons.close_rounded),
-          label: const Text('Reject'),
+          icon: const Icon(Icons.delete_outline_rounded),
+          label: const Text('Delete'),
         ),
-        FilledButton.icon(
-          onPressed: id.isEmpty || !hasViewed ? null : () => _approveStatus(id),
-          style: FilledButton.styleFrom(
-            backgroundColor: context.appTheme.primary,
-            foregroundColor: context.appTheme.onPrimary,
-            disabledForegroundColor: context.appTheme.onSurfaceVariant,
+        if (requiresDecision)
+          OutlinedButton.icon(
+            onPressed: id.isEmpty ? null : () => _rejectStatus(id),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: context.appTheme.error,
+              side: BorderSide(color: context.appTheme.error),
+            ),
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Reject'),
           ),
-          icon: const Icon(Icons.check_rounded),
-          label: const Text('Approve'),
-        ),
-        if (requiresView && !hasViewed)
+        if (requiresDecision)
+          FilledButton.icon(
+            onPressed: id.isEmpty || !hasViewed
+                ? null
+                : () => _approveStatus(id),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.primary,
+              foregroundColor: context.appTheme.onPrimary,
+              disabledForegroundColor: context.appTheme.onSurfaceVariant,
+            ),
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Approve'),
+          ),
+        if (requiresDecision && requiresView && !hasViewed)
           Padding(
             padding: const EdgeInsets.only(left: 4),
             child: Text(
@@ -850,6 +859,53 @@ class _PrincipalEventApprovalScreenState
           ),
       ],
     );
+  }
+
+  Future<void> _deletePost(Map<String, dynamic> post) async {
+    final id = (post['id'] ?? '').toString().trim();
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete school post?'),
+        content: Text(
+          '“${(post['title'] ?? 'This post').toString()}” will be removed from every school surface.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await BackendApiClient.instance.deleteEventPost(id);
+      if (!mounted) return;
+      setState(() {
+        _posts.removeWhere((item) => item['id']?.toString() == id);
+        if (_selectedPost?['id']?.toString() == id) _selectedPost = null;
+      });
+      await _notifyAndReload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('School post deleted.')));
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete post: $error')));
+    }
   }
 
   Future<void> _openAttachmentPreview(

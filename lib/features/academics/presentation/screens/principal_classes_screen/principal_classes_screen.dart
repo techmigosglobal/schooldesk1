@@ -999,31 +999,20 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
 
   Widget _buildDesktopLayout() {
     final rows = _filteredClasses;
-    final showAddFab = !_loading && _error == null && rows.isNotEmpty;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F8FF),
-      floatingActionButton: showAddFab
-          ? FloatingActionButton(
-              heroTag: 'classes-directory-add-class-desktop',
-              onPressed: _openClassForm,
-              tooltip: 'Add class',
-              backgroundColor: const Color(0xFF1478F2),
-              foregroundColor: Colors.white,
-              elevation: 10,
-              shape: const CircleBorder(),
-              child: const Icon(Icons.add_rounded, size: 30),
-            )
-          : null,
       body: SafeArea(
         child: DesktopMasterDetailLayout(
+          masterWidth: 380,
           master: Container(
             color: Colors.white,
             child: Column(
               children: [
-                _ClassesDirectoryHeader(
+                _DesktopClassHubMasterHeader(
                   unreadNotifications: _unreadNotifications,
-                  onMenu: _showDirectoryMenu,
+                  classCount: rows.length,
+                  onAddClass: _saving ? null : _openClassForm,
                   onUpload: _importClassesCsv,
                   onNotifications: () => Navigator.pushNamed(
                     context,
@@ -1033,8 +1022,8 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 8.0,
+                    horizontal: 16,
+                    vertical: 12,
                   ),
                   child: _ClassesDirectorySearchField(
                     onChanged: (value) => setState(() => _search = value),
@@ -1043,10 +1032,18 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 4.0,
+                    horizontal: 16,
+                    vertical: 0,
                   ),
-                  child: _ClassesDirectoryMetricStrip(
+                  child: _DesktopClassHubFilterBar(
+                    selectedFilter: _capacityFilter,
+                    onSelected: (value) =>
+                        setState(() => _capacityFilter = value),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                  child: _DesktopClassHubSummaryBar(
                     classes: _int(
                       _summary['total_classes'],
                       fallback: _classes.length,
@@ -1060,6 +1057,27 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                   ),
                 ),
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 6),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Classes (${rows.length})',
+                        style: GoogleFonts.dmSans(
+                          color: _classesDirectoryInk,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: 'Refresh classes',
+                        onPressed: _loading ? null : _load,
+                        icon: const Icon(Icons.refresh_rounded, size: 20),
+                      ),
+                    ],
+                  ),
+                ),
                 Expanded(
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
@@ -1082,8 +1100,13 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                                   _selectedSectionId ==
                                   _text(row['section_id']);
                               return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: InkWell(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _DesktopClassHubListItem(
+                                  row: row,
+                                  subjectCount: _subjectsForClass(row).length,
+                                  healthLabel: _healthLabel(row),
+                                  healthColor: _healthColor(row),
+                                  selected: isSelected,
                                   onTap: () {
                                     setState(() {
                                       _selectedSectionId = _text(
@@ -1091,34 +1114,8 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                                       );
                                     });
                                   },
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      border: isSelected
-                                          ? Border.all(
-                                              color: const Color(0xFF1478F2),
-                                              width: 2,
-                                            )
-                                          : Border.all(
-                                              color: Colors.transparent,
-                                            ),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: _ClassesDirectoryClassCard(
-                                      row: row,
-                                      subjects: _subjectsForClass(row),
-                                      healthLabel: _healthLabel(row),
-                                      healthColor: _healthColor(row),
-                                      onTap: () {
-                                        setState(() {
-                                          _selectedSectionId = _text(
-                                            row['section_id'],
-                                          );
-                                        });
-                                      },
-                                      onAction: (action) =>
-                                          _handleClassAction(action, row),
-                                    ),
-                                  ),
+                                  onAction: (action) =>
+                                      _handleClassAction(action, row),
                                 ),
                               );
                             },
@@ -1161,19 +1158,38 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFEFF8FD),
         elevation: 0,
+        toolbarHeight: 72,
         automaticallyImplyLeading: false,
-        title: Text(
-          _text(row['class_name'], fallback: 'Class Detail'),
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _text(row['class_name'], fallback: 'Class Detail'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 2),
+            const Text(
+              'Class workspace',
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Edit Class',
-            onPressed: () => _openEditClassForm(row),
+          Tooltip(
+            message: 'Edit Class',
+            child: TextButton.icon(
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              onPressed: () => _openEditClassForm(row),
+              label: const Text('Edit class'),
+            ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline_rounded),
+            color: const Color(0xFFB42318),
+            icon: const Icon(Icons.delete_outline_rounded, size: 20),
             tooltip: 'Remove Class',
             onPressed: () => _deleteClass(row),
           ),
@@ -1352,36 +1368,13 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: () =>
-                            _openRoute(AppRoutes.studentOversight, row),
-                        icon: const Icon(Icons.groups_rounded, size: 16),
-                        label: const Text('Students List'),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () =>
-                            _openRoute(AppRoutes.principalAttendance, row),
-                        icon: const Icon(Icons.fact_check_rounded, size: 16),
-                        label: const Text('Attendance'),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => _openFeesModule(row),
-                        icon: const Icon(
-                          Icons.account_balance_wallet_rounded,
-                          size: 16,
-                        ),
-                        label: const Text('Fees Monitoring'),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => _openInstructionSheet(row),
-                        icon: const Icon(Icons.rate_review_rounded, size: 16),
-                        label: const Text('Add Observation'),
-                      ),
-                    ],
+                  _DesktopClassHubActionGrid(
+                    onStudents: () =>
+                        _openRoute(AppRoutes.studentOversight, row),
+                    onAttendance: () =>
+                        _openRoute(AppRoutes.principalAttendance, row),
+                    onFees: () => _openFeesModule(row),
+                    onObservation: () => _openInstructionSheet(row),
                   ),
                 ],
               ),
@@ -1397,6 +1390,58 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     return _classes.firstWhere(
       (row) => _text(row['section_id']) == _selectedSectionId,
       orElse: () => _classes.first,
+    );
+  }
+}
+
+class _DesktopClassHubActionGrid extends StatelessWidget {
+  final VoidCallback onStudents;
+  final VoidCallback onAttendance;
+  final VoidCallback onFees;
+  final VoidCallback onObservation;
+
+  const _DesktopClassHubActionGrid({
+    required this.onStudents,
+    required this.onAttendance,
+    required this.onFees,
+    required this.onObservation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = [
+      (Icons.groups_rounded, 'Students', onStudents),
+      (Icons.fact_check_rounded, 'Attendance', onAttendance),
+      (Icons.account_balance_wallet_rounded, 'Fees', onFees),
+      (Icons.rate_review_rounded, 'Observation', onObservation),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 920 ? 4 : 2;
+        const spacing = 10.0;
+        final itemWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final action in actions)
+              SizedBox(
+                width: itemWidth,
+                child: OutlinedButton.icon(
+                  onPressed: action.$3,
+                  icon: Icon(action.$1, size: 18),
+                  label: Text(action.$2),
+                  style: OutlinedButton.styleFrom(
+                    alignment: Alignment.centerLeft,
+                    minimumSize: const Size(0, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1466,6 +1511,469 @@ EdgeInsets _classesPagePadding(BuildContext context) {
       ? 16.0
       : 18.0;
   return EdgeInsets.fromLTRB(horizontal, 10, horizontal, 28);
+}
+
+class _DesktopClassHubMasterHeader extends StatelessWidget {
+  final int unreadNotifications;
+  final int classCount;
+  final VoidCallback? onAddClass;
+  final VoidCallback onUpload;
+  final VoidCallback onNotifications;
+
+  const _DesktopClassHubMasterHeader({
+    required this.unreadNotifications,
+    required this.classCount,
+    required this.onAddClass,
+    required this.onUpload,
+    required this.onNotifications,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 12, 10),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 350;
+          return Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Class Hub',
+                      style: GoogleFonts.dmSans(
+                        color: _classesDirectoryInk,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$classCount visible class${classCount == 1 ? '' : 'es'}',
+                      style: GoogleFonts.dmSans(
+                        color: _classesDirectoryMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Tooltip(
+                message: 'Add class',
+                child: FilledButton.icon(
+                  onPressed: onAddClass,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: compact ? const SizedBox.shrink() : const Text('New'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _classesDirectoryBlue,
+                    minimumSize: Size(compact ? 42 : 74, 42),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? 10 : 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              IconButton(
+                tooltip: 'Import classes CSV',
+                onPressed: onUpload,
+                icon: const Icon(Icons.upload_file_outlined),
+              ),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    tooltip: 'Notifications',
+                    onPressed: onNotifications,
+                    icon: Icon(
+                      unreadNotifications > 0
+                          ? Icons.notifications_active_outlined
+                          : Icons.notifications_none_rounded,
+                    ),
+                  ),
+                  if (unreadNotifications > 0)
+                    Positioned(
+                      right: 8,
+                      top: 7,
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF4D4F),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DesktopClassHubFilterBar extends StatelessWidget {
+  final String selectedFilter;
+  final ValueChanged<String> onSelected;
+
+  const _DesktopClassHubFilterBar({
+    required this.selectedFilter,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const filters = [
+      ('All', Icons.all_inclusive_rounded),
+      ('Healthy', Icons.health_and_safety_outlined),
+      ('Full', Icons.groups_rounded),
+      ('Issues', Icons.warning_amber_rounded),
+    ];
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final filter in filters)
+          ChoiceChip(
+            label: Text(filter.$1),
+            avatar: Icon(filter.$2, size: 15),
+            selected: selectedFilter == filter.$1,
+            selectedColor: const Color(0xFFE4F0FF),
+            labelStyle: GoogleFonts.dmSans(
+              color: selectedFilter == filter.$1
+                  ? _classesDirectoryBlue
+                  : _classesDirectoryMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+            side: BorderSide(
+              color: selectedFilter == filter.$1
+                  ? const Color(0xFF8FC2FF)
+                  : const Color(0xFFDCE6F2),
+            ),
+            onSelected: (_) => onSelected(filter.$1),
+          ),
+      ],
+    );
+  }
+}
+
+class _DesktopClassHubSummaryBar extends StatelessWidget {
+  final int classes;
+  final int students;
+  final double attendance;
+  final int issues;
+  final VoidCallback onClassesTap;
+  final VoidCallback onIssuesTap;
+
+  const _DesktopClassHubSummaryBar({
+    required this.classes,
+    required this.students,
+    required this.attendance,
+    required this.issues,
+    required this.onClassesTap,
+    required this.onIssuesTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        border: Border.all(color: const Color(0xFFDCE8F5)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _DesktopClassHubSummaryItem(
+              icon: Icons.meeting_room_outlined,
+              value: '$classes',
+              label: 'Classes',
+              color: _classesDirectoryBlue,
+              onTap: onClassesTap,
+            ),
+          ),
+          const _DesktopClassHubSummaryDivider(),
+          Expanded(
+            child: _DesktopClassHubSummaryItem(
+              icon: Icons.school_outlined,
+              value: '$students',
+              label: 'Students',
+              color: const Color(0xFF25B65A),
+              onTap: onClassesTap,
+            ),
+          ),
+          const _DesktopClassHubSummaryDivider(),
+          Expanded(
+            child: _DesktopClassHubSummaryItem(
+              icon: Icons.stacked_line_chart_rounded,
+              value: '${attendance.toStringAsFixed(0)}%',
+              label: 'Attendance',
+              color: const Color(0xFF7C3AED),
+            ),
+          ),
+          const _DesktopClassHubSummaryDivider(),
+          Expanded(
+            child: _DesktopClassHubSummaryItem(
+              icon: Icons.warning_amber_rounded,
+              value: '$issues',
+              label: 'Issues',
+              color: const Color(0xFFF97316),
+              onTap: onIssuesTap,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopClassHubSummaryItem extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _DesktopClassHubSummaryItem({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 17),
+            const SizedBox(height: 3),
+            Text(
+              value,
+              style: GoogleFonts.dmSans(
+                color: _classesDirectoryInk,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(
+                color: _classesDirectoryMuted,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopClassHubSummaryDivider extends StatelessWidget {
+  const _DesktopClassHubSummaryDivider();
+
+  @override
+  Widget build(BuildContext context) =>
+      const SizedBox(height: 42, child: VerticalDivider(width: 1));
+}
+
+class _DesktopClassHubListItem extends StatelessWidget {
+  final Map<String, dynamic> row;
+  final int subjectCount;
+  final String healthLabel;
+  final Color healthColor;
+  final bool selected;
+  final VoidCallback onTap;
+  final ValueChanged<String> onAction;
+
+  const _DesktopClassHubListItem({
+    required this.row,
+    required this.subjectCount,
+    required this.healthLabel,
+    required this.healthColor,
+    required this.selected,
+    required this.onTap,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final students = _classInt(row['total_students']);
+    final capacity = _classInt(row['capacity']);
+    final teacher = _classText(
+      row['class_teacher'],
+      fallback: 'Teacher pending',
+    );
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFEAF3FF) : Colors.white,
+            border: Border.all(
+              color: selected ? _classesDirectoryBlue : const Color(0xFFE0EAF4),
+              width: selected ? 1.5 : 1,
+            ),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const _ClassesIconTile(
+                    icon: Icons.meeting_room_outlined,
+                    color: _classesDirectoryBlue,
+                    tone: Color(0xFFDDECFF),
+                    size: 38,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _classText(row['class_name'], fallback: 'Class'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.dmSans(
+                            color: _classesDirectoryInk,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          teacher,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.dmSans(
+                            color: _classesDirectoryMuted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _ClassesStatusPill(label: healthLabel, color: healthColor),
+                  PopupMenuButton<String>(
+                    tooltip: 'Class options',
+                    onSelected: onAction,
+                    icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'details',
+                        child: Text('View details'),
+                      ),
+                      PopupMenuItem(value: 'edit', child: Text('Edit class')),
+                      PopupMenuItem(
+                        value: 'students',
+                        child: Text('Open roster'),
+                      ),
+                      PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'subjects',
+                        child: Text('Setup subjects'),
+                      ),
+                      PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Remove class'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Wrap(
+                spacing: 6,
+                runSpacing: 5,
+                children: [
+                  _DesktopClassHubMetaChip(
+                    icon: Icons.groups_2_outlined,
+                    label: capacity > 0
+                        ? '$students / $capacity students'
+                        : '$students students',
+                  ),
+                  _DesktopClassHubMetaChip(
+                    icon: Icons.menu_book_outlined,
+                    label: '$subjectCount subjects',
+                  ),
+                  if (_classInt(row['pending_issues']) > 0)
+                    _DesktopClassHubMetaChip(
+                      icon: Icons.warning_amber_rounded,
+                      label: '${_classInt(row['pending_issues'])} issues',
+                      warning: true,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopClassHubMetaChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool warning;
+
+  const _DesktopClassHubMetaChip({
+    required this.icon,
+    required this.label,
+    this.warning = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = warning ? const Color(0xFFD97706) : _classesDirectoryMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: warning ? const Color(0xFFFFF7E8) : const Color(0xFFF5F8FC),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              color: color,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ClassesDirectoryHeader extends StatelessWidget {

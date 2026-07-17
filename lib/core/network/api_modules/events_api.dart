@@ -145,6 +145,25 @@ extension BackendEventsApi on BackendApiClient {
     }
   }
 
+  /// Principal-only management list. Includes drafts, pending, approved and
+  /// published posts so a principal can correct or remove a post after it has
+  /// appeared in a school surface.
+  Future<List<Map<String, dynamic>>> getPrincipalEventPosts() async {
+    try {
+      final response = await _dio.get('/event-posts');
+      final data = response.data;
+      final rows = data is List
+          ? data
+          : (data is Map ? data['data'] as List? ?? const [] : const []);
+      return rows
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> getEventPost(String id) async {
     final safeId = id.trim();
     if (safeId.isEmpty) {

@@ -20,6 +20,10 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
   String? _error;
   List<Map<String, dynamic>> _posts = const [];
 
+  bool get _canManagePosts =>
+      (BackendApiClient.instance.currentRoleName ?? '').toLowerCase() ==
+      'principal';
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +57,15 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
       title: 'School Gallery',
       subtitle: 'Approved event posts and photos',
       actions: [
+        if (_canManagePosts)
+          Tooltip(
+            message: 'Manage school posts',
+            child: TextButton.icon(
+              onPressed: _openPostManager,
+              icon: const Icon(Icons.edit_note_outlined, size: 18),
+              label: const Text('Manage posts'),
+            ),
+          ),
         IconButton(
           tooltip: 'Refresh gallery',
           icon: const Icon(Icons.refresh_rounded),
@@ -118,18 +131,90 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
             crossAxisSpacing: 14,
             childAspectRatio: columns == 1 ? 1.25 : 0.88,
           ),
-          itemBuilder: (context, index) =>
-              _GalleryPostCard(post: _posts[index]),
+          itemBuilder: (context, index) => _GalleryPostCard(
+            post: _posts[index],
+            canManage: _canManagePosts,
+            onEdit: () => _openPostManager(_posts[index]),
+            onDelete: () => _deletePost(_posts[index]),
+          ),
         );
       },
     );
+  }
+
+  Future<void> _openPostManager([Map<String, dynamic>? post]) async {
+    final id = (post?['id'] ?? '').toString().trim();
+    await Navigator.pushNamed(
+      context,
+      AppRoutes.principalEventApprovals,
+      arguments: {
+        if (id.isNotEmpty) 'referenceId': id,
+        'referenceType': 'event_post',
+      },
+    );
+    if (mounted) await _loadGallery();
+  }
+
+  Future<void> _deletePost(Map<String, dynamic> post) async {
+    final id = (post['id'] ?? '').toString().trim();
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete school post?'),
+        content: Text(
+          '“${_text(post['title'], fallback: 'This post')}” will be removed from the gallery and every other school surface.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await BackendApiClient.instance.deleteEventPost(id);
+      try {
+        await BackendApiClient.instance.invalidateCachedReads();
+      } on Object catch (_) {
+        // The deletion succeeded; refresh the source list even if cache cleanup
+        // is temporarily unavailable.
+      }
+      await _loadGallery();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('School post deleted.')));
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to delete post: $error')));
+    }
   }
 }
 
 class _GalleryPostCard extends StatelessWidget {
   final Map<String, dynamic> post;
+  final bool canManage;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
-  const _GalleryPostCard({required this.post});
+  const _GalleryPostCard({
+    required this.post,
+    this.canManage = false,
+    this.onEdit,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -151,71 +236,113 @@ class _GalleryPostCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: context.appTheme.outlineVariant),
       ),
-      child: InkWell(
-        onTap: () => _showDetails(context),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: cover.url.isEmpty
-                  ? Container(
-                      color: context.appTheme.panelMuted,
-                      child: Icon(
-                        Icons.photo_library_outlined,
-                        size: 44,
-                        color: context.appTheme.onSurfaceVariant,
-                      ),
-                    )
-                  : EventPostMediaPreview(
-                      item: cover,
-                      height: double.infinity,
-                      compact: true,
-                    ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    description.isEmpty
-                        ? 'Approved school gallery post'
-                        : description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  if (eventDate.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Icon(Icons.event_outlined, size: 15),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _formatEventDate(eventDate),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall,
+      child: Stack(
+        children: [
+          InkWell(
+            onTap: () => _showDetails(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: cover.url.isEmpty
+                      ? Container(
+                          color: context.appTheme.panelMuted,
+                          child: Icon(
+                            Icons.photo_library_outlined,
+                            size: 44,
+                            color: context.appTheme.onSurfaceVariant,
                           ),
+                        )
+                      : EventPostMediaPreview(
+                          item: cover,
+                          height: double.infinity,
+                          compact: true,
+                        ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        description.isEmpty
+                            ? 'Approved school gallery post'
+                            : description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      if (eventDate.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            const Icon(Icons.event_outlined, size: 15),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _formatEventDate(eventDate),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (canManage)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: Colors.white.withOpacity(0.92),
+                borderRadius: BorderRadius.circular(20),
+                child: PopupMenuButton<String>(
+                  tooltip: 'Manage school post',
+                  icon: const Icon(Icons.more_horiz_rounded),
+                  onSelected: (action) {
+                    if (action == 'edit') {
+                      onEdit?.call();
+                    } else if (action == 'delete') {
+                      onDelete?.call();
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Edit post'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.delete_outline_rounded,
+                          color: Color(0xFFB42318),
+                        ),
+                        title: Text('Delete post'),
+                      ),
                     ),
                   ],
-                ],
+                ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

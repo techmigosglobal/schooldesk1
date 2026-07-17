@@ -38,12 +38,19 @@ void main() {
       expect(principal, contains('_buildDayWiseEditor'));
       expect(principal, contains('_saveManualTimetable'));
       expect(principal, contains('_deleteDayCell'));
+      expect(principal, contains('_addPeriodAfter'));
+      expect(principal, contains('_pickDayCellTime'));
       expect(principal, contains('deleteTimetableSlot('));
       expect(principal, contains('createTimetableSlot('));
       expect(principal, isNot(contains('Delete Extra Period Rows')));
       expect(principal, isNot(contains('_deletePeriodColumn')));
-      expect(principal, contains('Reflow Day'));
+      expect(principal, contains('Edit timetable'));
+      expect(principal, contains('Save Timetable'));
+      expect(principal, contains('Add period after'));
       expect(principal, contains('Delete Whole Timetable'));
+      expect(principal, isNot(contains('_buildTimingQuickControls')));
+      expect(principal, isNot(contains('Timing & Period Count')));
+      expect(principal, isNot(contains('Reflow Day')));
 
       expect(principal, isNot(contains('Manual Edit Today')));
       expect(principal, isNot(contains('Generate Time Table')));
@@ -94,7 +101,7 @@ void main() {
       expect(principal, contains('_breakCellsForDay'));
       expect(principal, contains('_deleteDayCell'));
       expect(principal, isNot(contains('_deletePeriodColumn')));
-      expect(principal, contains('_reflowSelectedDay'));
+      expect(principal, contains('_validateDraftCells'));
       expect(
         principal,
         contains("cell.slotType = cell.subjectId.isEmpty ? 'free' : 'regular'"),
