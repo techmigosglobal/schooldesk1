@@ -96,10 +96,19 @@ extension BackendEventsApi on BackendApiClient {
     }
   }
 
-  Future<String> uploadFile(String filePath, {required String filename}) async {
+  Future<String> uploadFile(
+    String filePath, {
+    required String filename,
+    String? mimeType,
+  }) async {
     try {
+      final contentType = _resolveMediaType(mimeType, filename);
       final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(filePath, filename: filename),
+        'file': await MultipartFile.fromFile(
+          filePath,
+          filename: filename,
+          contentType: contentType,
+        ),
       });
       final response = await _dio.post('/uploads', data: formData);
       final data = _asMap(response.data);
@@ -449,5 +458,32 @@ extension BackendEventsApi on BackendApiClient {
     } on DioException catch (e) {
       throw _handleError(e);
     }
+  }
+}
+
+// Resolves a Dio MediaType from an explicit MIME string or falls back to the
+// file extension. This ensures MP4 and other video files are never uploaded
+// with application/octet-stream, which breaks Supabase video playback.
+DioMediaType? _resolveMediaType(String? mimeType, String filename) {
+  final mime = mimeType?.trim() ?? '';
+  if (mime.isNotEmpty) {
+    final parts = mime.split('/');
+    if (parts.length == 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
+      return DioMediaType(parts[0], parts[1]);
+    }
+  }
+  switch (filename.split('.').last.toLowerCase()) {
+    case 'mp4':  return DioMediaType('video', 'mp4');
+    case 'mov':  return DioMediaType('video', 'quicktime');
+    case 'm4v':  return DioMediaType('video', 'x-m4v');
+    case 'webm': return DioMediaType('video', 'webm');
+    case 'jpg':
+    case 'jpeg': return DioMediaType('image', 'jpeg');
+    case 'png':  return DioMediaType('image', 'png');
+    case 'webp': return DioMediaType('image', 'webp');
+    case 'gif':  return DioMediaType('image', 'gif');
+    case 'heic': return DioMediaType('image', 'heic');
+    case 'pdf':  return DioMediaType('application', 'pdf');
+    default:     return null;
   }
 }

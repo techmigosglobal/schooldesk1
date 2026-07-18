@@ -15,7 +15,7 @@ void main() {
       expect(source, contains('class EventApprovalRouteArgs'));
       expect(source, contains('initialPostId'));
       expect(source, contains('getEventPost'));
-      expect(source, contains('getPendingEventPosts'));
+      expect(source, contains('getPrincipalEventPosts'));
       expect(source, contains('WidgetsBindingObserver'));
       expect(source, contains('Timer.periodic'));
       expect(source, contains('NotificationService.getInstance'));

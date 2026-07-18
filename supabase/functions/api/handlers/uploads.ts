@@ -57,6 +57,24 @@ function approvedEventDestinations(
   return normalizeDestinations(value, visibility);
 }
 
+function _guessMimeFromName(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    m4v: "video/x-m4v",
+    webm: "video/webm",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    gif: "image/gif",
+    heic: "image/heic",
+    pdf: "application/pdf",
+  };
+  return map[ext] ?? "application/octet-stream";
+}
+
 function eventMediaItems(value: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
@@ -77,21 +95,40 @@ function isImageEventMedia(item: Record<string, unknown>): boolean {
     /\.(jpe?g|png|webp|gif|heic)$/.test(url);
 }
 
+function isVideoEventMedia(item: Record<string, unknown>): boolean {
+  const kind = textValue(item.kind ?? item.type).toLowerCase();
+  const mime = textValue(item.mime_type ?? item.mimeType ?? item.content_type)
+    .toLowerCase();
+  const url = textValue(item.url ?? item.media_url ?? item.mediaUrl)
+    .toLowerCase().split("?")[0];
+  return kind === "video" || mime.startsWith("video/") ||
+    /\.(mp4|mov|m4v|webm)$/.test(url);
+}
+
 function validateEventMedia(
   rawMedia: unknown,
   destinations: string[],
 ): string | null {
   const media = eventMediaItems(rawMedia);
-  if (media.length > 0 && media.some((item) => !isImageEventMedia(item))) {
-    return "Event posts accept images only";
+  if (
+    media.length > 0 &&
+    media.some((item) => !isImageEventMedia(item) && !isVideoEventMedia(item))
+  ) {
+    return "Event posts accept images and videos only";
   }
   if (destinations.includes("SCHOOL_LANDING") && media.length === 0) {
     return "Landing page posts require at least one image";
   }
+  if (
+    destinations.includes("SCHOOL_LANDING") &&
+    media.some((item) => !isImageEventMedia(item))
+  ) {
+    return "Landing page posts accept images only";
+  }
   return null;
 }
 
-function eventPostRow(row: Record<string, unknown>) {
+function eventPostRow(row: Record<string, unknown>, author = "") {
   const description = `${row.description ?? row.body ?? ""}`;
   const approvalStatus = `${row.approval_status ?? row.status ?? "draft"}`;
   const destinations = normalizeDestinations(row.destinations, row.visibility);
@@ -105,7 +142,39 @@ function eventPostRow(row: Record<string, unknown>) {
     visibility: `${row.visibility ?? "school"}`,
     event_date: row.event_date ?? row.created_at ?? null,
     rejection_reason: row.rejection_reason ?? "",
+    author: author || `${row.author ?? row.posted_by ?? ""}`.trim(),
   };
+}
+
+/// `event_posts` has both `created_by` and `approved_by` foreign keys to
+/// `users`. Do not use a PostgREST embedded relationship here: it becomes
+/// ambiguous as soon as both keys exist. A small explicit author lookup keeps
+/// every event-post surface working for teachers, principals, and parents.
+async function eventPostRows(
+  svc: SupabaseClient,
+  rows: Record<string, unknown>[],
+) {
+  const authorIds = [
+    ...new Set(
+      rows.map((row) => textValue(row.created_by)).filter(Boolean),
+    ),
+  ];
+  const authorNames = new Map<string, string>();
+  if (authorIds.length > 0) {
+    const { data, error } = await svc.from("users").select("id, name, username")
+      .in("id", authorIds);
+    if (!error) {
+      for (const author of data ?? []) {
+        authorNames.set(
+          `${author.id ?? ""}`,
+          textValue(author.name, textValue(author.username)),
+        );
+      }
+    }
+  }
+  return rows.map((row) =>
+    eventPostRow(row, authorNames.get(textValue(row.created_by)) ?? "")
+  );
 }
 
 async function notifyUsersByRole(
@@ -757,10 +826,13 @@ export async function handleUploads(
   const filePath =
     `${folder}/${school}/${entityType}/${entityId}/${Date.now()}-${file.name}`;
 
+  // Explicitly forward the content type so Supabase Storage never falls back
+  // to application/octet-stream for MP4 and other video files.
+  const contentType = file.type || _guessMimeFromName(file.name);
   const { error: uploadErr } = await svc.storage.from("school-assets").upload(
     filePath,
     file,
-    { upsert: true },
+    { upsert: true, contentType },
   );
   if (uploadErr) return fail(uploadErr.message);
 
@@ -809,7 +881,7 @@ export async function handleEvents(
     });
     if (error) return fail(error.message);
     return ok(
-      (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)),
+      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
     );
   }
   if (path === "/event-posts/gallery" && method === "GET") {
@@ -826,7 +898,7 @@ export async function handleEvents(
       }).limit(50);
     if (error) return fail(error.message);
     return ok(
-      (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)),
+      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
     );
   }
   if (path === "/event-posts/home-feed" && method === "GET") {
@@ -840,7 +912,7 @@ export async function handleEvents(
       }).limit(20);
     if (error) return fail(error.message);
     return ok(
-      (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)),
+      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
     );
   }
   if (path === "/event-posts/teacher" && method === "GET") {
@@ -850,14 +922,14 @@ export async function handleEvents(
     ).eq("created_by", user.id).order("created_at", { ascending: false });
     if (error) return fail(error.message);
     return ok(
-      (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)),
+      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
     );
   }
   if (!seg && method === "GET") {
     if (!["principal", "admin", "super_admin"].includes(roleValue(user))) {
       return fail("forbidden", 403);
     }
-    let q = svc.from("event_posts").select("*, created_by:users(name)").eq(
+    let q = svc.from("event_posts").select("*").eq(
       "school_id",
       school,
     );
@@ -868,7 +940,7 @@ export async function handleEvents(
       .limit(50);
     if (error) return fail(error.message);
     return ok(
-      (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)),
+      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
     );
   }
   if (!seg && method === "POST") {
@@ -880,6 +952,8 @@ export async function handleEvents(
     const media = body.media ?? body.media_urls ?? [];
     const mediaError = validateEventMedia(media, destinations);
     if (mediaError) return fail(mediaError, 420);
+    const isPrincipal = roleValue(user) === "principal";
+    const directPublish = isPrincipal && body.is_submit === true;
     const payload = {
       school_id: school,
       title: textValue(body.title, "Untitled event post"),
@@ -888,15 +962,24 @@ export async function handleEvents(
       visibility: textValue(body.visibility, "school"),
       destinations,
       event_date: body.event_date ?? new Date().toISOString(),
-      status: body.is_submit === true ? "pending" : "draft",
+      // Principal posts are already approved by their publisher. Teacher
+      // submissions remain pending so the existing review workflow is intact.
+      status: directPublish
+        ? "approved"
+        : body.is_submit === true
+        ? "pending"
+        : "draft",
       created_by: user.id,
+      ...(directPublish
+        ? { approved_by: user.id, approved_at: new Date().toISOString() }
+        : {}),
       event_id: body.event_id ?? null,
       rejection_reason: null,
     };
     const { data, error } = await svc.from("event_posts").insert(payload)
       .select().single();
     if (error) return fail(error.message);
-    if (body.is_submit === true) {
+    if (body.is_submit === true && !directPublish) {
       try {
         await notifyUsersByRole(svc, school, "principal", {
           title: "Event post pending approval",
@@ -909,7 +992,7 @@ export async function handleEvents(
         // Keep the event post creation successful even if notification fan-out fails.
       }
     }
-    return ok(eventPostRow(data as Record<string, unknown>));
+    return ok((await eventPostRows(svc, [data as Record<string, unknown>]))[0]);
   }
   if (seg && method === "GET") {
     const { data, error } = await svc.from("event_posts").select("*").eq(
@@ -918,7 +1001,7 @@ export async function handleEvents(
     ).eq("school_id", school).maybeSingle();
     if (error) return fail(error.message);
     if (!data) return fail("not found", 404);
-    return ok(eventPostRow(data as Record<string, unknown>));
+    return ok((await eventPostRows(svc, [data as Record<string, unknown>]))[0]);
   }
   if (seg && method === "PUT") {
     const { data: existing, error: existingError } = await svc.from(
@@ -942,6 +1025,8 @@ export async function handleEvents(
     const media = body.media ?? body.media_urls ?? existing.media_urls ?? [];
     const mediaError = validateEventMedia(media, destinations);
     if (mediaError) return fail(mediaError, 420);
+    const isPrincipal = userRole === "principal";
+    const directPublish = isPrincipal && body.is_submit === true;
     const payload = {
       title: textValue(
         body.title,
@@ -953,7 +1038,9 @@ export async function handleEvents(
       destinations,
       event_date: body.event_date ?? existing.event_date ??
         new Date().toISOString(),
-      status: body.is_submit === true
+      status: directPublish
+        ? "approved"
+        : body.is_submit === true
         ? "pending"
         : textValue(body.status, currentStatus),
       updated_at: new Date().toISOString(),
@@ -961,13 +1048,16 @@ export async function handleEvents(
       rejection_reason: body.is_submit === true
         ? null
         : body.rejection_reason ?? existing.rejection_reason ?? null,
+      ...(directPublish
+        ? { approved_by: user.id, approved_at: new Date().toISOString() }
+        : {}),
     };
     const { data, error } = await svc.from("event_posts").update(payload).eq(
       "id",
       seg,
     ).eq("school_id", school).select().single();
     if (error) return fail(error.message);
-    if (body.is_submit === true) {
+    if (body.is_submit === true && !directPublish) {
       try {
         await notifyUsersByRole(svc, school, "principal", {
           title: "Event post pending approval",
@@ -1144,7 +1234,14 @@ export async function handleDocuments(
         return fail("section is not assigned to teacher", 403);
       }
       if (studentId) {
-        if (!(await teacherCanAccessStudentDocument(svc, school, staffId, studentId))) {
+        if (
+          !(await teacherCanAccessStudentDocument(
+            svc,
+            school,
+            staffId,
+            studentId,
+          ))
+        ) {
           return fail("student is not assigned to teacher", 403);
         }
         query = query.eq("student_id", studentId);
@@ -1200,7 +1297,14 @@ export async function handleDocuments(
     }
     if (userRole === "teacher") {
       const staffId = textValue(user.app_metadata?.linked_id);
-      if (!(await teacherCanAccessStudentDocument(svc, school, staffId, studentId))) {
+      if (
+        !(await teacherCanAccessStudentDocument(
+          svc,
+          school,
+          staffId,
+          studentId,
+        ))
+      ) {
         return fail("student is not assigned to teacher", 403);
       }
     } else if (userRole !== "parent" && !canManageStudentDocuments(userRole)) {
@@ -1479,18 +1583,22 @@ export async function handleParent(
       "student_id, student:students(id, admission_number, student_code, first_name, last_name)",
     ).eq("school_id", school).eq("parent_user_id", parentUserId);
     if (error) return fail(error.message);
-    return ok((data ?? []).map((link: Record<string, unknown>) => {
-      const student = (link.student ?? {}) as Record<string, unknown>;
-      return {
-        ...student,
-        student_id: textValue(link.student_id ?? student.id),
-        student_admission_number: textValue(
-          student.admission_number ?? student.student_code,
-        ),
-        student_first_name: textValue(student.first_name),
-        student_last_name: textValue(student.last_name),
-      };
-    }).filter((student: Record<string, unknown>) => textValue(student.student_id)));
+    return ok(
+      (data ?? []).map((link: Record<string, unknown>) => {
+        const student = (link.student ?? {}) as Record<string, unknown>;
+        return {
+          ...student,
+          student_id: textValue(link.student_id ?? student.id),
+          student_admission_number: textValue(
+            student.admission_number ?? student.student_code,
+          ),
+          student_first_name: textValue(student.first_name),
+          student_last_name: textValue(student.last_name),
+        };
+      }).filter((student: Record<string, unknown>) =>
+        textValue(student.student_id)
+      ),
+    );
   }
   if (parentMatch && method === "POST") {
     if (!["principal", "admin", "super_admin"].includes(roleValue(user))) {

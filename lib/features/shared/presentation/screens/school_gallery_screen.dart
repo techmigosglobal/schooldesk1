@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
@@ -129,7 +130,7 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
             crossAxisCount: columns,
             mainAxisSpacing: 14,
             crossAxisSpacing: 14,
-            childAspectRatio: columns == 1 ? 1.25 : 0.88,
+            childAspectRatio: columns == 1 ? 1.35 : 0.82,
           ),
           itemBuilder: (context, index) => _GalleryPostCard(
             post: _posts[index],
@@ -163,7 +164,7 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete school post?'),
         content: Text(
-          '“${_text(post['title'], fallback: 'This post')}” will be removed from the gallery and every other school surface.',
+          '"${_text(post['title'], fallback: 'This post')}" will be removed from the gallery and every other school surface.',
         ),
         actions: [
           TextButton(
@@ -185,10 +186,7 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
       await BackendApiClient.instance.deleteEventPost(id);
       try {
         await BackendApiClient.instance.invalidateCachedReads();
-      } on Object catch (_) {
-        // The deletion succeeded; refresh the source list even if cache cleanup
-        // is temporarily unavailable.
-      }
+      } on Object catch (_) {}
       await _loadGallery();
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -202,6 +200,10 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
     }
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gallery post card — media-first, identical feel to the parent home feed card
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _GalleryPostCard extends StatelessWidget {
   final Map<String, dynamic> post;
@@ -219,175 +221,440 @@ class _GalleryPostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mediaItems = EventPostMediaItem.parseList(post['media_urls']);
-    final cover = mediaItems.firstWhere(
-      (item) => item.isImage || item.isVideo,
-      orElse: () => mediaItems.isEmpty
-          ? const EventPostMediaItem(url: '')
-          : mediaItems.first,
-    );
     final title = _text(post['title'], fallback: 'School event');
-    final description = _text(post['description']);
     final eventDate = _text(post['event_date']);
+    final category = _text(post['category']);
+    final gradient = _gradientFor(title);
 
-    return Card(
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: context.appTheme.outlineVariant),
-      ),
-      child: Stack(
-        children: [
-          InkWell(
-            onTap: () => _showDetails(context),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: cover.url.isEmpty
-                      ? Container(
-                          color: context.appTheme.panelMuted,
-                          child: Icon(
-                            Icons.photo_library_outlined,
-                            size: 44,
-                            color: context.appTheme.onSurfaceVariant,
-                          ),
-                        )
-                      : EventPostMediaPreview(
-                          item: cover,
-                          height: double.infinity,
-                          compact: true,
-                        ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        description.isEmpty
-                            ? 'Approved school gallery post'
-                            : description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      if (eventDate.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            const Icon(Icons.event_outlined, size: 15),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                _formatEventDate(eventDate),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.labelSmall,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
+    return GestureDetector(
+      onTap: () => _showDetails(context),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // ── Full-bleed media or gradient placeholder ──────────────────
+            if (mediaItems.isNotEmpty)
+              _GalleryMediaCover(
+                mediaItems: mediaItems,
+                gradient: gradient,
+                onTap: () => _showDetails(context),
+              )
+            else
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: gradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
                 ),
-              ],
-            ),
-          ),
-          if (canManage)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Material(
-                color: Colors.white.withOpacity(0.92),
-                borderRadius: BorderRadius.circular(20),
-                child: PopupMenuButton<String>(
-                  tooltip: 'Manage school post',
-                  icon: const Icon(Icons.more_horiz_rounded),
-                  onSelected: (action) {
-                    if (action == 'edit') {
-                      onEdit?.call();
-                    } else if (action == 'delete') {
-                      onDelete?.call();
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: ListTile(
-                        leading: Icon(Icons.edit_outlined),
-                        title: Text('Edit post'),
-                      ),
+                child: Center(
+                  child: Icon(
+                    Icons.photo_library_outlined,
+                    color: Colors.white.withOpacity(0.8),
+                    size: 48,
+                  ),
+                ),
+              ),
+
+            // ── Bottom gradient scrim so text is always legible ───────────
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black45,
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0.0, 0.45, 1.0],
                     ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: ListTile(
-                        leading: Icon(
-                          Icons.delete_outline_rounded,
-                          color: Color(0xFFB42318),
-                        ),
-                        title: Text('Delete post'),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-        ],
+
+            // ── Category chip (top-left) ───────────────────────────────────
+            if (category.isNotEmpty)
+              Positioned(
+                top: 10,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    category.toUpperCase(),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                      color: gradient[0],
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+
+            // ── Date chip (top-right) ─────────────────────────────────────
+            if (eventDate.isNotEmpty)
+              Positioned(
+                top: 10,
+                right: canManage ? 48 : 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.55),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _formatEventDate(eventDate),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+
+            // ── Title + media counter overlaid at the bottom ──────────────
+            Positioned(
+              bottom: 10,
+              left: 12,
+              right: 12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      shadows: const [
+                        Shadow(
+                          color: Colors.black54,
+                          blurRadius: 4,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (mediaItems.length > 1) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${mediaItems.length} photos',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 9,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // ── Principal manage menu ─────────────────────────────────────
+            if (canManage)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Material(
+                  color: Colors.white.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(20),
+                  child: PopupMenuButton<String>(
+                    tooltip: 'Manage school post',
+                    icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                    onSelected: (action) {
+                      if (action == 'edit') {
+                        onEdit?.call();
+                      } else if (action == 'delete') {
+                        onDelete?.call();
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: ListTile(
+                          leading: Icon(Icons.edit_outlined),
+                          title: Text('Edit post'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          leading: Icon(
+                            Icons.delete_outline_rounded,
+                            color: Color(0xFFB42318),
+                          ),
+                          title: Text('Delete post'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
   void _showDetails(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) {
-        final media = EventPostMediaItem.parseList(post['media_urls']);
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.75,
-          minChildSize: 0.45,
-          maxChildSize: 0.92,
-          builder: (context, controller) => ListView(
-            controller: controller,
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+    final mediaItems = EventPostMediaItem.parseList(post['media_urls']);
+    final title = _text(post['title'], fallback: 'School event');
+    final description = _text(post['description']);
+    final eventDate = _text(post['event_date']);
+    final gradient = _gradientFor(title);
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
             children: [
-              Text(
-                _text(post['title'], fallback: 'School event'),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _text(post['description'], fallback: 'No description added.'),
-              ),
-              const SizedBox(height: 16),
-              for (final item in media)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: EventPostMediaPreview(item: item, height: 220),
+              // ── Media carousel ─────────────────────────────────────────
+              if (mediaItems.isNotEmpty) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: SizedBox(
+                    height: 260,
+                    child: _GalleryMediaCarousel(
+                      mediaItems: mediaItems,
+                      gradient: gradient,
+                    ),
                   ),
                 ),
+                const SizedBox(height: 20),
+              ],
+
+              // ── Meta row ───────────────────────────────────────────────
+              if (eventDate.isNotEmpty)
+                Row(
+                  children: [
+                    Icon(
+                      Icons.event_outlined,
+                      size: 14,
+                      color: Colors.grey.shade500,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      _formatEventDate(eventDate),
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 12),
+
+              // ── Title ──────────────────────────────────────────────────
+              Text(
+                title,
+                style: GoogleFonts.dmSans(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // ── Description ────────────────────────────────────────────
+              Text(
+                description.isEmpty ? 'No description added.' : description,
+                style: GoogleFonts.dmSans(
+                  fontSize: 15,
+                  height: 1.6,
+                  color: const Color(0xFF334155),
+                ),
+              ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Full-bleed cover — shows first media item (image or video thumbnail)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GalleryMediaCover extends StatelessWidget {
+  final List<EventPostMediaItem> mediaItems;
+  final List<Color> gradient;
+  final VoidCallback onTap;
+
+  const _GalleryMediaCover({
+    required this.mediaItems,
+    required this.gradient,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cover = mediaItems.firstWhere(
+      (item) => item.isImage || item.isVideo,
+      orElse: () => mediaItems.first,
+    );
+    if (cover.url.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+      );
+    }
+    return EventPostMediaPreview(
+      item: cover,
+      height: double.infinity,
+      compact: true,
+      // The cover is part of the post card, so tapping it must open the post
+      // detail screen just like tapping the title or photo-count label.
+      onImageTap: onTap,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Media carousel used in the detail view
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GalleryMediaCarousel extends StatefulWidget {
+  final List<EventPostMediaItem> mediaItems;
+  final List<Color> gradient;
+
+  const _GalleryMediaCarousel({
+    required this.mediaItems,
+    required this.gradient,
+  });
+
+  @override
+  State<_GalleryMediaCarousel> createState() => _GalleryMediaCarouselState();
+}
+
+class _GalleryMediaCarouselState extends State<_GalleryMediaCarousel> {
+  late final PageController _controller;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: widget.mediaItems.length,
+          onPageChanged: (i) => setState(() => _currentIndex = i),
+          itemBuilder: (context, index) {
+            final item = widget.mediaItems[index];
+            if (item.isVideo) {
+              return EventPostVideoPreview(
+                url: resolveEventPostMediaUrl(item.url),
+                height: 260,
+                autoPlay: index == _currentIndex,
+              );
+            }
+            return EventPostMediaPreview(item: item, height: 260);
+          },
+        ),
+        if (widget.mediaItems.length > 1)
+          Positioned(
+            bottom: 8,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_currentIndex + 1}/${widget.mediaItems.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const List<List<Color>> _gradients = [
+  [Color(0xFFFE7A36), Color(0xFFF35F30)],
+  [Color(0xFF2196F3), Color(0xFF1976D2)],
+  [Color(0xFF9C27B0), Color(0xFF7B1FA2)],
+  [Color(0xFF4CAF50), Color(0xFF388E3C)],
+  [Color(0xFFFF9800), Color(0xFFF57C00)],
+  [Color(0xFFE91E63), Color(0xFFC2185B)],
+];
+
+List<Color> _gradientFor(String title) {
+  return _gradients[title.hashCode.abs() % _gradients.length];
 }
 
 String _formatEventDate(String raw) {

@@ -317,11 +317,15 @@ Future<Uint8List> _downloadMediaBytes(String url) async {
 class EventPostVideoPreview extends StatefulWidget {
   final String url;
   final double height;
+  final bool autoPlay;
+  final bool muted;
 
   const EventPostVideoPreview({
     super.key,
     required this.url,
     this.height = 200,
+    this.autoPlay = false,
+    this.muted = true,
   });
 
   @override
@@ -331,15 +335,21 @@ class EventPostVideoPreview extends StatefulWidget {
 class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
   late final VideoPlayerController _controller;
   bool _ready = false;
+  late bool _muted;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _muted = widget.muted;
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
       ..initialize()
           .then((_) {
             if (!mounted) return;
+            _controller
+              ..setLooping(true)
+              ..setVolume(_muted ? 0 : 1);
+            if (widget.autoPlay) _controller.play();
             setState(() => _ready = true);
           })
           .catchError((Object error) {
@@ -355,6 +365,17 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
     }
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(EventPostVideoPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_ready || oldWidget.autoPlay == widget.autoPlay) return;
+    if (widget.autoPlay) {
+      _controller.play();
+    } else if (_controller.value.isPlaying) {
+      _controller.pause();
+    }
   }
 
   @override
@@ -383,6 +404,9 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
           ),
           Center(
             child: IconButton.filled(
+              tooltip: _controller.value.isPlaying
+                  ? 'Pause video'
+                  : 'Play video',
               onPressed: () {
                 setState(() {
                   _controller.value.isPlaying
@@ -394,6 +418,23 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
                 _controller.value.isPlaying
                     ? Icons.pause_rounded
                     : Icons.play_arrow_rounded,
+              ),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton.filledTonal(
+              tooltip: _muted ? 'Unmute video' : 'Mute video',
+              onPressed: () {
+                setState(() {
+                  _muted = !_muted;
+                  _controller.setVolume(_muted ? 0 : 1);
+                });
+              },
+              icon: Icon(
+                _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                size: 20,
               ),
             ),
           ),

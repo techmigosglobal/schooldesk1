@@ -3,7 +3,7 @@
 // Returns the legacy auth envelope: { token, refresh_token, expires_at, user }
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { ok, fail, serviceClient } from "../index.ts";
+import { fail, ok, serviceClient } from "../index.ts";
 
 function svc() {
   return serviceClient();
@@ -15,9 +15,45 @@ function profileText(value: unknown, fallback = ""): string {
   return text.length ? text : fallback;
 }
 
+function normalizedUsername(value: unknown): string {
+  return profileText(value).toLowerCase();
+}
+
+async function updateOwnUsernameAlias(
+  schoolId: string,
+  authUserId: string,
+  username: string,
+): Promise<string | null> {
+  const { data: existing, error: lookupError } = await svc()
+    .from("username_aliases")
+    .select("auth_user_id")
+    .eq("username", username)
+    .maybeSingle();
+  if (lookupError) return lookupError.message;
+  if (existing?.auth_user_id && existing.auth_user_id !== authUserId) {
+    return "That username is already in use";
+  }
+
+  const { error: removeError } = await svc().from("username_aliases").delete()
+    .eq("auth_user_id", authUserId).neq("username", username);
+  if (removeError) return removeError.message;
+  if (existing?.auth_user_id === authUserId) return null;
+
+  const { error: insertError } = await svc().from("username_aliases").insert({
+    username,
+    auth_user_id: authUserId,
+    school_id: schoolId,
+  });
+  return insertError?.message ?? null;
+}
+
 function normalizeProfileResponse(
   profile: Record<string, unknown> | null | undefined,
-  authUser: { id?: string; email?: string | null; app_metadata?: Record<string, unknown> },
+  authUser: {
+    id?: string;
+    email?: string | null;
+    app_metadata?: Record<string, unknown>;
+  },
 ): Record<string, unknown> {
   // Prefer app_metadata.role_name (set at login, always authoritative) over
   // public.users.role_name which can be stale after role changes.
@@ -67,10 +103,13 @@ export async function handleAuth(
         .maybeSingle();
 
       if (alias?.auth_user_id) {
-        const { data: authUser, error: authErr } = await svc().auth.admin.getUserById(
-          alias.auth_user_id,
-        );
-        if (authErr || !authUser?.user?.email) return fail("invalid username or password", 401);
+        const { data: authUser, error: authErr } = await svc().auth.admin
+          .getUserById(
+            alias.auth_user_id,
+          );
+        if (authErr || !authUser?.user?.email) {
+          return fail("invalid username or password", 401);
+        }
         resolvedEmail = authUser.user.email;
       } else {
         const { data: userRow, error: userErr } = await svc()
@@ -205,8 +244,13 @@ export async function handleAuth(
   // ── POST /auth/password ─────────────────────────────────────
   if (path === "/auth/password" && method === "POST") {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-    const { new_password } = await req.json().catch(() => ({}));
-    if (!new_password) return fail("new_password required");
+    const { current_password, new_password } = await req.json().catch(
+      () => ({}),
+    );
+    if (!current_password) return fail("current_password required");
+    if (!new_password || profileText(new_password).length < 8) {
+      return fail("new_password must be at least 8 characters");
+    }
 
     const { data: { user } } = await createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -214,6 +258,16 @@ export async function handleAuth(
       { global: { headers: { Authorization: `Bearer ${token}` } } },
     ).auth.getUser();
     if (!user) return fail("unauthorized", 401);
+
+    const email = profileText(user.email);
+    if (!email) return fail("account email is unavailable", 400);
+    const verifier = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+    );
+    const { error: verificationError } = await verifier.auth
+      .signInWithPassword({ email, password: profileText(current_password) });
+    if (verificationError) return fail("Current password is incorrect", 401);
 
     const { error } = await svc().auth.admin.updateUserById(user.id, {
       password: new_password,
@@ -257,6 +311,21 @@ export async function handleAuth(
     for (const key of allowed) {
       if (body[key] !== undefined) patch[key] = body[key];
     }
+    if (body.username !== undefined) {
+      const username = normalizedUsername(body.username);
+      if (!/^[a-z0-9._-]{3,40}$/.test(username)) {
+        return fail(
+          "Username must be 3-40 characters and use only letters, numbers, dots, hyphens, or underscores",
+        );
+      }
+      const aliasError = await updateOwnUsernameAlias(
+        profileText(user.app_metadata?.school_id),
+        user.id,
+        username,
+      );
+      if (aliasError) return fail(aliasError, 409);
+      patch.username = username;
+    }
 
     const { data: profile, error } = await svc()
       .from("users")
@@ -287,8 +356,9 @@ export async function handleAuth(
       "id",
       user.id,
     ).maybeSingle();
-    const filePath =
-      `avatars/${profile?.school_id ?? "common"}/${user.id}/${Date.now()}-${file.name}`;
+    const filePath = `avatars/${
+      profile?.school_id ?? "common"
+    }/${user.id}/${Date.now()}-${file.name}`;
     const { error: uploadError } = await svc().storage.from("school-assets")
       .upload(filePath, file, { upsert: true });
     if (uploadError) return fail(uploadError.message);

@@ -437,6 +437,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             badge: _data.pendingApprovals,
           ),
           const _AcademicModuleItem(
+            label: 'School Feed Posts',
+            route: AppRoutes.principalEventPosts,
+            illustration: SchoolDeskUiIllustrations.notices,
+            fallbackIcon: Icons.campaign_rounded,
+            accent: Color(0xFF0F766E),
+            cardColor: Color(0xFFE6FFFA),
+          ),
+          const _AcademicModuleItem(
             label: 'Gallery',
             route: AppRoutes.schoolGallery,
             illustration: SchoolDeskUiIllustrations.resources,
@@ -657,6 +665,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     accent: const Color(0xFFEA580C),
                     cardColor: const Color(0xFFFFF1E8),
                     badge: _data.pendingApprovals,
+                  ),
+                  const _AcademicModuleItem(
+                    label: 'School Feed Posts',
+                    route: AppRoutes.principalEventPosts,
+                    illustration: SchoolDeskUiIllustrations.notices,
+                    fallbackIcon: Icons.campaign_rounded,
+                    accent: Color(0xFF0F766E),
+                    cardColor: Color(0xFFE6FFFA),
                   ),
                   const _AcademicModuleItem(
                     label: 'Gallery',

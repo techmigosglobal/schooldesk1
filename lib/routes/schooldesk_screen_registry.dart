@@ -697,6 +697,12 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
+      route: '/principal-event-posts-screen',
+      title: 'School Feed Posts',
+      module: 'Communication',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/principal-documents-screen',
       title: SchoolDeskGlossary.documents,
       module: 'Records',

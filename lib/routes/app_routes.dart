@@ -101,6 +101,7 @@ class AppRoutes {
       '/principal-school-profile-screen';
   static const String principalEventApprovals =
       '/principal-event-approvals-screen';
+  static const String principalEventPosts = '/principal-event-posts-screen';
   static const String principalTimetable = '/principal-timetable-screen';
   static const String principalDocuments = '/principal-documents-screen';
   static const String principalAuditLogs = '/principal-audit-logs-screen';
@@ -299,6 +300,8 @@ class AppRoutes {
         ModalRoute.of(context)?.settings.arguments,
       ),
     ),
+    principalEventPosts: (context) =>
+        const TeacherEventPostScreen(principalMode: true),
     principalTimetable: (context) => const AdminTimetableScreen(),
     principalDocuments: (context) => const AdminDocumentsScreen(),
     principalAuditLogs: (context) => const PrincipalAuditLogsScreen(),

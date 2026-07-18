@@ -12,7 +12,9 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 
 class TeacherEventPostScreen extends StatefulWidget {
-  const TeacherEventPostScreen({super.key});
+  final bool principalMode;
+
+  const TeacherEventPostScreen({super.key, this.principalMode = false});
 
   @override
   State<TeacherEventPostScreen> createState() => _TeacherEventPostScreenState();
@@ -41,6 +43,10 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   List<dynamic> _posts = [];
   NotificationService? _notificationService;
   Timer? _pollingTimer;
+
+  bool get _canPublishDirectly => widget.principalMode;
+  String get _postNoun =>
+      _canPublishDirectly ? 'School Feed Post' : 'Event Post';
 
   void _onNotificationChanged() {
     unawaited(_loadPosts(showSpinner: false));
@@ -93,23 +99,35 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     final picked = await picker.pickMultiImage(imageQuality: 80);
     if (picked.isEmpty) return;
     for (final xfile in picked) {
-      await _uploadFile(xfile.path, xfile.name);
+      await _uploadFile(xfile.path, xfile.name, mimeType: xfile.mimeType);
     }
   }
 
-  Future<void> _uploadFile(String path, String name) async {
+  Future<void> _pickVideo() async {
+    final video = await ImagePicker().pickVideo(source: ImageSource.gallery);
+    if (video == null) return;
+    await _uploadFile(video.path, video.name, mimeType: video.mimeType);
+  }
+
+  Future<void> _uploadFile(String path, String name, {String? mimeType}) async {
     setState(() => _uploading = true);
     try {
       final url = await BackendApiClient.instance.uploadFile(
         path,
         filename: name,
+        mimeType: mimeType,
       );
       if (url.isNotEmpty && mounted) {
-        final item = EventPostMediaItem.fromUrl(url);
+        final item = EventPostMediaItem.fromUrl(url, mimeType: mimeType ?? '');
         setState(() {
           _uploadedUrls.add(url);
           _uploadedMedia.add(
-            EventPostMediaItem(url: url, name: name, kind: item.kind),
+            EventPostMediaItem(
+              url: url,
+              name: name,
+              mimeType: mimeType ?? '',
+              kind: item.kind,
+            ),
           );
         });
       }
@@ -131,7 +149,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       setState(() => _loading = true);
     }
     try {
-      final response = await BackendApiClient.instance.getTeacherEventPosts();
+      final response = _canPublishDirectly
+          ? await BackendApiClient.instance.getPrincipalEventPosts()
+          : await BackendApiClient.instance.getTeacherEventPosts();
       if (!mounted) return;
       setState(() {
         _posts = response;
@@ -173,6 +193,16 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       );
       return;
     }
+    if (_destSchoolLanding && _uploadedMedia.any((item) => !item.isImage)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Landing-page posts can contain images only. Remove the video or choose another destination.',
+          ),
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -207,7 +237,13 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isSubmit ? 'Submitted for approval!' : 'Draft saved!'),
+          content: Text(
+            isSubmit
+                ? _canPublishDirectly
+                      ? 'Published to the school feed!'
+                      : 'Submitted for approval!'
+                : 'Draft saved!',
+          ),
         ),
       );
       _clearForm();
@@ -341,16 +377,19 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Event Posts',
+      title: _canPublishDirectly ? 'School Feed Posts' : 'Event Posts',
       body: Column(
         children: [
           TabBar(
             controller: _tabController,
             labelColor: context.appTheme.primary,
             unselectedLabelColor: context.appTheme.onSurface.withOpacity(0.6),
-            tabs: const [
-              Tab(text: 'Create Post', icon: Icon(Icons.add_box)),
-              Tab(text: 'My Posts', icon: Icon(Icons.history)),
+            tabs: [
+              const Tab(text: 'Create Post', icon: Icon(Icons.add_box)),
+              Tab(
+                text: _canPublishDirectly ? 'School Posts' : 'My Posts',
+                icon: const Icon(Icons.history),
+              ),
             ],
           ),
           Expanded(
@@ -383,7 +422,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                 children: [
                   Text(
                     _editingPostId == null
-                        ? 'Create Event Post'
+                        ? 'Create $_postNoun'
                         : _editingRejectedPost
                         ? 'Edit Rejected Event Post'
                         : 'Edit Draft Event Post',
@@ -437,7 +476,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                   const SizedBox(height: 20),
                   // ── Attachment section ──────────────────────────────
                   Text(
-                    'Images',
+                    'Photos & Videos',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -452,6 +491,11 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                         onPressed: _uploading ? null : _pickImage,
                         icon: const Icon(Icons.photo_outlined, size: 18),
                         label: const Text('Pick Images'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _uploading ? null : _pickVideo,
+                        icon: const Icon(Icons.videocam_outlined, size: 18),
+                        label: const Text('Pick Video'),
                       ),
                       if (_uploading)
                         const SizedBox.square(
@@ -565,7 +609,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                       FilledButton(
                         onPressed: _loading ? null : () => _submit(true),
                         child: Text(
-                          _editingRejectedPost
+                          _canPublishDirectly
+                              ? 'Publish to School Feed'
+                              : _editingRejectedPost
                               ? 'Resubmit'
                               : 'Submit for Approval',
                         ),

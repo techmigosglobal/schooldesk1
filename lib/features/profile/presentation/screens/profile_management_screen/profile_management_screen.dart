@@ -20,6 +20,7 @@ class ProfileManagementScreen extends StatefulWidget {
 }
 
 class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
+  final _usernameCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -89,6 +90,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
       setState(() {
         _profile = profile;
         _teacherStaff = teacherStaff;
+        _usernameCtrl.text = profile.username;
         _nameCtrl.text = profile.name.isNotEmpty ? profile.name : profile.email;
         _emailCtrl.text = profile.email;
         _phoneCtrl.text = profile.phone;
@@ -113,6 +115,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
 
   @override
   void dispose() {
+    _usernameCtrl.dispose();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
@@ -127,6 +130,14 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
   }
 
   Future<void> _save() async {
+    final username = _usernameCtrl.text.trim();
+    if (!RegExp(r'^[A-Za-z0-9._-]{3,40}$').hasMatch(username)) {
+      _showSnack(
+        'Username must be 3-40 characters and use only letters, numbers, dots, hyphens, or underscores.',
+        isError: true,
+      );
+      return;
+    }
     if (_nameCtrl.text.trim().isEmpty) {
       _showSnack('Name cannot be empty.', isError: true);
       return;
@@ -138,6 +149,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
     setState(() => _saving = true);
     try {
       final profile = await BackendApiClient.instance.updateProfile({
+        'username': username,
         'name': _nameCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
         'phone': _phoneCtrl.text.trim(),
@@ -268,6 +280,13 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
                       _buildSection(
                         title: 'Personal Information',
                         children: [
+                          _field(
+                            'Username',
+                            _usernameCtrl,
+                            Icons.alternate_email_rounded,
+                            helperText:
+                                'Use this username when you sign in. You can change it later.',
+                          ),
                           _field('Full Name', _nameCtrl, Icons.person_rounded),
                           _field(
                             'Email Address',
@@ -487,6 +506,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
     TextEditingController controller,
     IconData icon, {
     TextInputType? keyboardType,
+    String? helperText,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -497,6 +517,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         style: GoogleFonts.dmSans(fontSize: 14),
         decoration: InputDecoration(
           labelText: label,
+          helperText: helperText,
           prefixIcon: Icon(icon, size: 18),
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(

@@ -70,6 +70,7 @@ class PrincipalNav {
   static const reports = 20;
   static const analytics = 21;
   static const gallery = 22;
+  static const eventPosts = 23;
 }
 
 class SuperAdminNav {

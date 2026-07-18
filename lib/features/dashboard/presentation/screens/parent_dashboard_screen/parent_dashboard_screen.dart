@@ -452,9 +452,9 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
 
   void _startAutoScroll() {
     _timer?.cancel();
-    if (widget.eventPosts.length <= 1) return;
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (_paused || !mounted) return;
+    if (_paused || widget.eventPosts.length <= 1) return;
+    _timer = Timer(_displayDurationForCurrentPost(), () {
+      if (!mounted || _paused || widget.eventPosts.length <= 1) return;
       final next = (_currentPage + 1) % widget.eventPosts.length;
       _pageController.animateToPage(
         next,
@@ -462,6 +462,28 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
         curve: Curves.easeInOut,
       );
     });
+  }
+
+  Duration _displayDurationForCurrentPost() {
+    final post = Map<String, dynamic>.from(
+      widget.eventPosts[_currentPage] is Map
+          ? widget.eventPosts[_currentPage] as Map
+          : <String, dynamic>{},
+    );
+    final media = EventPostMediaItem.parseList(
+      post['media'] ??
+          post['media_urls'] ??
+          post['mediaUrls'] ??
+          post['media_url'] ??
+          post['mediaUrl'] ??
+          post['attachments'],
+    );
+    if (media.isEmpty) return const Duration(seconds: 5);
+    final seconds = media.fold<int>(
+      0,
+      (total, item) => total + (item.isVideo ? 8 : 3),
+    );
+    return Duration(seconds: seconds);
   }
 
   @override
@@ -481,6 +503,7 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
 
   void _togglePause() {
     setState(() => _paused = !_paused);
+    _startAutoScroll();
   }
 
   @override
@@ -499,7 +522,10 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
           child: PageView.builder(
             controller: _pageController,
             itemCount: widget.eventPosts.length,
-            onPageChanged: (i) => setState(() => _currentPage = i),
+            onPageChanged: (i) {
+              setState(() => _currentPage = i);
+              _startAutoScroll();
+            },
             itemBuilder: (context, index) {
               final post = Map<String, dynamic>.from(
                 widget.eventPosts[index] is Map
@@ -535,7 +561,10 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
                         _gradientFor(post['title'] ?? ''),
                       );
                     },
-                    child: _PostCard(post: post),
+                    child: _PostCard(
+                      post: post,
+                      isActive: index == _currentPage,
+                    ),
                   ),
                 ),
               );
@@ -878,25 +907,15 @@ void _showPostDetailsBottomSheet(
                     ],
                     const SizedBox(height: 20),
                     if (mediaItems.isNotEmpty) ...[
-                      SizedBox(
-                        height: 240,
-                        child: PageView.builder(
-                          itemCount: mediaItems.length,
-                          itemBuilder: (context, idx) {
-                            final item = mediaItems[idx];
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 12),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: EventPostMediaPreview(
-                                  item: item,
-                                  height: 240,
-                                  onImageTap: () =>
-                                      openEventPostMediaPreview(context, item),
-                                ),
-                              ),
-                            );
-                          },
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: SizedBox(
+                          height: 240,
+                          child: _PostMediaCarousel(
+                            mediaItems: mediaItems,
+                            isActive: true,
+                            height: 240,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -920,20 +939,133 @@ void _showPostDetailsBottomSheet(
   );
 }
 
-class _PostCard extends StatelessWidget {
-  final Map<String, dynamic> post;
+/// Displays every attachment in a post before the enclosing school-feed card
+/// advances. Images slide horizontally; videos begin muted and can be unmuted.
+class _PostMediaCarousel extends StatefulWidget {
+  final List<EventPostMediaItem> mediaItems;
+  final bool isActive;
+  final double height;
 
-  const _PostCard({required this.post});
+  const _PostMediaCarousel({
+    required this.mediaItems,
+    required this.isActive,
+    required this.height,
+  });
+
+  @override
+  State<_PostMediaCarousel> createState() => _PostMediaCarouselState();
+}
+
+class _PostMediaCarouselState extends State<_PostMediaCarousel> {
+  late final PageController _controller;
+  Timer? _timer;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+    _scheduleNextMedia();
+  }
+
+  @override
+  void didUpdateWidget(_PostMediaCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive ||
+        oldWidget.mediaItems.length != widget.mediaItems.length) {
+      _scheduleNextMedia();
+    }
+  }
+
+  void _scheduleNextMedia() {
+    _timer?.cancel();
+    if (!widget.isActive || widget.mediaItems.length <= 1) return;
+    final current = widget.mediaItems[_currentIndex];
+    _timer = Timer(Duration(seconds: current.isVideo ? 8 : 3), () {
+      if (!mounted || !widget.isActive || widget.mediaItems.length <= 1) {
+        return;
+      }
+      final next = (_currentIndex + 1) % widget.mediaItems.length;
+      _controller.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: widget.mediaItems.length,
+          onPageChanged: (index) {
+            setState(() => _currentIndex = index);
+            _scheduleNextMedia();
+          },
+          itemBuilder: (context, index) {
+            final item = widget.mediaItems[index];
+            if (item.isVideo) {
+              return EventPostVideoPreview(
+                url: resolveEventPostMediaUrl(item.url),
+                height: widget.height,
+                autoPlay: widget.isActive && index == _currentIndex,
+                muted: true,
+              );
+            }
+            return EventPostMediaPreview(
+              item: item,
+              height: widget.height,
+              onImageTap: () => openEventPostMediaPreview(context, item),
+            );
+          },
+        ),
+        if (widget.mediaItems.length > 1)
+          Positioned(
+            bottom: 8,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_currentIndex + 1}/${widget.mediaItems.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
+class _PostCard extends StatelessWidget {
+  final Map<String, dynamic> post;
+  final bool isActive;
+
+  const _PostCard({required this.post, required this.isActive});
+
+  @override
+  Widget build(BuildContext context) {
     final title = _text(post['title']).isEmpty
         ? 'School Post'
         : _text(post['title']);
-    final description = _text(post['description']);
     final rawDate = _text(post['date']);
     final category = _text(post['category']);
     final author = _text(post['author']);
@@ -966,17 +1098,15 @@ class _PostCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AspectRatio(
-            aspectRatio: 1.45,
+          Expanded(
             child: Stack(
               fit: StackFit.expand,
               children: [
                 if (mediaItems.isNotEmpty)
-                  EventPostMediaPreview(
-                    item: mediaItems.first,
+                  _PostMediaCarousel(
+                    mediaItems: mediaItems,
+                    isActive: isActive,
                     height: 240,
-                    onImageTap: () =>
-                        openEventPostMediaPreview(context, mediaItems.first),
                   )
                 else
                   Container(
@@ -996,16 +1126,18 @@ class _PostCard extends StatelessWidget {
                     ),
                   ),
                 Positioned.fill(
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.black54,
-                          Colors.transparent,
-                          Colors.black45,
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.black54,
+                            Colors.transparent,
+                            Colors.black45,
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
                       ),
                     ),
                   ),
@@ -1096,49 +1228,6 @@ class _PostCard extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      description.isEmpty
-                          ? 'No description available.'
-                          : description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        height: 1.4,
-                        color: const Color(0xFF475569),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(
-                        'Read More',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: tokens.roleColor(SchoolDeskRole.parent),
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.arrow_forward_rounded,
-                        size: 12,
-                        color: tokens.roleColor(SchoolDeskRole.parent),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
             ),
           ),
         ],
