@@ -5,11 +5,42 @@ function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
 
-const tutorialMimeTypes = new Set(["video/mp4", "video/webm", "video/quicktime"]);
+const tutorialMimeTypes = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+]);
 const maxTutorialBytes = 250 * 1024 * 1024;
+const supportedHelpRoles = new Set([
+  "principal",
+  "coordinator",
+  "teacher",
+  "parent",
+]);
+const maxWorkflowSteps = 12;
+
+function text(value: unknown, fallback = ""): string {
+  const result = `${value ?? ""}`.trim();
+  return result || fallback;
+}
+
+function optionalText(value: unknown, maxLength: number): string | null {
+  const result = text(value);
+  return result ? result.slice(0, maxLength) : null;
+}
+
+function workflowSteps(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((step) => text(step))
+    .filter(Boolean)
+    .slice(0, maxWorkflowSteps)
+    .map((step) => step.slice(0, 500));
+}
 
 function roleOf(profile: Record<string, unknown> | null, user: User): string {
-  return `${profile?.role_name ?? user.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
+  return `${profile?.role_name ?? user.app_metadata?.role_name ?? ""}`.trim()
+    .toLowerCase();
 }
 
 function safeFileName(name: string): string {
@@ -37,17 +68,24 @@ export async function handleHelp(
   const isSuperAdmin = currentRole === "super_admin";
 
   if (path === "/help/videos" && method === "POST") {
-    if (!isSuperAdmin) return fail("forbidden: only super_admin can upload tutorials", 403);
+    if (!isSuperAdmin) {
+      return fail("forbidden: only super_admin can upload tutorials", 403);
+    }
     const form = await req.formData().catch(() => null);
     const file = form?.get("file");
     const targetRole = `${form?.get("role_name") ?? ""}`.trim().toLowerCase();
-    if (!(file instanceof File) || !["principal", "teacher", "parent"].includes(targetRole)) {
+    if (!(file instanceof File) || !supportedHelpRoles.has(targetRole)) {
       return fail("a video file and supported role_name are required", 420);
     }
     if (!tutorialMimeTypes.has(file.type) || file.size > maxTutorialBytes) {
-      return fail("Tutorial must be MP4, WebM, or MOV and no larger than 250 MB", 420);
+      return fail(
+        "Tutorial must be MP4, WebM, or MOV and no larger than 250 MB",
+        420,
+      );
     }
-    const pathValue = `${school}/${targetRole}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+    const pathValue = `${school}/${targetRole}/${crypto.randomUUID()}-${
+      safeFileName(file.name)
+    }`;
     const { error } = await svc.storage.from("help-tutorial-videos").upload(
       pathValue,
       file,
@@ -69,11 +107,15 @@ export async function handleHelp(
     ).eq("id", videoMatch[1]).eq("school_id", school).maybeSingle();
     if (error) return fail(error.message);
     if (!data) return fail("Help tutorial not found", 404);
-    if (!isSuperAdmin && data.role_name !== currentRole) return fail("forbidden", 403);
+    if (!isSuperAdmin && data.role_name !== currentRole) {
+      return fail("forbidden", 403);
+    }
     if (data.video_path) {
       const { data: signed, error: signedError } = await svc.storage
         .from("help-tutorial-videos").createSignedUrl(data.video_path, 60 * 10);
-      if (signedError || !signed?.signedUrl) return fail(signedError?.message ?? "Unable to prepare video");
+      if (signedError || !signed?.signedUrl) {
+        return fail(signedError?.message ?? "Unable to prepare video");
+      }
       return ok({ url: signed.signedUrl, expires_in: 600 });
     }
     if (data.video_url) return ok({ url: data.video_url, legacy: true });
@@ -108,16 +150,21 @@ export async function handleHelp(
     return fail("forbidden: only super_admin can modify help content", 403);
   }
 
-  const body = req.method !== "DELETE" ? await req.json().catch(() => ({})) : {};
+  const body = req.method !== "DELETE"
+    ? await req.json().catch(() => ({}))
+    : {};
 
   if (method === "POST") {
-    const roleName = `${body.role_name ?? ""}`.trim().toLowerCase();
-    const question = `${body.question ?? ""}`.trim();
-    const answer = `${body.answer ?? ""}`.trim();
+    const roleName = text(body.role_name).toLowerCase();
+    const question = text(body.question);
+    const answer = text(body.answer);
     const videoUrl = body.video_url ? `${body.video_url}`.trim() : null;
 
-    if (!roleName || !question || !answer) {
-      return fail("role_name, question, and answer are required", 420);
+    if (!supportedHelpRoles.has(roleName) || !question || !answer) {
+      return fail(
+        "a supported role_name, question, and answer are required",
+        420,
+      );
     }
 
     const { data, error } = await svc.from("help_contents").insert({
@@ -125,10 +172,17 @@ export async function handleHelp(
       role_name: roleName,
       question,
       answer,
+      category: optionalText(body.category, 80) ?? "General",
+      workflow_steps: workflowSteps(body.workflow_steps),
+      action_route: optionalText(body.action_route, 160),
       video_url: videoUrl,
       video_path: body.video_path ? `${body.video_path}`.trim() : null,
-      video_file_name: body.video_file_name ? `${body.video_file_name}`.trim() : null,
-      video_mime_type: body.video_mime_type ? `${body.video_mime_type}`.trim() : null,
+      video_file_name: body.video_file_name
+        ? `${body.video_file_name}`.trim()
+        : null,
+      video_mime_type: body.video_mime_type
+        ? `${body.video_mime_type}`.trim()
+        : null,
       video_size: body.video_size ?? null,
     }).select().single();
 
@@ -145,7 +199,11 @@ export async function handleHelp(
     };
 
     if (body.role_name !== undefined) {
-      updates.role_name = `${body.role_name ?? ""}`.trim().toLowerCase();
+      const roleName = text(body.role_name).toLowerCase();
+      if (!supportedHelpRoles.has(roleName)) {
+        return fail("unsupported role_name", 420);
+      }
+      updates.role_name = roleName;
     }
     if (body.question !== undefined) {
       updates.question = `${body.question ?? ""}`.trim();
@@ -153,10 +211,26 @@ export async function handleHelp(
     if (body.answer !== undefined) {
       updates.answer = `${body.answer ?? ""}`.trim();
     }
+    if (body.category !== undefined) {
+      updates.category = optionalText(body.category, 80) ?? "General";
+    }
+    if (body.workflow_steps !== undefined) {
+      updates.workflow_steps = workflowSteps(body.workflow_steps);
+    }
+    if (body.action_route !== undefined) {
+      updates.action_route = optionalText(body.action_route, 160);
+    }
     if (body.video_url !== undefined) {
       updates.video_url = body.video_url ? `${body.video_url}`.trim() : null;
     }
-    for (const key of ["video_path", "video_file_name", "video_mime_type", "video_size"]) {
+    for (
+      const key of [
+        "video_path",
+        "video_file_name",
+        "video_mime_type",
+        "video_size",
+      ]
+    ) {
       if (body[key] !== undefined) updates[key] = body[key] || null;
     }
 
