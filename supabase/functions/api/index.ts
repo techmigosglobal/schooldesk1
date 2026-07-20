@@ -47,6 +47,7 @@ import {
 import { handleHelp } from "./handlers/help.ts";
 import { handleAccess } from "./handlers/access.ts";
 import { handleIssues } from "./handlers/issues.ts";
+import { handleWebsite, handleWebsitePublic } from "./handlers/website.ts";
 import { handleActivity, recordHttpActivity } from "./handlers/activity.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
@@ -372,6 +373,9 @@ Deno.serve(async (req: Request) => {
   if (path === "/event-posts/landing" && method === "GET") {
     return handleLandingFeed(req, url, serviceClient());
   }
+  if (path === "/website/public" && method === "GET") {
+    return handleWebsitePublic(url, serviceClient());
+  }
 
   // ── Schools setup (no prior auth for first-time setup) ────
   if (path === "/schools/setup" && method === "POST") {
@@ -476,6 +480,9 @@ Deno.serve(async (req: Request) => {
       path,
       method,
     );
+  }
+  if (path.startsWith("/website")) {
+    return auditedResponse(handleWebsite(req, path, method, url, client, svc, user), svc, user, path, method);
   }
   if (path.startsWith("/staff")) {
     return auditedResponse(
