@@ -178,7 +178,7 @@ export async function handleBirthdayAlerts(
     photo_url: string;
   };
   type RecipientGroup = {
-    role: "teacher" | "principal" | "parent";
+    role: "teacher" | "principal" | "coordinator" | "parent";
     students: StudentInfo[];
     sectionId?: string;
     teacherId?: string;
@@ -187,7 +187,7 @@ export async function handleBirthdayAlerts(
 
   const addStudentToRecipient = (
     userId: string,
-    role: "teacher" | "principal" | "parent",
+    role: "teacher" | "principal" | "coordinator" | "parent",
     studentInfo: StudentInfo,
     sectionId?: string,
     teacherId?: string,
@@ -219,7 +219,8 @@ export async function handleBirthdayAlerts(
       if (
         targetRole !== "parent" &&
         targetRole !== "teacher" &&
-        targetRole !== "principal"
+        targetRole !== "principal" &&
+        targetRole !== "coordinator"
       ) continue;
       const userId = text(recipient.id);
       if (!userId) continue;
@@ -291,28 +292,28 @@ export async function handleBirthdayAlerts(
     }
 
     const eventRows = rows.map((row) => {
-          const group = recipientMap.get(row.user_id as string)!;
-          return {
-            school_id: row.school_id,
-            user_id: row.user_id,
-            event_type: row.entity_type,
-            dedupe_key: `birthday:${row.user_id}:${row.entity_id}:${window}`,
-            event_data: {
-              title: row.title,
-              message: row.body,
-              reference_type: row.entity_type,
-              reference_id: row.entity_id,
-              delivery_window: window,
-              student_id: row.student_id ?? "",
-              section_id: row.section_id ?? "",
-              teacher_id: row.teacher_id ?? "",
-              students: group.students,
-              photo_url: group.students.length === 1
-                ? group.students[0].photo_url
-                : "",
-            },
-          };
-        });
+      const group = recipientMap.get(row.user_id as string)!;
+      return {
+        school_id: row.school_id,
+        user_id: row.user_id,
+        event_type: row.entity_type,
+        dedupe_key: `birthday:${row.user_id}:${row.entity_id}:${window}`,
+        event_data: {
+          title: row.title,
+          message: row.body,
+          reference_type: row.entity_type,
+          reference_id: row.entity_id,
+          delivery_window: window,
+          student_id: row.student_id ?? "",
+          section_id: row.section_id ?? "",
+          teacher_id: row.teacher_id ?? "",
+          students: group.students,
+          photo_url: group.students.length === 1
+            ? group.students[0].photo_url
+            : "",
+        },
+      };
+    });
     const dedupeKeys = eventRows.map((row) => text(row.dedupe_key));
     const { data: existingEvents, error: existingEventsError } = await svc
       .from("notification_events")

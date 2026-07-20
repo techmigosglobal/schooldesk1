@@ -537,6 +537,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   String _roleFromDesignation(String? designation) {
     final value = (designation ?? '').toLowerCase();
     if (value.contains('admin')) return 'Admin';
+    if (value.contains('coordinator')) return 'Coordinator';
     return 'Teacher';
   }
 
@@ -1843,9 +1844,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
   static const List<String> _designations = [
     'Teacher',
     'Co Teacher',
-    'Staff',
-    'Support Staff',
-    'PE',
+    'Coordinator',
   ];
   static const List<String> _employmentTypes = [
     'full_time',
@@ -1878,7 +1877,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
   DateTime? _joiningDate;
   String? _gender;
   String? _designation;
-  String _employmentType = 'full_time';
+  String? _employmentType;
   String _accountRole = 'Teacher';
   String _documentType = _documentTypes.first;
   String? _selectedSectionId;
@@ -1910,7 +1909,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       _usernameCtrl.text = staff.loginUsername;
       _setDesignationFromValue(staff.designation);
       _employmentType = staff.employmentType.trim().isEmpty
-          ? 'full_time'
+          ? null
           : staff.employmentType;
       _accountRole = staff.accountRole;
       _loginEnabled = false;
@@ -2042,20 +2041,16 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-    if (_dob == null || _joiningDate == null) {
-      setState(() => _error = 'Date of birth and joining date are required');
+    if (_joiningDate == null) {
+      setState(() => _error = 'Joining date is required');
       return;
     }
-    if (_joiningDate!.isBefore(_dob!)) {
+    if (_dob != null && _joiningDate!.isBefore(_dob!)) {
       setState(() => _error = 'Joining date cannot be before date of birth');
       return;
     }
-    if (_joiningDate!.difference(_dob!).inDays < 18 * 365) {
+    if (_dob != null && _joiningDate!.difference(_dob!).inDays < 18 * 365) {
       setState(() => _error = 'Staff member must be at least 18 years old');
-      return;
-    }
-    if (_loginEnabled && _emailCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'Email is required when login access is enabled');
       return;
     }
     if (_loginEnabled && _usernameCtrl.text.trim().isEmpty) {
@@ -2087,12 +2082,12 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
         _StaffProfileInput(
           staffId: widget.initialStaff?.id,
           fullName: _nameCtrl.text.trim(),
-          backendDateOfBirth: _backendDate(_dob!),
+          backendDateOfBirth: _backendDate(_dob),
           gender: _gender!,
           phone: _phoneCtrl.text.trim(),
           email: _emailCtrl.text.trim(),
           designation: designation,
-          employmentType: _employmentType,
+          employmentType: _employmentType ?? '',
           backendJoinDate: _backendDate(_joiningDate!),
           employeeId: _employeeCtrl.text.trim(),
           username: _usernameCtrl.text.trim(),
@@ -2212,7 +2207,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _LabeledField(
-              label: 'Date of Birth',
+              label: 'Date of Birth (optional)',
               child: _TextInput(
                 controller: _dobCtrl,
                 hint: 'Select date',
@@ -2220,8 +2215,6 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
                 readOnly: true,
                 suffixIcon: Icons.calendar_today_outlined,
                 onTap: _saving ? null : () => _pickDate(joining: false),
-                validator: (value) =>
-                    value == null || value.trim().isEmpty ? 'Required' : null,
               ),
             ),
             _LabeledField(
@@ -2243,17 +2236,17 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _LabeledField(
-              label: 'Phone Number',
+              label: 'Phone Number (optional)',
               child: _TextInput(
                 controller: _phoneCtrl,
                 hint: 'Enter phone number',
                 enabled: !_saving,
                 keyboardType: TextInputType.phone,
-                validator: _requiredPhone,
+                validator: _optionalPhone,
               ),
             ),
             _LabeledField(
-              label: 'Email',
+              label: 'Email (optional)',
               child: _TextInput(
                 controller: _emailCtrl,
                 hint: 'staff@example.com',
@@ -2280,13 +2273,11 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
               child: _buildDesignationInput(),
             ),
             _LabeledField(
-              label: 'Employee ID',
+              label: 'Employee ID (optional)',
               child: _TextInput(
                 controller: _employeeCtrl,
                 hint: 'Enter employee ID',
                 enabled: !_saving,
-                validator: (value) =>
-                    value == null || value.trim().isEmpty ? 'Required' : null,
               ),
             ),
           ],
@@ -2309,15 +2300,14 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
               ),
             ),
             _LabeledField(
-              label: 'Employment Type',
+              label: 'Employment Type (optional)',
               child: _DropdownInput<String>(
                 value: _employmentType,
                 enabled: !_saving,
                 hint: 'Select employment type',
                 items: _employmentTypes,
                 labelBuilder: _employmentLabel,
-                onChanged: (value) =>
-                    setState(() => _employmentType = value ?? 'full_time'),
+                onChanged: (value) => setState(() => _employmentType = value),
               ),
             ),
           ],
@@ -2706,7 +2696,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       _setDesignationFromValue(staff?.designation);
       _employmentType = staff?.employmentType.trim().isNotEmpty == true
           ? staff!.employmentType
-          : 'full_time';
+          : null;
       _accountRole = staff?.accountRole ?? 'Teacher';
       _selectedSectionId = null;
       _selectedSubjectId = null;
@@ -2763,7 +2753,14 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
           hint: 'Select designation',
           items: _designationItems,
           labelBuilder: _designationLabel,
-          onChanged: (value) => setState(() => _designation = value),
+          onChanged: (value) => setState(() {
+            _designation = value;
+            if (value == 'Coordinator') {
+              _accountRole = 'Coordinator';
+            } else if (_accountRole == 'Coordinator') {
+              _accountRole = 'Teacher';
+            }
+          }),
           validator: (value) => value == null ? 'Required' : null,
         ),
         if (_isCustomDesignation) ...[
@@ -2789,7 +2786,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
   }
 
   List<String> get _roleOptions {
-    final options = <String>['Teacher'];
+    final options = <String>['Teacher', 'Coordinator'];
     if (_accountRole.trim().isNotEmpty && !options.contains(_accountRole)) {
       options.add(_accountRole);
     }
@@ -2886,7 +2883,8 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
     return '$day/$month/${date.year}';
   }
 
-  static String _backendDate(DateTime date) {
+  static String _backendDate(DateTime? date) {
+    if (date == null) return '';
     final day = date.day.toString().padLeft(2, '0');
     final month = date.month.toString().padLeft(2, '0');
     return '${date.year}-$month-$day';
@@ -2901,9 +2899,9 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
     return null;
   }
 
-  static String? _requiredPhone(String? value) {
+  static String? _optionalPhone(String? value) {
     final text = value?.trim() ?? '';
-    if (text.isEmpty) return 'Phone number is required';
+    if (text.isEmpty) return null;
     final normalized = text.replaceAll(RegExp(r'[\s()-]'), '');
     if (!RegExp(r'^\+?[0-9]{10,15}$').hasMatch(normalized)) {
       return 'Enter a valid phone number';

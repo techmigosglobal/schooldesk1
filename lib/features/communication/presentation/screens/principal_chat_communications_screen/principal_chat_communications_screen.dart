@@ -41,6 +41,8 @@ class _PrincipalChatCommunicationsScreenState
   String _teacherFilter = '';
   String _parentFilter = '';
   String _studentFilter = '';
+  String _directRoleFilter = 'teacher';
+  String _directClassFilter = '';
   DateTime? _dateFilter;
   List<Map<String, dynamic>> _monitorConversations = const [];
   List<Map<String, dynamic>> _directConversations = const [];
@@ -50,6 +52,12 @@ class _PrincipalChatCommunicationsScreenState
   Map<String, dynamic>? _selectedMonitorConversation;
   Map<String, dynamic>? _selectedDirectConversation;
   DateTime? _messagesCursor;
+
+  String get _leadershipRole =>
+      BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+          'coordinator'
+      ? 'coordinator'
+      : 'principal';
 
   @override
   void initState() {
@@ -125,7 +133,7 @@ class _PrincipalChatCommunicationsScreenState
             monitor: true,
           ),
         ),
-        _safeChatRows(() => api.getUnifiedChatContacts(role: 'principal')),
+        _safeChatRows(() => api.getUnifiedChatContacts(role: _leadershipRole)),
       ]);
       final profile = results[0] as dynamic;
       final monitor = results[1] as List<Map<String, dynamic>>;
@@ -257,7 +265,7 @@ class _PrincipalChatCommunicationsScreenState
             monitor: true,
           ),
         ),
-        _safeChatRows(() => api.getUnifiedChatContacts(role: 'principal')),
+        _safeChatRows(() => api.getUnifiedChatContacts(role: _leadershipRole)),
       ]);
       final monitor = results[0] as List<Map<String, dynamic>>;
       final directTeacher = results[1] as List<Map<String, dynamic>>;
@@ -600,7 +608,11 @@ class _PrincipalChatCommunicationsScreenState
       ),
       floatingActionButton: (!isWide && hasSelection)
           ? null
-          : const DashboardFabWidget(role: DashboardRole.principal),
+          : DashboardFabWidget(
+              role: _leadershipRole == 'coordinator'
+                  ? DashboardRole.coordinator
+                  : DashboardRole.principal,
+            ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       bottom: TabBar(
         controller: _tabController,
@@ -624,7 +636,7 @@ class _PrincipalChatCommunicationsScreenState
       controller: _tabController,
       children: [
         _workspace(_filteredMonitor(), monitorMode: true),
-        _workspace(_directConversations, monitorMode: false),
+        _workspace(_filteredDirect(), monitorMode: false),
       ],
     );
   }
@@ -638,7 +650,7 @@ class _PrincipalChatCommunicationsScreenState
         final wide = constraints.maxWidth >= 840;
         final list = Column(
           children: [
-            if (monitorMode) _filters(),
+            if (monitorMode) _filters() else _directFilters(),
             Expanded(child: _conversationList(conversations, monitorMode)),
           ],
         );
@@ -785,6 +797,126 @@ class _PrincipalChatCommunicationsScreenState
     );
   }
 
+  List<Map<String, dynamic>> _filteredDirect() {
+    return _directConversations.where((row) {
+      if (_directRoleLabel(row).toLowerCase() != _directRoleFilter) {
+        return false;
+      }
+      if (_directClassFilter.isEmpty) return true;
+      final sections = _classSectionsFor(row).toSet();
+      return sections.contains(_directClassFilter);
+    }).toList();
+  }
+
+  Widget _directFilters() {
+    final theme = context.appTheme;
+    final teacherCount = _directConversations
+        .where((row) => _directRoleLabel(row) == 'Teacher')
+        .length;
+    final parentCount = _directConversations
+        .where((row) => _directRoleLabel(row) == 'Parent')
+        .length;
+    final classOptions = <String>{
+      for (final row in _directConversations) ..._classSectionsFor(row),
+    }.toList()..sort();
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _directRoleChip(
+              label: 'Teachers ($teacherCount)',
+              icon: Icons.badge_outlined,
+              selected: _directRoleFilter == 'teacher',
+              theme: theme,
+              onSelected: () => setState(() => _directRoleFilter = 'teacher'),
+            ),
+            const SizedBox(width: 8),
+            _directRoleChip(
+              label: 'Parents ($parentCount)',
+              icon: Icons.family_restroom_rounded,
+              selected: _directRoleFilter == 'parent',
+              theme: theme,
+              onSelected: () => setState(() => _directRoleFilter = 'parent'),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              tooltip: 'Filter contacts by class',
+              onSelected: (value) => setState(() => _directClassFilter = value),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: '', child: Text('All classes')),
+                ...classOptions.map(
+                  (value) => PopupMenuItem(value: value, child: Text(value)),
+                ),
+              ],
+              child: Chip(
+                avatar: Icon(
+                  Icons.class_rounded,
+                  size: 18,
+                  color: _directClassFilter.isEmpty
+                      ? theme.onSurfaceVariant
+                      : theme.primary,
+                ),
+                label: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 160),
+                  child: Text(
+                    _directClassFilter.isEmpty
+                        ? 'All classes'
+                        : _directClassFilter,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                backgroundColor: _directClassFilter.isEmpty
+                    ? theme.surface
+                    : theme.primaryContainer,
+                side: BorderSide(
+                  color: _directClassFilter.isEmpty
+                      ? theme.outlineVariant
+                      : theme.primary,
+                ),
+                labelStyle: TextStyle(
+                  color: _directClassFilter.isEmpty
+                      ? theme.onSurface
+                      : theme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _directRoleChip({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required dynamic theme,
+    required VoidCallback onSelected,
+  }) {
+    return ChoiceChip(
+      avatar: Icon(
+        icon,
+        size: 18,
+        color: selected ? theme.primary : theme.onSurfaceVariant,
+      ),
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onSelected(),
+      backgroundColor: theme.surface,
+      selectedColor: theme.primaryContainer,
+      side: BorderSide(color: selected ? theme.primary : theme.outlineVariant),
+      checkmarkColor: theme.primary,
+      labelStyle: TextStyle(
+        color: selected ? theme.primary : theme.onSurface,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+
   Widget _filterMenu({
     required String label,
     required String value,
@@ -858,8 +990,8 @@ class _PrincipalChatCommunicationsScreenState
             ? _studentLine(row)
             : _isContactPlaceholder(row)
             ? _text(row['type'], fallback: 'direct') == 'principal_teacher'
-                  ? 'Teacher contact - tap to start direct chat'
-                  : 'Parent contact - tap to start direct chat'
+                  ? _directContactHint(row, 'Teacher contact')
+                  : _directContactHint(row, 'Parent contact')
             : _text(row['last_message'], fallback: 'Direct conversation');
         final unread = int.tryParse('${row['unread_count'] ?? 0}') ?? 0;
         return ListTile(
@@ -1007,7 +1139,7 @@ class _PrincipalChatCommunicationsScreenState
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: context.appTheme.warningContainer,
             child: Text(
-              'Read-only oversight. Principal replies are sent through separate direct chats.',
+              'Read-only oversight. School-leader replies are sent through their own direct chats.',
               style: TextStyle(color: context.appTheme.onSurface),
             ),
           ),
@@ -1056,8 +1188,13 @@ class _PrincipalChatCommunicationsScreenState
     );
   }
 
-  bool _canSendIn(Map<String, dynamic> conversation) =>
-      _text(conversation['type']) != 'parent_teacher';
+  bool _canSendIn(Map<String, dynamic> conversation) {
+    if (_text(conversation['type']) == 'parent_teacher') return false;
+    final owner = _text(
+      conversation['leader_id'] ?? conversation['created_by'],
+    );
+    return owner.isEmpty || owner == _principalUserId;
+  }
 
   List<Map<String, dynamic>> _mergeDirectConversationsWithContacts({
     required List<Map<String, dynamic>> directTeacher,
@@ -1066,14 +1203,14 @@ class _PrincipalChatCommunicationsScreenState
     required List<dynamic> parentContacts,
   }) {
     final uniqueRows = <String, Map<String, dynamic>>{};
-    for (final row in directTeacher) {
+    for (final row in directTeacher.where(_canSendIn)) {
       final key = 'teacher_${_text(row['teacher_id'])}';
       final existing = uniqueRows[key];
       if (existing == null || _sortTime(row) > _sortTime(existing)) {
         uniqueRows[key] = Map<String, dynamic>.from(row);
       }
     }
-    for (final row in directParent) {
+    for (final row in directParent.where(_canSendIn)) {
       final key = 'parent_${_text(row['parent_id'])}';
       final existing = uniqueRows[key];
       if (existing == null || _sortTime(row) > _sortTime(existing)) {
@@ -1111,6 +1248,9 @@ class _PrincipalChatCommunicationsScreenState
           'last_name': _contactLastName(contact),
           'name': name,
         },
+        'class_sections': contact is Map
+            ? contact['class_sections'] ?? const []
+            : const [],
         'is_contact_placeholder': true,
       });
     }
@@ -1129,6 +1269,9 @@ class _PrincipalChatCommunicationsScreenState
         'last_message_at': '',
         'unread_count': 0,
         'parent': {'id': id, 'name': name, 'full_name': name},
+        'class_sections': contact is Map
+            ? contact['class_sections'] ?? const []
+            : const [],
         'is_contact_placeholder': true,
       });
     }
@@ -1202,6 +1345,19 @@ class _PrincipalChatCommunicationsScreenState
 
   String _directRoleLabel(Map<String, dynamic> row) {
     return _text(row['type']) == 'principal_teacher' ? 'Teacher' : 'Parent';
+  }
+
+  List<String> _classSectionsFor(Map<String, dynamic> row) {
+    final raw = row['class_sections'];
+    if (raw is! Iterable) return const [];
+    return raw.map(_text).where((value) => value.isNotEmpty).toSet().toList()
+      ..sort();
+  }
+
+  String _directContactHint(Map<String, dynamic> row, String roleLabel) {
+    final classes = _classSectionsFor(row);
+    final classDetail = classes.isEmpty ? '' : ' · ${classes.join(', ')}';
+    return '$roleLabel$classDetail · tap to start direct chat';
   }
 
   String _messageRole(

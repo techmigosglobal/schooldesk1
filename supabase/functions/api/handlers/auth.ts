@@ -4,6 +4,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, serviceClient } from "../index.ts";
+import { recordActivity } from "./activity.ts";
 
 function svc() {
   return serviceClient();
@@ -172,6 +173,30 @@ export async function handleAuth(
       (authUser.app_metadata as Record<string, unknown> | undefined)?.role_name,
     );
     const resolvedRole = appMetaRole || profileText(profile?.role_name);
+    const normalizedRole = resolvedRole.toLowerCase();
+    const now = new Date().toISOString();
+    await svc().from("user_sessions").insert({
+      user_id: authUser.id,
+      school_id: profile.school_id,
+      role_name: normalizedRole,
+      session_type: normalizedRole === "kiosk" ? "kiosk" : "app",
+      last_active: now,
+    });
+    await recordActivity(svc(), {
+      schoolId: profile.school_id,
+      userId: authUser.id,
+      actorRole: normalizedRole,
+      action: "auth.login",
+      module: "auth",
+      eventType: "login",
+      summary: normalizedRole === "kiosk"
+        ? "Attendance kiosk signed in"
+        : `${normalizedRole || "User"} signed in`,
+      entityType: "user",
+      entityId: authUser.id,
+      actorName: profileText(profile.name, profileText(authUser.email)),
+      details: { session_type: normalizedRole === "kiosk" ? "kiosk" : "app" },
+    });
 
     return ok({
       // Flutter reads token OR access_token
@@ -236,6 +261,40 @@ export async function handleAuth(
         Deno.env.get("SUPABASE_ANON_KEY")!,
         { global: { headers: { Authorization: `Bearer ${token}` } } },
       );
+      const { data: { user } } = await userClient.auth.getUser();
+      if (user) {
+        const { data: profile } = await svc().from("users")
+          .select("school_id, role_name, name, email")
+          .eq("id", user.id)
+          .maybeSingle();
+        const role = profileText(
+          user.app_metadata?.role_name,
+          profileText(profile?.role_name),
+        )
+          .toLowerCase();
+        const now = new Date().toISOString();
+        await svc().from("user_sessions").update({
+          signed_out_at: now,
+          last_active: now,
+        }).eq("user_id", user.id).is("signed_out_at", null);
+        if (profile?.school_id) {
+          await recordActivity(svc(), {
+            schoolId: profile.school_id,
+            userId: user.id,
+            actorRole: role,
+            action: "auth.logout",
+            module: "auth",
+            eventType: "logout",
+            summary: role === "kiosk"
+              ? "Attendance kiosk signed out"
+              : `${role || "User"} signed out`,
+            entityType: "user",
+            entityId: user.id,
+            actorName: profileText(profile.name, profileText(user.email)),
+            details: { session_type: role === "kiosk" ? "kiosk" : "app" },
+          });
+        }
+      }
       await userClient.auth.signOut();
     }
     return ok({ success: true });

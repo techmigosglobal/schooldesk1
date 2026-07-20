@@ -74,9 +74,9 @@ extension BackendStaffApi on BackendApiClient {
     String? password,
     String accountRole = 'Teacher',
     String gender = 'unspecified',
-    String employmentType = 'full_time',
-    String joinDate = '2026-01-01',
-    String dateOfBirth = '1990-01-01',
+    String? employmentType,
+    String? joinDate,
+    String? dateOfBirth,
     double basicSalary = 0,
     bool requestPrincipalApproval = false,
   }) async {
@@ -98,9 +98,12 @@ extension BackendStaffApi on BackendApiClient {
           'account_role': accountRole,
           'request_principal_approval': requestPrincipalApproval,
           'gender': gender,
-          'employment_type': employmentType,
-          'join_date': joinDate,
-          'date_of_birth': dateOfBirth,
+          if (employmentType != null && employmentType.trim().isNotEmpty)
+            'employment_type': employmentType.trim(),
+          if (joinDate != null && joinDate.trim().isNotEmpty)
+            'join_date': joinDate.trim(),
+          if (dateOfBirth != null && dateOfBirth.trim().isNotEmpty)
+            'date_of_birth': dateOfBirth.trim(),
           'basic_salary': basicSalary,
         },
       );
@@ -189,9 +192,9 @@ extension BackendStaffApi on BackendApiClient {
     String? password,
     String accountRole = 'Teacher',
     String gender = 'unspecified',
-    String employmentType = 'full_time',
-    String joinDate = '2026-01-01',
-    String dateOfBirth = '1990-01-01',
+    String? employmentType,
+    String? joinDate,
+    String? dateOfBirth,
     double basicSalary = 0,
   }) async {
     try {
@@ -211,9 +214,12 @@ extension BackendStaffApi on BackendApiClient {
             'password': password.trim(),
           'account_role': accountRole,
           'gender': gender,
-          'employment_type': employmentType,
-          'join_date': joinDate,
-          'date_of_birth': dateOfBirth,
+          if (employmentType != null && employmentType.trim().isNotEmpty)
+            'employment_type': employmentType.trim(),
+          if (joinDate != null && joinDate.trim().isNotEmpty)
+            'join_date': joinDate.trim(),
+          if (dateOfBirth != null && dateOfBirth.trim().isNotEmpty)
+            'date_of_birth': dateOfBirth.trim(),
           'basic_salary': basicSalary,
         },
       );

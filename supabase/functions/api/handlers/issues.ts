@@ -1,7 +1,7 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
 
-const allowedRoles = new Set(["principal", "teacher", "parent"]);
+const allowedRoles = new Set(["principal", "coordinator", "teacher", "parent"]);
 const allowedMimeTypes = new Set([
   "image/jpeg",
   "image/png",
@@ -121,7 +121,9 @@ async function notifySuperAdminsOfIssue(
     "school_id",
     school,
   ).eq("role_name", "super_admin").eq("is_active", true);
-  const reporter = role === "principal"
+  const reporter = role === "coordinator"
+    ? "Coordinator"
+    : role === "principal"
     ? "Principal"
     : role === "teacher"
     ? "Teacher"

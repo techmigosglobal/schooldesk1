@@ -14,7 +14,9 @@ function role(user: User) {
 }
 
 function canReviewLeaves(user: User) {
-  return ["principal", "admin", "super_admin"].includes(role(user));
+  return ["principal", "coordinator", "admin", "super_admin"].includes(
+    role(user),
+  );
 }
 
 async function currentStaffId(
@@ -116,6 +118,18 @@ async function resolvePrincipalUserId(
     .limit(1)
     .maybeSingle();
   return roleUser?.id ?? "";
+}
+
+async function resolveLeadershipUserIds(
+  svc: SupabaseClient,
+  school: string,
+): Promise<string[]> {
+  const { data } = await svc
+    .from("users")
+    .select("id")
+    .eq("school_id", school)
+    .in("role_name", ["principal", "coordinator"]);
+  return (data ?? []).map((row) => text(row.id)).filter(Boolean);
 }
 
 /** Resolve a student_id to the parent/guardian auth user_id for push notifications. */
@@ -247,10 +261,10 @@ export async function handleLeave(
     const { data, error } = await svc.from("leave_applications").insert(payload)
       .select().single();
     if (error) return fail(error.message);
-    // Notify the principal that a new leave request has been submitted
+    // Notify each school leader that can review the request.
     try {
-      const principalUserId = await resolvePrincipalUserId(svc, school);
-      if (principalUserId) {
+      const leadershipUserIds = await resolveLeadershipUserIds(svc, school);
+      if (leadershipUserIds.length > 0) {
         const fromDate = text(data.start_date).split("T")[0] ?? "";
         const toDate = text(data.end_date).split("T")[0] ?? "";
         const dateRange = fromDate && toDate
@@ -268,34 +282,37 @@ export async function handleLeave(
           : text(staffUserId, "A teacher");
         const notifBody =
           `${staffName} has submitted a leave request${dateRange}. Please review.`;
-        const { data: eventRow } = await svc.from("notification_events").insert(
-          {
+        for (const principalUserId of leadershipUserIds) {
+          const { data: eventRow } = await svc.from("notification_events")
+            .insert(
+              {
+                school_id: school,
+                user_id: principalUserId,
+                event_type: "leave_submitted",
+                event_data: {
+                  leave_id: data.id,
+                  message: notifBody,
+                  reference_type: "leave",
+                  reference_id: data.id,
+                  route: "/approval-center-screen",
+                  action: "review",
+                },
+              },
+            ).select("id").maybeSingle();
+          if (eventRow?.id) triggerPushProcessing(eventRow.id);
+          await svc.from("notification_logs").insert({
             school_id: school,
             user_id: principalUserId,
-            event_type: "leave_submitted",
-            event_data: {
-              leave_id: data.id,
-              message: notifBody,
-              reference_type: "leave",
-              reference_id: data.id,
-              route: "/approval-center-screen",
-              action: "review",
-            },
-          },
-        ).select("id").maybeSingle();
-        if (eventRow?.id) triggerPushProcessing(eventRow.id);
-        await svc.from("notification_logs").insert({
-          school_id: school,
-          user_id: principalUserId,
-          title: "New Leave Request",
-          body: notifBody,
-          type: "leave",
-          entity_type: "leave",
-          entity_id: data.id,
-          route: "/approval-center-screen",
-          target_role: "principal",
-          is_read: false,
-        });
+            title: "New Leave Request",
+            body: notifBody,
+            type: "leave",
+            entity_type: "leave",
+            entity_id: data.id,
+            route: "/approval-center-screen",
+            target_role: "all",
+            is_read: false,
+          });
+        }
       }
     } catch (notifErr) {
       console.error(
@@ -318,10 +335,10 @@ export async function handleLeave(
     }).eq("id", recallMatch[1]).eq("school_id", school).eq("staff_id", staffId)
       .eq("status", "pending").select().single();
     if (error) return fail(error.message);
-    // Notify the principal that a leave request was recalled
+    // Notify each school leader that can review leave requests.
     try {
-      const principalUserId = await resolvePrincipalUserId(svc, school);
-      if (principalUserId) {
+      const leadershipUserIds = await resolveLeadershipUserIds(svc, school);
+      if (leadershipUserIds.length > 0) {
         const staffName = [
           text(data.staff?.first_name),
           text(data.staff?.last_name),
@@ -331,31 +348,34 @@ export async function handleLeave(
         const dateRange = fromDate && toDate
           ? ` (${fromDate} to ${toDate})`
           : "";
-        const { data: eventRow } = await svc.from("notification_events").insert(
-          {
+        for (const principalUserId of leadershipUserIds) {
+          const { data: eventRow } = await svc.from("notification_events")
+            .insert(
+              {
+                school_id: school,
+                user_id: principalUserId,
+                event_type: "leave_recalled",
+                event_data: {
+                  leave_id: recallMatch[1],
+                  message:
+                    `${staffName} has recalled their leave request${dateRange}.`,
+                  reference_type: "leave",
+                },
+              },
+            ).select("id").maybeSingle();
+          if (eventRow?.id) triggerPushProcessing(eventRow.id);
+          await svc.from("notification_logs").insert({
             school_id: school,
             user_id: principalUserId,
-            event_type: "leave_recalled",
-            event_data: {
-              leave_id: recallMatch[1],
-              message:
-                `${staffName} has recalled their leave request${dateRange}.`,
-              reference_type: "leave",
-            },
-          },
-        ).select("id").maybeSingle();
-        if (eventRow?.id) triggerPushProcessing(eventRow.id);
-        await svc.from("notification_logs").insert({
-          school_id: school,
-          user_id: principalUserId,
-          title: "Leave Request Recalled",
-          body: `${staffName} has recalled their leave request${dateRange}.`,
-          type: "leave",
-          entity_type: "leave",
-          entity_id: recallMatch[1],
-          target_role: "principal",
-          is_read: false,
-        });
+            title: "Leave Request Recalled",
+            body: `${staffName} has recalled their leave request${dateRange}.`,
+            type: "leave",
+            entity_type: "leave",
+            entity_id: recallMatch[1],
+            target_role: "all",
+            is_read: false,
+          });
+        }
       }
       const teacherUserId = await resolveUserId(svc, school, staffId);
       if (teacherUserId) {
@@ -586,10 +606,10 @@ export async function handleLeave(
       payload,
     ).select().single();
     if (error) return fail(error.message);
-    // Notify the principal that a student leave request has been submitted
+    // Notify each school leader that can review the request.
     try {
-      const principalUserId = await resolvePrincipalUserId(svc, school);
-      if (principalUserId) {
+      const leadershipUserIds = await resolveLeadershipUserIds(svc, school);
+      if (leadershipUserIds.length > 0) {
         const studentId = text(data.student_id);
         const fromDate = text(data.start_date).split("T")[0] ?? "";
         const toDate = text(data.end_date).split("T")[0] ?? "";
@@ -612,34 +632,37 @@ export async function handleLeave(
         }
         const notifBody =
           `A parent submitted a leave request for ${studentLabel}${dateRange}. Please review.`;
-        const { data: eventRow } = await svc.from("notification_events").insert(
-          {
+        for (const principalUserId of leadershipUserIds) {
+          const { data: eventRow } = await svc.from("notification_events")
+            .insert(
+              {
+                school_id: school,
+                user_id: principalUserId,
+                event_type: "student_leave_submitted",
+                event_data: {
+                  leave_id: data.id,
+                  message: notifBody,
+                  reference_type: "leave",
+                  reference_id: data.id,
+                  route: "/approval-center-screen",
+                  action: "review",
+                },
+              },
+            ).select("id").maybeSingle();
+          if (eventRow?.id) triggerPushProcessing(eventRow.id);
+          await svc.from("notification_logs").insert({
             school_id: school,
             user_id: principalUserId,
-            event_type: "student_leave_submitted",
-            event_data: {
-              leave_id: data.id,
-              message: notifBody,
-              reference_type: "leave",
-              reference_id: data.id,
-              route: "/approval-center-screen",
-              action: "review",
-            },
-          },
-        ).select("id").maybeSingle();
-        if (eventRow?.id) triggerPushProcessing(eventRow.id);
-        await svc.from("notification_logs").insert({
-          school_id: school,
-          user_id: principalUserId,
-          title: "Student Leave Request",
-          body: notifBody,
-          type: "leave",
-          entity_type: "student_leave",
-          entity_id: data.id,
-          route: "/approval-center-screen",
-          target_role: "principal",
-          is_read: false,
-        });
+            title: "Student Leave Request",
+            body: notifBody,
+            type: "leave",
+            entity_type: "student_leave",
+            entity_id: data.id,
+            route: "/approval-center-screen",
+            target_role: "all",
+            is_read: false,
+          });
+        }
       }
     } catch (notifErr) {
       console.error(

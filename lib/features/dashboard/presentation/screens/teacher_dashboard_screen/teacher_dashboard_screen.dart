@@ -229,22 +229,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         filled: true,
                         onTap: _openMyAttendance,
                       ),
-                      TeacherFlowAction(
-                        label: 'Attendance',
-                        icon: Icons.how_to_reg_rounded,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.teacherAttendance,
-                        ),
-                      ),
-                      TeacherFlowAction(
-                        label: 'Timetable',
-                        icon: Icons.calendar_month_rounded,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.teacherTimetable,
-                        ),
-                      ),
                     ],
                   ),
                 if (_timetable.isNotEmpty) ...[

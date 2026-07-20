@@ -413,7 +413,7 @@ async function parentCanAccessStudent(
 }
 
 function canManageStudentDocuments(role: string) {
-  return ["principal", "admin", "super_admin"].includes(role);
+  return ["principal", "coordinator", "admin", "super_admin"].includes(role);
 }
 
 async function teacherAssignedSectionIds(
@@ -872,7 +872,7 @@ export async function handleEvents(
   const seg = parts[0];
 
   if (path === "/event-posts/pending" && method === "GET") {
-    if (roleValue(user) !== "principal") return fail("forbidden", 403);
+    if (!["principal", "coordinator"].includes(roleValue(user))) return fail("forbidden", 403);
     const { data, error } = await svc.from("event_posts").select("*").eq(
       "school_id",
       school,
@@ -926,7 +926,7 @@ export async function handleEvents(
     );
   }
   if (!seg && method === "GET") {
-    if (!["principal", "admin", "super_admin"].includes(roleValue(user))) {
+    if (!["principal", "coordinator", "admin", "super_admin"].includes(roleValue(user))) {
       return fail("forbidden", 403);
     }
     let q = svc.from("event_posts").select("*").eq(
@@ -952,7 +952,7 @@ export async function handleEvents(
     const media = body.media ?? body.media_urls ?? [];
     const mediaError = validateEventMedia(media, destinations);
     if (mediaError) return fail(mediaError, 420);
-    const isPrincipal = roleValue(user) === "principal";
+    const isPrincipal = ["principal", "coordinator"].includes(roleValue(user));
     const directPublish = isPrincipal && body.is_submit === true;
     const payload = {
       school_id: school,
@@ -988,6 +988,13 @@ export async function handleEvents(
           referenceType: "event_post",
           referenceId: `${data.id ?? ""}`,
         });
+        await notifyUsersByRole(svc, school, "coordinator", {
+          title: "Event post pending approval",
+          body: `${payload.title} was submitted for review.`,
+          type: "pending_approval",
+          referenceType: "event_post",
+          referenceId: `${data.id ?? ""}`,
+        });
       } catch {
         // Keep the event post creation successful even if notification fan-out fails.
       }
@@ -1012,7 +1019,7 @@ export async function handleEvents(
     if (!existing) return fail("not found", 404);
     const userRole = roleValue(user);
     if (
-      userRole !== "principal" && `${existing.created_by ?? ""}` !== user.id
+      !["principal", "coordinator"].includes(userRole) && `${existing.created_by ?? ""}` !== user.id
     ) {
       return fail("forbidden", 403);
     }
@@ -1025,7 +1032,7 @@ export async function handleEvents(
     const media = body.media ?? body.media_urls ?? existing.media_urls ?? [];
     const mediaError = validateEventMedia(media, destinations);
     if (mediaError) return fail(mediaError, 420);
-    const isPrincipal = userRole === "principal";
+    const isPrincipal = ["principal", "coordinator"].includes(userRole);
     const directPublish = isPrincipal && body.is_submit === true;
     const payload = {
       title: textValue(
@@ -1066,6 +1073,13 @@ export async function handleEvents(
           referenceType: "event_post",
           referenceId: `${data.id ?? seg}`,
         });
+        await notifyUsersByRole(svc, school, "coordinator", {
+          title: "Event post pending approval",
+          body: `${payload.title} was updated and submitted for review.`,
+          type: "pending_approval",
+          referenceType: "event_post",
+          referenceId: `${data.id ?? seg}`,
+        });
       } catch {
         // Saving the teacher's update remains successful even if the
         // notification fan-out is temporarily unavailable.
@@ -1074,7 +1088,7 @@ export async function handleEvents(
     return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && parts[1] === "approve" && method === "POST") {
-    if (roleValue(user) !== "principal") return fail("forbidden", 403);
+    if (!["principal", "coordinator"].includes(roleValue(user))) return fail("forbidden", 403);
     const { data: existing, error: existingError } = await svc.from(
       "event_posts",
     )
@@ -1141,7 +1155,7 @@ export async function handleEvents(
     return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && parts[1] === "reject" && method === "POST") {
-    if (roleValue(user) !== "principal") return fail("forbidden", 403);
+    if (!["principal", "coordinator"].includes(roleValue(user))) return fail("forbidden", 403);
     const { data: existing, error: existingError } = await svc.from(
       "event_posts",
     )
@@ -1169,14 +1183,14 @@ export async function handleEvents(
   }
   if (seg && method === "DELETE") {
     const userRole = roleValue(user);
-    if (!["principal", "teacher"].includes(userRole)) {
+    if (!["principal", "coordinator", "teacher"].includes(userRole)) {
       return fail("forbidden", 403);
     }
     let deleteQuery = svc.from("event_posts").delete().eq("id", seg).eq(
       "school_id",
       school,
     );
-    if (userRole !== "principal") {
+    if (!["principal", "coordinator"].includes(userRole)) {
       deleteQuery = deleteQuery.eq("created_by", user.id);
     }
     const { error } = await deleteQuery;
@@ -1392,7 +1406,7 @@ export async function handleDocuments(
       });
       if (error) return fail(error.message);
       return ok(data ?? []);
-    } else if (userRole === "principal") {
+    } else if (["principal", "coordinator"].includes(userRole)) {
       let query = svc.from("staff_documents").select(
         "*, staff:staff(id, school_id, first_name, last_name)",
       ).eq("school_id", school);
@@ -1417,7 +1431,7 @@ export async function handleDocuments(
         "";
       if (!myStaffId) return fail("user not linked to staff", 400);
       staffId = myStaffId;
-    } else if (userRole !== "principal") {
+    } else if (!["principal", "coordinator"].includes(userRole)) {
       return fail("unauthorized", 403);
     }
     if (!staffId) return fail("staff_id required");
@@ -1441,7 +1455,7 @@ export async function handleDocuments(
   if (staffDocMatch && method === "DELETE") {
     const docId = staffDocMatch[1];
     const userRole = roleValue(user);
-    if (userRole === "principal") {
+    if (["principal", "coordinator"].includes(userRole)) {
       const { error } = await svc.from("staff_documents").delete().eq(
         "id",
         docId,
@@ -1573,7 +1587,7 @@ export async function handleParent(
   const parentMatch = path.match(/^\/parents\/([^/]+)\/students$/);
   if (parentMatch && method === "GET") {
     const parentUserId = parentMatch[1];
-    const canManageParentLinks = ["principal", "admin", "super_admin"].includes(
+    const canManageParentLinks = ["principal", "coordinator", "admin", "super_admin"].includes(
       roleValue(user),
     );
     if (!canManageParentLinks && parentUserId !== user.id) {
@@ -1601,7 +1615,7 @@ export async function handleParent(
     );
   }
   if (parentMatch && method === "POST") {
-    if (!["principal", "admin", "super_admin"].includes(roleValue(user))) {
+    if (!["principal", "coordinator", "admin", "super_admin"].includes(roleValue(user))) {
       return fail("forbidden", 403);
     }
     const body = await req.json().catch(() => ({}));

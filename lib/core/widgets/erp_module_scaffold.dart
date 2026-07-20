@@ -264,7 +264,8 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
           ),
       ];
     }
-    if (widget.actions.isEmpty && _role == 'principal') {
+    if (widget.actions.isEmpty &&
+        const {'principal', 'coordinator'}.contains(_role)) {
       return [
         _ToolbarIconButton(
           tooltip: 'Help',

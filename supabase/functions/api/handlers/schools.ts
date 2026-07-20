@@ -10,7 +10,7 @@ function isSchoolAdministrator(user: _User) {
     user.app_metadata?.role_name ?? user.app_metadata?.role ?? ""
   }`
     .trim().toLowerCase();
-  return ["principal", "admin", "super_admin"].includes(role);
+  return ["principal", "coordinator", "admin", "super_admin"].includes(role);
 }
 
 async function withAuthorizedSignatureUrl(

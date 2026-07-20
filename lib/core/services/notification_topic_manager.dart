@@ -92,7 +92,7 @@ class NotificationTopicManager {
 
   /// Subscribe to admin-specific topics (for principal/admin roles)
   Future<void> subscribeToAdminTopics(SchoolDeskRole role) async {
-    if (role == SchoolDeskRole.principal) {
+    if (role == SchoolDeskRole.principal || role == SchoolDeskRole.coordinator) {
       try {
         // Subscribe to complaint escalation topic
         await subscribeToEventTopic('complaints_escalated');
@@ -119,7 +119,7 @@ class NotificationTopicManager {
 
   /// Unsubscribe from admin-specific topics
   Future<void> unsubscribeFromAdminTopics(SchoolDeskRole role) async {
-    if (role == SchoolDeskRole.principal) {
+    if (role == SchoolDeskRole.principal || role == SchoolDeskRole.coordinator) {
       try {
         await unsubscribeFromEventTopic('complaints_escalated');
         await unsubscribeFromEventTopic('system_alerts');
@@ -237,6 +237,7 @@ class NotificationTopicManager {
       // Subscribe to role-specific topics
       switch (role) {
         case SchoolDeskRole.principal:
+        case SchoolDeskRole.coordinator:
           await subscribeToAdminTopics(role);
           break;
         case SchoolDeskRole.parent:
@@ -274,6 +275,7 @@ class NotificationTopicManager {
       // Unsubscribe from role-specific topics
       switch (role) {
         case SchoolDeskRole.principal:
+        case SchoolDeskRole.coordinator:
           await unsubscribeFromAdminTopics(role);
           break;
         case SchoolDeskRole.parent:

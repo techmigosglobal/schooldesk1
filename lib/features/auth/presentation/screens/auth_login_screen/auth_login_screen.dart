@@ -102,6 +102,8 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
       case AppConstants.roleAdmin:
       case 'super_admin':
         return SchoolDeskRole.principal;
+      case AppConstants.roleCoordinator:
+        return SchoolDeskRole.coordinator;
       case AppConstants.roleTeacher:
         return SchoolDeskRole.teacher;
       case AppConstants.roleParent:
@@ -118,9 +120,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-
     final wide = MediaQuery.of(context).size.width >= 820;
 
     return Scaffold(

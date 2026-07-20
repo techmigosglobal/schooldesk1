@@ -192,7 +192,10 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     final role = BackendApiClient.instance.currentRoleName
         ?.trim()
         .toLowerCase();
-    return role == null || role.isEmpty || role == 'principal';
+    return role == null ||
+        role.isEmpty ||
+        role == 'principal' ||
+        role == 'coordinator';
   }
 
   AcademicYearModel? get _selectedAcademicYear {

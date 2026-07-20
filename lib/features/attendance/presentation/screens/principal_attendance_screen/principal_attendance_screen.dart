@@ -38,6 +38,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   List<StaffAttendanceModel> _staffAttendance = [];
   List<StaffAttendanceModel> _monthlyStaffAttendance = [];
   List<StaffModel> _staff = [];
+  Map<String, dynamic> _staffDailySummary = const {};
   List<SectionModel> _sections = [];
   List<AttendanceSessionModel> _sessions = [];
   List<AttendanceSessionModel> _monthlySessions = [];
@@ -82,11 +83,18 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   Future<void> _pollStaffAttendance() async {
     if (!_isViewingToday) return;
     try {
-      final staffAttendance = await BackendApiClient.instance
-          .getStaffAttendanceForDate(date: _selectedDateText);
+      final results = await Future.wait<Object>([
+        BackendApiClient.instance.getStaffAttendanceForDate(
+          date: _selectedDateText,
+        ),
+        BackendApiClient.instance.getStaffDailyAttendanceSummary(
+          date: _selectedDateText,
+        ),
+      ]);
       if (!mounted) return;
       setState(() {
-        _staffAttendance = staffAttendance;
+        _staffAttendance = results[0] as List<StaffAttendanceModel>;
+        _staffDailySummary = results[1] as Map<String, dynamic>;
       });
     } on Object {
       // Silently ignore polling errors
@@ -113,6 +121,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           startDate: _monthStartText,
           endDate: _monthEndText,
         ),
+        api.getStaffDailyAttendanceSummary(date: _selectedDateText),
       ]);
       final sections = results[3] as List<SectionModel>;
       if (!mounted) return;
@@ -123,6 +132,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         _sections = sections;
         _sessions = results[4] as List<AttendanceSessionModel>;
         _monthlySessions = results[5] as List<AttendanceSessionModel>;
+        _staffDailySummary = results[6] as Map<String, dynamic>;
         _selectedSectionId =
             _selectedSectionId.isNotEmpty &&
                 sections.any((section) => section.id == _selectedSectionId)
@@ -417,7 +427,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   icon: Icons.badge_outlined,
                   title: 'Staff Attendance',
                   subtitle:
-                      '${_staffAttendance.where((row) => row.checkedIn).length}/${_staff.length} checked in',
+                      '${_summaryCount('checked_in', _staffAttendance.where((row) => row.checkedIn).length)}/${_summaryCount('expected_staff', _staff.length)} checked in',
                   selected: _view == _AttendanceView.staff,
                   onTap: () => _setView(_AttendanceView.staff),
                 ),
@@ -546,7 +556,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    '${_staffAttendance.where((row) => row.checkedIn).length} checked in · ${(_staff.length - _staffAttendance.where((row) => row.checkedIn).length).clamp(0, _staff.length)} pending',
+                    '${_summaryCount('checked_in', _staffAttendance.where((row) => row.checkedIn).length)} checked in · ${_summaryCount('checked_out', _staffAttendance.where((row) => row.checkOut != null).length)} checked out\n${_summaryCount('currently_on_site', _staffAttendance.where((row) => row.checkedIn && row.checkOut == null).length)} on-site · ${_summaryCount('pending', (_staff.length - _staffAttendance.where((row) => row.checkedIn).length).clamp(0, _staff.length))} pending',
                     style: _UiText.title,
                   ),
                 ),
@@ -572,6 +582,11 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         ],
       ),
     );
+  }
+
+  int _summaryCount(String key, int fallback) {
+    final value = _staffDailySummary[key];
+    return value is num ? value.toInt() : fallback;
   }
 
   Widget _monthlyStaffArchive() {
@@ -2486,7 +2501,12 @@ class _StaffAttendanceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final checkedIn = attendance?.checkedIn ?? false;
-    final color = checkedIn ? const Color(0xFF24A765) : const Color(0xFFF59E0B);
+    final checkedOut = attendance?.checkOut != null;
+    final color = checkedOut
+        ? const Color(0xFF64748B)
+        : checkedIn
+        ? const Color(0xFF24A765)
+        : const Color(0xFFF59E0B);
     final subtitleParts = [
       if ((staff.designation ?? '').trim().isNotEmpty)
         staff.designation!.trim(),
@@ -2495,7 +2515,11 @@ class _StaffAttendanceRow extends StatelessWidget {
     return Row(
       children: [
         _IconBubble(
-          icon: checkedIn ? Icons.check_circle_rounded : Icons.schedule_rounded,
+          icon: checkedOut
+              ? Icons.logout_rounded
+              : checkedIn
+              ? Icons.check_circle_rounded
+              : Icons.schedule_rounded,
           color: color,
         ),
         const SizedBox(width: 12),
@@ -2524,12 +2548,18 @@ class _StaffAttendanceRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             _StatusPill(
-              label: checkedIn ? 'Checked In' : 'Pending',
+              label: checkedOut
+                  ? 'Checked Out'
+                  : checkedIn
+                  ? 'Checked In'
+                  : 'Pending',
               color: color,
             ),
             const SizedBox(height: 6),
             Text(
-              attendance?.checkInTimeLabel ?? '--:--',
+              checkedOut
+                  ? 'In ${attendance?.checkInTimeLabel ?? '--:--'} · Out ${attendance?.checkOutTimeLabel ?? '--:--'}${attendance?.workedDurationLabel.isNotEmpty == true ? ' · ${attendance!.workedDurationLabel}' : ''}${attendance?.checkOutSource.isNotEmpty == true ? ' · ${attendance!.checkOutSource}' : ''}'
+                  : attendance?.checkInTimeLabel ?? '--:--',
               style: _UiText.caption,
             ),
           ],

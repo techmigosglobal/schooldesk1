@@ -81,6 +81,7 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
   final ValueChanged<int> onDestinationSelected;
   final List<SchoolDeskNavigationSection> sections;
   final List<SchoolDeskNavigationFooterAction> footerActions;
+  final Set<String> hiddenRoutes;
   final double width;
 
   const SchoolDeskNavigationDrawer({
@@ -99,6 +100,7 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
     this.organizationLogo,
     this.userAvatar,
     this.footerActions = const [],
+    this.hiddenRoutes = const {},
     this.width = 304,
   });
 
@@ -118,7 +120,7 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
         userAvatar: userAvatar,
         selectedIndex: selectedIndex,
         onDestinationSelected: onDestinationSelected,
-        sections: sections,
+        sections: _visibleSections,
         footerActions: footerActions,
       );
     }
@@ -158,8 +160,9 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
                       tokens.spacing.md,
                     ),
                     children: [
-                      for (final section in sections) ...[
-                        _NavigationSectionLabel(label: section.label),
+                      for (final section in _visibleSections) ...[
+                        if (section.label.isNotEmpty)
+                          _NavigationSectionLabel(label: section.label),
                         for (final item in section.items)
                           _NavigationItemTile(
                             role: role,
@@ -181,6 +184,18 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
       ),
     );
   }
+
+  List<SchoolDeskNavigationSection> get _visibleSections => sections
+      .map(
+        (section) => SchoolDeskNavigationSection(
+          label: section.label,
+          items: section.items
+              .where((item) => !hiddenRoutes.contains(item.route))
+              .toList(),
+        ),
+      )
+      .where((section) => section.items.isNotEmpty)
+      .toList();
 }
 
 class _NavigationHeader extends StatelessWidget {

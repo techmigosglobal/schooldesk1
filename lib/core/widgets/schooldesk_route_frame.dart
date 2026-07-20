@@ -289,6 +289,7 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
       Widget sidebar;
       switch (widget.metadata.portal) {
         case 'principal':
+        case 'coordinator':
           sidebar = PrincipalDrawer(
             selectedIndex: selectedIndex,
             onDestinationSelected: (_) {},
@@ -318,6 +319,7 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
               .toLowerCase();
           switch (currentRole) {
             case 'principal':
+            case 'coordinator':
             case 'admin':
               sidebar = PrincipalDrawer(
                 selectedIndex: selectedIndex,

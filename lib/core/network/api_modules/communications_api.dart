@@ -44,6 +44,7 @@ extension BackendCommunicationsApi on BackendApiClient {
     String teacherId = '',
     String parentId = '',
     String studentId = '',
+    String leaderId = '',
     String title = '',
   }) {
     return createRaw('/chat/conversations', {
@@ -51,6 +52,7 @@ extension BackendCommunicationsApi on BackendApiClient {
       if (teacherId.trim().isNotEmpty) 'teacher_id': teacherId.trim(),
       if (parentId.trim().isNotEmpty) 'parent_id': parentId.trim(),
       if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+      if (leaderId.trim().isNotEmpty) 'leader_id': leaderId.trim(),
       if (title.trim().isNotEmpty) 'title': title.trim(),
     });
   }

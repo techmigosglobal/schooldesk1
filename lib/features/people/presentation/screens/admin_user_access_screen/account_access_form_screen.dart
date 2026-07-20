@@ -19,7 +19,8 @@ class AccountAccessFormArgs {
     this.initialRole,
   });
 
-  bool get isPrincipalOwner => ownerRole.toLowerCase() == 'principal';
+  bool get isPrincipalOwner =>
+      {'principal', 'coordinator'}.contains(ownerRole.toLowerCase());
   bool get isEdit => existing != null;
 }
 
@@ -58,7 +59,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
   bool get _isPrincipalOwner => widget.args.isPrincipalOwner;
   bool get _isEdit => widget.args.isEdit;
 
-  List<String> get _manageableRoles => const ['Teacher', 'Parent'];
+  List<String> get _manageableRoles => const ['Coordinator', 'Teacher', 'Parent'];
 
   bool _isStaffManagedRole(String role) => role == 'Teacher';
 

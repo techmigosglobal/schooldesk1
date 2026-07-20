@@ -71,7 +71,7 @@ class _KioskQrAttendanceScreenState extends State<KioskQrAttendanceScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Live staff punch-in QR',
+                    'Live staff check-in and check-out QR',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: context.appTheme.onSurface,
@@ -79,7 +79,7 @@ class _KioskQrAttendanceScreenState extends State<KioskQrAttendanceScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Keep this screen open on the attendance display device. Teachers scan this QR from My Attendance to record their own staff attendance.',
+                    'Keep this screen open on the attendance display device. Teachers use the same QR for check-in and, after 12:00 p.m. India time, check-out.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: context.appTheme.onSurfaceVariant,
                       height: 1.45,

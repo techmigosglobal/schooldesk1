@@ -39,6 +39,7 @@ class AppRoutes {
   // Principal Module Routes
   static const String principalLogin = '/principal-login-screen';
   static const String principalDashboard = '/principal-dashboard-screen';
+  static const String coordinatorDashboard = '/coordinator-dashboard-screen';
   static const String staffManagement = '/staff-management-screen';
   static const String staffForm = '/staff-management-screen/form';
   static const String studentOversight = '/student-oversight-screen';
@@ -203,6 +204,7 @@ class AppRoutes {
     loginLoading: (context) => const LoginLoadingScreen(),
     principalLogin: (context) => const AuthLoginScreen(),
     principalDashboard: (context) => const PrincipalDashboardScreen(),
+    coordinatorDashboard: (context) => const PrincipalDashboardScreen(),
     principalSchoolProfile: (context) => const SchoolProfileScreen(),
     staffManagement: (context) => const StaffManagementScreen(),
     staffForm: (context) => StaffFormScreen(args: _staffFormArgs(context)),
@@ -412,6 +414,7 @@ class AppRoutes {
         case 'parent':
           return const ParentTeacherChatScreen();
         case 'principal':
+        case 'coordinator':
         case 'admin':
           return const PrincipalChatCommunicationsScreen();
         case 'teacher':

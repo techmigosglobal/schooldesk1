@@ -5,6 +5,7 @@ class RouteAccessGuard {
 
   static const Set<String> authenticatedRoles = {
     'principal',
+    'coordinator',
     'teacher',
     'parent',
     'kiosk',
@@ -34,6 +35,7 @@ class RouteAccessGuard {
     AppRoutes.idCardGeneration: {'principal'},
     // Principal routes
     AppRoutes.principalDashboard: {'principal'},
+    AppRoutes.coordinatorDashboard: {'coordinator'},
     AppRoutes.staffManagement: {'principal'},
     AppRoutes.staffForm: {'principal'},
     AppRoutes.studentOversight: {'principal'},
@@ -159,8 +161,8 @@ class RouteAccessGuard {
     if (normalizedRole == 'super_admin') {
       return null;
     }
-    final allowedRoles = _routeRoles[routeName];
-    if (allowedRoles == null || allowedRoles.isEmpty) {
+    final allowedRoles = allowedRolesFor(routeName);
+    if (allowedRoles.isEmpty) {
       return null;
     }
 
@@ -182,7 +184,11 @@ class RouteAccessGuard {
     if (sharedProtectedRoutes.contains(routeName)) {
       return authenticatedRoles;
     }
-    return _routeRoles[routeName] ?? const <String>{};
+    final configured = _routeRoles[routeName] ?? const <String>{};
+    if (configured.contains('principal') && !_isFinanceRoute(routeName)) {
+      return {...configured, 'coordinator'};
+    }
+    return configured;
   }
 
   static bool isRoleAllowedFor({
@@ -218,6 +224,8 @@ class RouteAccessGuard {
     switch (_normalizeRole(role)) {
       case 'principal':
         return AppRoutes.principalDashboard;
+      case 'coordinator':
+        return AppRoutes.coordinatorDashboard;
       case 'super_admin':
         return AppRoutes.superAdminDashboard;
       case 'teacher':
@@ -239,5 +247,31 @@ class RouteAccessGuard {
     // add an explicit 'admin' case to _routeRoles and dashboardForRole.
     if (normalized == 'admin') return 'principal';
     return normalized;
+  }
+
+  static bool _isFinanceRoute(String routeName) {
+    return <String>{
+      AppRoutes.feeMonitoring,
+      AppRoutes.feeHome,
+      AppRoutes.feeStructures,
+      AppRoutes.feeCollect,
+      AppRoutes.feeLedger,
+      AppRoutes.feeReports,
+      AppRoutes.feePaymentConfig,
+      AppRoutes.principalPaymentRequests,
+      AppRoutes.principalPaymentRequestDecision,
+      AppRoutes.principalFeeStructureForm,
+      AppRoutes.principalInvoiceGenerationForm,
+      AppRoutes.principalPaymentRecordForm,
+      AppRoutes.principalFees,
+      AppRoutes.principalFeeConcessions,
+      AppRoutes.legacyPrincipalPaymentRequests,
+      AppRoutes.legacyPrincipalFeeStructures,
+      AppRoutes.legacyPrincipalInvoiceGenerate,
+      AppRoutes.legacyPrincipalCollectFee,
+      AppRoutes.legacyPrincipalFeeReports,
+      AppRoutes.legacyPrincipalPaymentConfig,
+      AppRoutes.academicYearFeesExport,
+    }.contains(routeName);
   }
 }

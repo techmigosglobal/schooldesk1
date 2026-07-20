@@ -957,7 +957,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         '${notification['role'] ?? notification['target_role'] ?? 'all'}'
             .trim()
             .toLowerCase();
-    return role == 'all' || role == 'principal';
+    return role == 'all' || role == 'principal' || role == 'coordinator';
   }
 
   static DateTime? _dateFromEvent(Map<String, dynamic> event) {

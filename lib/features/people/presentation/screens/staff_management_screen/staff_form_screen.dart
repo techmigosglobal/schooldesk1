@@ -38,6 +38,13 @@ class StaffFormScreen extends StatefulWidget {
 }
 
 class _StaffFormScreenState extends State<StaffFormScreen> {
+  static const _customDesignation = 'Custom';
+  static const _designationChoices = <String>[
+    'Teacher',
+    'Co Teacher',
+    'Coordinator',
+    _customDesignation,
+  ];
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
@@ -48,6 +55,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   late final TextEditingController _passwordController;
 
   String _accountRole = 'Teacher';
+  String _designationSelection = 'Teacher';
   bool _saving = false;
   bool _passwordVisible = false;
   String? _feedback;
@@ -55,7 +63,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   bool get _isAdminOwner => widget.args.isAdminOwner;
   bool get _isEdit => widget.args.isEdit;
 
-  List<String> get _allowedAccountRoles => const ['Teacher'];
+  List<String> get _allowedAccountRoles => const ['Teacher', 'Coordinator'];
 
   @override
   void initState() {
@@ -77,6 +85,10 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     if (!_allowedAccountRoles.contains(_accountRole)) {
       _accountRole = _allowedAccountRoles.first;
     }
+    final designation = _designationController.text.trim();
+    _designationSelection = _designationChoices.contains(designation)
+        ? designation
+        : _customDesignation;
   }
 
   @override
@@ -232,12 +244,9 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
       controller: _employeeController,
       textInputAction: TextInputAction.next,
       decoration: const InputDecoration(
-        labelText: 'Employee ID *',
+        labelText: 'Employee ID (optional)',
         prefixIcon: Icon(Icons.badge_outlined),
       ),
-      validator: (value) => value == null || value.trim().isEmpty
-          ? 'Employee ID is required'
-          : null,
     );
   }
 
@@ -255,16 +264,53 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   }
 
   Widget _buildDesignationField() {
-    return TextFormField(
-      controller: _designationController,
-      textInputAction: TextInputAction.next,
-      textCapitalization: TextCapitalization.words,
-      decoration: const InputDecoration(
-        labelText: 'Designation *',
-        prefixIcon: Icon(Icons.badge_rounded),
-      ),
-      validator: (value) =>
-          value == null || value.trim().isEmpty ? 'Required' : null,
+    return Column(
+      children: [
+        DropdownButtonFormField<String>(
+          value: _designationSelection,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Designation *',
+            prefixIcon: Icon(Icons.badge_rounded),
+          ),
+          items: _designationChoices
+              .map(
+                (value) => DropdownMenuItem(value: value, child: Text(value)),
+              )
+              .toList(),
+          onChanged: (value) {
+            if (value == null) return;
+            setState(() {
+              _designationSelection = value;
+              if (value != _customDesignation) {
+                _designationController.text = value;
+                if (value == 'Coordinator') {
+                  _accountRole = 'Coordinator';
+                } else if (_accountRole == 'Coordinator') {
+                  _accountRole = 'Teacher';
+                }
+              } else {
+                _designationController.clear();
+              }
+            });
+          },
+        ),
+        if (_designationSelection == _customDesignation) ...[
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _designationController,
+            textInputAction: TextInputAction.next,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Custom designation *',
+              prefixIcon: Icon(Icons.badge_rounded),
+            ),
+            validator: (value) => value == null || value.trim().isEmpty
+                ? 'Custom designation is required'
+                : null,
+          ),
+        ],
+      ],
     );
   }
 
@@ -274,11 +320,14 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
       keyboardType: TextInputType.phone,
       textInputAction: TextInputAction.next,
       decoration: const InputDecoration(
-        labelText: 'Phone *',
+        labelText: 'Phone (optional)',
         prefixIcon: Icon(Icons.phone_rounded),
       ),
-      validator: (value) =>
-          value == null || value.trim().isEmpty ? 'Phone is required' : null,
+      validator: (value) {
+        final phone = value?.trim() ?? '';
+        if (phone.isEmpty) return null;
+        return phone.length < 7 ? 'Enter a valid phone number' : null;
+      },
     );
   }
 
@@ -289,12 +338,12 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
       textInputAction: TextInputAction.next,
       autofillHints: const [AutofillHints.email],
       decoration: const InputDecoration(
-        labelText: 'Email *',
+        labelText: 'Email (optional)',
         prefixIcon: Icon(Icons.email_outlined),
       ),
       validator: (value) {
         final email = value?.trim() ?? '';
-        if (email.isEmpty) return 'Email is required';
+        if (email.isEmpty) return null;
         if (!email.contains('@')) return 'Enter a valid email';
         return null;
       },

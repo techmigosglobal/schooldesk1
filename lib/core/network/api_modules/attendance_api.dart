@@ -235,6 +235,43 @@ extension BackendAttendanceApi on BackendApiClient {
     }
   }
 
+  Future<StaffAttendanceModel> punchOutMyStaffAttendance() async {
+    try {
+      final response = await _dio.post('/attendance/staff/me/punch-out');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return StaffAttendanceModel.fromJson(
+          Map<String, dynamic>.from(data['data'] as Map),
+        );
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to record staff punch-out',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getStaffDailyAttendanceSummary({
+    String? date,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/attendance/staff/daily-summary',
+        queryParameters: {if (date != null && date.isNotEmpty) 'date': date},
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true && data['data'] is Map) {
+        return Map<String, dynamic>.from(data['data'] as Map);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load staff attendance summary',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<StaffAttendanceModel?> getMyStaffAttendanceToday() async {
     try {
       final response = await _dio.get('/attendance/staff/me/today');

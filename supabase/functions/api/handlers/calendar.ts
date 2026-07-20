@@ -122,7 +122,7 @@ export async function handleCalendar(
       return ok(data ?? []);
     }
     if (!id && method === "POST") {
-      if (roleName(user) !== "principal") return fail("forbidden", 403);
+      if (!["principal", "coordinator"].includes(roleName(user))) return fail("forbidden", 403);
       const payload = {
         ...body,
         school_id: sid,
@@ -143,7 +143,7 @@ export async function handleCalendar(
       return ok(data);
     }
     if (id && method === "PUT") {
-      if (roleName(user) !== "principal") return fail("forbidden", 403);
+      if (!["principal", "coordinator"].includes(roleName(user))) return fail("forbidden", 403);
       const payload = {
         ...body,
         event_name: body.event_name ?? body.event_title,
@@ -160,7 +160,7 @@ export async function handleCalendar(
       return ok(data);
     }
     if (id && method === "DELETE") {
-      if (roleName(user) !== "principal") return fail("forbidden", 403);
+      if (!["principal", "coordinator"].includes(roleName(user))) return fail("forbidden", 403);
       const { error } = await svc.from("events").delete().eq("id", id).eq(
         "school_id",
         sid,

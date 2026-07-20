@@ -49,6 +49,7 @@ class AppTheme {
     motion: SchoolDeskMotion.standard,
     roleColors: {
       SchoolDeskRole.principal: Color(0xFF1D4ED8),
+      SchoolDeskRole.coordinator: Color(0xFF1D4ED8),
       SchoolDeskRole.teacher: Color(0xFF7C3AED),
       SchoolDeskRole.parent: Color(0xFF0F766E),
       SchoolDeskRole.student: Color(0xFFEA580C),
@@ -95,6 +96,7 @@ class AppTheme {
     motion: SchoolDeskMotion.standard,
     roleColors: {
       SchoolDeskRole.principal: Color(0xFF93C5FD),
+      SchoolDeskRole.coordinator: Color(0xFF93C5FD),
       SchoolDeskRole.teacher: Color(0xFFC4B5FD),
       SchoolDeskRole.parent: Color(0xFF5EEAD4),
       SchoolDeskRole.student: Color(0xFFFDBA74),

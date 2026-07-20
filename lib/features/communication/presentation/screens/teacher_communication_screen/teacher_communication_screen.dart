@@ -296,6 +296,7 @@ class _TeacherCommunicationScreenState
               teacherId: RoleAccessService.teacherStaffId,
               parentId: _text(conversation['parent_id']),
               studentId: _text(conversation['student_id']),
+              leaderId: _text(conversation['leader_id']),
               title: _conversationTitle(conversation),
             );
         conversationId = _text(created['id']);
@@ -584,15 +585,20 @@ List<Map<String, dynamic>> _mergeConversationsWithContacts({
       };
     }
 
-    if (role == 'principal') {
-      final principalId = _text(contact['id']);
-      if (principalId.isEmpty) continue;
-      final exists = principalConversations.isNotEmpty;
+    if (role == 'principal' || role == 'coordinator') {
+      final leaderId = _text(contact['id']);
+      if (leaderId.isEmpty) continue;
+      final exists = principalConversations.any(
+        (row) => _text(row['leader_id']) == leaderId,
+      );
       if (exists) continue;
-      merged['contact-principal-$principalId'] = {
-        'id': 'contact-principal-$principalId',
+      final leaderLabel = role == 'coordinator' ? 'Coordinator' : 'Principal';
+      merged['contact-leader-$leaderId'] = {
+        'id': 'contact-leader-$leaderId',
         'type': 'principal_teacher',
-        'principal_id': principalId,
+        'leader_id': leaderId,
+        'leader_role': role,
+        'leader_name': _text(contact['name'], fallback: leaderLabel),
         'last_message': '',
         'last_message_at': null,
         'unread_count': 0,
@@ -609,7 +615,9 @@ bool _isContactPlaceholder(Map<String, dynamic> row) =>
 
 String _conversationTitle(Map<String, dynamic> row) {
   final type = _text(row['type']);
-  if (type == 'principal_teacher') return 'Principal';
+  if (type == 'principal_teacher') {
+    return _text(row['leader_name'], fallback: 'School leadership');
+  }
   return _name(_map(row['parent']), fallback: 'Parent');
 }
 

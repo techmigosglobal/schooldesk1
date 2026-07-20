@@ -899,6 +899,7 @@ class StaffAttendanceModel {
   final DateTime? checkOut;
   final String status;
   final String source;
+  final String checkOutSource;
   final String biometricId;
   final String markedBy;
   final StaffModel? staff;
@@ -911,6 +912,7 @@ class StaffAttendanceModel {
     required this.checkOut,
     required this.status,
     required this.source,
+    required this.checkOutSource,
     required this.biometricId,
     required this.markedBy,
     required this.staff,
@@ -928,6 +930,15 @@ class StaffAttendanceModel {
 
   String get checkOutTimeLabel => _clockLabel(checkOut);
 
+  String get workedDurationLabel {
+    if (checkIn == null || checkOut == null) return '';
+    final duration = checkOut!.difference(checkIn!);
+    if (duration.isNegative) return '';
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    return '${hours}h ${minutes}m';
+  }
+
   factory StaffAttendanceModel.fromJson(Map<String, dynamic> json) {
     final staffJson = json['staff'];
     return StaffAttendanceModel(
@@ -938,6 +949,7 @@ class StaffAttendanceModel {
       checkOut: _parseDateTime(json['check_out']),
       status: '${json['status'] ?? ''}',
       source: '${json['source'] ?? 'manual'}',
+      checkOutSource: '${json['check_out_source'] ?? ''}',
       biometricId: '${json['biometric_id'] ?? ''}',
       markedBy: '${json['marked_by'] ?? ''}',
       staff: staffJson is Map

@@ -20,7 +20,7 @@ void main() {
   );
 
   test(
-    'chat handler protects conversation access and notifies principals in direct chats',
+    'chat handler protects conversation access and preserves direct-leader ownership',
     () {
       final handler = File(
         'supabase/functions/api/handlers/communications.ts',
@@ -32,7 +32,9 @@ void main() {
       expect(handler, contains('resolveChatNotificationTarget'));
       expect(
         handler,
-        contains('const createdBy = text(conversation.created_by);'),
+        contains(
+          'const createdBy = text(conversation.leader_id ?? conversation.created_by);',
+        ),
       );
       expect(handler, contains('async function principalUserIdForSchool'));
       expect(handler, contains('if (type === "principal_parent")'));
@@ -129,7 +131,7 @@ void main() {
     );
     expect(
       principalScreen,
-      contains("api.getUnifiedChatContacts(role: 'principal'"),
+      contains('api.getUnifiedChatContacts(role: _leadershipRole)'),
     );
   });
 
@@ -153,7 +155,7 @@ void main() {
         parentScreen,
         contains('School leadership - tap to start direct chat'),
       );
-      expect(parentScreen, contains('principalConversations.isNotEmpty'));
+      expect(parentScreen, contains('leaderId: leaderId'));
       expect(parentScreen, contains("tooltip: 'Back to chats'"));
       expect(teacherScreen, contains("tooltip: 'Back to chats'"));
       expect(principalScreen, contains("tooltip: 'Back to chats'"));
@@ -178,7 +180,7 @@ void main() {
       expect(principalScreen, contains('_safeModelRows('));
       expect(
         principalScreen,
-        contains("api.getUnifiedChatContacts(role: 'principal')"),
+        contains('api.getUnifiedChatContacts(role: _leadershipRole)'),
       );
       expect(principalScreen, contains("api.getStaff(page: 1, pageSize: 200)"));
       expect(principalScreen, contains("api.getUsers(role: 'Parent'"));
@@ -186,13 +188,14 @@ void main() {
       expect(principalScreen, contains("'id': 'contact-parent-\$id'"));
       expect(
         principalScreen,
-        contains('Teacher contact - tap to start direct chat'),
+        contains('_directContactHint(row, \'Teacher contact\')'),
       );
       expect(
         principalScreen,
-        contains('Parent contact - tap to start direct chat'),
+        contains('_directContactHint(row, \'Parent contact\')'),
       );
-      expect(teacherScreen, contains('principalConversations.isNotEmpty'));
+      expect(principalScreen, contains('directTeacher.where(_canSendIn)'));
+      expect(principalScreen, contains('directParent.where(_canSendIn)'));
     },
   );
 
@@ -305,6 +308,30 @@ void main() {
   });
 
   test(
+    'principal direct-contact filters retain readable contrast and class context',
+    () {
+      final principalScreen = File(
+        'lib/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart',
+      ).readAsStringSync();
+
+      expect(principalScreen, contains('Widget _directFilters()'));
+      expect(principalScreen, contains('SingleChildScrollView('));
+      expect(principalScreen, contains("label: 'Teachers (\$teacherCount)'"));
+      expect(principalScreen, contains("label: 'Parents (\$parentCount)'"));
+      expect(
+        principalScreen,
+        contains('selectedColor: theme.primaryContainer'),
+      );
+      expect(
+        principalScreen,
+        contains('color: selected ? theme.primary : theme.onSurface'),
+      );
+      expect(principalScreen, contains('List<String> _classSectionsFor'));
+      expect(principalScreen, contains('String _directContactHint'));
+    },
+  );
+
+  test(
     'teacher chat hydrates parent and principal contacts even before direct threads exist',
     () {
       final teacherScreen = File(
@@ -329,10 +356,7 @@ void main() {
         teacherScreen,
         contains("studentId: _text(conversation['student_id'])"),
       );
-      expect(
-        teacherScreen,
-        contains("'id': 'contact-principal-\$principalId'"),
-      );
+      expect(teacherScreen, contains("'id': 'contact-leader-\$leaderId'"));
       expect(
         teacherScreen,
         contains('Parent contact - tap to start direct chat'),

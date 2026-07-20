@@ -37,6 +37,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   String? _error;
   String _parentFilter = 'all';
 
+  bool get _isSchoolLeader => const {
+    'principal',
+    'coordinator',
+  }.contains(widget.role.trim().toLowerCase());
+
+  bool get _isCoordinator => widget.role.trim().toLowerCase() == 'coordinator';
+
   @override
   void initState() {
     super.initState();
@@ -54,7 +61,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     });
     try {
       _service = await NotificationService.getInstance();
-      if (forceRefresh || widget.role.trim().toLowerCase() == 'principal') {
+      if (forceRefresh || _isSchoolLeader) {
         await _service?.refresh();
       }
     } on Object catch (error) {
@@ -71,8 +78,18 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
   List<AppNotification> _filtered(String? category) {
     final all = _service?.getNotificationsForRole(widget.role) ?? [];
-    if (category == null) return all;
-    if (widget.role.trim().toLowerCase() == 'principal') {
+    if (category == null) {
+      return _isCoordinator
+          ? all
+                .where(
+                  (notification) =>
+                      _principalCategory(notification) !=
+                      NotificationCategory.feeDue,
+                )
+                .toList()
+          : all;
+    }
+    if (_isSchoolLeader) {
       return all.where((n) => _principalCategory(n) == category).toList();
     }
     return all.where((n) => n.category == category).toList();
@@ -82,6 +99,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     return switch (role.trim().toLowerCase()) {
       'teacher' => 5,
       'principal' => 6,
+      'coordinator' => 5,
       _ => 5,
     };
   }
@@ -168,7 +186,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                           mutedColor,
                         ),
                       ]
-                    : widget.role.trim().toLowerCase() == 'principal'
+                    : _isSchoolLeader
                     ? [
                         _buildList(
                           null,
@@ -198,13 +216,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                           onSurfaceColor,
                           mutedColor,
                         ),
-                        _buildList(
-                          NotificationCategory.feeDue,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
+                        if (!_isCoordinator)
+                          _buildList(
+                            NotificationCategory.feeDue,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
                         _buildList(
                           NotificationCategory.event,
                           bgColor,
@@ -263,6 +282,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         Tab(text: 'Birthdays'),
         Tab(text: 'Health'),
         Tab(text: 'Fees'),
+        Tab(text: 'Events'),
+      ],
+      'coordinator' => const [
+        Tab(text: 'All'),
+        Tab(text: 'Approvals'),
+        Tab(text: 'Birthdays'),
+        Tab(text: 'Health'),
         Tab(text: 'Events'),
       ],
       _ => const [
@@ -544,8 +570,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             categoryLabel: _categoryLabel(category),
             hasBackendIssue: _error != null,
             runtimeStatus: PushNotificationService.instance.runtimeStatus,
-            showPushDiagnostics:
-                widget.role.trim().toLowerCase() == 'principal',
+            showPushDiagnostics: _isSchoolLeader,
             diagnosticsInFlight: _runningPushDiagnostic,
             onRunPushDiagnostics: _runPushDiagnostics,
           ),
@@ -688,7 +713,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     Color onSurfaceColor,
     Color mutedColor,
   ) {
-    final effectiveCategory = widget.role.trim().toLowerCase() == 'principal'
+    final effectiveCategory = _isSchoolLeader
         ? _principalCategory(notif)
         : notif.category;
     final categoryIcon = _getCategoryIcon(effectiveCategory);

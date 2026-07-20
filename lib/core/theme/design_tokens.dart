@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum SchoolDeskRole { principal, teacher, parent, student }
+enum SchoolDeskRole { principal, coordinator, teacher, parent, student }
 
 @immutable
 class SchoolDeskSpacing {
@@ -372,6 +372,7 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       motion: SchoolDeskMotion.standard,
       roleColors: const {
         SchoolDeskRole.principal: Color(0xFF1D4ED8),
+        SchoolDeskRole.coordinator: Color(0xFF1D4ED8),
         SchoolDeskRole.teacher: Color(0xFF7C3AED),
         SchoolDeskRole.parent: Color(0xFF0F766E),
         SchoolDeskRole.student: Color(0xFFEA580C),

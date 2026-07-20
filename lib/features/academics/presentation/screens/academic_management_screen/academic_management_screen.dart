@@ -69,7 +69,10 @@ class _AcademicManagementScreenState extends State<AcademicManagementScreen>
   int _unreadNotifications = 0;
 
   String get _role => widget.ownerRole.toLowerCase();
-  bool get _isAdminOwner => widget.ownerRole.toLowerCase() == 'principal';
+  bool get _isAdminOwner => const {
+    'principal',
+    'coordinator',
+  }.contains(widget.ownerRole.toLowerCase());
 
   @override
   void initState() {
@@ -761,7 +764,8 @@ class _AcademicYearsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canManageAcademicYears =
-        isAdminOwner || ownerRole.toLowerCase() == 'principal';
+        isAdminOwner ||
+        const {'principal', 'coordinator'}.contains(ownerRole.toLowerCase());
     final studentTotal = classes.fold<int>(
       0,
       (sum, row) =>

@@ -45,7 +45,7 @@ type SchoolWipeAccounts = {
 
 function isRetainedWipeRole(value: unknown): boolean {
   const role = text(value).toLowerCase();
-  return role === "principal" || role === "super_admin";
+  return role === "principal" || role === "coordinator" || role === "super_admin";
 }
 
 async function collectSchoolWipeAccounts(

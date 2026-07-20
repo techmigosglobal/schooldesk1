@@ -115,7 +115,56 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
         _attendance = attendance;
         _attendanceLog = attendanceLog;
         _submitting = false;
-        _message = 'Attendance punch recorded';
+        _message = attendance.checkOut != null
+            ? 'Check-out recorded'
+            : 'Check-in recorded';
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  Future<void> _punchOut() async {
+    if (_submitting ||
+        _attendance?.checkedIn != true ||
+        _attendance?.checkOut != null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Punch out'),
+        content: const Text('Record your attendance check-out time now?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Punch out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+      _message = null;
+    });
+    try {
+      final attendance = await BackendApiClient.instance
+          .punchOutMyStaffAttendance();
+      if (!mounted) return;
+      setState(() {
+        _attendance = attendance;
+        _submitting = false;
+        _message = 'Check-out recorded';
       });
     } on Object catch (error) {
       if (!mounted) return;
@@ -130,7 +179,7 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
   Widget build(BuildContext context) {
     return TeacherFlowScaffold(
       title: 'My Attendance',
-      subtitle: 'QR Punch-in',
+      subtitle: 'QR check-in and check-out',
       selectedIndex: TeacherNav.myAttendance,
       loading: _loading,
       error: _error,
@@ -140,11 +189,17 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
           Semantics(
             label: 'Teacher QR attendance punch screen',
             child: TeacherCurrentClassCard(
-              greeting: _attendance?.checkedIn == true
-                  ? 'Attendance Recorded'
-                  : 'Ready to punch in',
-              classLabel: 'Scan the live staff QR',
-              subject: _attendance?.checkInTimeLabel ?? 'Punch In pending',
+              greeting: _attendance?.checkOut != null
+                  ? 'Checked out'
+                  : _attendance?.checkedIn == true
+                  ? 'Checked in'
+                  : 'Ready to check in',
+              classLabel: _attendance?.checkOut != null
+                  ? 'Your attendance is complete for today'
+                  : 'Scan the live staff QR',
+              subject: _attendance?.checkOut != null
+                  ? 'In ${_attendance?.checkInTimeLabel ?? '--:--'} · Out ${_attendance?.checkOutTimeLabel ?? '--:--'}'
+                  : _attendance?.checkInTimeLabel ?? 'Check-in pending',
               timeLabel: '',
               actions: [
                 TeacherFlowAction(
@@ -153,6 +208,14 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
                   filled: true,
                   onTap: _openScanner,
                 ),
+                if (_attendance?.checkedIn == true &&
+                    _attendance?.checkOut == null)
+                  TeacherFlowAction(
+                    label: 'Punch Out',
+                    icon: Icons.logout_rounded,
+                    filled: true,
+                    onTap: _punchOut,
+                  ),
                 TeacherFlowAction(
                   label: 'Refresh Status',
                   icon: Icons.refresh_rounded,
@@ -233,6 +296,7 @@ class _AttendanceLogRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = record.date ?? record.checkIn;
     final checkIn = record.checkIn;
+    final checkOut = record.checkOut;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -250,8 +314,8 @@ class _AttendanceLogRow extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
-              Icons.login_rounded,
+            child: Icon(
+              checkOut == null ? Icons.login_rounded : Icons.logout_rounded,
               color: teacherFlowAccent,
               size: 22,
             ),
@@ -269,13 +333,22 @@ class _AttendanceLogRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            _timeLabel(checkIn),
-            style: const TextStyle(
-              color: teacherFlowInk,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'In ${_timeLabel(checkIn)}',
+                style: const TextStyle(
+                  color: teacherFlowInk,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                'Out ${_timeLabel(checkOut)}',
+                style: const TextStyle(color: teacherFlowMuted, fontSize: 12),
+              ),
+            ],
           ),
         ],
       ),

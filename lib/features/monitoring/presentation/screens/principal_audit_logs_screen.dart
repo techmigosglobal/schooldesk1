@@ -16,7 +16,10 @@ class PrincipalAuditLogsScreen extends StatefulWidget {
 
 class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
   final _userController = TextEditingController();
+  final _searchController = TextEditingController();
   String _module = '';
+  String _actorRole = '';
+  String _eventType = '';
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _logs = const [];
@@ -30,6 +33,7 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
   @override
   void dispose() {
     _userController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -46,6 +50,10 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
           if (_module.isNotEmpty) 'module': _module,
           if (_userController.text.trim().isNotEmpty)
             'user_id': _userController.text.trim(),
+          if (_actorRole.isNotEmpty) 'actor_role': _actorRole,
+          if (_eventType.isNotEmpty) 'event_type': _eventType,
+          if (_searchController.text.trim().isNotEmpty)
+            'search': _searchController.text.trim(),
         },
       );
       if (!mounted) return;
@@ -122,6 +130,12 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
               DropdownMenuItem(value: 'staff', child: Text('Staff')),
               DropdownMenuItem(value: 'homework', child: Text('Homework')),
               DropdownMenuItem(value: 'fees', child: Text('Fees')),
+              DropdownMenuItem(value: 'attendance', child: Text('Attendance')),
+              DropdownMenuItem(value: 'auth', child: Text('Authentication')),
+              DropdownMenuItem(
+                value: 'communications',
+                child: Text('Communications'),
+              ),
             ],
             onChanged: (value) {
               setState(() => _module = value ?? '');
@@ -136,6 +150,62 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
             decoration: const InputDecoration(
               labelText: 'User ID',
               suffixIcon: Icon(Icons.person_search_rounded),
+            ),
+            onSubmitted: (_) => _loadLogs(),
+          ),
+        ),
+        SizedBox(
+          width: 180,
+          child: DropdownButtonFormField<String>(
+            initialValue: _actorRole,
+            decoration: const InputDecoration(labelText: 'Actor role'),
+            items: const [
+              DropdownMenuItem(value: '', child: Text('All roles')),
+              DropdownMenuItem(value: 'teacher', child: Text('Teacher')),
+              DropdownMenuItem(value: 'kiosk', child: Text('Kiosk')),
+              DropdownMenuItem(value: 'principal', child: Text('Principal')),
+              DropdownMenuItem(
+                value: 'coordinator',
+                child: Text('Coordinator'),
+              ),
+            ],
+            onChanged: (value) {
+              setState(() => _actorRole = value ?? '');
+              _loadLogs();
+            },
+          ),
+        ),
+        SizedBox(
+          width: 180,
+          child: DropdownButtonFormField<String>(
+            initialValue: _eventType,
+            decoration: const InputDecoration(labelText: 'Event'),
+            items: const [
+              DropdownMenuItem(value: '', child: Text('All events')),
+              DropdownMenuItem(value: 'login', child: Text('Login')),
+              DropdownMenuItem(value: 'logout', child: Text('Logout')),
+              DropdownMenuItem(
+                value: 'attendance.check_in',
+                child: Text('Check-in'),
+              ),
+              DropdownMenuItem(
+                value: 'attendance.check_out',
+                child: Text('Check-out'),
+              ),
+            ],
+            onChanged: (value) {
+              setState(() => _eventType = value ?? '');
+              _loadLogs();
+            },
+          ),
+        ),
+        SizedBox(
+          width: 220,
+          child: TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+              labelText: 'Search activity',
+              suffixIcon: Icon(Icons.search_rounded),
             ),
             onSubmitted: (_) => _loadLogs(),
           ),
@@ -164,10 +234,14 @@ class _AuditLogTile extends StatelessWidget {
     return Card(
       child: ListTile(
         leading: const Icon(Icons.history_rounded),
-        title: Text('${log['action'] ?? 'activity'} ${log['module'] ?? ''}'),
+        title: Text('${log['summary'] ?? log['action'] ?? 'Activity'}'),
         subtitle: Text(
           [
-            if ('${log['role'] ?? ''}'.isNotEmpty) 'Role: ${log['role']}',
+            if ('${log['actor_name'] ?? ''}'.isNotEmpty)
+              'Actor: ${log['actor_name']}',
+            if ('${log['actor_role'] ?? ''}'.isNotEmpty)
+              'Role: ${log['actor_role']}',
+            if ('${log['module'] ?? ''}'.isNotEmpty) 'Module: ${log['module']}',
             if ('${log['entity_type'] ?? ''}'.isNotEmpty)
               'Entity: ${log['entity_type']}',
             if ('${log['ip_address'] ?? ''}'.isNotEmpty)

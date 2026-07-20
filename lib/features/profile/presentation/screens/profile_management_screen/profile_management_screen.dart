@@ -48,6 +48,8 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
       case 'principal':
       case 'admin':
         return SchoolDeskRole.principal;
+      case 'coordinator':
+        return SchoolDeskRole.coordinator;
       case 'teacher':
         return SchoolDeskRole.teacher;
       case 'parent':

@@ -33,10 +33,11 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   final List<Map<String, dynamic>> _activities = [];
 
   List<String> get _manageableRoles => _isSuperAdminOwner
-      ? const ['Principal', 'Teacher', 'Parent']
-      : const ['Teacher', 'Parent'];
+      ? const ['Principal', 'Coordinator', 'Teacher', 'Parent']
+      : const ['Coordinator', 'Teacher', 'Parent'];
 
   bool get _isPrincipalOwner => widget.ownerRole == 'principal';
+  bool get _isCoordinatorOwner => widget.ownerRole == 'coordinator';
   bool get _isSuperAdminOwner => widget.ownerRole == 'super_admin';
 
   final Map<String, List<String>> _rolePermissions = {
@@ -49,6 +50,15 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       'Approvals',
       'Communication',
       'All Access',
+    ],
+    'Coordinator': [
+      'Dashboard',
+      'Staff',
+      'Students',
+      'Reports',
+      'Approvals',
+      'Communication',
+      'All Access except Fees',
     ],
     'Teacher': ['Dashboard', 'Attendance', 'Communication'],
     'Parent': ['Child Profile', 'Attendance View', 'Fee View', 'Notices'],
@@ -210,7 +220,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       title: title,
       subtitle: _isSuperAdminOwner
           ? 'Manage role access boundaries across the school'
-          : _isPrincipalOwner
+          : (_isPrincipalOwner || _isCoordinatorOwner)
           ? 'Create school operators and review permission boundaries'
           : 'Provision teacher and parent accounts from backend users',
       drawer: drawer,
@@ -223,7 +233,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
-        if (_isPrincipalOwner)
+        if (_isPrincipalOwner || _isCoordinatorOwner)
           Semantics(
             label: 'Create role login',
             button: true,

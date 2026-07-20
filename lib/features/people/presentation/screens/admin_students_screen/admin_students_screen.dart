@@ -32,7 +32,10 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   List<Map<String, String>> _sectionOptions = [];
   List<Map<String, String>> _parentOptions = [];
 
-  bool get _isPrincipal => widget.ownerRole.toLowerCase() == 'principal';
+  bool get _isPrincipal => const {
+    'principal',
+    'coordinator',
+  }.contains(widget.ownerRole.toLowerCase());
 
   @override
   void initState() {

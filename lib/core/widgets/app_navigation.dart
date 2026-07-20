@@ -48,7 +48,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
     if (!mounted) return;
     setState(() {
       _notifService = svc;
-      _unreadCount = svc.getUnreadCountForRole('principal');
+      _unreadCount = svc.getUnreadCountForRole(_leadershipRole);
     });
     svc.addListener(_onNotifChanged);
   }
@@ -89,7 +89,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
   void _onNotifChanged() {
     if (!mounted) return;
     setState(() {
-      _unreadCount = _notifService?.getUnreadCountForRole('principal') ?? 0;
+      _unreadCount = _notifService?.getUnreadCountForRole(_leadershipRole) ?? 0;
     });
   }
 
@@ -101,9 +101,10 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    final isCoordinator = _leadershipRole == 'coordinator';
     return SchoolDeskNavigationDrawer(
-      role: SchoolDeskRole.principal,
-      portalLabel: 'Principal Portal',
+      role: isCoordinator ? SchoolDeskRole.coordinator : SchoolDeskRole.principal,
+      portalLabel: isCoordinator ? 'Coordinator Portal' : 'Principal Portal',
       organizationName: _schoolName,
       organizationSubtitle: _schoolSubtitle,
       organizationLogo: _schoolLogo.isEmpty
@@ -125,6 +126,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
             ),
       portalIcon: Icons.account_balance_rounded,
+      hiddenRoutes: isCoordinator ? {AppRoutes.feeMonitoring} : const {},
       selectedIndex: widget.selectedIndex,
       onDestinationSelected: widget.onDestinationSelected,
       sections: const [
@@ -330,20 +332,20 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           icon: Icons.notifications_outlined,
           label: SchoolDeskGlossary.notifications,
           route: AppRoutes.notificationCenter,
-          arguments: 'principal',
+          arguments: _leadershipRole,
           badgeCount: _unreadCount,
         ),
-        const SchoolDeskNavigationFooterAction(
+        SchoolDeskNavigationFooterAction(
           icon: Icons.account_circle_outlined,
           label: SchoolDeskGlossary.profile,
           route: AppRoutes.profileScreen,
-          arguments: 'principal',
+          arguments: _leadershipRole,
         ),
-        const SchoolDeskNavigationFooterAction(
+        SchoolDeskNavigationFooterAction(
           icon: Icons.settings_outlined,
           label: SchoolDeskGlossary.settings,
           route: AppRoutes.settingsScreen,
-          arguments: 'principal',
+          arguments: _leadershipRole,
         ),
         SchoolDeskNavigationFooterAction(
           icon: Icons.logout_rounded,
@@ -351,11 +353,18 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           color: Theme.of(context).colorScheme.error,
           onPressed: (context) => LogoutService.confirmAndSignOut(
             context,
-            portalName: 'Principal portal',
+            portalName: isCoordinator ? 'Coordinator portal' : 'Principal portal',
           ),
         ),
       ],
     );
+  }
+
+  String get _leadershipRole {
+    final role = BackendApiClient.instance.currentRoleName
+        ?.trim()
+        .toLowerCase();
+    return role == 'coordinator' ? 'coordinator' : 'principal';
   }
 
   String _assetUrl(String path) {
@@ -448,33 +457,39 @@ class _PrincipalShellBottomBarState extends State<PrincipalShellBottomBar> {
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;
-    final destinations = const [
+    final role = BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+            'coordinator'
+        ? 'coordinator'
+        : 'principal';
+    final destinations = [
       _PrincipalShellDestination(
         label: 'Home',
         icon: Icons.home_outlined,
         activeIcon: Icons.home_rounded,
-        route: AppRoutes.principalDashboard,
+        route: role == 'coordinator'
+            ? AppRoutes.coordinatorDashboard
+            : AppRoutes.principalDashboard,
       ),
       _PrincipalShellDestination(
         label: SchoolDeskGlossary.search,
         icon: Icons.search_rounded,
         activeIcon: Icons.manage_search_rounded,
         route: AppRoutes.globalSearch,
-        arguments: 'principal',
+        arguments: role,
       ),
       _PrincipalShellDestination(
         label: SchoolDeskGlossary.notifications,
         icon: Icons.notifications_none_rounded,
         activeIcon: Icons.notifications_rounded,
         route: AppRoutes.notificationCenter,
-        arguments: 'principal',
+        arguments: role,
       ),
       _PrincipalShellDestination(
         label: SchoolDeskGlossary.profile,
         icon: Icons.account_circle_outlined,
         activeIcon: Icons.account_circle_rounded,
         route: AppRoutes.profileScreen,
-        arguments: 'principal',
+        arguments: role,
       ),
     ];
 
@@ -504,7 +519,8 @@ class _PrincipalShellBottomBarState extends State<PrincipalShellBottomBar> {
     final navigator = Navigator.of(context);
     final currentRoute = ModalRoute.of(context)?.settings.name;
     if (currentRoute == destination.route) return;
-    if (destination.route == AppRoutes.principalDashboard) {
+    if (destination.route == AppRoutes.principalDashboard ||
+        destination.route == AppRoutes.coordinatorDashboard) {
       navigator.pushNamedAndRemoveUntil(destination.route, (_) => false);
       return;
     }

@@ -45,7 +45,9 @@ async function notifyParentsOfAbsence(
       { parentUserId, studentIds },
     ) => {
       const sortedStudentIds = [...new Set(studentIds)].sort();
-      const entityId = `absence:${attendanceDate}:${sortedStudentIds.join(",")}`;
+      const entityId = `absence:${attendanceDate}:${
+        sortedStudentIds.join(",")
+      }`;
       const message = sortedStudentIds.length === 1
         ? `Your child was marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`
         : `Your children were marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`;
@@ -106,7 +108,9 @@ async function notifyParentsOfAbsence(
       dedupe_key: `attendance:${delivery.userId}:${delivery.entityId}`,
       event_data: {
         student_ids: delivery.studentIds,
-        student_id: delivery.studentIds.length === 1 ? delivery.studentIds[0] : "",
+        student_id: delivery.studentIds.length === 1
+          ? delivery.studentIds[0]
+          : "",
         status: "absent",
         date: attendanceDate,
         message: delivery.message,
@@ -135,13 +139,17 @@ function role(u: User) {
   return `${u.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
 }
 function canDisplayStaffQr(roleName: string) {
-  return ["admin", "principal", "kiosk", "super_admin"].includes(roleName);
+  return ["admin", "principal", "coordinator", "kiosk", "super_admin"].includes(
+    roleName,
+  );
 }
 function canScanStaffQr(roleName: string) {
   return ["teacher", "staff"].includes(roleName);
 }
 function canManageAttendance(roleName: string) {
-  return ["admin", "principal", "super_admin"].includes(roleName);
+  return ["admin", "principal", "coordinator", "super_admin"].includes(
+    roleName,
+  );
 }
 
 async function parentCanAccessStudent(
@@ -196,7 +204,47 @@ const staffQRRefreshSeconds = 7;
 const staffQRScanGraceSeconds = 10;
 
 function todayDate() {
-  return new Date().toISOString().split("T")[0];
+  return indiaDateParts(new Date()).date;
+}
+
+function indiaDateParts(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value || "";
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    hour: Number(get("hour")),
+  };
+}
+
+function staffPunchPayload(
+  attendance: Record<string, unknown>,
+  punchAction:
+    | "check_in"
+    | "check_out"
+    | "already_checked_in"
+    | "already_checked_out",
+) {
+  const checkIn = `${attendance.check_in ?? ""}`;
+  const checkOut = `${attendance.check_out ?? ""}`;
+  const durationMinutes = checkIn && checkOut
+    ? Math.max(
+      0,
+      Math.round((Date.parse(checkOut) - Date.parse(checkIn)) / 60000),
+    )
+    : null;
+  return {
+    ...attendance,
+    punch_action: punchAction,
+    worked_minutes: durationMinutes,
+  };
 }
 
 function base64UrlEncode(bytes: Uint8Array) {
@@ -268,6 +316,7 @@ function staffAttendanceCsv(rows: Array<Record<string, unknown>>) {
     "status",
     "check_in",
     "check_out",
+    "check_out_source",
     "source",
     "qr_scanned",
   ];
@@ -288,6 +337,7 @@ function staffAttendanceCsv(rows: Array<Record<string, unknown>>) {
       row.status,
       row.check_in,
       row.check_out,
+      row.check_out_source,
       row.source,
       row.qr_scanned,
     ].map(escape).join(",");
@@ -799,6 +849,79 @@ export async function handleAttendance(
     return ok({ attendance: data ?? null });
   }
 
+  if (path === "/attendance/staff/me/punch-out" && method === "POST") {
+    if (!canScanStaffQr(roleName)) return fail("forbidden", 403);
+    if (!linkedStaffId) return fail("staff profile not linked", 400);
+    const date = todayDate();
+    const { data: existing, error: existingError } = await svc
+      .from("staff_attendances")
+      .select("*, staff:staff(*)")
+      .eq("school_id", school)
+      .eq("staff_id", linkedStaffId)
+      .eq("date", date)
+      .maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (!existing?.check_in) {
+      return fail("check-in is required before punch-out", 409);
+    }
+    if (existing.check_out) {
+      return ok(staffPunchPayload(existing, "already_checked_out"));
+    }
+    const now = new Date().toISOString();
+    const { data, error } = await svc.from("staff_attendances").update({
+      check_out: now,
+      check_out_source: "manual",
+      check_out_marked_by: user.id,
+      updated_at: now,
+    }).eq("id", existing.id).select("*, staff:staff(*)").single();
+    if (error) return fail(error.message);
+    return ok(staffPunchPayload(data, "check_out"));
+  }
+
+  if (path === "/attendance/staff/daily-summary" && method === "GET") {
+    if (!canDisplayStaffQr(roleName)) return fail("forbidden", 403);
+    const date = url.searchParams.get("date") || todayDate();
+    const [
+      { data: staff, error: staffError },
+      { data: attendance, error: attendanceError },
+    ] = await Promise.all([
+      // The dashboard only needs the active staff count here. `staff` stores
+      // names as first_name / last_name; it does not have a full_name column.
+      // Selecting only the ID keeps this count query schema-safe and avoids
+      // failing the whole attendance dashboard before any data can render.
+      svc.from("staff").select("id")
+        .eq("school_id", school),
+      svc.from("staff_attendances").select("*, staff:staff(*)")
+        .eq("school_id", school).eq("date", date).order("check_in", {
+          ascending: true,
+        }),
+    ]);
+    if (staffError) return fail(staffError.message);
+    if (attendanceError) return fail(attendanceError.message);
+    const rows = attendance ?? [];
+    const checkedIn = rows.filter((row) => Boolean(row.check_in));
+    const checkedOut = rows.filter((row) => Boolean(row.check_out));
+    return ok({
+      date,
+      timezone: "Asia/Kolkata",
+      expected_staff: staff?.length ?? 0,
+      checked_in: checkedIn.length,
+      checked_out: checkedOut.length,
+      currently_on_site: checkedIn.length - checkedOut.length,
+      pending: Math.max(0, (staff?.length ?? 0) - checkedIn.length),
+      attendances: rows.map((row) =>
+        staffPunchPayload(
+          row,
+          row.check_out
+            ? "already_checked_out"
+            : row.check_in
+            ? "already_checked_in"
+            : "check_in",
+        )
+      ),
+    });
+  }
+
   if (path === "/attendance/staff/qr-token" && method === "GET") {
     if (!canDisplayStaffQr(roleName)) return fail("forbidden", 403);
     const today = todayDate();
@@ -855,14 +978,30 @@ export async function handleAttendance(
       .eq("date", date)
       .maybeSingle();
     if (existing.error) return fail(existing.error.message);
-    if (existing.data?.check_in) return ok(existing.data);
+    const afterNoon = indiaDateParts(now).hour >= 12;
+    if (existing.data?.check_out) {
+      return ok(staffPunchPayload(existing.data, "already_checked_out"));
+    }
+    if (existing.data?.check_in && afterNoon) {
+      const { data, error } = await svc.from("staff_attendances").update({
+        check_out: timeValue,
+        check_out_source: "qr",
+        check_out_marked_by: user.id,
+        updated_at: timeValue,
+      }).eq("id", existing.data.id).select("*, staff:staff(*)").single();
+      if (error) return fail(error.message);
+      return ok(staffPunchPayload(data, "check_out"));
+    }
+    if (existing.data?.check_in) {
+      return ok(staffPunchPayload(existing.data, "already_checked_in"));
+    }
     const { data, error } = await svc.from("staff_attendances").upsert({
       school_id: school,
       staff_id: linkedStaffId,
       date,
       status: "present",
       qr_scanned: true,
-      check_in: body.check_in ?? timeValue,
+      check_in: timeValue,
       notes: body.location ?? null,
       source: "qr",
       marked_by: user.id,
@@ -873,8 +1012,8 @@ export async function handleAttendance(
     )
       .eq("id", data.id)
       .single();
-    if (withStaff.error) return ok(data);
-    return ok(withStaff.data);
+    if (withStaff.error) return ok(staffPunchPayload(data, "check_in"));
+    return ok(staffPunchPayload(withStaff.data, "check_in"));
   }
 
   if (path === "/attendance/staff/qr-logs/export" && method === "GET") {
@@ -903,19 +1042,57 @@ export async function handleAttendance(
     if (!canScanStaffQr(roleName)) return fail("forbidden", 403);
     if (!linkedStaffId) return fail("staff profile not linked", 400);
     if (!qr_token) return fail("qr_token required");
-    const today = new Date().toISOString().split("T")[0];
-    const { data, error } = await svc.from("staff_attendances").upsert({
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = await verifyStaffQrToken(`${qr_token}`.trim());
+    } catch (_error) {
+      return fail("invalid token", 400);
+    }
+    if (
+      `${parsed.school_id ?? ""}` !== school ||
+      `${parsed.purpose ?? ""}` !== "staff_attendance"
+    ) {
+      return fail("invalid token", 400);
+    }
+    const today = `${parsed.date ?? todayDate()}`.trim();
+    const now = new Date();
+    const timeValue = now.toISOString();
+    const { data: existing, error: existingError } = await svc
+      .from("staff_attendances")
+      .select("*, staff:staff(*)")
+      .eq("school_id", school)
+      .eq("staff_id", linkedStaffId)
+      .eq("date", today)
+      .maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (existing?.check_out) {
+      return ok(staffPunchPayload(existing, "already_checked_out"));
+    }
+    if (existing?.check_in && indiaDateParts(now).hour >= 12) {
+      const { data, error } = await svc.from("staff_attendances").update({
+        check_out: timeValue,
+        check_out_source: "qr",
+        check_out_marked_by: user.id,
+        updated_at: timeValue,
+      }).eq("id", existing.id).select("*, staff:staff(*)").single();
+      if (error) return fail(error.message);
+      return ok(staffPunchPayload(data, "check_out"));
+    }
+    if (existing?.check_in) {
+      return ok(staffPunchPayload(existing, "already_checked_in"));
+    }
+    const { data, error } = await svc.from("staff_attendances").insert({
       school_id: school,
       staff_id: linkedStaffId,
       date: today,
       status: "present",
       qr_scanned: true,
-      check_in: new Date().toISOString(),
+      check_in: timeValue,
       source: "qr",
       marked_by: user.id,
-    }, { onConflict: "staff_id,date" }).select().single();
+    }).select("*, staff:staff(*)").single();
     if (error) return fail(error.message);
-    return ok(data);
+    return ok(staffPunchPayload(data, "check_in"));
   }
 
   const studentAttendanceMatch = path.match(

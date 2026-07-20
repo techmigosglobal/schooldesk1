@@ -34,6 +34,7 @@ class DesktopToolbar extends StatelessWidget {
     if (role != null && role.isNotEmpty) {
       final portalName = switch (role) {
         'principal' || 'admin' => 'Principal Portal',
+        'coordinator' => 'Coordinator Portal',
         'super_admin' => 'Super Admin Portal',
         'teacher' => 'Teacher Portal',
         'parent' => 'Parent Portal',

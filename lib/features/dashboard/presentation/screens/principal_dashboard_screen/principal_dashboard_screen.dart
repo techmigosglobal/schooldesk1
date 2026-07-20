@@ -34,6 +34,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   String? _error;
   DateTime? _lastBackPressedAt;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
+  Map<String, dynamic> _staffAttendanceSummary = const {};
+  List<Map<String, dynamic>> _recentSchoolActivity = const [];
+
+  bool get _isCoordinator =>
+      BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+      'coordinator';
+
+  String get _leadershipRole => _isCoordinator ? 'coordinator' : 'principal';
 
   @override
   void initState() {
@@ -68,7 +76,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       // Only 3 calls needed to paint the dashboard. Render immediately.
       final criticalResults =
           await Future.wait<Object>([
-            api.getDashboard('principal', forceRefresh: true),
+            api.getDashboard(_leadershipRole, forceRefresh: true),
             api.getCurrentSchool(),
             api.getProfile(),
           ]).timeout(
@@ -162,14 +170,30 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             pageSize: 1,
           ),
         ),
-        _loadOptional(
-          label: 'fee structures',
-          request: api.getFeeStructures(),
-          fallback: <Map<String, dynamic>>[],
-        ),
+        if (!_isCoordinator)
+          _loadOptional(
+            label: 'fee structures',
+            request: api.getFeeStructures(),
+            fallback: <Map<String, dynamic>>[],
+          )
+        else
+          Future.value(<Map<String, dynamic>>[]),
         _loadOptional(
           label: 'notifications',
           request: api.getNotifications(),
+          fallback: <Map<String, dynamic>>[],
+        ),
+        _loadOptional(
+          label: 'staff attendance summary',
+          request: api.getStaffDailyAttendanceSummary(),
+          fallback: <String, dynamic>{},
+        ),
+        _loadOptional(
+          label: 'recent school activity',
+          request: api.getRawList(
+            '/audit-logs',
+            queryParameters: const {'page': 1, 'page_size': 3},
+          ),
           fallback: <Map<String, dynamic>>[],
         ),
       ]).timeout(const Duration(seconds: 45));
@@ -184,6 +208,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       final students = optionalResults[5] as PaginatedList<StudentModel>;
       final feeStructures = optionalResults[6] as List<Map<String, dynamic>>;
       final notifications = optionalResults[7] as List<Map<String, dynamic>>;
+      final staffAttendanceSummary = optionalResults[8] as Map<String, dynamic>;
+      final recentSchoolActivity =
+          optionalResults[9] as List<Map<String, dynamic>>;
 
       setState(() {
         _data = _data.withSetupData(
@@ -201,9 +228,11 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             final targetRole = '${row['role'] ?? row['target_role'] ?? 'all'}'
                 .trim()
                 .toLowerCase();
-            return targetRole == 'all' || targetRole == 'principal';
+            return targetRole == 'all' || targetRole == _leadershipRole;
           }).length,
         );
+        _staffAttendanceSummary = staffAttendanceSummary;
+        _recentSchoolActivity = recentSchoolActivity;
         _setupLoading = false;
       });
     } on Object catch (_) {
@@ -331,10 +360,10 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       header: _PrincipalAppHeader(
         data: _data,
         onNotifications: () =>
-            _open(AppRoutes.notificationCenter, arguments: 'principal'),
+            _open(AppRoutes.notificationCenter, arguments: _leadershipRole),
       ),
       searchBar: _DashboardSearchBar(
-        onTap: () => _open(AppRoutes.globalSearch, arguments: 'principal'),
+        onTap: () => _open(AppRoutes.globalSearch, arguments: _leadershipRole),
       ),
       statsRow: _PrincipalStatsRow(data: _data),
       academicsSection: _AcademicModuleGrid(
@@ -411,14 +440,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             accent: Color(0xFFDB2777),
             cardColor: Color(0xFFFCE7F3),
           ),
-          const _AcademicModuleItem(
-            label: 'Fees',
-            route: AppRoutes.feeMonitoring,
-            illustration: SchoolDeskUiIllustrations.principalFees,
-            fallbackIcon: Icons.account_balance_wallet_rounded,
-            accent: Color(0xFF16A34A),
-            cardColor: Color(0xFFE9F9EF),
-          ),
+          if (!_isCoordinator)
+            const _AcademicModuleItem(
+              label: 'Fees',
+              route: AppRoutes.feeMonitoring,
+              illustration: SchoolDeskUiIllustrations.principalFees,
+              fallbackIcon: Icons.account_balance_wallet_rounded,
+              accent: Color(0xFF16A34A),
+              cardColor: Color(0xFFE9F9EF),
+            ),
           const _AcademicModuleItem(
             label: 'Calendar',
             route: AppRoutes.eventsCalendar,
@@ -463,7 +493,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         ],
         onTap: (item) => _open(item.route),
       ),
-      highlights: const TodaysHighlightsCard(role: 'principal'),
+      highlights: _leadershipHighlights(),
       setupSection: _setupLoading
           ? const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
@@ -553,13 +583,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             children: [
               _PrincipalAppHeader(
                 data: _data,
-                onNotifications: () =>
-                    _open(AppRoutes.notificationCenter, arguments: 'principal'),
+                onNotifications: () => _open(
+                  AppRoutes.notificationCenter,
+                  arguments: _leadershipRole,
+                ),
               ),
               const SizedBox(height: 18),
               _DashboardSearchBar(
                 onTap: () =>
-                    _open(AppRoutes.globalSearch, arguments: 'principal'),
+                    _open(AppRoutes.globalSearch, arguments: _leadershipRole),
               ),
               const SizedBox(height: 18),
               _PrincipalStatsRow(data: _data),
@@ -641,14 +673,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     accent: Color(0xFFDB2777),
                     cardColor: Color(0xFFFCE7F3),
                   ),
-                  const _AcademicModuleItem(
-                    label: 'Fees',
-                    route: AppRoutes.feeMonitoring,
-                    illustration: SchoolDeskUiIllustrations.principalFees,
-                    fallbackIcon: Icons.account_balance_wallet_rounded,
-                    accent: Color(0xFF16A34A),
-                    cardColor: Color(0xFFE9F9EF),
-                  ),
+                  if (!_isCoordinator)
+                    const _AcademicModuleItem(
+                      label: 'Fees',
+                      route: AppRoutes.feeMonitoring,
+                      illustration: SchoolDeskUiIllustrations.principalFees,
+                      fallbackIcon: Icons.account_balance_wallet_rounded,
+                      accent: Color(0xFF16A34A),
+                      cardColor: Color(0xFFE9F9EF),
+                    ),
                   const _AcademicModuleItem(
                     label: 'Calendar',
                     route: AppRoutes.eventsCalendar,
@@ -694,7 +727,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                 onTap: (item) => _open(item.route),
               ),
               const SizedBox(height: 18),
-              const TodaysHighlightsCard(role: 'principal'),
+              _leadershipHighlights(),
               const SizedBox(height: 22),
               // _SectionTitle('Principal Action Queue'),
               // const SizedBox(height: 10),
@@ -776,6 +809,97 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     if (mounted && route == AppRoutes.notificationCenter) {
       await _loadDashboard();
     }
+  }
+
+  Widget _leadershipHighlights() {
+    final expected = _dashboardCount('expected_staff');
+    final checkedIn = _dashboardCount('checked_in');
+    final onSite = _dashboardCount('currently_on_site');
+    final recent = _recentSchoolActivity.take(3).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: const Color(0xFFF0FDF9),
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => _open(AppRoutes.principalAttendance),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.badge_rounded, color: Color(0xFF0E9384)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      expected == 0
+                          ? 'Today\'s teacher arrivals are loading'
+                          : '$checkedIn of $expected staff checked in · $onSite currently on-site',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Material(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => _open(AppRoutes.principalAuditLogs),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.history_rounded,
+                        color: Color(0xFF5B35F5),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Recent school activity',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded),
+                    ],
+                  ),
+                  if (recent.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    for (final activity in recent)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '${activity['summary'] ?? activity['event_type'] ?? 'School activity'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TodaysHighlightsCard(role: _leadershipRole),
+      ],
+    );
+  }
+
+  int _dashboardCount(String key) {
+    final value = _staffAttendanceSummary[key];
+    return value is num ? value.toInt() : 0;
   }
 
   /*

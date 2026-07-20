@@ -86,7 +86,15 @@ void main() {
       ];
 
       for (final route in principalRoutes) {
-        expect(RouteAccessGuard.allowedRolesFor(route), {'principal'});
+        final isFinanceRoute = {
+          AppRoutes.feeMonitoring,
+          AppRoutes.principalPaymentRequests,
+          AppRoutes.principalPaymentRequestDecision,
+        }.contains(route);
+        expect(
+          RouteAccessGuard.allowedRolesFor(route),
+          isFinanceRoute ? {'principal'} : {'principal', 'coordinator'},
+        );
         expect(
           RouteAccessGuard.redirectFor(
             routeName: route,

@@ -124,6 +124,7 @@ class ModuleOwnership {
       case 'admin':
         return admin;
       case 'principal':
+      case 'coordinator':
         return principal;
       default:
         return null;

@@ -101,7 +101,8 @@ export async function handleUsers(
 
   if (!seg && method === "POST") {
     const { password, role, role_name, ...rest } = body;
-    const resolvedRole = `${role_name ?? role ?? "staff"}`.trim() || "staff";
+    const resolvedRole =
+      `${role_name ?? role ?? "staff"}`.trim().toLowerCase() || "staff";
     const email = loginEmail(rest, school);
     // Create Supabase Auth user
     const { data: authUser, error: authErr } = await svc.auth.admin.createUser({
@@ -134,17 +135,20 @@ export async function handleUsers(
   if (seg && method === "PATCH") {
     const { password, role, role_name, ...patch } = body;
     const resolvedRole = role_name ?? role;
+    const normalizedRole = resolvedRole
+      ? `${resolvedRole}`.trim().toLowerCase()
+      : "";
     if (password || resolvedRole) {
       await svc.auth.admin.updateUserById(seg, {
         ...(password ? { password } : {}),
-        ...(resolvedRole
-          ? { app_metadata: { school_id: school, role_name: resolvedRole } }
+        ...(normalizedRole
+          ? { app_metadata: { school_id: school, role_name: normalizedRole } }
           : {}),
       });
     }
     const { data, error } = await svc.from("users").update({
       ...patch,
-      ...(resolvedRole ? { role_name: resolvedRole } : {}),
+      ...(normalizedRole ? { role_name: normalizedRole } : {}),
       updated_at: new Date().toISOString(),
     }).eq("id", seg).eq("school_id", school).select().single();
     if (error) return fail(error.message);

@@ -170,7 +170,7 @@ class NotificationRouteResolver {
     return switch (role) {
       'parent' => AppRoutes.parentTeacherChat,
       'teacher' => AppRoutes.teacherCommunication,
-      'principal' => AppRoutes.communicationCenter,
+      'principal' || 'coordinator' => AppRoutes.communicationCenter,
       _ => AppRoutes.notificationCenter,
     };
   }
@@ -179,14 +179,14 @@ class NotificationRouteResolver {
     return switch (role) {
       'parent' => AppRoutes.parentTeacherChat,
       'teacher' => AppRoutes.teacherCommunication,
-      'principal' => AppRoutes.communicationCenter,
+      'principal' || 'coordinator' => AppRoutes.communicationCenter,
       _ => AppRoutes.notificationCenter,
     };
   }
 
   static String _issueRouteFor(String role) {
     return switch (role) {
-      'principal' => AppRoutes.complaintManagement,
+      'principal' || 'coordinator' => AppRoutes.complaintManagement,
       'teacher' => AppRoutes.teacherComplaints,
       'parent' => AppRoutes.parentComplaints,
       'super_admin' => AppRoutes.superAdminIssues,
@@ -241,14 +241,14 @@ class NotificationRouteResolver {
     return switch (role) {
       'parent' => AppRoutes.schoolGallery,
       'teacher' => AppRoutes.teacherEventPosts,
-      'principal' => AppRoutes.principalEventApprovals,
+      'principal' || 'coordinator' => AppRoutes.principalEventApprovals,
       _ => AppRoutes.notificationCenter,
     };
   }
 
   static String _attendanceRouteFor(String role) {
     return switch (role) {
-      'principal' => AppRoutes.principalAttendance,
+      'principal' || 'coordinator' => AppRoutes.principalAttendance,
       'teacher' => AppRoutes.teacherMyAttendance,
       'parent' => AppRoutes.parentAttendance,
       _ => AppRoutes.notificationCenter,
@@ -257,7 +257,7 @@ class NotificationRouteResolver {
 
   static String _lessonPlannerRouteFor(String role) {
     return switch (role) {
-      'principal' => AppRoutes.principalLessonPlanner,
+      'principal' || 'coordinator' => AppRoutes.principalLessonPlanner,
       'teacher' => AppRoutes.teacherLessonPlanner,
       'parent' => AppRoutes.parentLessonPlanner,
       _ => AppRoutes.notificationCenter,
@@ -270,7 +270,7 @@ class NotificationRouteResolver {
       // Teachers have no separate health workspace; the communication hub is
       // where they can act on a parent reminder with the family.
       'teacher' => AppRoutes.teacherCommunication,
-      'principal' => AppRoutes.notificationCenter,
+      'principal' || 'coordinator' => AppRoutes.notificationCenter,
       _ => AppRoutes.notificationCenter,
     };
   }

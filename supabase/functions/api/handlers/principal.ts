@@ -1,6 +1,7 @@
 // handlers/principal.ts — classes hub CRUD, subject workflows, imports, timetable
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
+import { isSchoolLeader, roleName } from "./authorization.ts";
 
 function sid(user: User) {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -639,6 +640,7 @@ function serializeClassRow(
     students: 0,
   },
   todayAttendancePct: number | null = null,
+  includeFees = true,
 ) {
   const sectionName = text(section["section_name"]);
   const gradeName = text(grade?.["grade_name"]);
@@ -655,9 +657,18 @@ function serializeClassRow(
   if (section["capacity"] && studentCount > Number(section["capacity"])) {
     pendingIssues++;
   }
-  if (feeDues.amount > 0) {
+  if (includeFees && feeDues.amount > 0) {
     pendingIssues++;
   }
+
+  const financeSummary = includeFees
+    ? {
+      fees_due_amount: feeDues.amount,
+      fees_due_students: feeDues.students,
+      fees_pending_verification_amount: pendingFeeProofs.amount,
+      fees_pending_verification_students: pendingFeeProofs.students,
+    }
+    : {};
 
   return {
     ...section,
@@ -674,10 +685,7 @@ function serializeClassRow(
     academic_year_id: text(section["academic_year_id"]),
     student_count: studentCount,
     total_students: studentCount,
-    fees_due_amount: feeDues.amount,
-    fees_due_students: feeDues.students,
-    fees_pending_verification_amount: pendingFeeProofs.amount,
-    fees_pending_verification_students: pendingFeeProofs.students,
+    ...financeSummary,
     today_attendance_pct: todayAttendancePct,
     pending_issues: pendingIssues,
   };
@@ -1298,6 +1306,8 @@ export async function handlePrincipal(
   user: User,
 ): Promise<Response> {
   const school = sid(user);
+  if (!isSchoolLeader(user)) return fail("school leadership access required", 403);
+  const includeFees = roleName(user) !== "coordinator";
   const body = method !== "GET"
     ? await req.json().catch(() => ({})) as Record<string, unknown>
     : {};
@@ -1317,12 +1327,12 @@ export async function handlePrincipal(
           row: Record<string, unknown>,
         ) => [text(row.id), text(row.academic_year_id)]),
       );
-      const dues = await feeDuesBySection(svc, school, sectionYears);
-      const pendingFeeProofs = await pendingFeeProofsBySection(
-        svc,
-        school,
-        sectionYears,
-      );
+      const dues = includeFees
+        ? await feeDuesBySection(svc, school, sectionYears)
+        : new Map<string, { amount: number; students: number }>();
+      const pendingFeeProofs = includeFees
+        ? await pendingFeeProofsBySection(svc, school, sectionYears)
+        : new Map<string, { amount: number; students: number }>();
       const attendancePct = await attendanceBySection(svc, school);
       const classes = (data ?? []).map((row: any) =>
         serializeClassRow(
@@ -1333,6 +1343,7 @@ export async function handlePrincipal(
           dues.get(text(row["id"])),
           pendingFeeProofs.get(text(row["id"])),
           attendancePct.get(text(row["id"])) ?? null,
+          includeFees,
         )
       );
       const totalStudents = classes.reduce(

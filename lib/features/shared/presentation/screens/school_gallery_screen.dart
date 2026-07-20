@@ -97,12 +97,12 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
           BackendApiClient.instance.currentRoleName?.toLowerCase() ?? '';
       final actionLabel = role == 'teacher'
           ? 'Create Event Post'
-          : role == 'principal'
+          : const {'principal', 'coordinator'}.contains(role)
           ? 'Review Event Approvals'
           : null;
       final actionRoute = role == 'teacher'
           ? AppRoutes.teacherEventPosts
-          : role == 'principal'
+          : const {'principal', 'coordinator'}.contains(role)
           ? AppRoutes.principalEventApprovals
           : null;
       return SchoolDeskStatusPanel.empty(

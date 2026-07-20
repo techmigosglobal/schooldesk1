@@ -16,7 +16,7 @@ function role(u: User) {
   return `${u.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
 }
 function canManageSchoolContent(u: User) {
-  return ["admin", "principal", "super_admin"].includes(role(u));
+  return ["admin", "principal", "coordinator", "super_admin"].includes(role(u));
 }
 function text(v: unknown, fallback = "") {
   const value = `${v ?? ""}`.trim();
@@ -102,12 +102,26 @@ async function principalUserIdsForSchool(
   school: string,
 ) {
   const { data } = await svc.from("users").select("id").eq("school_id", school)
-    .ilike("role_name", "principal");
+    .in("role_name", ["principal", "coordinator"]);
   return uniqueText((data ?? []).map((row) => row.id));
 }
 
+async function isSchoolLeaderId(
+  svc: SupabaseClient,
+  school: string,
+  userId: string,
+) {
+  if (!userId) return false;
+  const { data } = await svc.from("users").select("id").eq("school_id", school)
+    .eq("id", userId).in("role_name", ["principal", "coordinator"])
+    .maybeSingle();
+  return Boolean(data?.id);
+}
+
 function canRunPushDiagnostics(user: User) {
-  return ["principal", "admin", "super_admin"].includes(role(user));
+  return ["principal", "coordinator", "admin", "super_admin"].includes(
+    role(user),
+  );
 }
 
 async function runPushDiagnostics(
@@ -430,20 +444,22 @@ async function parentChatContacts(
     }
   }
 
-  // Add principals
+  // Add every school leader so families can reach both Principals and Coordinators.
   const { data: principals } = await svc.from("users")
-    .select("id, name, username")
+    .select("id, name, username, role_name")
     .eq("school_id", school)
-    .ilike("role_name", "principal");
+    .in("role_name", ["principal", "coordinator"]);
 
   for (const p of principals ?? []) {
-    const key = `principal:${p.id}`;
+    const leaderRole = text(p.role_name, "principal").toLowerCase();
+    const key = `${leaderRole}:${p.id}`;
     if (!addedKeys.has(key)) {
       addedKeys.add(key);
       contacts.push({
         id: p.id,
-        name: p.name || p.username || "Principal",
-        role: "principal",
+        name: p.name || p.username ||
+          (leaderRole === "coordinator" ? "Coordinator" : "Principal"),
+        role: leaderRole,
         type: "principal_parent",
       });
     }
@@ -507,20 +523,22 @@ async function teacherChatContacts(
     }
   }
 
-  // Add principals
+  // Add every school leader so teachers can reach both Principals and Coordinators.
   const { data: principals } = await svc.from("users")
-    .select("id, name, username")
+    .select("id, name, username, role_name")
     .eq("school_id", school)
-    .ilike("role_name", "principal");
+    .in("role_name", ["principal", "coordinator"]);
 
   for (const p of principals ?? []) {
-    const key = `principal:${p.id}`;
+    const leaderRole = text(p.role_name, "principal").toLowerCase();
+    const key = `${leaderRole}:${p.id}`;
     if (!addedKeys.has(key)) {
       addedKeys.add(key);
       contacts.push({
         id: p.id,
-        name: p.name || p.username || "Principal",
-        role: "principal",
+        name: p.name || p.username ||
+          (leaderRole === "coordinator" ? "Coordinator" : "Principal"),
+        role: leaderRole,
         type: "principal_teacher",
       });
     }
@@ -536,6 +554,38 @@ async function principalChatContacts(
   const contacts: any[] = [];
   const addedKeys = new Set<string>();
 
+  const { data: sections } = await svc.from("sections").select(
+    "id, section_name, grade:grades(grade_name), class_teacher_id, co_teacher_id",
+  ).eq("school_id", school);
+  const labelsBySection = new Map<string, string>();
+  const labelsByStaff = new Map<string, string[]>();
+  for (const section of sections ?? []) {
+    const label = [
+      text((section as any).grade?.grade_name),
+      text(section.section_name),
+    ]
+      .filter(Boolean).join(" - ");
+    labelsBySection.set(text(section.id), label);
+    for (const staffId of [section.class_teacher_id, section.co_teacher_id]) {
+      const id = text(staffId);
+      if (id && label) {
+        labelsByStaff.set(id, [...(labelsByStaff.get(id) ?? []), label]);
+      }
+    }
+  }
+  const { data: staffSubjects } = await svc.from("staff_subjects")
+    .select("staff_id, section_id").eq("school_id", school);
+  for (const assignment of staffSubjects ?? []) {
+    const staffId = text(assignment.staff_id);
+    const label = labelsBySection.get(text(assignment.section_id)) ?? "";
+    if (staffId && label) {
+      labelsByStaff.set(
+        staffId,
+        [...(labelsByStaff.get(staffId) ?? []), label],
+      );
+    }
+  }
+
   const { data: staff } = await svc.from("staff")
     .select("*")
     .eq("school_id", school)
@@ -550,6 +600,7 @@ async function principalChatContacts(
         name: [s.first_name, s.last_name].filter(Boolean).join(" "),
         role: "teacher",
         type: "principal_teacher",
+        class_sections: uniqueText(labelsByStaff.get(text(s.id)) ?? []),
       });
     }
   }
@@ -558,6 +609,23 @@ async function principalChatContacts(
     .select("*")
     .eq("school_id", school)
     .ilike("role_name", "parent");
+
+  const { data: links } = await svc.from("parent_student_links").select(
+    "parent_user_id, student:students(current_section_id)",
+  ).eq("school_id", school);
+  const labelsByParent = new Map<string, string[]>();
+  for (const link of links ?? []) {
+    const parentId = text(link.parent_user_id);
+    const label =
+      labelsBySection.get(text((link as any).student?.current_section_id)) ??
+        "";
+    if (parentId && label) {
+      labelsByParent.set(
+        parentId,
+        [...(labelsByParent.get(parentId) ?? []), label],
+      );
+    }
+  }
 
   for (const p of parents ?? []) {
     const key = `parent:${p.id}`;
@@ -568,6 +636,7 @@ async function principalChatContacts(
         name: p.name || p.username || "Parent",
         role: "parent",
         type: "principal_parent",
+        class_sections: uniqueText(labelsByParent.get(text(p.id)) ?? []),
       });
     }
   }
@@ -648,9 +717,11 @@ async function canSendChatMessage(
   const type = text(conversation.type) || "parent_teacher";
   if (type === "parent_teacher") {
     return await canReadChatConversation(svc, school, conversation, user) &&
-      userRole !== "principal";
+      !canManageSchoolContent(user);
   }
-  if (canManageSchoolContent(user)) return true;
+  if (canManageSchoolContent(user)) {
+    return text(conversation.leader_id ?? conversation.created_by) === user.id;
+  }
   if (type === "principal_parent") {
     return userRole === "parent" && text(conversation.parent_id) === user.id;
   }
@@ -670,7 +741,7 @@ async function resolveChatNotificationTarget(
   const type = text(conversation.type) || "parent_teacher";
   const parentId = text(conversation.parent_id);
   const teacherId = text(conversation.teacher_id);
-  const createdBy = text(conversation.created_by);
+  const createdBy = text(conversation.leader_id ?? conversation.created_by);
   const teacherUserId = await teacherUserIdForStaff(svc, school, teacherId);
 
   if (type === "parent_teacher") {
@@ -712,9 +783,11 @@ async function enrichChatConversations(
   const teacherIds = uniqueText(rows.map((row) => row.teacher_id));
   const parentIds = uniqueText(rows.map((row) => row.parent_id));
   const studentIds = uniqueText(rows.map((row) => row.student_id));
+  const leaderIds = uniqueText(rows.map((row) => row.leader_id));
   const teachersById = new Map<string, Record<string, unknown>>();
   const parentsById = new Map<string, Record<string, unknown>>();
   const studentsById = new Map<string, Record<string, unknown>>();
+  const leadersById = new Map<string, Record<string, unknown>>();
 
   if (teacherIds.length) {
     const { data } = await svc.from("staff").select("*").eq("school_id", school)
@@ -733,12 +806,20 @@ async function enrichChatConversations(
     ).in("id", studentIds);
     for (const row of data ?? []) studentsById.set(`${row.id}`, row);
   }
+  if (leaderIds.length) {
+    const { data } = await svc.from("users")
+      .select("id, name, username, role_name")
+      .eq("school_id", school)
+      .in("id", leaderIds);
+    for (const row of data ?? []) leadersById.set(`${row.id}`, row);
+  }
 
   return rows.map((row) => ({
     ...row,
     teacher: teachersById.get(`${row.teacher_id ?? ""}`) ?? null,
     parent: parentsById.get(`${row.parent_id ?? ""}`) ?? null,
     student: studentsById.get(`${row.student_id ?? ""}`) ?? null,
+    leader: leadersById.get(`${row.leader_id ?? ""}`) ?? null,
   }));
 }
 
@@ -1154,13 +1235,19 @@ export async function handleCommunications(
   if (path === "/chat/contacts" && method === "GET") {
     const roleParam = text(url.searchParams.get("role")).toLowerCase();
     const studentId = text(url.searchParams.get("student_id"));
+    if (roleParam !== role(user)) {
+      return fail("role does not match session", 403);
+    }
     if (roleParam === "parent") {
       const contacts = await parentChatContacts(svc, school, user, studentId);
       return ok(contacts);
     } else if (roleParam === "teacher") {
       const contacts = await teacherChatContacts(svc, school, user);
       return ok(contacts);
-    } else if (roleParam === "principal") {
+    } else if (
+      ["principal", "coordinator"].includes(roleParam) &&
+      canManageSchoolContent(user) && roleParam === role(user)
+    ) {
       const contacts = await principalChatContacts(svc, school);
       return ok(contacts);
     }
@@ -1231,6 +1318,30 @@ export async function handleCommunications(
     const parentId = text(body.parent_id) ||
       (role(user) == "parent" ? user.id : "");
     const studentId = text(body.student_id);
+    const requestedLeaderId = text(body.leader_id);
+    const isLeadershipUser = canManageSchoolContent(user);
+
+    if (
+      conversationType !== "parent_teacher" && !isLeadershipUser &&
+      !(
+        conversationType === "principal_parent" &&
+        role(user) === "parent" && parentId === user.id
+      ) &&
+      !(
+        conversationType === "principal_teacher" &&
+        role(user) === "teacher" && teacherId === linkedStaffId(user)
+      )
+    ) {
+      return fail("school leadership access required", 403);
+    }
+
+    let conversationLeaderId = "";
+    if (conversationType !== "parent_teacher") {
+      conversationLeaderId = isLeadershipUser ? user.id : requestedLeaderId;
+      if (!await isSchoolLeaderId(svc, school, conversationLeaderId)) {
+        return fail("a principal or coordinator leader is required", 403);
+      }
+    }
 
     const validationError = await validateChatConversationScope(
       svc,
@@ -1255,6 +1366,9 @@ export async function handleCommunications(
     if (conversationType === "parent_teacher" && studentId) {
       existing = existing.eq("student_id", studentId);
     }
+    if (conversationType !== "parent_teacher") {
+      existing = existing.eq("leader_id", conversationLeaderId);
+    }
     const { data: found, error: findError } = await existing.maybeSingle();
     if (findError) return fail(findError.message);
     if (found) return ok(normalizeChatConversation(found, user.id));
@@ -1267,6 +1381,9 @@ export async function handleCommunications(
       parent_id: parentId || null,
       student_id: studentId || null,
       participant_ids: [teacherId, parentId].filter(Boolean),
+      leader_id: conversationType === "parent_teacher"
+        ? null
+        : conversationLeaderId,
       created_by: user.id,
       last_message_at: new Date().toISOString(),
     }).select("*").single();
@@ -1384,7 +1501,7 @@ export async function handleCommunications(
             "Parent-teacher chat updated",
             messageText,
             conversationId,
-            "principal",
+            "all",
           );
         }
       }
@@ -2253,19 +2370,19 @@ async function notifyLessonPlannerUploaded(
 
     const eventIds: string[] = [];
 
-    // 2. Notify principal(s)
+    // 2. Notify all school leaders who can review the planner.
     const { data: principalUsers } = await svc
       .from("users")
       .select("id")
       .eq("school_id", school)
-      .eq("role_name", "principal");
+      .in("role_name", ["principal", "coordinator"]);
 
     if (principalUsers && principalUsers.length > 0) {
       for (const p of principalUsers) {
         await svc.from("notification_logs").insert({
           school_id: school,
           user_id: p.id,
-          target_role: "principal",
+          target_role: "all",
           title: "New Lesson Planner",
           body:
             `${resolvedTeacherName} uploaded a weekly lesson plan for Class ${className}.`,

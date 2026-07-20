@@ -129,6 +129,12 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
+      route: '/coordinator-dashboard-screen',
+      title: 'Coordinator Dashboard',
+      module: 'Overview',
+      portal: 'coordinator',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/principal-school-profile-screen',
       title: SchoolDeskGlossary.schoolProfile,
       module: 'Governance',
@@ -272,6 +278,13 @@ class SchoolDeskScreenRegistry {
     SchoolDeskScreenMetadata(
       route: '/principal/fees',
       title: 'Fee Operations',
+      module: 'Finance',
+      portal: 'principal',
+      feature: SchoolDeskFeature.adminFees,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal/fee-concessions',
+      title: 'Fee Concessions',
       module: 'Finance',
       portal: 'principal',
       feature: SchoolDeskFeature.adminFees,

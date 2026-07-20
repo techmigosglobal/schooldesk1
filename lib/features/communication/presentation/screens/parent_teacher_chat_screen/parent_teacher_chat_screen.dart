@@ -130,24 +130,12 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
           })
           .toList();
       final principalContacts = contacts
-          .where((c) => _text(c['role']) == 'principal')
-          .map(
-            (c) => UserAccountModel(
-              id: _text(c['id']),
-              name: _text(c['name']),
-              username: '',
-              email: '',
-              phone: '',
-              avatar: '',
-              schoolId: '',
-              roleId: '',
-              roleName: 'principal',
-              linkedType: '',
-              linkedId: '',
-              isActive: true,
-              isVerified: true,
-            ),
+          .where(
+            (c) =>
+                _text(c['role']) == 'principal' ||
+                _text(c['role']) == 'coordinator',
           )
+          .map((c) => Map<String, dynamic>.from(c))
           .toList();
       final threads = _mergeThreads(
         parentUserId: profile.id,
@@ -239,24 +227,12 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
           })
           .toList();
       final principalContacts = contacts
-          .where((c) => _text(c['role']) == 'principal')
-          .map(
-            (c) => UserAccountModel(
-              id: _text(c['id']),
-              name: _text(c['name']),
-              username: '',
-              email: '',
-              phone: '',
-              avatar: '',
-              schoolId: '',
-              roleId: '',
-              roleName: 'principal',
-              linkedType: '',
-              linkedId: '',
-              isActive: true,
-              isVerified: true,
-            ),
+          .where(
+            (c) =>
+                _text(c['role']) == 'principal' ||
+                _text(c['role']) == 'coordinator',
           )
+          .map((c) => Map<String, dynamic>.from(c))
           .toList();
       final threads = _mergeThreads(
         parentUserId: _parentUserId,
@@ -308,7 +284,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
     required List<_TeacherThread> teacherRows,
     required List<Map<String, dynamic>> conversations,
     required List<Map<String, dynamic>> principalConversations,
-    required List<UserAccountModel> principalContacts,
+    required List<Map<String, dynamic>> principalContacts,
   }) {
     final byTeacher = <String, _TeacherThread>{
       for (final row in teacherRows) row.threadKey: row,
@@ -344,7 +320,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       byTeacher['principal:$id'] = _TeacherThread(
         threadKey: 'principal:$id',
         teacherId: 'principal:$id',
-        teacherName: 'Principal',
+        teacherName: _name(_map(row['leader']), fallback: 'School leadership'),
         subtitle: 'School leadership',
         studentId: _text(row['student_id'], fallback: studentId),
         studentName: _childName(
@@ -354,6 +330,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
           ),
         ),
         conversationType: 'principal_parent',
+        leaderId: _text(row['leader_id']),
         conversationId: id,
         lastMessage: _text(row['last_message']),
         lastMessageAt: _date(row['last_message_at']),
@@ -361,19 +338,24 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       );
     }
     for (final user in principalContacts) {
-      if (user.roleName.trim().toLowerCase() != 'principal') continue;
-      final principalId = user.id.trim();
-      if (principalId.isEmpty) continue;
-      final alreadyPresent = principalConversations.isNotEmpty;
+      final leaderId = _text(user['id']);
+      if (leaderId.isEmpty) continue;
+      final alreadyPresent = principalConversations.any(
+        (row) => _text(row['leader_id']) == leaderId,
+      );
       if (alreadyPresent) continue;
-      byTeacher['principal-contact:$principalId'] = _TeacherThread(
-        threadKey: 'principal-contact:$principalId',
+      final leaderLabel = _text(user['role']).toLowerCase() == 'coordinator'
+          ? 'Coordinator'
+          : 'Principal';
+      byTeacher['leader-contact:$leaderId'] = _TeacherThread(
+        threadKey: 'leader-contact:$leaderId',
         teacherId: '',
-        teacherName: 'Principal',
+        teacherName: _text(user['name'], fallback: leaderLabel),
         subtitle: 'School leadership - tap to start direct chat',
         studentId: '',
         studentName: '',
         conversationType: 'principal_parent',
+        leaderId: leaderId,
       );
     }
     final threads = byTeacher.values.toList()
@@ -444,6 +426,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
               studentId: thread.conversationType == 'parent_teacher'
                   ? thread.studentId
                   : '',
+              leaderId: thread.leaderId,
               title: thread.teacherName,
             );
         conversationId = _text(created['id']);
@@ -707,6 +690,7 @@ class _TeacherThread {
     required this.studentId,
     required this.studentName,
     this.conversationType = 'parent_teacher',
+    this.leaderId = '',
     this.conversationId = '',
     this.lastMessage = '',
     this.lastMessageAt,
@@ -720,6 +704,7 @@ class _TeacherThread {
   final String studentId;
   final String studentName;
   final String conversationType;
+  final String leaderId;
   final String conversationId;
   final String lastMessage;
   final DateTime? lastMessageAt;
@@ -739,6 +724,7 @@ class _TeacherThread {
       studentId: studentId,
       studentName: studentName,
       conversationType: conversationType,
+      leaderId: leaderId,
       conversationId: conversationId ?? this.conversationId,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,

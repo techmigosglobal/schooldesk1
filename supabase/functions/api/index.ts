@@ -47,6 +47,7 @@ import {
 import { handleHelp } from "./handlers/help.ts";
 import { handleAccess } from "./handlers/access.ts";
 import { handleIssues } from "./handlers/issues.ts";
+import { handleActivity, recordHttpActivity } from "./handlers/activity.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
 
@@ -104,6 +105,25 @@ export function fail(message: string, status = 400): Response {
 
 export function notFound(path: string): Response {
   return cors({ success: false, error: "not_found", path }, 404);
+}
+
+async function auditedResponse(
+  response: Promise<Response>,
+  svc: ReturnType<typeof serviceClient>,
+  user: NonNullable<Awaited<ReturnType<typeof authedClient>>["user"]>,
+  path: string,
+  method: string,
+) {
+  const resolved = await response;
+  if (resolved.ok) {
+    const payload = await resolved.clone().json().catch(() => null);
+    if (payload?.success === true || path.endsWith("/export")) {
+      await recordHttpActivity(svc, user, path, method, payload).catch(() =>
+        undefined
+      );
+    }
+  }
+  return resolved;
 }
 
 // ── Supabase clients ──────────────────────────────────────────
@@ -400,7 +420,13 @@ Deno.serve(async (req: Request) => {
 
   // Route dispatch
   if (path.startsWith("/schools")) {
-    return handleSchools(req, path, method, url, client, svc);
+    return auditedResponse(
+      handleSchools(req, path, method, url, client, svc),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/dashboard")) {
     return handleDashboard(req, path, method, url, client, svc, user);
@@ -412,59 +438,149 @@ Deno.serve(async (req: Request) => {
     path.startsWith("/staff-subjects") ||
     path.startsWith("/rooms")
   ) {
-    return handleAcademics(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleAcademics(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/events") || path.startsWith("/holidays")) {
-    return handleCalendar(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleCalendar(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (
     path.startsWith("/documents") ||
     path.startsWith("/student-documents") ||
     path.startsWith("/staff-documents")
   ) {
-    return handleDocuments(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleDocuments(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/principal")) {
-    return handlePrincipal(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handlePrincipal(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/staff")) {
-    return handleStaff(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleStaff(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/students")) {
-    return handleStudents(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleStudents(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/guardians")) {
-    return handleGuardians(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleGuardians(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/users")) {
-    return handleUsers(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleUsers(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/account-approvals") || path.startsWith("/approvals")) {
-    return handleApprovals(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleApprovals(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/attendance")) {
-    return handleAttendance(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleAttendance(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (
     path.startsWith("/fee") || path.startsWith("/fees") ||
     path.startsWith("/parent/students/")
   ) {
-    return handleFees(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleFees(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/leave") || path.startsWith("/student-leave")) {
-    return handleLeave(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleLeave(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/homework")) {
-    return handleHomework(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleHomework(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/medical-records")) {
-    return handleMedical(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleMedical(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/health-reminders")) {
     return handleHealthReminders(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/timetable")) {
-    return handleTimetable(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleTimetable(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (
     path.startsWith("/notifications/register-token") ||
@@ -473,7 +589,13 @@ Deno.serve(async (req: Request) => {
     path.startsWith("/notifications/subscribe") ||
     path.startsWith("/notifications/unsubscribe")
   ) {
-    return handleNotifications(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleNotifications(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (
     path.startsWith("/chat") ||
@@ -487,31 +609,76 @@ Deno.serve(async (req: Request) => {
     path === "/notifications" ||
     path.startsWith("/notifications/")
   ) {
-    return handleCommunications(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleCommunications(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/uploads")) {
-    return handleUploads(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleUploads(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/event-posts")) {
-    return handleEvents(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleEvents(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/me/students") || path.startsWith("/parents")) {
-    return handleParent(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleParent(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/help")) {
     return handleHelp(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/access")) {
-    return handleAccess(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleAccess(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/issues")) {
-    return handleIssues(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleIssues(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
+  }
+  if (path.startsWith("/audit-logs")) {
+    return handleActivity(path, method, url, svc, user);
   }
   if (path.startsWith("/monitoring")) {
     return handleMonitoring(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/reports")) {
-    return handleReports(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleReports(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
 
   return notFound(path);

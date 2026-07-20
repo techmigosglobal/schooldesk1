@@ -70,7 +70,7 @@ async function parentCanAccessStudent(
 
 type Recipient = {
   userId: string;
-  targetRole: "teacher" | "principal";
+  targetRole: "teacher" | "principal" | "coordinator";
   teacherId?: string;
 };
 
@@ -125,8 +125,9 @@ async function resolveStudentRecipients(
   if (principalError) throw principalError;
   for (const principal of principals ?? []) {
     const userId = text(principal.id);
-    if (userId && text(principal.role_name).toLowerCase() === "principal") {
-      recipients.push({ userId, targetRole: "principal" });
+    const recipientRole = text(principal.role_name).toLowerCase();
+    if (userId && ["principal", "coordinator"].includes(recipientRole)) {
+      recipients.push({ userId, targetRole: recipientRole as "principal" | "coordinator" });
     }
   }
 
