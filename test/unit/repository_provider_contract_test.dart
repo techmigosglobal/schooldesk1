@@ -88,9 +88,6 @@ void main() {
   test('ServiceLocator registers repositories and exposes AuthController', () {
     final source = File('lib/core/di/service_locator.dart').readAsStringSync();
     final main = File('lib/main.dart').readAsStringSync();
-    final riverpodProviders = File(
-      'lib/app/providers/schooldesk_providers.dart',
-    ).readAsStringSync();
 
     expect(source, contains('ApiStudentRepository(apiClient)'));
     expect(source, contains('ApiTeacherRepository(apiClient)'));
@@ -102,10 +99,12 @@ void main() {
     expect(source, contains('ServiceLocator.authController'));
 
     expect(main, contains('await ServiceLocator.initialize();'));
-    expect(main, contains('ProviderScope('));
+    expect(main, contains('MultiProvider('));
+    expect(main, isNot(contains('ProviderScope(')));
+    expect(
+      File('lib/app/providers/schooldesk_providers.dart').existsSync(),
+      isFalse,
+    );
     expect(main, contains('const AppProviders(child: MyApp())'));
-    expect(riverpodProviders, contains('backendApiClientProvider'));
-    expect(riverpodProviders, contains('studentRepositoryProvider'));
-    expect(riverpodProviders, contains('feeRepositoryProvider'));
   });
 }

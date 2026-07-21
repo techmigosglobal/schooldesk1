@@ -106,8 +106,12 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         getByName("release") {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 removes unreachable native code and resources from the signed
+            // production artifact. Flutter's Gradle plugin supplies the rules
+            // needed for generated/plugin registrants; app-specific exceptions
+            // stay in proguard-rules.pro.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }

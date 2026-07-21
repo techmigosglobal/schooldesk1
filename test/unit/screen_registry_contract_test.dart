@@ -38,6 +38,30 @@ void main() {
     );
   });
 
+  testWidgets('an unconfigured route fails loudly instead of rendering blank', (
+    tester,
+  ) async {
+    BuildContext? capturedContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            capturedContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(
+      () => AppRoutes.buildRoutePage(
+        capturedContext!,
+        routeName: '/test/unconfigured-route',
+      ),
+      throwsA(isA<StateError>()),
+    );
+  });
+
   testWidgets('route frame exposes screen metadata to semantics', (
     tester,
   ) async {

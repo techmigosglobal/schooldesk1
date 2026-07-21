@@ -15,7 +15,10 @@ Defaults:
 Examples:
   scripts/build-android-supabase.sh apk
   scripts/build-android-supabase.sh aab
-  scripts/build-android-supabase.sh all -- --obfuscate --split-debug-info=build/debug-info
+  scripts/build-android-supabase.sh all
+
+Release builds always enable Dart obfuscation and preserve symbol files under
+build/debug-info/android/. Keep those symbol files with the deployed artifact.
 USAGE
 }
 
@@ -100,20 +103,22 @@ log "Using Firebase project  : $firebase_project"
 cd "$repo_root"
 
 build_apk() {
-  log "Building release APK with Supabase backend defines."
+  local debug_info_dir="build/debug-info/android/apk"
+  log "Building obfuscated release APK with Supabase backend defines."
   if ((${#flutter_args[@]})); then
-    flutter build apk --release --dart-define-from-file="$env_file" "${flutter_args[@]}"
+    flutter build apk --release --obfuscate --split-debug-info="$debug_info_dir" --dart-define-from-file="$env_file" "${flutter_args[@]}"
   else
-    flutter build apk --release --dart-define-from-file="$env_file"
+    flutter build apk --release --obfuscate --split-debug-info="$debug_info_dir" --dart-define-from-file="$env_file"
   fi
 }
 
 build_aab() {
-  log "Building release AAB with Supabase backend defines."
+  local debug_info_dir="build/debug-info/android/aab"
+  log "Building obfuscated release AAB with Supabase backend defines."
   if ((${#flutter_args[@]})); then
-    flutter build appbundle --release --dart-define-from-file="$env_file" "${flutter_args[@]}"
+    flutter build appbundle --release --obfuscate --split-debug-info="$debug_info_dir" --dart-define-from-file="$env_file" "${flutter_args[@]}"
   else
-    flutter build appbundle --release --dart-define-from-file="$env_file"
+    flutter build appbundle --release --obfuscate --split-debug-info="$debug_info_dir" --dart-define-from-file="$env_file"
   fi
 }
 

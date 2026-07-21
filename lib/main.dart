@@ -5,7 +5,6 @@ import 'package:flutter/semantics.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -95,38 +94,29 @@ void main() async {
   final themeProvider = await ThemeProvider.create();
   final appSettingsProvider = await AppSettingsProvider.create();
 
-  bool hasShownError = false;
-
-  // 🚨 CRITICAL: Custom error handling - DO NOT REMOVE
-  ErrorWidget.builder = (FlutterErrorDetails details) {
-    if (!hasShownError) {
-      hasShownError = true;
-
-      // Reset flag after 3 seconds to allow error widget on new screens
-      Future.delayed(const Duration(seconds: 5), () {
-        hasShownError = false;
-      });
-
-      return CustomErrorWidget(errorDetails: details);
-    }
-    return const SizedBox.shrink();
-  };
+  // Never hide a framework error. A blank screen makes failures impossible for
+  // a user to report and prevents the error boundary's retry action from being
+  // reached when more than one widget fails in the same frame.
+  ErrorWidget.builder = buildSchoolDeskErrorWidget;
 
   runApp(
-    ProviderScope(
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
-          ChangeNotifierProvider<AppSettingsProvider>.value(
-            value: appSettingsProvider,
-          ),
-        ],
-        child: const AppProviders(child: MyApp()),
-      ),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
+        ChangeNotifierProvider<AppSettingsProvider>.value(
+          value: appSettingsProvider,
+        ),
+      ],
+      child: const AppProviders(child: MyApp()),
     ),
   );
   _deferStartupServices();
 }
+
+/// The application-wide error boundary is deliberately a pure builder so every
+/// framework failure remains visible, including multiple failures in one frame.
+Widget buildSchoolDeskErrorWidget(FlutterErrorDetails details) =>
+    CustomErrorWidget(errorDetails: details);
 
 void _deferStartupServices() {
   WidgetsBinding.instance.addPostFrameCallback((_) {

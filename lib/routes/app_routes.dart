@@ -433,6 +433,7 @@ class AppRoutes {
     final metadata = SchoolDeskScreenRegistry.byRoute(routeName);
     final routeChild = _buildRouteChild(
       context,
+      routeName: routeName,
       metadata: metadata,
       child: child,
       routeBuilder: routeBuilder,
@@ -443,13 +444,16 @@ class AppRoutes {
 
   static Widget _buildRouteChild(
     BuildContext context, {
+    required String routeName,
     required SchoolDeskScreenMetadata? metadata,
     required Widget? child,
     required WidgetBuilder? routeBuilder,
   }) {
     if (child != null) return child;
     if (routeBuilder != null) return routeBuilder(context);
-    return const SizedBox.shrink();
+    throw StateError(
+      'Route "$routeName" was requested without a screen or route builder.',
+    );
   }
 
   static AccountAccessFormArgs _accountFormArgs(
