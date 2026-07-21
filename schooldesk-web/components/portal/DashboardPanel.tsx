@@ -14,6 +14,7 @@ import {
   UsersRound,
   WalletCards,
 } from "lucide-react";
+} from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
 import type { Dashboard } from "./types";
 import { api, money } from "./utils";

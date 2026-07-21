@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { studentSchema } from "@/lib/schemas";
 import type { Row } from "./types";
 import { api, rowsFrom, rowText, stringValue, splitName, displayName } from "./utils";
 import { Dialog } from "./Dialog";
@@ -46,16 +47,33 @@ export function StudentDialog({
     setError("");
     try {
       const fullName = stringValue(form.get("student_name"));
-      const payload: Row = {
-        ...splitName(fullName),
+      const validated = studentSchema.safeParse({
+        student_name: fullName,
+        current_section_id: stringValue(form.get("current_section_id")),
+        student_id_number: stringValue(form.get("student_id_number")),
         date_of_birth: stringValue(form.get("date_of_birth")),
         gender: stringValue(form.get("gender")),
-        student_id_number: stringValue(form.get("student_id_number")),
-        current_section_id: stringValue(form.get("current_section_id")),
         admission_number: stringValue(form.get("admission_number")),
         admission_date:
           stringValue(form.get("admission_date")) ||
           new Date().toISOString().slice(0, 10),
+        parent_user_id: stringValue(form.get("parent_user_id")),
+      });
+
+      if (!validated.success) {
+        throw new Error(
+          validated.error.issues[0]?.message || "Please complete the student form."
+        );
+      }
+
+      const payload: Row = {
+        ...splitName(validated.data.student_name),
+        date_of_birth: validated.data.date_of_birth,
+        gender: validated.data.gender,
+        student_id_number: validated.data.student_id_number,
+        current_section_id: validated.data.current_section_id,
+        admission_number: validated.data.admission_number,
+        admission_date: validated.data.admission_date,
         status: "active",
       };
 

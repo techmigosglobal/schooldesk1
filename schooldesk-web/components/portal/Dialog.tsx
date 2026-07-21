@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { X } from "@/lib/lucide-react";
 
 export function Dialog({
   kicker,

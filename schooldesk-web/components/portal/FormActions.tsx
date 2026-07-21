@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "@/lib/lucide-react";
 
 export function FormActions({
   saving,

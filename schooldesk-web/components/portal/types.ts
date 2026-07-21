@@ -1,5 +1,4 @@
 import type { ComponentType } from "react";
-import type { LucideProps } from "lucide-react";
 import {
   LayoutDashboard,
   UsersRound,
@@ -8,7 +7,11 @@ import {
   CalendarClock,
   WalletCards,
   Globe2,
+  BellRing,
+  ChartNoAxesCombined,
+  ClipboardCheck,
 } from "lucide-react";
+} from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
 
 export type Row = Record<string, unknown>;
@@ -108,7 +111,7 @@ export interface Module {
   fields: Field[];
   columns: Array<[string, string]>;
   create: string;
-  icon: ComponentType<LucideProps>;
+  icon: ComponentType<any>;
   tone: string;
 }
 
@@ -147,13 +150,16 @@ export interface FeeState {
   config: Row;
 }
 
-export const navMeta: Record<string, { icon: ComponentType<LucideProps>; label: string }> = {
+export const navMeta: Record<string, { icon: ComponentType<any>; label: string }> = {
   overview: { icon: LayoutDashboard, label: "Overview" },
   students: { icon: UsersRound, label: "Students & Parents" },
   parents: { icon: UsersRound, label: "Parents" },
   teachers: { icon: GraduationCap, label: "Teachers" },
   classes: { icon: Building2, label: "Classes" },
   timetable: { icon: CalendarClock, label: "Timetable" },
+  attendance: { icon: ClipboardCheck, label: "Attendance" },
+  communications: { icon: BellRing, label: "Announcements" },
+  reports: { icon: ChartNoAxesCombined, label: "Reports" },
   fees: { icon: WalletCards, label: "Fees" },
   website: { icon: Globe2, label: "Public Website" },
 };

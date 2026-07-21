@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { feeStructureSchema } from "@/lib/schemas";
 import type { FeeState, Row } from "./types";
 import { api, stringValue, rowText } from "./utils";
 import { Dialog } from "./Dialog";
@@ -33,14 +34,17 @@ export function FeeStructureDialog({
         late_fine_per_day: Number(form.get("late_fine_per_day") || 0),
         replace_existing: Boolean(form.get("replace_existing")),
       };
-
-      if (!payload.academic_year_id || !payload.grade_id || !payload.fee_category_id || payload.amount <= 0) {
-        throw new Error("Academic year, class, category, and a positive amount are required.");
+      const parsed = feeStructureSchema.safeParse(payload);
+      if (!parsed.success) {
+        throw new Error(
+          parsed.error.issues[0]?.message ||
+            "Academic year, class, category, and a positive amount are required."
+        );
       }
 
       const created = (await api("fees/structures", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(parsed.data),
       })) as Row;
 
       if (created.id) {

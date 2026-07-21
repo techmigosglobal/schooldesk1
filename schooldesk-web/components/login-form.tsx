@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
 import { loginSchema } from "@/lib/schemas";
 
@@ -141,4 +141,3 @@ export function LoginForm({ role }: { role: PortalRole }) {
     </main>
   );
 }
-

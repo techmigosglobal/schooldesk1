@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Pause, Play } from "lucide-react";
 
 type HeroSlide = { eyebrow: string; title: string; body: string; link: string; action: string; theme: string };
 const heroSlides: HeroSlide[] = [
@@ -17,7 +16,7 @@ export function HomeHero({ heroTitle, heroBody }: { heroTitle: string; heroBody:
   const slide = active === 0 ? { ...heroSlides[0], title: heroTitle, body: heroBody } : heroSlides[active];
   const chooseSlide = (index: number) => { setActive(index); setPaused(true); };
   return <section className={`hero hero-${slide.theme}`} aria-roledescription="carousel" aria-label="ArishVille Preschool highlights" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-    <div className="hero-copy hero-copy-animated" key={slide.title} aria-live="polite"><p className="eyebrow">{slide.eyebrow}</p><h1>{slide.title}</h1><div className="hero-mark" /><p>{slide.body}</p><Link className="primary-button" href={slide.link}>{slide.action} <span aria-hidden>→</span></Link><div className="hero-controls" aria-label="Choose a highlight">{heroSlides.map((item, index) => <button key={item.theme} className={index === active ? "active" : ""} onClick={() => chooseSlide(index)} aria-label={`Show slide ${index + 1}`} aria-current={index === active ? "true" : undefined} />)}<button className="hero-pause" onClick={() => setPaused((value) => !value)} aria-label={paused ? "Resume automatic slides" : "Pause automatic slides"}>{paused ? <Play size={14}/> : <Pause size={14}/>}</button></div><div className="hero-progress" aria-hidden><span key={`${active}-${paused}`} className={paused ? "paused" : ""}/></div></div>
+    <div className="hero-copy hero-copy-animated" key={slide.title} aria-live="polite"><p className="eyebrow">{slide.eyebrow}</p><h1>{slide.title}</h1><div className="hero-mark" /><p>{slide.body}</p><Link className="primary-button" href={slide.link}>{slide.action} <span aria-hidden>→</span></Link><div className="hero-controls" aria-label="Choose a highlight">{heroSlides.map((item, index) => <button key={item.theme} className={index === active ? "active" : ""} onClick={() => chooseSlide(index)} aria-label={`Show slide ${index + 1}`} aria-current={index === active ? "true" : undefined} />)}<button className="hero-pause" onClick={() => setPaused((value) => !value)} aria-label={paused ? "Resume automatic slides" : "Pause automatic slides"}>{paused ? <span aria-hidden>Play</span> : <span aria-hidden>Pause</span>}</button></div><div className="hero-progress" aria-hidden><span key={`${active}-${paused}`} className={paused ? "paused" : ""}/></div></div>
     <div className="hero-media" aria-hidden><div className="hero-cloud cloud-one"/><div className="hero-cloud cloud-two"/><div className="hero-sun"/><div className="hero-doodle doodle-one">✦</div><div className="hero-doodle doodle-two">●</div><div className="hero-message"><b>Play. Learn. Bloom.</b><span>One wonderful day at a time.</span></div></div>
   </section>;
 }

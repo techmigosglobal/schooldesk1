@@ -12,6 +12,16 @@ export function isFinancePath(path: string) {
 }
 
 export function visibleModules(role: PortalRole) {
-  const base = ["overview", "students", "parents", "teachers", "classes", "timetable"] as const;
+  const base = [
+    "overview",
+    "students",
+    "parents",
+    "teachers",
+    "classes",
+    "timetable",
+    "attendance",
+    "communications",
+    "reports",
+  ] as const;
   return role === "principal" ? [...base, "fees", "website"] : base;
 }

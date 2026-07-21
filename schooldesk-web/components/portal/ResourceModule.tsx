@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
+} from "@/lib/lucide-react";
 import type { Module, Row } from "./types";
 import { api, rowsFrom, rowText, stringValue } from "./utils";
 import { StudentDialog } from "./StudentDialog";
@@ -31,6 +32,7 @@ export function ResourceModule({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [dialogState, setDialogState] = useState<{
     open: boolean;
     row?: Row;
@@ -73,6 +75,21 @@ export function ResourceModule({
     );
   }, [rows, search]);
 
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, rows]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   async function remove(row: Row) {
     const label = stringValue(row.name || row.first_name || row.id || "this record");
     if (!confirm(`Are you sure you want to delete ${label}?`)) return;
@@ -109,6 +126,9 @@ export function ResourceModule({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          <span className="ops-count">
+            Showing <b>{pagedRows.length}</b> of <b>{filteredRows.length}</b>
+          </span>
           <button
             className="secondary-button"
             onClick={() => void load(true)}
@@ -142,52 +162,73 @@ export function ResourceModule({
             <div className="skeleton skeleton-row" />
           </div>
         ) : filteredRows.length ? (
-          <table className="data-table ops-data-table">
-            <thead>
-              <tr>
-                {module.columns.map(([key, title]) => (
-                  <th key={key}>{title}</th>
-                ))}
-                <th style={{ width: "110px", textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.map((row, index) => (
-                <tr key={stringValue(row.id) || index}>
-                  {module.columns.map(([key]) => (
-                    <td key={key}>{rowText(row, key)}</td>
+          <>
+            <table className="data-table ops-data-table">
+              <thead>
+                <tr>
+                  {module.columns.map(([key, title]) => (
+                    <th key={key}>{title}</th>
                   ))}
-                  <td className="actions-cell" style={{ textAlign: "right" }}>
-                    <button
-                      className="icon-button"
-                      title="View details"
-                      onClick={() =>
-                        setDialogState({ open: true, row, readOnly: true })
-                      }
-                    >
-                      <Eye size={15} />
-                    </button>
-                    <button
-                      className="icon-button"
-                      title="Edit record"
-                      onClick={() =>
-                        setDialogState({ open: true, row, readOnly: false })
-                      }
-                    >
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      className="icon-button danger"
-                      title="Delete record"
-                      onClick={() => void remove(row)}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
+                  <th style={{ width: "110px", textAlign: "right" }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pagedRows.map((row, index) => (
+                  <tr key={stringValue(row.id) || index}>
+                    {module.columns.map(([key]) => (
+                      <td key={key}>{rowText(row, key)}</td>
+                    ))}
+                    <td className="actions-cell" style={{ textAlign: "right" }}>
+                      <button
+                        className="icon-button"
+                        title="View details"
+                        onClick={() =>
+                          setDialogState({ open: true, row, readOnly: true })
+                        }
+                      >
+                        <Eye size={15} />
+                      </button>
+                      <button
+                        className="icon-button"
+                        title="Edit record"
+                        onClick={() =>
+                          setDialogState({ open: true, row, readOnly: false })
+                        }
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        className="icon-button danger"
+                        title="Delete record"
+                        onClick={() => void remove(row)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="ops-pagination">
+              <button
+                className="secondary-button"
+                disabled={page === 1}
+                onClick={() => setPage((value) => value - 1)}
+              >
+                Previous
+              </button>
+              <span>
+                Page {page} of {totalPages}
+              </span>
+              <button
+                className="secondary-button"
+                disabled={page === totalPages}
+                onClick={() => setPage((value) => value + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </>
         ) : (
           <p className="ops-empty">
             {search

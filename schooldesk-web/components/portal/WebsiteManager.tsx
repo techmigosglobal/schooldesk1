@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CircleAlert, Globe2, RefreshCw } from "lucide-react";
+import { CircleAlert, Globe2, RefreshCw } from "@/lib/lucide-react";
 import type { Row } from "./types";
 import { api, rowsFrom, stringValue } from "./utils";
 

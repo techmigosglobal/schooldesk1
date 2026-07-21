@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { teacherSchema } from "@/lib/schemas";
 import type { Row } from "./types";
 import { api, stringValue, splitName, displayName } from "./utils";
 import { Dialog } from "./Dialog";
@@ -28,26 +29,38 @@ export function TeacherDialog({
     setSaving(true);
     setError("");
     try {
-      const payload: Row = {
-        ...splitName(stringValue(form.get("full_name"))),
-        staff_code: stringValue(form.get("staff_code")),
+      const parsed = teacherSchema.safeParse({
+        full_name: stringValue(form.get("full_name")),
         username: stringValue(form.get("username")),
-        email: stringValue(form.get("email")),
-        phone: stringValue(form.get("phone")),
         designation:
           designation === "Custom"
             ? stringValue(form.get("custom_designation"))
             : designation,
+        staff_code: stringValue(form.get("staff_code")),
+        phone: stringValue(form.get("phone")),
+        email: stringValue(form.get("email")),
+        password: stringValue(form.get("password")),
         account_role: stringValue(form.get("account_role")) || "Teacher",
+      });
+      if (!parsed.success) {
+        throw new Error(
+          parsed.error.issues[0]?.message || "Please complete the staff form."
+        );
+      }
+
+      const payload: Row = {
+        ...splitName(parsed.data.full_name),
+        staff_code: parsed.data.staff_code,
+        username: parsed.data.username,
+        email: parsed.data.email,
+        phone: parsed.data.phone,
+        designation: parsed.data.designation,
+        account_role: parsed.data.account_role || "Teacher",
         gender: "unspecified",
         request_principal_approval: false,
       };
 
-      const password = stringValue(form.get("password"));
-      if (!row && password.length < 8) {
-        throw new Error("Temporary password must be at least 8 characters.");
-      }
-      if (password) payload.password = password;
+      if (parsed.data.password) payload.password = parsed.data.password;
 
       await api(row ? `staff/${row.id}` : "staff", {
         method: row ? "PUT" : "POST",

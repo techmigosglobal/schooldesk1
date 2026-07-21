@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { concessionSchema } from "@/lib/schemas";
 import type { Row } from "./types";
 import { api, stringValue, money, displayName, nested } from "./utils";
 import { Dialog } from "./Dialog";
@@ -27,20 +28,26 @@ export function ConcessionDialog({
     setSaving(true);
     setError("");
     try {
-      const val = Number(form.get("value") || 0);
-      const payload: Row = {
+      const payload = {
         invoice_id: stringValue(form.get("invoice_id")),
         reason: stringValue(form.get("reason")),
-        [kind]: val,
+        kind,
+        value: Number(form.get("value") || 0),
       };
-
-      if (!payload.invoice_id || !payload.reason || val <= 0) {
-        throw new Error("Invoice, reason, and positive value are required.");
+      const parsed = concessionSchema.safeParse(payload);
+      if (!parsed.success) {
+        throw new Error(
+          parsed.error.issues[0]?.message || "Invoice, reason, and positive value are required."
+        );
       }
 
       await api("fees/concessions", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          invoice_id: parsed.data.invoice_id,
+          reason: parsed.data.reason,
+          [parsed.data.kind]: parsed.data.value,
+        }),
       });
 
       onSaved();

@@ -14,6 +14,10 @@ const envSchema = z.object({
     .url(
       "SCHOOLDESK_API_BASE_URL must be a valid URL (e.g. https://api.yourbackend.com)"
     ),
+  /** Public website school UUID for fetching published branded content. */
+  SCHOOLDESK_PUBLIC_SCHOOL_ID: z.string().uuid().optional(),
+  /** Canonical site URL used for metadata. */
+  NEXT_PUBLIC_SITE_URL: z.string().url().optional(),
   /** Secret for signing session cookies. Must be at least 32 characters. */
   SESSION_SECRET: z
     .string()

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { paymentSchema } from "@/lib/schemas";
 import type { Row } from "./types";
 import { api, stringValue, money, displayName, nested } from "./utils";
 import { Dialog } from "./Dialog";
@@ -37,14 +38,16 @@ export function PaymentDialog({
         payment_mode: stringValue(form.get("payment_mode")),
         transaction_id: stringValue(form.get("transaction_id")) || undefined,
       };
-
-      if (!payload.invoice_id || payload.amount_paid <= 0) {
-        throw new Error("Invoice and amount paid are required.");
+      const parsed = paymentSchema.safeParse(payload);
+      if (!parsed.success) {
+        throw new Error(
+          parsed.error.issues[0]?.message || "Invoice and amount paid are required."
+        );
       }
 
       await api("fees/payments", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(parsed.data),
       });
 
       onSaved();

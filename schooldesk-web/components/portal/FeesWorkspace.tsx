@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   CircleAlert,
+  Download,
   FileText,
   Plus,
   ReceiptIndianRupee,
   RefreshCw,
   WalletCards,
 } from "lucide-react";
+} from "@/lib/lucide-react";
 import type { FeeState, Row } from "./types";
-import { api, rowsFrom, rowText, stringValue, money, displayName, nested } from "./utils";
+import { api, downloadCsv, rowsFrom, rowText, stringValue, money, displayName, nested } from "./utils";
 import { FeeStructureDialog } from "./FeeStructureDialog";
 import { PaymentDialog } from "./PaymentDialog";
 import { ConcessionDialog } from "./ConcessionDialog";
@@ -44,7 +46,7 @@ function FinanceTable({
 export function FeesWorkspace({
   onNotify,
 }: {
-  onNotify: (message: string) => void;
+  onNotify: (message: string, type?: "success" | "error" | "info") => void;
 }) {
   const [tab, setTab] = useState<
     "structures" | "invoices" | "collections" | "requests" | "concessions" | "reports"
@@ -120,6 +122,40 @@ export function FeesWorkspace({
     void load();
   }, [load]);
 
+  async function requestFinanceExport(reportType: string, title: string) {
+    try {
+      const result = (await api("fees/reports/exports", {
+        method: "POST",
+        body: JSON.stringify({
+          reportTitle: title,
+          reportType,
+          format: "csv",
+          parameters: {
+            invoice_count: state.invoices.length,
+            payment_count: state.payments.length,
+            concession_count: state.concessions.length,
+          },
+        }),
+      })) as Row;
+      if (stringValue(result.download_url)) {
+        const response = await fetch(stringValue(result.download_url));
+        if (!response.ok) throw new Error("The fee export could not be downloaded.");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${title.toLowerCase().replaceAll(/\s+/g, "_")}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        onNotify(`${title} downloaded.`);
+        return;
+      }
+      onNotify(`${title} export requested.`, "info");
+    } catch (event) {
+      setNotice(event instanceof Error ? event.message : "Unable to export finance report");
+    }
+  }
+
   async function applyFines() {
     try {
       const res = (await api("fees/invoices/late-fines/apply", {
@@ -173,6 +209,11 @@ export function FeesWorkspace({
   const pendingRequestsCount = state.requests.filter(
     (r) => stringValue(r.status).toLowerCase() === "pending"
   ).length;
+  const overdueInvoices = state.invoices.filter(
+    (row) =>
+      Number(row.balance || 0) > 0 &&
+      stringValue(row.status).toLowerCase() !== "paid"
+  );
 
   return (
     <section className="ops-module">
@@ -395,8 +436,63 @@ export function FeesWorkspace({
               <FileText size={24} />
               <h3>Ledger Export</h3>
               <p>Download full transaction history, audit trails, and student fee statements in CSV format.</p>
-              <button className="secondary-button" type="button" onClick={() => onNotify("CSV export initiated.")}>
-                Export full ledger (CSV)
+              <div className="ops-stack">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void requestFinanceExport("fee_outstanding_report", "Fee outstanding report")}
+                >
+                  <Download size={16} /> Export outstanding report
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() =>
+                    downloadCsv(
+                      `fee_receipt_register_${new Date().toISOString().slice(0, 10)}.csv`,
+                      state.payments.map((payment) => ({
+                        receipt_number: payment.receipt_number,
+                        invoice_id: payment.invoice_id,
+                        amount_paid: payment.amount_paid,
+                        payment_mode: payment.payment_mode,
+                        payment_date: payment.payment_date,
+                        transaction_id: payment.transaction_id,
+                      }))
+                    )
+                  }
+                >
+                  <FileText size={16} /> Receipt register CSV
+                </button>
+              </div>
+            </section>
+            <section className="finance-report-card surface">
+              <ReceiptIndianRupee size={24} />
+              <h3>Overdue follow-up</h3>
+              <p>{overdueInvoices.length} invoices currently have an outstanding balance and need fee collection follow-up.</p>
+              <div className="ops-chip-cloud">
+                {overdueInvoices.slice(0, 6).map((invoice) => (
+                  <span key={stringValue(invoice.id)} className="ops-chip">
+                    {stringValue(invoice.invoice_number)} · {money(invoice.balance)}
+                  </span>
+                ))}
+                {!overdueInvoices.length && <span className="ops-chip success">No overdue invoices</span>}
+              </div>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() =>
+                  downloadCsv(
+                    `overdue_follow_up_${new Date().toISOString().slice(0, 10)}.csv`,
+                    overdueInvoices.map((invoice) => ({
+                      invoice_number: invoice.invoice_number,
+                      student: displayName(nested(invoice, "student")),
+                      balance: invoice.balance,
+                      status: invoice.status,
+                    }))
+                  )
+                }
+              >
+                Export overdue follow-up list
               </button>
             </section>
           </form>

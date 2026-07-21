@@ -1,4 +1,6 @@
-const baseUrl = () => (process.env.SCHOOLDESK_API_BASE_URL ?? "").replace(/\/$/, "");
+import { env } from "@/lib/env";
+
+const baseUrl = () => env.SCHOOLDESK_API_BASE_URL.replace(/\/$/, "");
 
 export function configuredBackend() { return baseUrl(); }
 

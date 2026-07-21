@@ -1,7 +1,6 @@
 "use client";
 
 import React, { Component } from "react";
-import { RefreshCw, TriangleAlert } from "lucide-react";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -49,7 +48,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return (
         <div className="error-boundary-card" role="alert">
           <span className="error-boundary-icon">
-            <TriangleAlert size={22} />
+            !
           </span>
           <div>
             <b>{this.props.label ?? "Something went wrong"}</b>
@@ -60,7 +59,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             onClick={this.handleReset}
             type="button"
           >
-            <RefreshCw size={15} /> Try again
+            Try again
           </button>
         </div>
       );

@@ -1,4 +1,5 @@
 import { configuredBackend } from "@/lib/backend";
+import { env } from "@/lib/env";
 
 export type GalleryItem = {
   id: string;
@@ -15,7 +16,7 @@ export type PublicWebsite = {
 
 export async function getPublicWebsite(): Promise<PublicWebsite> {
   const base = configuredBackend();
-  const schoolId = process.env.SCHOOLDESK_PUBLIC_SCHOOL_ID;
+  const schoolId = env.SCHOOLDESK_PUBLIC_SCHOOL_ID;
   if (!base || !schoolId) return {};
 
   try {

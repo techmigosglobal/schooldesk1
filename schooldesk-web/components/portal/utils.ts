@@ -15,6 +15,29 @@ export async function api(path: string, init: RequestInit = {}) {
   return body.data;
 }
 
+export async function apiRaw(path: string, init: RequestInit = {}) {
+  const response = await fetch(`/api/backend/${path}`, {
+    ...init,
+    headers: {
+      ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+      ...(init.headers ?? {}),
+    },
+  });
+  const body = await response.json().catch(() => ({}));
+  return { ok: response.ok && body.success !== false, status: response.status, body };
+}
+
+export async function apiFirst(paths: string[], init?: RequestInit) {
+  let lastError = "Request failed";
+  for (const path of paths) {
+    const response = await apiRaw(path, init);
+    if (response.ok) return response.body.data;
+    lastError = response.body.error || lastError;
+    if (response.status !== 404) break;
+  }
+  throw new Error(lastError);
+}
+
 export function rowsFrom(data: unknown): Row[] {
   if (Array.isArray(data)) return data as Row[];
   if (data && typeof data === "object") {
@@ -80,6 +103,49 @@ export function money(value: unknown): string {
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(Number.isNaN(amount) ? 0 : amount);
+}
+
+export function formatDate(value: unknown, fallback = "—"): string {
+  const text = stringValue(value);
+  if (!text) return fallback;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text.slice(0, 10) || fallback;
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+export function formatDateTime(value: unknown, fallback = "—"): string {
+  const text = stringValue(value);
+  if (!text) return fallback;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text || fallback;
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+export function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
+  const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+  const escape = (value: unknown) =>
+    `"${stringValue(value).replaceAll('"', '""')}"`;
+  const csv = [
+    headers.join(","),
+    ...rows.map((row) => headers.map((header) => escape(row[header])).join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function splitName(name: string): { first_name: string; last_name: string } {

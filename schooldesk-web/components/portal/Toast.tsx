@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
+import { CheckCircle2, CircleAlert, Info, X } from "@/lib/lucide-react";
 
 export interface ToastItem {
   id: string;

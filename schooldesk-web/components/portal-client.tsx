@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from "react";
 import Image from "next/image";
-import { RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
 import type { PortalRole } from "@/lib/roles";
 import { visibleModules } from "@/lib/roles";
 import { modules, navMeta } from "@/components/portal/types";
@@ -12,6 +11,9 @@ import { DashboardPanel } from "@/components/portal/DashboardPanel";
 import { ResourceModule } from "@/components/portal/ResourceModule";
 import { FeesWorkspace } from "@/components/portal/FeesWorkspace";
 import { WebsiteManager } from "@/components/portal/WebsiteManager";
+import { AttendanceWorkspace } from "@/components/portal/AttendanceWorkspace";
+import { CommunicationsWorkspace } from "@/components/portal/CommunicationsWorkspace";
+import { ReportsWorkspace } from "@/components/portal/ReportsWorkspace";
 import { PortalErrorBoundary } from "@/components/error-boundary";
 
 export function PortalClient({ role }: { role: PortalRole }) {
@@ -51,6 +53,8 @@ export function PortalClient({ role }: { role: PortalRole }) {
     location.assign("/");
   }
 
+  const roleLabel = role === "principal" ? "Principal workspace" : "Coordinator workspace";
+
   return (
     <main className="portal ops-portal">
       {/* Sidebar */}
@@ -68,10 +72,7 @@ export function PortalClient({ role }: { role: PortalRole }) {
           </span>
         </a>
 
-        <p className="ops-role-chip">
-          <ShieldCheck size={14} />
-          {role === "principal" ? "Principal workspace" : "Coordinator workspace"}
-        </p>
+        <p className="ops-role-chip">{roleLabel}</p>
 
         <nav className="side-nav" aria-label="Portal navigation">
           {nav.map((id) => {
@@ -86,7 +87,7 @@ export function PortalClient({ role }: { role: PortalRole }) {
                 }}
                 className={active === id ? "active" : ""}
               >
-                <Icon size={17} />
+                {typeof Icon === "function" ? <Icon size={17} /> : <span aria-hidden>•</span>}
                 <span>{meta.label}</span>
               </button>
             );
@@ -94,9 +95,7 @@ export function PortalClient({ role }: { role: PortalRole }) {
         </nav>
 
         {role === "coordinator" && (
-          <p className="finance-note">
-            <WalletCards size={15} /> Finance is safely managed by the Principal.
-          </p>
+          <p className="finance-note">Finance is safely managed by the Principal.</p>
         )}
 
         <div className="ops-sidebar-status">
@@ -119,7 +118,7 @@ export function PortalClient({ role }: { role: PortalRole }) {
               className="secondary-button"
               onClick={() => setDashboardRefresh((v) => v + 1)}
             >
-              <RefreshCw size={16} /> Refresh data
+              Refresh data
             </button>
             <button className="secondary-button" onClick={() => void logout()}>
               Sign out
@@ -136,6 +135,12 @@ export function PortalClient({ role }: { role: PortalRole }) {
                 onCreate={createInModule}
                 refreshNonce={dashboardRefresh}
               />
+            ) : active === "attendance" ? (
+              <AttendanceWorkspace role={role} onNotify={notify} />
+            ) : active === "communications" ? (
+              <CommunicationsWorkspace role={role} onNotify={notify} />
+            ) : active === "reports" ? (
+              <ReportsWorkspace role={role} onNotify={notify} />
             ) : active === "website" && role === "principal" ? (
               <WebsiteManager onNotify={notify} />
             ) : active === "fees" && role === "principal" ? (
@@ -157,4 +162,3 @@ export function PortalClient({ role }: { role: PortalRole }) {
     </main>
   );
 }
-
