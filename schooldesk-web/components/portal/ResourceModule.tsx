@@ -8,15 +8,46 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-} from "lucide-react";
 } from "@/lib/lucide-react";
 import type { Module, Row } from "./types";
 import { api, rowsFrom, rowText, stringValue } from "./utils";
 import { StudentDialog } from "./StudentDialog";
 import { TeacherDialog } from "./TeacherDialog";
 import { GenericDialog } from "./GenericDialog";
+import { StudentDirectory } from "./StudentDirectory";
 
 export function ResourceModule({
+  module,
+  createToken,
+  onSaved,
+  onNotify,
+}: {
+  module: Module;
+  createToken: number;
+  onSaved: () => void;
+  onNotify: (message: string) => void;
+}) {
+  if (module.id === "students") {
+    return (
+      <StudentDirectory
+        createToken={createToken}
+        onSaved={onSaved}
+        onNotify={onNotify}
+      />
+    );
+  }
+
+  return (
+    <GenericResourceModule
+      module={module}
+      createToken={createToken}
+      onSaved={onSaved}
+      onNotify={onNotify}
+    />
+  );
+}
+
+function GenericResourceModule({
   module,
   createToken,
   onSaved,

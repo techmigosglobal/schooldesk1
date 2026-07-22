@@ -13,7 +13,6 @@ import {
   RefreshCw,
   UsersRound,
   WalletCards,
-} from "lucide-react";
 } from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
 import type { Dashboard } from "./types";
@@ -103,6 +102,7 @@ export function DashboardPanel({
       sub: "Active nursery & preschool profiles",
       icon: UsersRound,
       tone: "blue",
+      action: "students",
     },
     {
       id: "teachers",
@@ -111,6 +111,7 @@ export function DashboardPanel({
       sub: "Active teacher profiles",
       icon: GraduationCap,
       tone: "green",
+      action: "teachers",
     },
     {
       id: "classes",
@@ -119,6 +120,7 @@ export function DashboardPanel({
       sub: "Configured grade rooms",
       icon: Building2,
       tone: "violet",
+      action: "classes",
     },
     {
       id: "attendance",
@@ -133,6 +135,7 @@ export function DashboardPanel({
           : "Marking in progress",
       icon: Activity,
       tone: "gold",
+      action: "attendance",
     },
   ];
 
@@ -176,19 +179,65 @@ export function DashboardPanel({
       : []),
   ];
 
+  const healthItems = [
+    {
+      id: "attendance",
+      label: "Attendance",
+      detail:
+        data.today_attendance?.marked !== undefined
+          ? `${data.today_attendance.marked} sections marked today`
+          : "Daily roll call is in progress",
+      actionLabel: "Open attendance",
+      icon: CheckCircle2,
+      tone: "green",
+      action: () => onNavigate("attendance"),
+    },
+    {
+      id: "leave",
+      label: "Staff leave",
+      detail: data.pending_leave_requests
+        ? `${data.pending_leave_requests} request${data.pending_leave_requests === 1 ? "" : "s"} waiting for review`
+        : "No pending leave applications",
+      actionLabel: "Review staff",
+      icon: CalendarClock,
+      tone: "blue",
+      action: () => onNavigate("teachers"),
+    },
+    ...(role === "principal"
+      ? [
+          {
+            id: "fees",
+            label: "Fee collections",
+            detail:
+              data.fees?.collection_pct !== undefined
+                ? `${data.fees.collection_pct}% of this month’s target collected`
+                : "Monthly billing is active",
+            actionLabel: "Open ledger",
+            icon: WalletCards,
+            tone: "violet",
+            action: () => onNavigate("fees"),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="ops-dashboard">
-      <div className="ops-dashboard-heading">
+    <div className="ops-dashboard ops-principal-overview">
+      <header className="ops-overview-hero">
         <div>
-          <p className="ops-kicker">Real-time telemetry</p>
-          <h2>ArishVille Operations Overview</h2>
+          <p className="ops-kicker">School day at a glance</p>
+          <h2>Everything your school needs today.</h2>
+          <p>Monitor people, learning spaces, attendance, and the tasks that need your attention.</p>
         </div>
-        <div className="ops-live-badge">
-          <i className="pulse-dot" />
-          <span>Syncing with SchoolDesk API</span>
-          {refreshedAt && <small>· {refreshedAt}</small>}
+        <div className="ops-overview-sync" aria-live="polite">
+          <span className="ops-sync-status"><i className="pulse-dot" />Live data</span>
+          <small>{refreshedAt ? `Updated ${refreshedAt}` : "Fetching the latest update"}</small>
+          <button className="ops-refresh-button" onClick={() => void load()} disabled={loading}>
+            <RefreshCw size={15} className={loading ? "spin" : ""} />
+            Refresh
+          </button>
         </div>
-      </div>
+      </header>
 
       {error && (
         <div className="ops-inline-error">
@@ -197,7 +246,6 @@ export function DashboardPanel({
         </div>
       )}
 
-      {/* Staggered Metric Cards Grid */}
       <div className="ops-metric-grid">
         {loading ? (
           <div className="ops-metric-skeleton" style={{ gridColumn: "1/-1" }}>
@@ -210,12 +258,11 @@ export function DashboardPanel({
           metrics.map((m, index) => {
             const Icon = m.icon;
             return (
-              <motion.article
+              <motion.button
+                type="button"
                 key={m.id}
                 className={`ops-metric-card ${m.tone}`}
-                onClick={() => onNavigate(m.id)}
-                role="button"
-                tabIndex={0}
+                onClick={() => onNavigate(m.action ?? m.id)}
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.28, delay: index * 0.06 }}
@@ -225,126 +272,69 @@ export function DashboardPanel({
                   <span className="ops-metric-icon">
                     <Icon size={18} />
                   </span>
-                  <small>{m.label}</small>
+                  <ChevronRight size={16} className="ops-metric-arrow" />
                 </div>
+                <small>{m.label}</small>
                 <div className="ops-metric-value">
                   <AnimatedValue value={m.value} />
                 </div>
                 <p className="ops-metric-sub">{m.sub}</p>
-              </motion.article>
+              </motion.button>
             );
           })
         )}
       </div>
 
-      {/* Main Dashboard Layout */}
-      <div className="ops-dashboard-grid">
-        {/* Left: Operating Picture */}
+      <div className="ops-overview-grid">
         <motion.section
-          className="surface ops-panel ops-health-panel"
+          className="ops-panel ops-today-panel"
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.32, delay: 0.24 }}
         >
-          <div className="ops-panel-header">
-            <h3>Today&apos;s Operating Picture</h3>
-            <button className="icon-button" onClick={() => void load()}>
-              <RefreshCw size={15} className={loading ? "spin" : ""} />
-            </button>
+          <div className="ops-panel-header ops-overview-panel-header">
+            <div>
+              <p className="ops-kicker">Daily operations</p>
+              <h3>Today&apos;s operating picture</h3>
+            </div>
+            <span className="ops-panel-caption">Keep the day moving</span>
           </div>
 
           <div className="ops-health-items">
-            <div className="ops-health-row">
-              <div className="ops-health-info">
-                <CheckCircle2 size={18} style={{ color: "#188038" }} />
-                <div>
-                  <b>Attendance Status</b>
-                  <p>
-                    {data.today_attendance?.marked !== undefined
-                      ? `${data.today_attendance.marked} sections marked today`
-                      : "Daily roll call in progress"}
-                  </p>
-                </div>
-              </div>
-              <button
-                className="outline-button"
-                onClick={() => onNavigate("students")}
-              >
-                View learners
-              </button>
-            </div>
-
-            <div className="ops-health-row">
-              <div className="ops-health-info">
-                <CalendarClock size={18} style={{ color: "#1a73e8" }} />
-                <div>
-                  <b>Staff Leave Requests</b>
-                  <p>
-                    {data.pending_leave_requests
-                      ? `${data.pending_leave_requests} pending approval`
-                      : "No pending leave applications"}
-                  </p>
-                </div>
-              </div>
-              <button
-                className="outline-button"
-                onClick={() => onNavigate("teachers")}
-              >
-                Review staff
-              </button>
-            </div>
-
-            {role === "principal" && (
-              <div className="ops-health-row">
-                <div className="ops-health-info">
-                  <WalletCards size={18} style={{ color: "#8e24aa" }} />
-                  <div>
-                    <b>Fee Collections Progress</b>
-                    <p>
-                      {data.fees?.collection_pct !== undefined
-                        ? `${data.fees.collection_pct}% of expected monthly target`
-                        : "Monthly billing active"}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  className="outline-button"
-                  onClick={() => onNavigate("fees")}
-                >
-                  Open ledger
-                </button>
-              </div>
-            )}
-          </div>
-
-          {data.recent_announcements && data.recent_announcements.length > 0 && (
-            <div className="ops-announcements">
-              <p className="ops-kicker">School announcements</p>
-              <ul>
-                {data.recent_announcements.map((item) => (
-                  <li key={item.id}>
-                    <span>{item.title}</span>
-                    {item.priority && (
-                      <span className={`ops-chip ${item.priority}`}>
-                        {item.priority}
+            {healthItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <article key={item.id} className={`ops-health-row ${item.tone}`}>
+                  <span className="ops-health-icon"><Icon size={18} /></span>
+                  <div className="ops-health-info">
+                    <b>{item.label}</b>
+                    <p>{item.detail}</p>
+                    {item.id === "fees" && data.fees?.collection_pct !== undefined && (
+                      <span className="ops-progress-track" aria-label={`${data.fees.collection_pct}% collected`}>
+                        <i style={{ width: `${Math.min(100, Math.max(0, data.fees.collection_pct))}%` }} />
                       </span>
                     )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                  </div>
+                  <button className="ops-row-action" onClick={item.action}>
+                    {item.actionLabel}<ChevronRight size={15} />
+                  </button>
+                </article>
+              );
+            })}
+          </div>
         </motion.section>
 
-        {/* Right: Quick Action Queue */}
         <motion.section
-          className="surface ops-panel ops-activity-panel"
+          className="ops-panel ops-actions-panel"
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.32, delay: 0.3 }}
         >
-          <div className="ops-panel-header">
-            <h3>Quick Action Queue</h3>
+          <div className="ops-panel-header ops-overview-panel-header">
+            <div>
+              <p className="ops-kicker">Shortcuts</p>
+              <h3>Start here</h3>
+            </div>
           </div>
 
           <div className="ops-task-list">
@@ -354,7 +344,8 @@ export function DashboardPanel({
                 className="ops-task-item"
                 onClick={task.action}
               >
-                <div>
+                <span className="ops-task-number">{String(tasks.indexOf(task) + 1).padStart(2, "0")}</span>
+                <div className="ops-task-copy">
                   <b>{task.title}</b>
                   <small>{task.sub}</small>
                 </div>
@@ -364,6 +355,32 @@ export function DashboardPanel({
           </div>
         </motion.section>
       </div>
+
+      <section className="ops-panel ops-announcements-panel">
+        <div className="ops-panel-header ops-overview-panel-header">
+          <div>
+            <p className="ops-kicker">Communications</p>
+            <h3>Latest school announcements</h3>
+          </div>
+          <button className="ops-text-action" onClick={() => onNavigate("communications")}>View announcements <ChevronRight size={15} /></button>
+        </div>
+        {data.recent_announcements?.length ? (
+          <div className="ops-announcements-list">
+            {data.recent_announcements.slice(0, 3).map((item) => (
+              <article key={item.id}>
+                <span className="ops-announcement-dot" />
+                <b>{item.title || "Untitled announcement"}</b>
+                {item.priority && <span className={`ops-chip ${item.priority}`}>{item.priority}</span>}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="ops-announcements-empty">
+            <CheckCircle2 size={18} />
+            <span>No new school-wide announcements. You&apos;re all caught up.</span>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

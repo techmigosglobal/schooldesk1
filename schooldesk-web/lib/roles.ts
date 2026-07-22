@@ -5,6 +5,11 @@ export function isPortalRole(value: string): value is PortalRole {
   return portalRoles.includes(value as PortalRole);
 }
 
+export function portalRoleFromPath(pathname: string): PortalRole | null {
+  const role = pathname.split("/")[2] ?? "";
+  return isPortalRole(role) ? role : null;
+}
+
 export function isFinancePath(path: string) {
   const normalized = path.replace(/^\/+/, "").toLowerCase();
   return normalized.startsWith("fees") || normalized.startsWith("fee-") ||

@@ -79,7 +79,14 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
 
       for (final parent in parents) {
         final linkedRows = await _safeParentStudents(parent.id);
-        final linkedStudents = _mapLinkedStudents(linkedRows, students);
+        var linkedStudents = _mapLinkedStudents(linkedRows, students);
+        if (linkedStudents.isEmpty) {
+          linkedStudents = _linkedStudentsFromGuardianRows(
+            parent,
+            guardianRows: guardianRows,
+            students: students,
+          );
+        }
         entries.add(
           _mapParentToEntry(
             parent,
@@ -214,6 +221,49 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         GuardianStudentLink(
           studentId: resolvedId,
           admissionNumber: _studentLookupCode(student) ?? admission,
+          studentName: name,
+        ),
+      );
+    }
+    return links;
+  }
+
+  List<GuardianStudentLink> _linkedStudentsFromGuardianRows(
+    api.UserAccountModel parent, {
+    required List<Map<String, dynamic>> guardianRows,
+    required List<api.StudentModel> students,
+  }) {
+    final parentEmail = parent.email.toLowerCase().trim();
+    final parentPhone = parent.phone.trim();
+    final parentName = parent.name.toLowerCase().trim();
+    final byId = {
+      for (final s in students) s.id.toLowerCase().trim(): s,
+    };
+    final links = <GuardianStudentLink>[];
+    final seenStudentIds = <String>{};
+    for (final row in guardianRows) {
+      final emailMatches =
+          parentEmail.isNotEmpty &&
+          _stringValue(row['email']).toLowerCase() == parentEmail;
+      final phoneMatches =
+          parentPhone.isNotEmpty && _stringValue(row['phone']) == parentPhone;
+      final nameMatches =
+          parentName.isNotEmpty &&
+          _stringValue(row['full_name']).toLowerCase() == parentName;
+      if (!emailMatches && !phoneMatches && !nameMatches) continue;
+      final studentId = _stringValue(row['student_id']);
+      if (studentId.isEmpty || !seenStudentIds.add(studentId)) continue;
+      final student = byId[studentId.toLowerCase()];
+      final name = student?.fullName.trim().isNotEmpty == true
+          ? student!.fullName.trim()
+          : _firstNonEmpty([
+              row['student_name'],
+              '${row['first_name'] ?? ''} ${row['last_name'] ?? ''}',
+            ]);
+      links.add(
+        GuardianStudentLink(
+          studentId: studentId,
+          admissionNumber: _studentLookupCode(student) ?? studentId,
           studentName: name,
         ),
       );
@@ -2181,7 +2231,7 @@ class _GuardianDetailPage extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFFEFF8FD),
         elevation: 0,
-        title: const Text('Guardian Details'),
+        title: const Text("Parent's Details"),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) => Navigator.pop(context, value),
@@ -2223,9 +2273,9 @@ class _GuardianDetailPage extends StatelessWidget {
                 ),
                 _DetailRow(label: 'Status', value: guardian.statusLabel),
                 _DetailRow(
-                  label: 'Linked Students',
+                  label: 'Linked Children',
                   value: guardian.linkedStudents.isEmpty
-                      ? 'Not assigned'
+                      ? 'No children linked'
                       : guardian.linkedStudents
                             .map(
                               (s) => '${s.studentName} (${s.admissionNumber})',

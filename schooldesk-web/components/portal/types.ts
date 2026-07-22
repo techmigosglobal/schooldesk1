@@ -10,7 +10,6 @@ import {
   BellRing,
   ChartNoAxesCombined,
   ClipboardCheck,
-} from "lucide-react";
 } from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
 

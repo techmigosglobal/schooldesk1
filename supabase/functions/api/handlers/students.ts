@@ -1,6 +1,10 @@
 // handlers/students.ts — CRUD, photo, documents, enrollments
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
+import { isSchoolLeader } from "./authorization.ts";
+
+const studentDirectorySelect =
+  "*, section:sections(*), guardians(*), student_guardians(guardian:guardians(*)), parent_student_links(parent_user_id)";
 
 function sid(user: User) {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -64,6 +68,184 @@ function guardianPayload(body: Record<string, unknown>, school: string) {
     occupation: text(body.occupation) || null,
     is_primary: body.is_primary ?? true,
   };
+}
+
+function canManageStudents(user: User) {
+  return isSchoolLeader(user);
+}
+
+function photoUploadError(file: File) {
+  const allowedTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+  ]);
+  if (!allowedTypes.has(file.type.toLowerCase())) {
+    return "Student photo must be a JPEG, PNG, WebP, HEIC, or HEIF image";
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return "Student photo must be 5 MB or smaller";
+  }
+  return "";
+}
+
+async function attachParentAccounts(
+  svc: SupabaseClient,
+  school: string,
+  students: Record<string, unknown>[],
+) {
+  const parentIds = [
+    ...new Set(
+      students.flatMap((student) => {
+        const links = Array.isArray(student.parent_student_links)
+          ? student.parent_student_links as Record<string, unknown>[]
+          : [];
+        return links.map((link) => text(link.parent_user_id)).filter(Boolean);
+      }),
+    ),
+  ];
+  if (parentIds.length === 0) return { data: students, error: null };
+
+  const { data: parents, error } = await svc.from("users").select(
+    "id, name, username, email, phone",
+  ).eq("school_id", school).in("id", parentIds);
+  if (error) return { data: students, error };
+
+  const parentById = new Map(
+    (parents ?? []).map((parent) => [text(parent.id), parent]),
+  );
+  return {
+    data: students.map((student) => {
+      const links = Array.isArray(student.parent_student_links)
+        ? student.parent_student_links as Record<string, unknown>[]
+        : [];
+      return {
+        ...student,
+        parent_student_links: links.map((link) => ({
+          ...link,
+          parent: parentById.get(text(link.parent_user_id)) ?? null,
+        })),
+      };
+    }),
+    error: null,
+  };
+}
+
+async function attachClassDetails(
+  svc: SupabaseClient,
+  school: string,
+  students: Record<string, unknown>[],
+) {
+  const sectionIds = [
+    ...new Set(students.map((student) => text(student.current_section_id)).filter(Boolean)),
+  ];
+  if (sectionIds.length === 0) return { data: students, error: null };
+
+  const { data: sections, error: sectionError } = await svc.from("sections")
+    .select("*").eq("school_id", school).in("id", sectionIds);
+  if (sectionError) return { data: students, error: sectionError };
+  const gradeIds = [
+    ...new Set((sections ?? []).map((section) => text(section.grade_id)).filter(Boolean)),
+  ];
+  const { data: grades, error: gradeError } = gradeIds.length > 0
+    ? await svc.from("grades").select("*").eq("school_id", school).in(
+      "id",
+      gradeIds,
+    )
+    : { data: [], error: null };
+  if (gradeError) return { data: students, error: gradeError };
+
+  const gradeById = new Map(
+    (grades ?? []).map((grade) => [text(grade.id), grade]),
+  );
+  const sectionById = new Map(
+    (sections ?? []).map((section) => [
+      text(section.id),
+      { ...section, grade: gradeById.get(text(section.grade_id)) ?? null },
+    ]),
+  );
+  return {
+    data: students.map((student) => ({
+      ...student,
+      section: sectionById.get(text(student.current_section_id)) ??
+        student.section ?? null,
+    })),
+    error: null,
+  };
+}
+
+async function attachFeeSummaries(
+  svc: SupabaseClient,
+  school: string,
+  students: Record<string, unknown>[],
+) {
+  const studentIds = students.map((s) => text(s.id)).filter(Boolean);
+  if (studentIds.length === 0) return { data: students, error: null };
+
+  const { data: invoices, error } = await svc.from("fee_invoices").select(
+    "student_id, total_amount, discount_amount, paid_amount, balance, net_amount, status",
+  ).eq("school_id", school).in("student_id", studentIds);
+  if (error) return { data: students, error };
+
+  const summaryById = new Map<string, Record<string, unknown>>();
+  for (const inv of invoices ?? []) {
+    const sid = text(inv.student_id);
+    if (!sid) continue;
+    const prev = summaryById.get(sid) ?? {
+      total_amount: 0,
+      discount_amount: 0,
+      paid_amount: 0,
+      balance: 0,
+      pending_invoices: 0,
+      overdue_invoices: 0,
+    };
+    const totalAmount = Number(prev.total_amount) + Number(inv.total_amount ?? 0);
+    const discountAmount = Number(prev.discount_amount) + Number(inv.discount_amount ?? 0);
+    const paidAmount = Number(prev.paid_amount) + Number(inv.paid_amount ?? 0);
+    const balance = Number(prev.balance) + Math.max(0, Number(inv.balance ?? 0) || (Number(inv.net_amount ?? 0) - Number(inv.paid_amount ?? 0)));
+    const pending = Number(prev.pending_invoices) + (inv.status !== "paid" ? 1 : 0);
+    const overdue = Number(prev.overdue_invoices) + (inv.status === "overdue" ? 1 : 0);
+    summaryById.set(sid, {
+      total_amount: totalAmount,
+      discount_amount: discountAmount,
+      paid_amount: paidAmount,
+      balance,
+      pending_invoices: pending,
+      overdue_invoices: overdue,
+      status: balance > 0 ? "due" : "clear",
+    });
+  }
+
+  return {
+    data: students.map((student) => {
+      const sid = text(student.id);
+      const summary = summaryById.get(sid) ?? {
+        total_amount: 0,
+        discount_amount: 0,
+        paid_amount: 0,
+        balance: 0,
+        pending_invoices: 0,
+        overdue_invoices: 0,
+        status: "clear",
+      };
+      return { ...student, fee_summary: summary };
+    }),
+    error: null,
+  };
+}
+
+async function hydrateStudentDirectory(
+  svc: SupabaseClient,
+  school: string,
+  students: Record<string, unknown>[],
+) {
+  const classDetails = await attachClassDetails(svc, school, students);
+  if (classDetails.error) return classDetails;
+  const withParents = await attachParentAccounts(svc, school, classDetails.data);
+  if (withParents.error) return withParents;
+  return await attachFeeSummaries(svc, school, withParents.data);
 }
 
 export async function handleGuardians(
@@ -136,6 +318,13 @@ export async function handleStudents(
 ): Promise<Response> {
   const school = sid(user);
 
+  if (
+    ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
+    !canManageStudents(user)
+  ) {
+    return fail("forbidden", 403);
+  }
+
   // Enrollments
   if (path === "/students/enrollments" && method === "POST") {
     const body = await req.json().catch(() => ({}));
@@ -154,11 +343,27 @@ export async function handleStudents(
     const form = await req.formData();
     const file = form.get("photo") as File;
     if (!file) return fail("photo required");
-    const p = `students/${school}/${id}/${Date.now()}-${file.name}`;
-    await svc.storage.from("school-assets").upload(p, file, { upsert: true });
+    const validationError = photoUploadError(file);
+    if (validationError) return fail(validationError);
+    const { data: student, error: studentError } = await svc.from("students")
+      .select("id").eq("id", id).eq("school_id", school).maybeSingle();
+    if (studentError) return fail(studentError.message);
+    if (!student) return fail("student not found", 404);
+    const filename = file.name.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
+    const p = `students/${school}/${id}/${Date.now()}-${filename || "photo"}`;
+    const { error: uploadError } = await svc.storage.from("school-assets").upload(
+      p,
+      file,
+      { upsert: true },
+    );
+    if (uploadError) return fail(uploadError.message);
     const { data: { publicUrl } } = svc.storage.from("school-assets")
       .getPublicUrl(p);
-    await svc.from("students").update({ photo_url: publicUrl }).eq("id", id);
+    const { error: updateError } = await svc.from("students").update({
+      photo_url: publicUrl,
+      updated_at: new Date().toISOString(),
+    }).eq("id", id).eq("school_id", school);
+    if (updateError) return fail(updateError.message);
     return ok({ photo_url: publicUrl });
   }
 
@@ -272,10 +477,9 @@ export async function handleStudents(
     const page = parseInt(url.searchParams.get("page") ?? "1");
     const size = parseInt(url.searchParams.get("page_size") ?? "50");
     const search = url.searchParams.get("search") ?? "";
-    let q = svc.from("students").select(
-      "*, section:sections(*), guardians(*), student_guardians(guardian:guardians(*)), enrollments(*)",
-      { count: "exact" },
-    ).eq("school_id", school).range((page - 1) * size, page * size - 1);
+    let q = svc.from("students").select(studentDirectorySelect, {
+      count: "exact",
+    }).eq("school_id", school).range((page - 1) * size, page * size - 1);
     if (url.searchParams.get("section_id")) {
       q = q.eq("current_section_id", url.searchParams.get("section_id")!);
     }
@@ -289,9 +493,15 @@ export async function handleStudents(
     }
     const { data, error, count } = await q;
     if (error) return fail(error.message);
+    const directory = await hydrateStudentDirectory(
+      svc,
+      school,
+      (data ?? []) as Record<string, unknown>[],
+    );
+    if (directory.error) return fail(directory.error.message);
     return cors({
       success: true,
-      data: data ?? [],
+      data: directory.data,
       total: count ?? 0,
       page,
       page_size: size,
@@ -309,10 +519,14 @@ export async function handleStudents(
 
   if (id && method === "GET") {
     const { data, error } = await svc.from("students").select(
-      "*, section:sections(*), guardians(*), student_guardians(guardian:guardians(*)), medical_records(*), student_documents(*), enrollments(*, section:sections(*), academic_year:academic_years(*))",
+      `${studentDirectorySelect}, medical_records(*), student_documents(*), enrollments(*, section:sections(*), academic_year:academic_years(*))`,
     ).eq("id", id).eq("school_id", school).single();
     if (error) return fail(error.message);
-    return ok(data);
+    const detail = await hydrateStudentDirectory(svc, school, [
+      data as Record<string, unknown>,
+    ]);
+    if (detail.error) return fail(detail.error.message);
+    return ok(detail.data[0]);
   }
 
   if (id && (method === "PATCH" || method === "PUT")) {

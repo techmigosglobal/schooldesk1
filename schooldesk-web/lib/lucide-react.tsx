@@ -54,6 +54,7 @@ export const Plus = icon("+");
 export const ReceiptIndianRupee = icon("₹");
 export const RefreshCw = icon("↻");
 export const RotateCcw = icon("↺");
+export const RotateCw = icon("↻");
 export const Search = icon("⌕");
 export const Send = icon("➚");
 export const ShieldCheck = icon("✓");
@@ -61,3 +62,6 @@ export const Trash2 = icon("×");
 export const UsersRound = icon("◍");
 export const WalletCards = icon("▭");
 export const X = icon("×");
+export const ZoomIn = icon("⊕");
+export const ZoomOut = icon("⊖");
+

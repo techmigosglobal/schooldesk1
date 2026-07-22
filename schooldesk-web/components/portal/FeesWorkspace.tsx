@@ -9,7 +9,6 @@ import {
   ReceiptIndianRupee,
   RefreshCw,
   WalletCards,
-} from "lucide-react";
 } from "@/lib/lucide-react";
 import type { FeeState, Row } from "./types";
 import { api, downloadCsv, rowsFrom, rowText, stringValue, money, displayName, nested } from "./utils";
