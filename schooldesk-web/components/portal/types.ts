@@ -1,15 +1,14 @@
 import type { ComponentType } from "react";
 import {
   LayoutDashboard,
-  UsersRound,
   GraduationCap,
+  HeartHandshake,
+  UserCog,
   Building2,
   CalendarClock,
   WalletCards,
-  Globe2,
-  BellRing,
   ChartNoAxesCombined,
-  ClipboardCheck,
+  Images,
 } from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
 
@@ -151,22 +150,20 @@ export interface FeeState {
 
 export const navMeta: Record<string, { icon: ComponentType<any>; label: string }> = {
   overview: { icon: LayoutDashboard, label: "Overview" },
-  students: { icon: UsersRound, label: "Students & Parents" },
-  parents: { icon: UsersRound, label: "Parents" },
-  teachers: { icon: GraduationCap, label: "Teachers" },
-  classes: { icon: Building2, label: "Classes" },
-  timetable: { icon: CalendarClock, label: "Timetable" },
-  attendance: { icon: ClipboardCheck, label: "Attendance" },
-  communications: { icon: BellRing, label: "Announcements" },
-  reports: { icon: ChartNoAxesCombined, label: "Reports" },
+  students: { icon: GraduationCap, label: "Students" },
+  parents: { icon: HeartHandshake, label: "Parents" },
+  teachers: { icon: UserCog, label: "Teachers" },
+  classes: { icon: Building2, label: "Classes & Subjects" },
+  timetable: { icon: CalendarClock, label: "Timetables" },
   fees: { icon: WalletCards, label: "Fees" },
-  website: { icon: Globe2, label: "Public Website" },
+  reports: { icon: ChartNoAxesCombined, label: "Reports" },
+  website: { icon: Images, label: "Gallery" },
 };
 
 export const modules: Module[] = [
   {
     id: "students",
-    label: "Students & Parents",
+    label: "Students",
     endpoint: "students?page=1&page_size=50",
     description: "Admissions, learner profiles, and parent accounts from the live SchoolDesk backend.",
     create: "students",
@@ -177,7 +174,7 @@ export const modules: Module[] = [
       ["current_section", "Class / section"],
       ["status", "Status"],
     ],
-    icon: UsersRound,
+    icon: GraduationCap,
     tone: "blue",
   },
   {
@@ -199,7 +196,7 @@ export const modules: Module[] = [
       ["email", "Email"],
       ["phone", "Phone"],
     ],
-    icon: UsersRound,
+    icon: HeartHandshake,
     tone: "gold",
   },
   {
@@ -215,14 +212,14 @@ export const modules: Module[] = [
       ["designation", "Designation"],
       ["phone", "Phone"],
     ],
-    icon: GraduationCap,
+    icon: UserCog,
     tone: "green",
   },
   {
     id: "classes",
-    label: "Classes",
+    label: "Classes & Subjects",
     endpoint: "principal/classes",
-    description: "Set up class sections, teaching assignments, and capacity.",
+    description: "Set up class sections, teaching assignments, capacity, and subject mapping.",
     create: "principal/classes",
     fields: [
       { key: "academic_year_id", label: "Academic year ID" },
@@ -242,7 +239,7 @@ export const modules: Module[] = [
   },
   {
     id: "timetable",
-    label: "Timetable",
+    label: "Timetables",
     endpoint: "timetable/slots",
     description: "Create and update timetable slots.",
     create: "timetable/slots",

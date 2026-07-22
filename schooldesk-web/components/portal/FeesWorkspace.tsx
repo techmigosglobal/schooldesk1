@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CircleAlert,
   Download,
@@ -11,10 +11,29 @@ import {
   WalletCards,
 } from "@/lib/lucide-react";
 import type { FeeState, Row } from "./types";
-import { api, downloadCsv, rowsFrom, rowText, stringValue, money, displayName, nested } from "./utils";
+import {
+  api,
+  displayName,
+  downloadCsv,
+  money,
+  nested,
+  rowsFrom,
+  rowText,
+  stringValue,
+} from "./utils";
 import { FeeStructureDialog } from "./FeeStructureDialog";
 import { PaymentDialog } from "./PaymentDialog";
 import { ConcessionDialog } from "./ConcessionDialog";
+
+function studentInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "S";
+}
 
 function FinanceTable({
   headers,
@@ -29,7 +48,7 @@ function FinanceTable({
 }) {
   if (!rows.length) return <p className="ops-empty">{emptyText}</p>;
   return (
-    <table className="data-table ops-data-table">
+    <table className="data-table student-directory-table">
       <thead>
         <tr>
           {headers.map((h) => (
@@ -52,6 +71,8 @@ export function FeesWorkspace({
   >("structures");
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [dialog, setDialog] = useState<"structure" | "payment" | "concession" | false>(
     false
   );
@@ -83,16 +104,16 @@ export function FeesWorkspace({
         sections,
         config,
       ] = await Promise.all([
-        api("fees/structures"),
-        api("fees/invoices?page=1&page_size=100"),
-        api("fees/payments?page=1&page_size=100"),
-        api("fees/payment-requests"),
-        api("fees/concessions"),
-        api("fees/categories"),
-        api("academic-years"),
-        api("grades"),
-        api("sections?page=1&page_size=100"),
-        api("fees/payment-config"),
+        api("fees/structures").catch(() => []),
+        api("fees/invoices?page=1&page_size=100").catch(() => []),
+        api("fees/payments?page=1&page_size=100").catch(() => []),
+        api("fees/payment-requests").catch(() => []),
+        api("fees/concessions").catch(() => []),
+        api("fees/categories").catch(() => []),
+        api("academic-years").catch(() => []),
+        api("grades").catch(() => []),
+        api("sections?page=1&page_size=100").catch(() => []),
+        api("fees/payment-config").catch(() => ({})),
       ]);
 
       setState({
@@ -120,6 +141,24 @@ export function FeesWorkspace({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const filteredInvoices = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return state.invoices.filter((inv) => {
+      const invNum = stringValue(inv.invoice_number);
+      const stName = displayName(nested(inv, "student"));
+      const status = stringValue(inv.status).toLowerCase();
+
+      const matchesSearch = !query || [invNum, stName].some((v) => v.toLowerCase().includes(query));
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "paid" && status === "paid") ||
+        (statusFilter === "unpaid" && status === "unpaid") ||
+        (statusFilter === "partial" && status === "partial");
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [state.invoices, search, statusFilter]);
 
   async function requestFinanceExport(reportType: string, title: string) {
     try {
@@ -205,6 +244,7 @@ export function FeesWorkspace({
     (sum, r) => sum + Number(r.balance || r.net_amount || 0),
     0
   );
+  const collectionRate = totalBilled > 0 ? Math.min(100, Math.round((totalPaid / totalBilled) * 100)) : 0;
   const pendingRequestsCount = state.requests.filter(
     (r) => stringValue(r.status).toLowerCase() === "pending"
   ).length;
@@ -215,15 +255,15 @@ export function FeesWorkspace({
   );
 
   return (
-    <section className="ops-module">
+    <section className="ops-module fees-workspace">
       <div className="ops-module-heading">
         <div>
-          <div className="ops-module-icon violet">
+          <div className="ops-module-icon violet" style={{ background: "#f3ebff", color: "#6e3ec7" }}>
             <WalletCards size={20} />
           </div>
           <div>
-            <p className="ops-kicker">Principal-only ledger</p>
-            <h2>Fee Operations & Accounting</h2>
+            <p className="ops-kicker">Principal ledger</p>
+            <h2>Fee Operations &amp; Accounting</h2>
             <p>
               Automate monthly billing, track UPI receipts, apply late fines, and approve concessions.
             </p>
@@ -258,20 +298,20 @@ export function FeesWorkspace({
         </article>
         <article>
           <small>Total Collections</small>
-          <b style={{ color: "#188038" }}>{money(totalPaid)}</b>
+          <b style={{ color: "#188038" }}>{money(totalPaid)} ({collectionRate}% efficiency)</b>
         </article>
         <article>
           <small>Outstanding Balance</small>
           <b style={{ color: "#d93025" }}>{money(totalOutstanding)}</b>
         </article>
         <article>
-          <small>Pending Approval</small>
+          <small>Verification Queue</small>
           <b>{pendingRequestsCount} requests</b>
         </article>
       </div>
 
       {/* Sub-navigation tabs */}
-      <nav className="finance-tabs" aria-label="Fee workspace sections">
+      <nav className="finance-tabs" aria-label="Fee workspace sections" style={{ marginBottom: "1rem" }}>
         {(
           [
             ["structures", "Fee structures"],
@@ -293,7 +333,7 @@ export function FeesWorkspace({
       </nav>
 
       {/* Tab content */}
-      <div className="table-card surface ops-table-surface">
+      <div className="table-card surface ops-table-surface student-directory-table-wrap">
         {loading ? (
           <div className="skeleton-container" style={{ padding: "1rem" }}>
             <div className="skeleton skeleton-row" />
@@ -307,9 +347,13 @@ export function FeesWorkspace({
             emptyText="No fee structures configured yet. Click 'New fee structure' to set up pricing."
             renderRow={(r) => (
               <tr key={stringValue(r.id)}>
-                <td>{rowText(r, "grade_name")}</td>
+                <td><b>{rowText(r, "grade_name")}</b></td>
                 <td>{stringValue(r.section_name) || "All sections"}</td>
-                <td>{stringValue(nested(r, "category").name || r.fee_category_name)}</td>
+                <td>
+                  <span className="status-pill" style={{ background: "#f0f6fc", color: "#0c5496" }}>
+                    {stringValue(nested(r, "category").name || r.fee_category_name)}
+                  </span>
+                </td>
                 <td><b>{money(r.amount)}</b></td>
                 <td><span className="ops-chip">{stringValue(r.frequency)}</span></td>
                 <td>Day {stringValue(r.due_day)}</td>
@@ -319,67 +363,108 @@ export function FeesWorkspace({
           />
         ) : tab === "invoices" ? (
           <>
-            <div className="finance-actions" style={{ padding: "0.8rem 1rem 0" }}>
-              <button className="primary-button" onClick={() => setDialog("payment")}>
-                <Plus size={16} /> Record offline payment
-              </button>
-              <button className="secondary-button" onClick={() => setDialog("concession")}>
-                Grant concession
-              </button>
+            <div className="student-directory-toolbar">
+              <input
+                className="search-input"
+                placeholder="Search student name or invoice number…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter status">
+                <option value="all">All statuses</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
+              </select>
+              <div className="finance-actions" style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+                <button className="primary-button" onClick={() => setDialog("payment")}>
+                  <Plus size={16} /> Record payment
+                </button>
+                <button className="secondary-button" onClick={() => setDialog("concession")}>
+                  Grant concession
+                </button>
+              </div>
             </div>
+
             <FinanceTable
-              headers={["Invoice #", "Student", "Gross", "Concession", "Net Due", "Paid", "Balance", "Status"]}
-              rows={state.invoices}
-              emptyText="No invoices issued."
-              renderRow={(r) => (
-                <tr key={stringValue(r.id)}>
-                  <td><b>{stringValue(r.invoice_number)}</b></td>
-                  <td>{displayName(nested(r, "student"))}</td>
-                  <td>{money(r.gross_amount)}</td>
-                  <td>{money(r.concession_amount)}</td>
-                  <td><b>{money(r.net_amount)}</b></td>
-                  <td>{money(r.total_paid)}</td>
-                  <td><b style={{ color: Number(r.balance) > 0 ? "#c0340f" : "#1e8e3e" }}>{money(r.balance)}</b></td>
-                  <td><span className={`ops-status-tag ${stringValue(r.status).toLowerCase()}`}>{stringValue(r.status)}</span></td>
-                </tr>
-              )}
+              headers={["Invoice #", "Learner", "Gross", "Concession", "Net Due", "Paid", "Balance", "Status"]}
+              rows={filteredInvoices}
+              emptyText="No invoices match your search."
+              renderRow={(r) => {
+                const stName = displayName(nested(r, "student"));
+                const status = stringValue(r.status).toLowerCase();
+
+                return (
+                  <tr key={stringValue(r.id)}>
+                    <td><b>{stringValue(r.invoice_number)}</b></td>
+                    <td>
+                      <div className="student-cell">
+                        <span className="student-avatar" style={{ background: "#e8f4fc", color: "#0d5598" }}>
+                          {studentInitials(stName)}
+                        </span>
+                        <b>{stName}</b>
+                      </div>
+                    </td>
+                    <td>{money(r.gross_amount)}</td>
+                    <td>{money(r.concession_amount)}</td>
+                    <td><b>{money(r.net_amount)}</b></td>
+                    <td>{money(r.total_paid)}</td>
+                    <td><b style={{ color: Number(r.balance) > 0 ? "#c0340f" : "#1e8e3e" }}>{money(r.balance)}</b></td>
+                    <td>
+                      <span className={`student-status ${status === "paid" ? "active" : "inactive"}`}>
+                        {stringValue(r.status)}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              }}
             />
           </>
         ) : tab === "collections" ? (
           <FinanceTable
-            headers={["Receipt #", "Student", "Amount Paid", "Date", "Mode", "Transaction Ref"]}
+            headers={["Receipt #", "Learner", "Amount Paid", "Date", "Mode", "Transaction Ref"]}
             rows={state.payments}
             emptyText="No payments recorded."
-            renderRow={(r) => (
-              <tr key={stringValue(r.id)}>
-                <td><b>{stringValue(r.receipt_number)}</b></td>
-                <td>{displayName(nested(nested(r, "invoice"), "student"))}</td>
-                <td><b style={{ color: "#1e8e3e" }}>{money(r.amount_paid)}</b></td>
-                <td>{stringValue(r.payment_date).slice(0, 10)}</td>
-                <td><span className="ops-chip">{stringValue(r.payment_mode)}</span></td>
-                <td>{stringValue(r.transaction_id) || "—"}</td>
-              </tr>
-            )}
+            renderRow={(r) => {
+              const stName = displayName(nested(nested(r, "invoice"), "student"));
+              return (
+                <tr key={stringValue(r.id)}>
+                  <td><b>{stringValue(r.receipt_number)}</b></td>
+                  <td>
+                    <div className="student-cell">
+                      <span className="student-avatar" style={{ background: "#eef8f1", color: "#1c6b32" }}>
+                        {studentInitials(stName)}
+                      </span>
+                      <b>{stName}</b>
+                    </div>
+                  </td>
+                  <td><b style={{ color: "#1e8e3e" }}>{money(r.amount_paid)}</b></td>
+                  <td>{stringValue(r.payment_date).slice(0, 10)}</td>
+                  <td><span className="status-pill" style={{ background: "#f0f4fb", color: "#0d5291" }}>{stringValue(r.payment_mode)}</span></td>
+                  <td>{stringValue(r.transaction_id) || "—"}</td>
+                </tr>
+              );
+            }}
           />
         ) : tab === "requests" ? (
-          <div className="request-list">
+          <div className="request-list" style={{ padding: "1rem" }}>
             {state.requests.length ? (
               state.requests.map((r) => (
-                <article key={stringValue(r.id)}>
+                <article key={stringValue(r.id)} style={{ padding: "0.85rem 1rem", background: "#f9fcfd", border: "1px solid #dce8ee", borderRadius: "10px", marginBottom: "0.75rem" }}>
                   <div>
                     <b>{displayName(nested(r, "student"))} · {money(r.amount)}</b>
-                    <span>
+                    <span style={{ display: "block", color: "#597080", fontSize: "0.78rem", marginTop: "0.2rem" }}>
                       Mode: {stringValue(r.payment_mode)} · Ref: {stringValue(r.transaction_id || "None")} · Submitted: {stringValue(r.created_at).slice(0, 10)}
                     </span>
                   </div>
-                  <div>
+                  <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
                     {stringValue(r.status).toLowerCase() === "pending" ? (
                       <>
                         <button className="primary-button" onClick={() => void decide(r, "approved")}>Approve</button>
-                        <button className="outline-button" onClick={() => void decide(r, "rejected")}>Reject</button>
+                        <button className="secondary-button danger" onClick={() => void decide(r, "rejected")}>Reject</button>
                       </>
                     ) : (
-                      <span className={`ops-status-tag ${stringValue(r.status).toLowerCase()}`}>{stringValue(r.status)}</span>
+                      <span className={`student-status ${stringValue(r.status).toLowerCase() === "approved" ? "active" : "inactive"}`}>{stringValue(r.status)}</span>
                     )}
                   </div>
                 </article>
@@ -390,12 +475,12 @@ export function FeesWorkspace({
           </div>
         ) : tab === "concessions" ? (
           <FinanceTable
-            headers={["Student", "Reason", "Amount/Discount", "Granted Date"]}
+            headers={["Learner", "Reason", "Amount/Discount", "Granted Date"]}
             rows={state.concessions}
             emptyText="No fee concessions granted."
             renderRow={(r) => (
               <tr key={stringValue(r.id)}>
-                <td>{displayName(nested(nested(r, "invoice"), "student"))}</td>
+                <td><b>{displayName(nested(nested(r, "invoice"), "student"))}</b></td>
                 <td>{stringValue(r.reason)}</td>
                 <td><b>{r.amount ? money(r.amount) : `${stringValue(r.percentage)}%`}</b></td>
                 <td>{stringValue(r.created_at).slice(0, 10)}</td>
@@ -405,7 +490,7 @@ export function FeesWorkspace({
         ) : tab === "reports" ? (
           <form action={saveConfig} className="finance-report-grid" style={{ padding: "1.2rem" }}>
             <section className="surface ops-form-surface">
-              <h3>UPI & Bank Account Settings</h3>
+              <h3>UPI &amp; Bank Account Settings</h3>
               <p>Parents see these payment details when making online transfers.</p>
               <label className="field">
                 UPI VPA / Handle

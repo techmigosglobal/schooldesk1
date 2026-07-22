@@ -123,19 +123,13 @@ export function DashboardPanel({
       action: "classes",
     },
     {
-      id: "attendance",
-      label: "Today's Attendance",
-      value:
-        data.today_attendance?.attendance_pct !== undefined
-          ? `${data.today_attendance.attendance_pct}%`
-          : "—",
-      sub:
-        data.today_attendance?.present !== undefined
-          ? `${data.today_attendance.present} learners present`
-          : "Marking in progress",
-      icon: Activity,
-      tone: "gold",
-      action: "attendance",
+      id: "timetable",
+      label: "Timetables",
+      value: data.total_sections ? `${data.total_sections} Classes` : "Active",
+      sub: "Teaching slots configured",
+      icon: CalendarClock,
+      tone: "teal",
+      action: "timetable",
     },
   ];
 
@@ -171,7 +165,7 @@ export function DashboardPanel({
           },
           {
             id: "website",
-            title: "Public website copy",
+            title: "Gallery & website",
             sub: "Update homepage story & gallery",
             action: () => onNavigate("website"),
           },
@@ -181,16 +175,13 @@ export function DashboardPanel({
 
   const healthItems = [
     {
-      id: "attendance",
-      label: "Attendance",
-      detail:
-        data.today_attendance?.marked !== undefined
-          ? `${data.today_attendance.marked} sections marked today`
-          : "Daily roll call is in progress",
-      actionLabel: "Open attendance",
+      id: "classes",
+      label: "Classes & Subjects",
+      detail: `${data.total_sections ?? 0} active class sections configured`,
+      actionLabel: "Open classes",
       icon: CheckCircle2,
       tone: "green",
-      action: () => onNavigate("attendance"),
+      action: () => onNavigate("classes"),
     },
     {
       id: "leave",
@@ -227,7 +218,7 @@ export function DashboardPanel({
         <div>
           <p className="ops-kicker">School day at a glance</p>
           <h2>Everything your school needs today.</h2>
-          <p>Monitor people, learning spaces, attendance, and the tasks that need your attention.</p>
+          <p>Monitor people, learning spaces, schedules, and operations.</p>
         </div>
         <div className="ops-overview-sync" aria-live="polite">
           <span className="ops-sync-status"><i className="pulse-dot" />Live data</span>
@@ -355,32 +346,6 @@ export function DashboardPanel({
           </div>
         </motion.section>
       </div>
-
-      <section className="ops-panel ops-announcements-panel">
-        <div className="ops-panel-header ops-overview-panel-header">
-          <div>
-            <p className="ops-kicker">Communications</p>
-            <h3>Latest school announcements</h3>
-          </div>
-          <button className="ops-text-action" onClick={() => onNavigate("communications")}>View announcements <ChevronRight size={15} /></button>
-        </div>
-        {data.recent_announcements?.length ? (
-          <div className="ops-announcements-list">
-            {data.recent_announcements.slice(0, 3).map((item) => (
-              <article key={item.id}>
-                <span className="ops-announcement-dot" />
-                <b>{item.title || "Untitled announcement"}</b>
-                {item.priority && <span className={`ops-chip ${item.priority}`}>{item.priority}</span>}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="ops-announcements-empty">
-            <CheckCircle2 size={18} />
-            <span>No new school-wide announcements. You&apos;re all caught up.</span>
-          </div>
-        )}
-      </section>
     </div>
   );
 }

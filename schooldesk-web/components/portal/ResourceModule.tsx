@@ -15,6 +15,10 @@ import { StudentDialog } from "./StudentDialog";
 import { TeacherDialog } from "./TeacherDialog";
 import { GenericDialog } from "./GenericDialog";
 import { StudentDirectory } from "./StudentDirectory";
+import { ParentDirectory } from "./ParentDirectory";
+import { TeacherDirectory } from "./TeacherDirectory";
+import { ClassesWorkspace } from "./ClassesWorkspace";
+import { TimetableWorkspace } from "./TimetableWorkspace";
 
 export function ResourceModule({
   module,
@@ -30,6 +34,46 @@ export function ResourceModule({
   if (module.id === "students") {
     return (
       <StudentDirectory
+        createToken={createToken}
+        onSaved={onSaved}
+        onNotify={onNotify}
+      />
+    );
+  }
+
+  if (module.id === "parents") {
+    return (
+      <ParentDirectory
+        createToken={createToken}
+        onSaved={onSaved}
+        onNotify={onNotify}
+      />
+    );
+  }
+
+  if (module.id === "teachers") {
+    return (
+      <TeacherDirectory
+        createToken={createToken}
+        onSaved={onSaved}
+        onNotify={onNotify}
+      />
+    );
+  }
+
+  if (module.id === "classes") {
+    return (
+      <ClassesWorkspace
+        createToken={createToken}
+        onSaved={onSaved}
+        onNotify={onNotify}
+      />
+    );
+  }
+
+  if (module.id === "timetable") {
+    return (
+      <TimetableWorkspace
         createToken={createToken}
         onSaved={onSaved}
         onNotify={onNotify}

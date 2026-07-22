@@ -24,9 +24,20 @@ export function visibleModules(role: PortalRole) {
     "teachers",
     "classes",
     "timetable",
-    "attendance",
-    "communications",
     "reports",
+    "website",
   ] as const;
-  return role === "principal" ? [...base, "fees", "website"] : base;
+  return role === "principal"
+    ? [
+        "overview",
+        "students",
+        "parents",
+        "teachers",
+        "classes",
+        "timetable",
+        "fees",
+        "reports",
+        "website",
+      ]
+    : base;
 }
