@@ -64,7 +64,10 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
       final school = results[0] as Map<String, dynamic>;
       final profile = results[1] as UserResponse;
       setState(() {
-        _schoolName = safeText(school['name'], fallback: 'School');
+        _schoolName = safeText(
+          school['organization_name'] ?? school['name'],
+          fallback: 'School',
+        );
         _schoolSubtitle = safeText(
           school['affiliation_board'],
           fallback: safeText(
@@ -103,7 +106,9 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
   Widget build(BuildContext context) {
     final isCoordinator = _leadershipRole == 'coordinator';
     return SchoolDeskNavigationDrawer(
-      role: isCoordinator ? SchoolDeskRole.coordinator : SchoolDeskRole.principal,
+      role: isCoordinator
+          ? SchoolDeskRole.coordinator
+          : SchoolDeskRole.principal,
       portalLabel: isCoordinator ? 'Coordinator Portal' : 'Principal Portal',
       organizationName: _schoolName,
       organizationSubtitle: _schoolSubtitle,
@@ -353,7 +358,9 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           color: Theme.of(context).colorScheme.error,
           onPressed: (context) => LogoutService.confirmAndSignOut(
             context,
-            portalName: isCoordinator ? 'Coordinator portal' : 'Principal portal',
+            portalName: isCoordinator
+                ? 'Coordinator portal'
+                : 'Principal portal',
           ),
         ),
       ],
@@ -457,7 +464,8 @@ class _PrincipalShellBottomBarState extends State<PrincipalShellBottomBar> {
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;
-    final role = BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+    final role =
+        BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
             'coordinator'
         ? 'coordinator'
         : 'principal';
@@ -598,7 +606,10 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
       final school = results[0] as Map<String, dynamic>;
       final profile = results[1] as UserResponse;
       setState(() {
-        _schoolName = safeText(school['name'], fallback: 'School');
+        _schoolName = safeText(
+          school['organization_name'] ?? school['name'],
+          fallback: 'School',
+        );
         _schoolSubtitle = safeText(
           school['affiliation_board'],
           fallback: safeText(

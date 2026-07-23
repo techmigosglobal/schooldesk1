@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class AppSettingsScreen extends StatefulWidget {
   final String role;
@@ -45,22 +46,12 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     // Use app-level ThemeProvider from Provider
     final themeProvider = context.watch<ThemeProvider>();
     _settingsProvider = context.watch<AppSettingsProvider>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark
-        ? const Color(0xFF151C26)
-        : context.appTheme.background;
-    final surfaceColor = isDark
-        ? const Color(0xFF1E2530)
-        : context.appTheme.surface;
-    final onSurfaceColor = isDark
-        ? const Color(0xFFE8EDF2)
-        : context.appTheme.onSurface;
-    final mutedColor = isDark
-        ? const Color(0xFF90A4AE)
-        : context.appTheme.muted;
-    final outlineColor = isDark
-        ? const Color(0xFF2D3748)
-        : context.appTheme.outlineVariant;
+    final themeTokens = Theme.of(context).schoolDesk;
+    final bgColor = themeTokens.background;
+    final surfaceColor = themeTokens.surface;
+    final onSurfaceColor = themeTokens.onSurface;
+    final mutedColor = themeTokens.muted;
+    final outlineColor = themeTokens.outlineVariant;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -814,13 +805,9 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark
-        ? const Color(0xFF151C26)
-        : context.appTheme.background;
-    final surfaceColor = isDark
-        ? const Color(0xFF1E2530)
-        : context.appTheme.surface;
+    final themeTokens = Theme.of(context).schoolDesk;
+    final bgColor = themeTokens.background;
+    final surfaceColor = themeTokens.surface;
 
     return Scaffold(
       backgroundColor: bgColor,

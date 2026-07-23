@@ -18,9 +18,14 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 enum _FinanceView { structures, invoices, payments, concessions, reports }
 
 class AdminFeesScreen extends StatefulWidget {
-  const AdminFeesScreen({super.key, this.initialSection = 'invoices'});
+  const AdminFeesScreen({
+    super.key,
+    this.initialSection = 'invoices',
+    this.concessionOnly = false,
+  });
 
   final String initialSection;
+  final bool concessionOnly;
 
   @override
   State<AdminFeesScreen> createState() => _AdminFeesScreenState();
@@ -124,9 +129,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Finance Operations',
-      subtitle:
-          'Structures, invoices, payments, concessions, receipts, and reconciliation',
+      title: widget.concessionOnly
+          ? 'Student Fee Concessions'
+          : 'Finance Operations',
+      subtitle: widget.concessionOnly
+          ? 'Search, assign, review, and remove invoice-scoped concessions'
+          : 'Structures, invoices, payments, concessions, receipts, and reconciliation',
       drawer: PrincipalDrawer(
         selectedIndex: PrincipalNav.fees,
         onDestinationSelected: (_) {},
@@ -164,6 +172,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         message: _error!,
         actionLabel: 'Retry',
         onAction: _loadData,
+      );
+    }
+    if (widget.concessionOnly) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(child: _buildConcessions()),
       );
     }
     return OpsWorkspace(
@@ -765,9 +779,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   }
 
   String _concessionStatusFilter = 'All';
+  String _concessionSearchQuery = '';
 
   Widget _buildConcessions() {
-    final filtered = _concessionStatusFilter == 'All'
+    final statusFiltered = _concessionStatusFilter == 'All'
         ? _concessions
         : _concessions
               .where(
@@ -779,6 +794,17 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                     _concessionStatusFilter.toLowerCase(),
               )
               .toList();
+    final filtered = _concessionSearchQuery.trim().isEmpty
+        ? statusFiltered
+        : statusFiltered.where((concession) {
+            final haystack = [
+              concession['student_name'],
+              concession['student_identifier'],
+              concession['invoice_number'],
+              concession['fee_item_name'],
+            ].map(_textValue).join(' ').toLowerCase();
+            return haystack.contains(_concessionSearchQuery.toLowerCase());
+          }).toList();
     final pendingCount = _concessions
         .where(
           (c) =>
@@ -805,6 +831,15 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          TextField(
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search_rounded),
+              labelText: 'Search student, ID, invoice, or fee item',
+            ),
+            onChanged: (value) =>
+                setState(() => _concessionSearchQuery = value),
+          ),
+          const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -893,6 +928,13 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           ],
           if (id.isNotEmpty) ...[
             const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Edit concession',
+              onPressed: saving
+                  ? null
+                  : () => _openEditConcessionDialog(concession),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+            ),
             IconButton(
               tooltip: 'Remove concession',
               onPressed: saving ? null : () => _deleteConcession(concession),
@@ -1098,6 +1140,138 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     }
   }
 
+  Future<void> _openEditConcessionDialog(
+    Map<String, dynamic> concession,
+  ) async {
+    final id = _textValue(concession['id']);
+    if (id.isEmpty) return;
+    final currentPercentage = _numValue(concession['percentage']);
+    var usePercentage = currentPercentage > 0;
+    final valueController = TextEditingController(
+      text:
+          (usePercentage
+                  ? currentPercentage
+                  : _numValue(
+                      concession['amount'] ?? concession['concession_amount'],
+                    ))
+              .toStringAsFixed(2),
+    );
+    final reasonController = TextEditingController(
+      text: _textValue(concession['reason'] ?? concession['concession_reason']),
+    );
+    final payload = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit fee concession'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _textValue(
+                    concession['student_name'] ?? concession['student_id'],
+                    fallback: 'Student fee concession',
+                  ),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Fixed amount')),
+                    ButtonSegment(value: true, label: Text('Percentage')),
+                  ],
+                  selected: {usePercentage},
+                  onSelectionChanged: (selection) => setDialogState(() {
+                    usePercentage = selection.first;
+                    valueController.clear();
+                  }),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: valueController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: usePercentage
+                        ? 'Concession percentage'
+                        : 'Concession amount',
+                    prefixIcon: Icon(
+                      usePercentage
+                          ? Icons.percent_rounded
+                          : Icons.currency_rupee_rounded,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    prefixIcon: Icon(Icons.notes_rounded),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = double.tryParse(valueController.text.trim());
+                final reason = reasonController.text.trim();
+                if (value == null ||
+                    value <= 0 ||
+                    reason.isEmpty ||
+                    (usePercentage && value > 100)) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Enter a valid concession value and reason.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, {
+                  if (usePercentage) 'percentage': value else 'amount': value,
+                  'reason': reason,
+                });
+              },
+              child: const Text('Save changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+    valueController.dispose();
+    reasonController.dispose();
+    if (payload == null || !mounted) return;
+    setState(() => _updatingConcessionIds.add(id));
+    try {
+      await BackendApiClient.instance.updateRaw(
+        '/fees/concessions/$id',
+        payload,
+      );
+      if (!mounted) return;
+      await _loadData();
+      _snack(
+        'Concession updated and fee balances recalculated.',
+        success: true,
+      );
+    } on Object catch (error) {
+      _snack('Unable to update concession: $error');
+    } finally {
+      if (mounted) setState(() => _updatingConcessionIds.remove(id));
+    }
+  }
+
   Future<void> _updateConcessionStatus(
     Map<String, dynamic> concession, {
     required bool approved,
@@ -1143,7 +1317,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Widget _buildReports() {
     final reports = [
       ('Collection summary', 'fee_collection_summary', 'pdf'),
-      ('Outstanding aging', 'fee_outstanding_aging', 'csv'),
+      ('Outstanding aging', 'fee_outstanding_aging', 'pdf'),
       ('Concession register', 'fee_concession_register', 'pdf'),
     ];
     return OpsPanel(

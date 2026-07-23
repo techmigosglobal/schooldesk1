@@ -49,7 +49,7 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
           'page_size': 50,
           if (_module.isNotEmpty) 'module': _module,
           if (_userController.text.trim().isNotEmpty)
-            'user_id': _userController.text.trim(),
+            'actor': _userController.text.trim(),
           if (_actorRole.isNotEmpty) 'actor_role': _actorRole,
           if (_eventType.isNotEmpty) 'event_type': _eventType,
           if (_searchController.text.trim().isNotEmpty)
@@ -57,7 +57,20 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
         },
       );
       if (!mounted) return;
-      setState(() => _logs = logs);
+      final isPrincipal =
+          BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+          'principal';
+      setState(
+        () => _logs = isPrincipal
+            ? logs
+                  .where(
+                    (log) =>
+                        '${log['actor_role'] ?? ''}'.trim().toLowerCase() !=
+                        'super_admin',
+                  )
+                  .toList()
+            : logs,
+      );
     } on Object catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -124,14 +137,13 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
             decoration: const InputDecoration(labelText: 'Module'),
             items: const [
               DropdownMenuItem(value: '', child: Text('All modules')),
-              DropdownMenuItem(value: 'auth', child: Text('Auth')),
+              DropdownMenuItem(value: 'auth', child: Text('Authentication')),
               DropdownMenuItem(value: 'users', child: Text('Users')),
               DropdownMenuItem(value: 'students', child: Text('Students')),
               DropdownMenuItem(value: 'staff', child: Text('Staff')),
               DropdownMenuItem(value: 'homework', child: Text('Homework')),
               DropdownMenuItem(value: 'fees', child: Text('Fees')),
               DropdownMenuItem(value: 'attendance', child: Text('Attendance')),
-              DropdownMenuItem(value: 'auth', child: Text('Authentication')),
               DropdownMenuItem(
                 value: 'communications',
                 child: Text('Communications'),
@@ -148,7 +160,8 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
           child: TextField(
             controller: _userController,
             decoration: const InputDecoration(
-              labelText: 'User ID',
+              labelText: 'Staff member or username',
+              helperText: 'Searches account names and usernames',
               suffixIcon: Icon(Icons.person_search_rounded),
             ),
             onSubmitted: (_) => _loadLogs(),
@@ -227,31 +240,164 @@ class _AuditLogTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final presentation = _AuditLogPresentation.from(log);
     final createdAt = DateTime.tryParse('${log['created_at'] ?? ''}');
     final when = createdAt == null
         ? ''
         : DateFormat('d MMM yyyy, h:mm a').format(createdAt.toLocal());
     return Card(
       child: ListTile(
-        leading: const Icon(Icons.history_rounded),
-        title: Text('${log['summary'] ?? log['action'] ?? 'Activity'}'),
+        isThreeLine: true,
+        leading: Icon(presentation.icon),
+        title: Text(presentation.title),
         subtitle: Text(
           [
-            if ('${log['actor_name'] ?? ''}'.isNotEmpty)
-              'Actor: ${log['actor_name']}',
-            if ('${log['actor_role'] ?? ''}'.isNotEmpty)
-              'Role: ${log['actor_role']}',
-            if ('${log['module'] ?? ''}'.isNotEmpty) 'Module: ${log['module']}',
-            if ('${log['entity_type'] ?? ''}'.isNotEmpty)
-              'Entity: ${log['entity_type']}',
-            if ('${log['ip_address'] ?? ''}'.isNotEmpty)
-              'IP: ${log['ip_address']}',
-          ].join(' - '),
+            presentation.actor,
+            if (presentation.role.isNotEmpty &&
+                presentation.role.toLowerCase() !=
+                    presentation.actor.toLowerCase())
+              presentation.role,
+            presentation.module,
+          ].where((value) => value.isNotEmpty).join(' · '),
         ),
-        trailing: Text(when, textAlign: TextAlign.end),
+        trailing: SizedBox(
+          width: 104,
+          child: Text(
+            when,
+            textAlign: TextAlign.end,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
       ),
     );
   }
+}
+
+class _AuditLogPresentation {
+  final String title;
+  final String actor;
+  final String role;
+  final String module;
+  final IconData icon;
+
+  const _AuditLogPresentation({
+    required this.title,
+    required this.actor,
+    required this.role,
+    required this.module,
+    required this.icon,
+  });
+
+  factory _AuditLogPresentation.from(Map<String, dynamic> log) {
+    final action = '${log['action'] ?? ''}'.trim().toLowerCase();
+    final rawSummary = '${log['summary'] ?? ''}'.trim();
+    final rawModule = '${log['module'] ?? log['entity_type'] ?? ''}'.trim();
+    final module = _moduleLabel(rawModule);
+    final role = _titleCase('${log['actor_role'] ?? ''}');
+    final actor = '${log['actor_name'] ?? ''}'.trim();
+    final displayActor = actor.isNotEmpty
+        ? actor
+        : (role.isNotEmpty ? role : 'School user');
+    final isTechnicalSummary = RegExp(
+      r'\bperformed\s+(GET|POST|PATCH|PUT|DELETE)\s+in\b',
+      caseSensitive: false,
+    ).hasMatch(rawSummary);
+    final rawDetails = log['details'];
+    final details = rawDetails is Map
+        ? '${rawDetails['description'] ?? ''}'.trim()
+        : '';
+    final title = isTechnicalSummary || rawSummary.isEmpty
+        ? details.isNotEmpty
+              ? _sentenceCase(details)
+              : _friendlyAction(action, rawModule)
+        : _sentenceCase(rawSummary);
+    return _AuditLogPresentation(
+      title: title,
+      actor: displayActor,
+      role: role,
+      module: module,
+      icon: _moduleIcon(rawModule),
+    );
+  }
+
+  static String _friendlyAction(String action, String rawModule) {
+    if (action.contains('logout') || action.contains('sign_out')) {
+      return 'Signed out';
+    }
+    if (action.contains('login') || action.contains('sign_in')) {
+      return 'Signed in';
+    }
+    if (action.contains('credentials.reset')) {
+      return 'Reset account password';
+    }
+    if (action.contains('check_in')) {
+      return 'Checked in for staff attendance';
+    }
+    if (action.contains('check_out')) {
+      return 'Checked out from staff attendance';
+    }
+    final method = action.split('.').last;
+    final verb = switch (method) {
+      'post' => 'Added',
+      'delete' => 'Deleted',
+      'patch' || 'put' => 'Updated',
+      'export' => 'Exported',
+      _ => 'Updated',
+    };
+    final target = _moduleLabel(rawModule).toLowerCase();
+    return '$verb ${target.isEmpty ? 'school information' : target}';
+  }
+
+  static String _moduleLabel(String value) {
+    final normalized = value.toLowerCase().trim();
+    const labels = <String, String>{
+      'auth': 'Authentication',
+      'attendance': 'Attendance',
+      'branches': 'Branches',
+      'communications': 'Communications',
+      'event-posts': 'School Feed',
+      'events': 'Events',
+      'fees': 'Fees',
+      'guardians': 'Parents and Guardians',
+      'homework': 'Homework',
+      'staff': 'Staff',
+      'students': 'Students',
+      'users': 'Accounts',
+    };
+    return labels[normalized] ?? _titleCase(normalized);
+  }
+
+  static IconData _moduleIcon(String value) {
+    switch (value.toLowerCase().trim()) {
+      case 'fees':
+        return Icons.currency_rupee_rounded;
+      case 'attendance':
+        return Icons.how_to_reg_rounded;
+      case 'students':
+      case 'guardians':
+      case 'staff':
+      case 'users':
+        return Icons.people_outline_rounded;
+      case 'event-posts':
+      case 'communications':
+        return Icons.campaign_outlined;
+      case 'auth':
+        return Icons.login_rounded;
+      default:
+        return Icons.history_rounded;
+    }
+  }
+
+  static String _titleCase(String value) => value
+      .split(RegExp(r'[_\s-]+'))
+      .where((part) => part.isNotEmpty)
+      .map(
+        (part) => '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+      )
+      .join(' ');
+
+  static String _sentenceCase(String value) =>
+      value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';
 }
 
 class _StateCard extends StatelessWidget {

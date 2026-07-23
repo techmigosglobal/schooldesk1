@@ -8,6 +8,18 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function roleName(user: User): string {
+  return text(user.app_metadata?.role_name).toLowerCase();
+}
+
+function canManageAccounts(user: User): boolean {
+  return ["principal", "admin", "super_admin"].includes(roleName(user));
+}
+
+function temporaryPassword(): string {
+  return `SD-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}!`;
+}
+
 function loginEmail(
   body: Record<string, unknown>,
   school: string,
@@ -50,13 +62,16 @@ async function syncUsernameAlias(
   authUserId: string,
   username: string,
 ) {
-  await svc.from("username_aliases").delete().eq("auth_user_id", authUserId);
+  const { error: deleteError } = await svc.from("username_aliases").delete()
+    .eq("auth_user_id", authUserId);
+  if (deleteError) throw deleteError;
   if (!username) return;
-  await svc.from("username_aliases").upsert({
+  const { error } = await svc.from("username_aliases").upsert({
     username: username.toLowerCase(),
     auth_user_id: authUserId,
     school_id: school,
   }, { onConflict: "username" });
+  if (error) throw error;
 }
 
 export async function handleUsers(
@@ -100,9 +115,16 @@ export async function handleUsers(
   }
 
   if (!seg && method === "POST") {
+    if (!canManageAccounts(user)) return fail("forbidden", 403);
     const { password, role, role_name, ...rest } = body;
     const resolvedRole =
       `${role_name ?? role ?? "staff"}`.trim().toLowerCase() || "staff";
+    if (
+      ["principal", "super_admin"].includes(resolvedRole) &&
+      roleName(user) !== "super_admin"
+    ) {
+      return fail("only super_admin can create principal accounts", 403);
+    }
     const email = loginEmail(rest, school);
     // Create Supabase Auth user
     const { data: authUser, error: authErr } = await svc.auth.admin.createUser({
@@ -116,12 +138,22 @@ export async function handleUsers(
       userInsertPayload(rest, school, authUser.user!.id, resolvedRole),
     ).select().single();
     if (error) return fail(error.message);
-    await syncUsernameAlias(
-      svc,
-      school,
-      authUser.user!.id,
-      text(rest.username),
-    );
+    try {
+      await syncUsernameAlias(
+        svc,
+        school,
+        authUser.user!.id,
+        text(rest.username),
+      );
+    } catch (aliasError) {
+      await svc.from("users").delete().eq("id", authUser.user!.id);
+      await svc.auth.admin.deleteUser(authUser.user!.id);
+      return fail(
+        aliasError instanceof Error
+          ? aliasError.message
+          : "username unavailable",
+      );
+    }
     return ok(data);
   }
 
@@ -132,22 +164,99 @@ export async function handleUsers(
     return ok(data);
   }
 
+  if (seg && path.endsWith("/reset-credentials") && method === "POST") {
+    if (!canManageAccounts(user)) return fail("forbidden", 403);
+    const { data: target, error: targetError } = await svc.from("users")
+      .select("id, username, school_id, role_name").eq("id", seg).eq(
+        "school_id",
+        school,
+      )
+      .maybeSingle();
+    if (targetError) return fail(targetError.message);
+    if (!target) return fail("user not found", 404);
+    const password = temporaryPassword();
+    const { error: authError } = await svc.auth.admin.updateUserById(seg, {
+      password,
+      app_metadata: {
+        school_id: school,
+        role_name: text(target.role_name),
+        must_change_password: true,
+      },
+    });
+    if (authError) return fail(authError.message);
+    const { error: profileError } = await svc.from("users").update({
+      must_change_password: true,
+      password_reset_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("id", seg).eq("school_id", school);
+    if (profileError) return fail(profileError.message);
+    await svc.from("audit_logs").insert({
+      school_id: school,
+      user_id: user.id,
+      action: "credentials.reset",
+      entity_type: "user",
+      entity_id: seg,
+      details: { username: target.username, temporary_password_issued: true },
+    });
+    // This is intentionally the only response carrying the temporary secret.
+    return ok({
+      id: seg,
+      username: target.username,
+      temporary_password: password,
+    });
+  }
+
   if (seg && method === "PATCH") {
+    if (!canManageAccounts(user)) return fail("forbidden", 403);
     const { password, role, role_name, ...patch } = body;
     const resolvedRole = role_name ?? role;
     const normalizedRole = resolvedRole
       ? `${resolvedRole}`.trim().toLowerCase()
       : "";
-    if (password || resolvedRole) {
-      await svc.auth.admin.updateUserById(seg, {
+    if (
+      ["principal", "super_admin"].includes(normalizedRole) &&
+      roleName(user) !== "super_admin"
+    ) {
+      return fail("only super_admin can assign principal accounts", 403);
+    }
+    const allowedPatch = Object.fromEntries(
+      [
+        "username",
+        "name",
+        "email",
+        "phone",
+        "avatar",
+        "is_active",
+        "linked_type",
+        "linked_id",
+      ]
+        .filter((key) => patch[key] !== undefined)
+        .map((key) => [key, patch[key]]),
+    );
+    if (password || resolvedRole || allowedPatch.email !== undefined) {
+      const { error: authError } = await svc.auth.admin.updateUserById(seg, {
         ...(password ? { password } : {}),
+        ...(allowedPatch.email ? { email: text(allowedPatch.email) } : {}),
         ...(normalizedRole
           ? { app_metadata: { school_id: school, role_name: normalizedRole } }
           : {}),
       });
+      if (authError) return fail(authError.message);
+    }
+    try {
+      if (allowedPatch.username !== undefined) {
+        await syncUsernameAlias(svc, school, seg, text(allowedPatch.username));
+      }
+    } catch (aliasError) {
+      return fail(
+        aliasError instanceof Error
+          ? aliasError.message
+          : "username unavailable",
+        409,
+      );
     }
     const { data, error } = await svc.from("users").update({
-      ...patch,
+      ...allowedPatch,
       ...(normalizedRole ? { role_name: normalizedRole } : {}),
       updated_at: new Date().toISOString(),
     }).eq("id", seg).eq("school_id", school).select().single();

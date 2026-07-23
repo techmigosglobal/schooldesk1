@@ -23,18 +23,21 @@ void main() {
       '$root/lib/features/finance/presentation/screens/parent_hub/parent_fee_hub.dart',
     ).readAsStringSync();
 
-    expect(source, contains("status == 'approved'"));
+    expect(source, contains("'completed', 'approved', 'paid'"));
     expect(source, contains('_openReceiptForFee(fee)'));
   });
 
-  test('principal server exports download the generated file before sharing', () {
+  test('principal fee reports preview branded PDFs before any export action', () {
     final source = File(
       '$root/lib/features/finance/presentation/screens/principal_dashboard/principal_reports_v2.dart',
     ).readAsStringSync();
 
-    expect(source, contains('downloadReportExport'));
-    expect(source, contains("format: 'csv'"));
-    expect(source, contains('ShareExportService().shareBytes'));
-    expect(source, isNot(contains('export has been queued on the server')));
+    expect(source, contains('_generatePdf'));
+    expect(source, contains('pdfService.previewDocument'));
+    expect(
+      source,
+      contains('Future<void> _requestExport(_ReportDef _) => _generatePdf()'),
+    );
+    expect(source, isNot(contains("format: 'csv'")));
   });
 }

@@ -31,7 +31,7 @@ extension BackendAuthApi on BackendApiClient {
         );
         await TokenStorageService.saveUserId(resp.user.id);
         if (resp.user.schoolId.isNotEmpty) {
-          await TokenStorageService.saveSchoolId(resp.user.schoolId);
+          await setActiveBranchId(resp.user.schoolId);
         }
         return resp;
       }
@@ -61,6 +61,7 @@ extension BackendAuthApi on BackendApiClient {
           roleName: resp.user.roleName,
         );
         await TokenStorageService.saveUserId(resp.user.id);
+        await setActiveBranchId(resp.user.schoolId);
         return resp;
       }
       throw ServerException(message: data['error'] ?? 'School setup failed');
@@ -190,7 +191,9 @@ extension BackendAuthApi on BackendApiClient {
   void _applyRestoredRole(String roleName) {
     final incoming = roleName.trim().toLowerCase();
     final existing = currentRoleName?.trim().toLowerCase() ?? '';
-    if (existing == 'super_admin' && incoming.isNotEmpty && incoming != 'super_admin') {
+    if (existing == 'super_admin' &&
+        incoming.isNotEmpty &&
+        incoming != 'super_admin') {
       // The token says super_admin but profile disagrees — trust the token;
       // the profile row is stale.  Do not save either.
       return;
@@ -204,7 +207,9 @@ extension BackendAuthApi on BackendApiClient {
       final response = await _dio.get('/auth/profile');
       final data = _asMap(response.data);
       if (data['success'] == true) {
-        final profile = UserResponse.fromJson(_profilePayloadFromEnvelope(data));
+        final profile = UserResponse.fromJson(
+          _profilePayloadFromEnvelope(data),
+        );
         _cachedProfile = profile;
         return profile;
       }
@@ -219,7 +224,9 @@ extension BackendAuthApi on BackendApiClient {
       final response = await _dio.patch('/auth/profile', data: payload);
       final data = _asMap(response.data);
       if (data['success'] == true) {
-        final profile = UserResponse.fromJson(_profilePayloadFromEnvelope(data));
+        final profile = UserResponse.fromJson(
+          _profilePayloadFromEnvelope(data),
+        );
         _cachedProfile = profile;
         return profile;
       }

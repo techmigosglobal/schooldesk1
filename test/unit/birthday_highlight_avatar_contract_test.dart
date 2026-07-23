@@ -45,6 +45,7 @@ void main() {
       contains('.select("*, student:students(photo_url)")'),
     );
     expect(communications, contains('student_photo_url:'));
-    expect(birthdayJob, contains('student_id: group.students.length === 1'));
+    expect(birthdayJob, contains('student_id: student.id'));
+    expect(birthdayJob, contains('one notification per birthday student'));
   });
 }

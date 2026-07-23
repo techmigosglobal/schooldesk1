@@ -147,6 +147,13 @@ export async function handleSchools(
       profile?.school_id,
     ).single();
     if (error) return fail(error.message);
+    const organizationId = `${school.organization_id ?? ""}`.trim();
+    const { data: organization } = organizationId
+      ? await svc.from("organizations").select("name").eq(
+        "id",
+        organizationId,
+      ).maybeSingle()
+      : { data: null };
     const profileSchool = await withAuthorizedSignatureUrl(svc, school);
     // The database column is registration_no. Keep the legacy response alias
     // during the mobile rollout, but never write it back as a phantom column.
@@ -154,6 +161,11 @@ export async function handleSchools(
       ...profileSchool,
       registration_number:
         (profileSchool as Record<string, unknown>)?.registration_no ?? "",
+      // The school row is the operational branch. Branch-only users see the
+      // organization (school) name in their header, not an internal branch
+      // label or switcher.
+      organization_name: `${organization?.name ?? school.name ?? ""}`.trim(),
+      branch_name: `${school.name ?? ""}`.trim(),
     });
   }
 

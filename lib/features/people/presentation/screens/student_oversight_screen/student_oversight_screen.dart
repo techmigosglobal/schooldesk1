@@ -124,7 +124,6 @@ class StudentOversightScreen extends StatefulWidget {
 
 class _StudentOversightScreenState extends State<StudentOversightScreen> {
   static const int _pageSize = 20;
-  static const Color _background = Color(0xFFEFF8FD);
 
   final List<StudentModel> _allStudents = [];
   final List<StudentModel> _filteredStudents = [];
@@ -237,7 +236,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final parentMap = {for (final p in parents) p.id: p};
 
       final loaded = students
-          .map((student) => _mapApiStudentToUi(student, sectionMap, gradeMap, parentMap))
+          .map(
+            (student) =>
+                _mapApiStudentToUi(student, sectionMap, gradeMap, parentMap),
+          )
           .toList();
       final classes =
           {
@@ -293,8 +295,12 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         }
         _applyFilters(resetState: false);
         _loading = false;
-        final isDesktop = DesktopBreakpoints.isDesktopWidth(MediaQuery.sizeOf(context).width);
-        if (isDesktop && _selectedStudent == null && _displayedStudents.isNotEmpty) {
+        final isDesktop = DesktopBreakpoints.isDesktopWidth(
+          MediaQuery.sizeOf(context).width,
+        );
+        if (isDesktop &&
+            _selectedStudent == null &&
+            _displayedStudents.isNotEmpty) {
           _selectStudentForDesktop(_displayedStudents.first);
         }
       });
@@ -491,7 +497,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         ..clear()
         ..addAll(next);
       _resetPagination();
-      final isDesktop = DesktopBreakpoints.isDesktopWidth(MediaQuery.sizeOf(context).width);
+      final isDesktop = DesktopBreakpoints.isDesktopWidth(
+        MediaQuery.sizeOf(context).width,
+      );
       if (isDesktop && _displayedStudents.isNotEmpty) {
         if (!_displayedStudents.any((s) => s.id == _selectedStudent?.id)) {
           _selectStudentForDesktop(_displayedStudents.first);
@@ -619,14 +627,16 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = DesktopBreakpoints.isDesktopWidth(MediaQuery.sizeOf(context).width);
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
 
     if (isDesktop) {
       return _buildDesktopLayout();
     }
 
     return Scaffold(
-      backgroundColor: _background,
+      backgroundColor: context.appTheme.background,
       floatingActionButton: _selectionMode
           ? null
           : FloatingActionButton(
@@ -1270,7 +1280,12 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final gradeMap = {for (final g in _grades) g.id: g};
       final parentMap = {for (final p in _parents) p.id: p};
       final latest = await api.BackendApiClient.instance.getStudent(student.id);
-      detailStudent = _mapApiStudentToUi(latest, sectionMap, gradeMap, parentMap);
+      detailStudent = _mapApiStudentToUi(
+        latest,
+        sectionMap,
+        gradeMap,
+        parentMap,
+      );
     } on Object catch (_) {
       detailStudent = student;
     }
@@ -1380,7 +1395,12 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final gradeMap = {for (final g in _grades) g.id: g};
       final parentMap = {for (final p in _parents) p.id: p};
       final latest = await api.BackendApiClient.instance.getStudent(student.id);
-      final detailed = _mapApiStudentToUi(latest, sectionMap, gradeMap, parentMap);
+      final detailed = _mapApiStudentToUi(
+        latest,
+        sectionMap,
+        gradeMap,
+        parentMap,
+      );
       if (!mounted) return;
       if (_selectedStudent?.id == student.id) {
         setState(() {
@@ -1422,7 +1442,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
   Widget _buildDesktopLayout() {
     return Scaffold(
-      backgroundColor: _background,
+      backgroundColor: context.appTheme.background,
       floatingActionButton: _selectionMode
           ? null
           : FloatingActionButton(
@@ -1442,7 +1462,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
               children: [
                 _buildHeader(context),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
                   child: _buildSearchAndFilters(),
                 ),
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
@@ -1450,56 +1473,59 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
                       : _loadError != null
-                          ? Center(
-                              child: EmptyStateWidget(
-                                icon: Icons.cloud_off_rounded,
-                                title: 'Unable to load students',
-                                description: _loadError!,
-                                actionLabel: 'Retry',
-                                onAction: _loadData,
-                              ),
-                            )
-                          : _filteredStudents.isEmpty
-                              ? const Center(
-                                  child: EmptyStateWidget(
-                                    icon: Icons.school_outlined,
-                                    title: 'No students found',
-                                    description: 'Adjust search or filters.',
-                                  ),
-                                )
-                              : RefreshIndicator(
-                                  onRefresh: _loadData,
-                                  color: const Color(0xFF0887F2),
-                                  child: ListView.builder(
-                                    padding: const EdgeInsets.all(16),
-                                    itemCount: _displayedStudents.length + (_hasMore ? 1 : 0),
-                                    itemBuilder: (context, index) {
-                                      if (index == _displayedStudents.length) {
-                                        return _buildLoadMoreButton();
-                                      }
-                                      final student = _displayedStudents[index];
-                                      final isSelected = _selectedStudent?.id == student.id;
-                                      return Padding(
-                                        padding: const EdgeInsets.only(bottom: 12),
-                                        child: _StudentDirectoryCard(
-                                          student: student,
-                                          imageUrl: _absoluteImageUrl(student.photoUrl),
-                                          selected: _selectionMode
-                                              ? _selectedStudentIds.contains(student.id)
-                                              : isSelected,
-                                          onTap: () {
-                                            if (_selectionMode) {
-                                              _toggleStudentSelection(student);
-                                            } else {
-                                              _selectStudentForDesktop(student);
-                                            }
-                                          },
-                                          onLongPress: () => _toggleStudentSelection(student),
-                                        ),
-                                      );
-                                    },
-                                  ),
+                      ? Center(
+                          child: EmptyStateWidget(
+                            icon: Icons.cloud_off_rounded,
+                            title: 'Unable to load students',
+                            description: _loadError!,
+                            actionLabel: 'Retry',
+                            onAction: _loadData,
+                          ),
+                        )
+                      : _filteredStudents.isEmpty
+                      ? const Center(
+                          child: EmptyStateWidget(
+                            icon: Icons.school_outlined,
+                            title: 'No students found',
+                            description: 'Adjust search or filters.',
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadData,
+                          color: const Color(0xFF0887F2),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount:
+                                _displayedStudents.length + (_hasMore ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index == _displayedStudents.length) {
+                                return _buildLoadMoreButton();
+                              }
+                              final student = _displayedStudents[index];
+                              final isSelected =
+                                  _selectedStudent?.id == student.id;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: _StudentDirectoryCard(
+                                  student: student,
+                                  imageUrl: _absoluteImageUrl(student.photoUrl),
+                                  selected: _selectionMode
+                                      ? _selectedStudentIds.contains(student.id)
+                                      : isSelected,
+                                  onTap: () {
+                                    if (_selectionMode) {
+                                      _toggleStudentSelection(student);
+                                    } else {
+                                      _selectStudentForDesktop(student);
+                                    }
+                                  },
+                                  onLongPress: () =>
+                                      _toggleStudentSelection(student),
                                 ),
+                              );
+                            },
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -1535,7 +1561,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     final imageUrl = _absoluteImageUrl(student.photoUrl);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF8FD),
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         backgroundColor: const Color(0xFFEFF8FD),
         elevation: 0,
@@ -1572,10 +1598,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              _DetailRow(
-                label: 'Class / Section',
-                value: student.classSection,
-              ),
+              _DetailRow(label: 'Class / Section', value: student.classSection),
               if (student.rollNumber.isNotEmpty)
                 _DetailRow(
                   label: 'Admission / Roll',
@@ -1666,19 +1689,32 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                   padding: EdgeInsets.symmetric(vertical: 8.0),
                   child: Text(
                     'No documents uploaded.',
-                    style: TextStyle(color: Color(0xFF64748B), fontStyle: FontStyle.italic),
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 )
               else
                 ...student.documents.map((doc) {
-                  final docName = '${doc['document_type_name'] ?? doc['name'] ?? 'Document'}';
+                  final docName =
+                      '${doc['document_type_name'] ?? doc['name'] ?? 'Document'}';
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.description_outlined, color: Colors.blue),
+                    leading: const Icon(
+                      Icons.description_outlined,
+                      color: Colors.blue,
+                    ),
                     title: Text(docName),
                     subtitle: doc['verified'] == true
-                        ? const Text('Verified', style: TextStyle(color: Colors.green))
-                        : const Text('Verification Pending', style: TextStyle(color: Colors.orange)),
+                        ? const Text(
+                            'Verified',
+                            style: TextStyle(color: Colors.green),
+                          )
+                        : const Text(
+                            'Verification Pending',
+                            style: TextStyle(color: Colors.orange),
+                          ),
                   );
                 }),
             ],
@@ -1707,10 +1743,12 @@ class _StudentDirectoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFE0F8FF) : context.appTheme.surface,
+      color: selected
+          ? context.appTheme.primaryContainer
+          : context.appTheme.surface,
       borderRadius: BorderRadius.circular(8),
       elevation: 2,
-      shadowColor: const Color(0xFF8AAAC0).withAlpha(55),
+      shadowColor: context.appTheme.onSurface.withAlpha(28),
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -1722,8 +1760,8 @@ class _StudentDirectoryCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: selected
-                  ? const Color(0xFF0887F2)
-                  : context.appTheme.surface.withAlpha(180),
+                  ? context.appTheme.primary
+                  : context.appTheme.outlineVariant,
               width: selected ? 1.4 : 1,
             ),
           ),
@@ -1747,7 +1785,7 @@ class _StudentDirectoryCard extends StatelessWidget {
                       style: GoogleFonts.dmSans(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
-                        color: const Color(0xFF1E2A32),
+                        color: context.appTheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 5),
@@ -1758,7 +1796,7 @@ class _StudentDirectoryCard extends StatelessWidget {
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF5C6872),
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ],
@@ -1766,9 +1804,9 @@ class _StudentDirectoryCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               selected
-                  ? const Icon(
+                  ? Icon(
                       Icons.check_circle_rounded,
-                      color: Color(0xFF0887F2),
+                      color: context.appTheme.primary,
                       size: 24,
                     )
                   : const SizedBox.shrink(),
@@ -2374,7 +2412,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _background,
+      backgroundColor: context.appTheme.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -3434,7 +3472,7 @@ class _StudentDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF8FD),
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         backgroundColor: const Color(0xFFEFF8FD),
         elevation: 0,

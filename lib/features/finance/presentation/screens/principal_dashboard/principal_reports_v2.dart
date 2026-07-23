@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
-import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 
@@ -178,7 +177,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: Text(
           'Fee Reports',
@@ -612,7 +611,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
                     Icon(Icons.download_rounded, size: 12, color: report.color),
                     const SizedBox(width: 4),
                     Text(
-                      'Export CSV',
+                      'Preview PDF',
                       style: GoogleFonts.ibmPlexSans(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -696,52 +695,7 @@ class _PrincipalReportsState extends State<PrincipalReports> {
     }
   }
 
-  Future<void> _requestExport(_ReportDef report) async {
-    try {
-      final export = await BackendApiClient.instance.createReportExport(
-        '/fees/reports/exports',
-        reportTitle: report.title,
-        reportType: report.reportType,
-        format: 'csv',
-        parameters: {
-          'invoice_count': _invoices.length,
-          'structure_count': _structures.length,
-        },
-      );
-      final downloadUrl = textValue(export['download_url']);
-      if (downloadUrl.isEmpty) {
-        throw StateError('The report was created without a download file.');
-      }
-      final bytes = await BackendApiClient.instance.downloadReportExport(
-        downloadUrl,
-      );
-      if (bytes.isEmpty) {
-        throw StateError('The generated report file is empty.');
-      }
-      if (!mounted) return;
-      await const ShareExportService().shareBytes(
-        bytes: bytes,
-        fileName: '${_exportFileName(report.title)}.csv',
-        mimeType: 'text/csv',
-        title: report.title,
-        subject: '${report.title} export',
-        context: context,
-      );
-    } on Object catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
-    }
-  }
-
-  String _exportFileName(String title) {
-    final normalized = title
-        .trim()
-        .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')
-        .replaceAll(RegExp(r'_+'), '_');
-    return normalized.isEmpty ? 'fee_report' : normalized;
-  }
+  Future<void> _requestExport(_ReportDef _) => _generatePdf();
 }
 
 // ── Student Report Picker Bottom Sheet ────────────────────────────────────────

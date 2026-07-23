@@ -13,7 +13,6 @@ import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
-import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
@@ -40,6 +39,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
   Map<String, dynamic> _dashboard = const {};
   List<Map<String, dynamic>> _children = const [];
   List<dynamic> _eventPosts = [];
+  String _schoolName = 'School';
   Timer? _autoRefreshTimer;
 
   @override
@@ -84,6 +84,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
               ? DateTime.now().millisecondsSinceEpoch
               : null,
         ),
+        api.getCurrentSchool().catchError((_) => const <String, dynamic>{}),
       ];
       if (includeFeedPosts) {
         futures.add(
@@ -113,7 +114,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         fallback: _activeChildIndex,
       );
       final feedItems = includeFeedPosts
-          ? _mapFeedItems(results[2] as List)
+          ? _mapFeedItems(results[3] as List)
           : _eventPosts
                 .whereType<Map>()
                 .map((row) => Map<String, dynamic>.from(row))
@@ -122,6 +123,10 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         _dashboard = dashboard;
         _children = children;
         _eventPosts = feedItems;
+        _schoolName = _schoolTitle(
+          Map<String, dynamic>.from(results[2] as Map? ?? const {}),
+          dashboard,
+        );
         _activeChildIndex = selectedChildIndex;
         _loading = false;
       });
@@ -146,7 +151,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         'category': ev['category'] ?? '',
         'author': ev['author'] ?? ev['posted_by'] ?? '',
         'media_urls': ev['media_urls'],
-        'media': ev['media'],
+        'media': _normalizedFeedMedia(ev),
         'media_url': ev['media_url'],
         'mediaUrl': ev['mediaUrl'],
         'attachments': ev['attachments'],
@@ -168,8 +173,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
     final isDesktop = DesktopBreakpoints.isDesktopWidth(width);
 
     return SchoolDeskModuleScaffold(
-      title: 'School Feed',
-      subtitle: 'Child summary, actions, and school updates',
+      title: _schoolName,
+      subtitle: 'School updates and your child overview',
       isPortalRoot: true,
       fallbackRoute: AppRoutes.parentDashboard,
       drawer: ParentDrawer(
@@ -177,6 +182,12 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
       ),
       actions: [
+        if (_children.isNotEmpty)
+          _ParentChildTopSwitcher(
+            children: _children,
+            selectedIndex: _activeChildIndex,
+            onSelected: _selectChild,
+          ),
         IconButton(
           tooltip: 'Refresh',
           icon: const Icon(Icons.refresh_rounded),
@@ -313,6 +324,107 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
 // Feed view
 // ---------------------------------------------------------------------------
 
+/// Keeps the selected student's identity in the header, instead of consuming
+/// a large card below the feed. The menu only appears as a switcher when the
+/// parent actually has more than one linked student.
+class _ParentChildTopSwitcher extends StatelessWidget {
+  final List<Map<String, dynamic>> children;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  const _ParentChildTopSwitcher({
+    required this.children,
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = children[selectedIndex.clamp(0, children.length - 1)];
+    final name = _childName(selected);
+    final photo = _childPhoto(selected);
+    final parentColor = Theme.of(
+      context,
+    ).schoolDesk.roleColor(SchoolDeskRole.parent);
+    return PopupMenuButton<int>(
+      tooltip: children.length > 1 ? 'Switch student' : '$name profile',
+      onSelected: onSelected,
+      offset: const Offset(0, 48),
+      itemBuilder: (context) => [
+        for (var index = 0; index < children.length; index++)
+          PopupMenuItem<int>(
+            value: index,
+            enabled: index != selectedIndex,
+            child: Row(
+              children: [
+                _HeaderStudentAvatar(
+                  child: children[index],
+                  selected: index == selectedIndex,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _childName(children[index]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (index == selectedIndex)
+                  Icon(Icons.check_rounded, color: parentColor, size: 18),
+              ],
+            ),
+          ),
+      ],
+      child: Semantics(
+        button: true,
+        label: children.length > 1
+            ? 'Selected student $name. Switch student.'
+            : '$name profile',
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: _HeaderStudentAvatar(
+            child: selected,
+            selected: true,
+            imageUrl: photo,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderStudentAvatar extends StatelessWidget {
+  final Map<String, dynamic> child;
+  final bool selected;
+  final String? imageUrl;
+
+  const _HeaderStudentAvatar({
+    required this.child,
+    required this.selected,
+    this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).schoolDesk.roleColor(SchoolDeskRole.parent);
+    final photo = resolveEventPostMediaUrl(imageUrl ?? _childPhoto(child));
+    final name = _childName(child);
+    return CircleAvatar(
+      radius: 18,
+      backgroundColor: color.withAlpha(selected ? 32 : 18),
+      foregroundColor: color,
+      backgroundImage: photo.isEmpty ? null : NetworkImage(photo),
+      onBackgroundImageError: photo.isEmpty ? null : (_, _) {},
+      child: photo.isEmpty
+          ? Text(
+              _initials(name),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            )
+          : null,
+    );
+  }
+}
+
 class _ParentFeedView extends StatelessWidget {
   final List<Map<String, dynamic>> children;
   final Map<String, dynamic> dashboard;
@@ -350,13 +462,6 @@ class _ParentFeedView extends StatelessWidget {
             SizedBox(height: tokens.spacing.sm),
             // ── Auto-scrolling carousel ──────────────────────────────────
             _SchoolFeedCarousel(eventPosts: eventPosts),
-            SizedBox(height: tokens.spacing.lg),
-            // ── Child selector ───────────────────────────────────────────
-            ParentChildSelector(
-              children: children,
-              selectedIndex: activeChildIndex,
-              onSelected: onChildSelected,
-            ),
             SizedBox(height: tokens.spacing.lg),
             // ── Summary stats ────────────────────────────────────────────
             _SectionHeader(
@@ -518,7 +623,7 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
     return Column(
       children: [
         SizedBox(
-          height: MediaQuery.sizeOf(context).width >= 700 ? 500 : 440,
+          height: _feedCardHeight(MediaQuery.sizeOf(context)),
           child: PageView.builder(
             controller: _pageController,
             itemCount: widget.eventPosts.length,
@@ -564,6 +669,11 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
                     child: _PostCard(
                       post: post,
                       isActive: index == _currentPage,
+                      onOpenDetails: () => _showPostDetailsBottomSheet(
+                        context,
+                        post,
+                        _gradientFor(post['title'] ?? ''),
+                      ),
                     ),
                   ),
                 ),
@@ -701,6 +811,12 @@ class _EmptyFeed extends StatelessWidget {
       ),
     );
   }
+}
+
+double _feedCardHeight(Size size) {
+  final widthDriven = size.width * 1.22;
+  final heightDriven = size.height * 0.60;
+  return math.max(500, math.min(650, math.max(widthDriven, heightDriven)));
 }
 
 // ---------------------------------------------------------------------------
@@ -907,16 +1023,26 @@ void _showPostDetailsBottomSheet(
                     ],
                     const SizedBox(height: 20),
                     if (mediaItems.isNotEmpty) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: SizedBox(
-                          height: 240,
-                          child: _PostMediaCarousel(
-                            mediaItems: mediaItems,
-                            isActive: true,
-                            height: 240,
-                          ),
-                        ),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final mediaHeight = math
+                              .max(330, constraints.maxWidth * 1.1)
+                              .clamp(330, 560)
+                              .toDouble();
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: SizedBox(
+                              height: mediaHeight,
+                              child: _PostMediaCarousel(
+                                mediaItems: mediaItems,
+                                isActive: true,
+                                height: mediaHeight,
+                                autoAdvance: false,
+                                imageFit: BoxFit.contain,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 20),
                     ],
@@ -945,11 +1071,17 @@ class _PostMediaCarousel extends StatefulWidget {
   final List<EventPostMediaItem> mediaItems;
   final bool isActive;
   final double height;
+  final bool autoAdvance;
+  final BoxFit imageFit;
+  final VoidCallback? onImageTap;
 
   const _PostMediaCarousel({
     required this.mediaItems,
     required this.isActive,
     required this.height,
+    this.autoAdvance = true,
+    this.imageFit = BoxFit.cover,
+    this.onImageTap,
   });
 
   @override
@@ -979,7 +1111,11 @@ class _PostMediaCarouselState extends State<_PostMediaCarousel> {
 
   void _scheduleNextMedia() {
     _timer?.cancel();
-    if (!widget.isActive || widget.mediaItems.length <= 1) return;
+    if (!widget.autoAdvance ||
+        !widget.isActive ||
+        widget.mediaItems.length <= 1) {
+      return;
+    }
     final current = widget.mediaItems[_currentIndex];
     _timer = Timer(Duration(seconds: current.isVideo ? 8 : 3), () {
       if (!mounted || !widget.isActive || widget.mediaItems.length <= 1) {
@@ -1017,6 +1153,7 @@ class _PostMediaCarouselState extends State<_PostMediaCarousel> {
             final item = widget.mediaItems[index];
             if (item.isVideo) {
               return EventPostVideoPreview(
+                key: ValueKey('event-video-${item.url}'),
                 url: resolveEventPostMediaUrl(item.url),
                 height: widget.height,
                 autoPlay: widget.isActive && index == _currentIndex,
@@ -1024,9 +1161,13 @@ class _PostMediaCarouselState extends State<_PostMediaCarousel> {
               );
             }
             return EventPostMediaPreview(
+              key: ValueKey('event-image-${item.url}'),
               item: item,
               height: widget.height,
-              onImageTap: () => openEventPostMediaPreview(context, item),
+              imageFit: widget.imageFit,
+              onImageTap:
+                  widget.onImageTap ??
+                  () => openEventPostMediaPreview(context, item),
             );
           },
         ),
@@ -1058,8 +1199,13 @@ class _PostMediaCarouselState extends State<_PostMediaCarousel> {
 class _PostCard extends StatelessWidget {
   final Map<String, dynamic> post;
   final bool isActive;
+  final VoidCallback onOpenDetails;
 
-  const _PostCard({required this.post, required this.isActive});
+  const _PostCard({
+    required this.post,
+    required this.isActive,
+    required this.onOpenDetails,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1107,6 +1253,7 @@ class _PostCard extends StatelessWidget {
                     mediaItems: mediaItems,
                     isActive: isActive,
                     height: 240,
+                    onImageTap: onOpenDetails,
                   )
                 else
                   Container(
@@ -1596,6 +1743,79 @@ class _QuickAccessCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 String _text(dynamic value) => value?.toString().trim() ?? '';
+
+String _schoolTitle(
+  Map<String, dynamic> school,
+  Map<String, dynamic> dashboard,
+) {
+  final dashboardSchool = dashboard['school'];
+  final dashboardSchoolMap = dashboardSchool is Map
+      ? Map<String, dynamic>.from(dashboardSchool)
+      : const <String, dynamic>{};
+  for (final value in [
+    school['organization_name'],
+    school['school_name'],
+    school['name'],
+    school['display_name'],
+    dashboard['school_name'],
+    dashboardSchoolMap['school_name'],
+    dashboardSchoolMap['name'],
+  ]) {
+    final text = _text(value);
+    if (text.isNotEmpty) return text;
+  }
+  return 'School';
+}
+
+dynamic _normalizedFeedMedia(Map<String, dynamic> post) {
+  final raw =
+      post['media'] ??
+      post['media_urls'] ??
+      post['mediaUrls'] ??
+      post['media_url'] ??
+      post['mediaUrl'] ??
+      post['attachments'];
+  final mediaType = _text(post['media_type'] ?? post['mediaType']);
+  if (mediaType.isEmpty || raw == null) return raw;
+  if (raw is List) {
+    return raw.map((item) {
+      if (item is Map) return item;
+      return {'url': item, 'mime_type': mediaType};
+    }).toList();
+  }
+  return [
+    {'url': raw, 'mime_type': mediaType},
+  ];
+}
+
+String _childName(Map<String, dynamic> child) {
+  for (final value in [
+    child['name'],
+    child['full_name'],
+    child['student_name'],
+    [
+      child['first_name'],
+      child['last_name'],
+    ].map(_text).where((part) => part.isNotEmpty).join(' '),
+  ]) {
+    final text = _text(value);
+    if (text.isNotEmpty) return text;
+  }
+  return 'Student';
+}
+
+String _childPhoto(Map<String, dynamic> child) {
+  for (final value in [child['photo_url'], child['photo'], child['avatar']]) {
+    final text = _text(value);
+    if (text.isNotEmpty) return text;
+  }
+  return '';
+}
+
+String _initials(String name) {
+  final parts = name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+  return parts.take(2).map((part) => part[0].toUpperCase()).join();
+}
 
 String _number(dynamic value) {
   if (value is int) return '$value';

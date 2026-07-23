@@ -161,9 +161,6 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
-
     final size = MediaQuery.sizeOf(context);
     final isSmall = size.width < 400;
     final isNarrow = size.width < 350;
@@ -173,7 +170,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
         statusBarColor: Colors.transparent,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFFEBF5FF),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {

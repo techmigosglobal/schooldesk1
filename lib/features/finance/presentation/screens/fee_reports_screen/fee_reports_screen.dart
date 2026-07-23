@@ -113,7 +113,7 @@ class _FeeReportsScreenState extends State<FeeReportsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFF),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text(
           'Fee Reports',
@@ -361,29 +361,7 @@ class _FeeReportsScreenState extends State<FeeReportsScreen> {
     }
   }
 
-  Future<void> _requestExport(_ReportDef report) async {
-    try {
-      await BackendApiClient.instance.createReportExport(
-        '/fees/reports/exports',
-        reportTitle: report.title,
-        reportType: report.reportType,
-        format: 'pdf',
-        parameters: {
-          'invoice_count': _invoices.length,
-          'structure_count': _structures.length,
-        },
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Report export queued')));
-    } on Object catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
-    }
-  }
+  Future<void> _requestExport(_ReportDef _) => _generatePdf();
 }
 
 class _ReportDef {

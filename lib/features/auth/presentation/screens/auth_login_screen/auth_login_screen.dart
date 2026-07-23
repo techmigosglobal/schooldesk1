@@ -123,7 +123,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
     final wide = MediaQuery.of(context).size.width >= 820;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
+      backgroundColor: context.appTheme.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

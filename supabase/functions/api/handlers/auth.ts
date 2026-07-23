@@ -330,8 +330,17 @@ export async function handleAuth(
 
     const { error } = await svc().auth.admin.updateUserById(user.id, {
       password: new_password,
+      app_metadata: {
+        ...user.app_metadata,
+        must_change_password: false,
+      },
     });
     if (error) return fail(error.message);
+    const { error: profileError } = await svc()
+      .from("users")
+      .update({ must_change_password: false })
+      .eq("id", user.id);
+    if (profileError) return fail(profileError.message);
     return ok({ success: true });
   }
 
@@ -365,7 +374,13 @@ export async function handleAuth(
     if (!user) return fail("unauthorized", 401);
 
     const body = await req.json().catch(() => ({}));
-    const allowed = ["name", "phone", "language", "notification_preferences"];
+    const allowed = [
+      "name",
+      "phone",
+      "language",
+      "notification_preferences",
+      "email",
+    ];
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {
       if (body[key] !== undefined) patch[key] = body[key];
@@ -384,6 +399,21 @@ export async function handleAuth(
       );
       if (aliasError) return fail(aliasError, 409);
       patch.username = username;
+    }
+    if (patch.email !== undefined) {
+      const email = profileText(patch.email).toLowerCase();
+      if (!/^\S+@\S+\.\S+$/.test(email)) {
+        return fail("valid email required", 422);
+      }
+      const { error: authError } = await svc().auth.admin.updateUserById(
+        user.id,
+        {
+          email,
+          email_confirm: true,
+        },
+      );
+      if (authError) return fail(authError.message);
+      patch.email = email;
     }
 
     const { data: profile, error } = await svc()

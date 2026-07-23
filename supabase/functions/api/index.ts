@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { handleAuth } from "./handlers/auth.ts";
 import { handleHealth } from "./handlers/health.ts";
 import { handleSchools } from "./handlers/schools.ts";
+import { handleBranches } from "./handlers/branches.ts";
 import { handleDashboard } from "./handlers/dashboard.ts";
 import { handleAcademics } from "./handlers/academics.ts";
 import { handleCalendar } from "./handlers/calendar.ts";
@@ -85,7 +86,7 @@ async function withDirectSql<T>(
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-school-id, x-job-secret",
+    "authorization, x-client-info, apikey, content-type, x-school-id, x-schooldesk-branch-id, x-job-secret",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 };
 
@@ -114,12 +115,20 @@ async function auditedResponse(
   user: NonNullable<Awaited<ReturnType<typeof authedClient>>["user"]>,
   path: string,
   method: string,
+  requestPayload: Record<string, unknown> = {},
 ) {
   const resolved = await response;
   if (resolved.ok) {
     const payload = await resolved.clone().json().catch(() => null);
     if (payload?.success === true || path.endsWith("/export")) {
-      await recordHttpActivity(svc, user, path, method, payload).catch(() =>
+      await recordHttpActivity(
+        svc,
+        user,
+        path,
+        method,
+        payload,
+        requestPayload,
+      ).catch(() =>
         undefined
       );
     }
@@ -184,11 +193,47 @@ export async function authedClient(req: Request) {
   // Require the active application profile on every protected request so a
   // school wipe immediately blocks deleted accounts from using stale tokens.
   const { data: profile, error: profileError } = await svc.from("users")
-    .select("id, is_active").eq("id", user.id).maybeSingle();
+    .select("id, is_active, school_id").eq("id", user.id).maybeSingle();
   if (profileError || !profile || profile.is_active !== true) {
     return { user: null, client: null, svc };
   }
-  return { user, client, svc };
+  const requestedBranch = (req.headers.get("x-schooldesk-branch-id") ?? "")
+    .trim();
+  if (!requestedBranch) return { user, client, svc };
+  const requestedIdIsUuid = /^[0-9a-f-]{36}$/i.test(requestedBranch);
+  if (!requestedIdIsUuid) return { user: null, client: null, svc };
+  const currentRole = `${user.app_metadata?.role_name ?? ""}`.toLowerCase();
+  let permitted = false;
+  if (currentRole === "super_admin") {
+    const { data: schools } = await svc.from("schools")
+      .select("id, organization_id")
+      .in("id", [profile.school_id, requestedBranch]);
+    const home = schools?.find((school) => school.id === profile.school_id);
+    const requested = schools?.find((school) => school.id === requestedBranch);
+    permitted = Boolean(
+      home?.organization_id &&
+        requested?.organization_id &&
+        home.organization_id === requested.organization_id,
+    );
+  } else {
+    permitted = Boolean(
+      (await svc.from("branch_memberships").select("id")
+        .eq("user_id", user.id).eq("school_id", requestedBranch)
+        .eq("is_active", true).maybeSingle()).data,
+    );
+  }
+  if (!permitted) return { user: null, client: null, svc };
+  // Existing handlers already derive their scope from app_metadata.school_id.
+  // Supply an authenticated, membership-validated branch context without
+  // trusting an arbitrary query parameter in every individual handler.
+  return {
+    user: {
+      ...user,
+      app_metadata: { ...user.app_metadata, school_id: requestedBranch },
+    },
+    client,
+    svc,
+  };
 }
 
 export function triggerPushProcessing(eventIds: string | string[]) {
@@ -423,6 +468,15 @@ Deno.serve(async (req: Request) => {
   }
 
   // Route dispatch
+  if (path.startsWith("/branches")) {
+    return auditedResponse(
+      handleBranches(req, path, method, url, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
+  }
   if (path.startsWith("/schools")) {
     return auditedResponse(
       handleSchools(req, path, method, url, client, svc),
@@ -482,7 +536,13 @@ Deno.serve(async (req: Request) => {
     );
   }
   if (path.startsWith("/website")) {
-    return auditedResponse(handleWebsite(req, path, method, url, client, svc, user), svc, user, path, method);
+    return auditedResponse(
+      handleWebsite(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/staff")) {
     return auditedResponse(
@@ -542,12 +602,16 @@ Deno.serve(async (req: Request) => {
     path.startsWith("/fee") || path.startsWith("/fees") ||
     path.startsWith("/parent/students/")
   ) {
+    const feeRequestPayload = method === "GET"
+      ? {}
+      : await req.clone().json().catch(() => ({})) as Record<string, unknown>;
     return auditedResponse(
       handleFees(req, path, method, url, client, svc, user),
       svc,
       user,
       path,
       method,
+      feeRequestPayload,
     );
   }
   if (path.startsWith("/leave") || path.startsWith("/student-leave")) {

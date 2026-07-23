@@ -40,6 +40,8 @@ void main() {
       expect(handler, contains('deliverHealthReminders'));
       expect(handler, contains('method === "GET"'));
       expect(handler, contains('method === "POST"'));
+      expect(handler, contains('method === "PATCH"'));
+      expect(handler, contains('method === "DELETE"'));
       expect(handler, contains('parentCanAccessStudent'));
       expect(handler, contains('resolveStudentRecipients'));
       expect(handler, contains('class_teacher_id'));
@@ -101,10 +103,14 @@ void main() {
 
       expect(source, contains('dio.get('));
       expect(source, contains('dio.post('));
+      expect(source, contains('dio.patch('));
+      expect(source, contains('dio.delete('));
       expect(source, contains("'/health-reminders'"));
       expect(source, contains("'reminder_date'"));
       expect(source, contains('Reminder Date'));
       expect(source, contains('Reminder History'));
+      expect(source, contains('Edit Health Reminder'));
+      expect(source, contains('Delete health reminder?'));
       expect(source, contains('4:00 PM on the selected date'));
       expect(source, isNot(contains('triggerHealthReminderAlert')));
       expect(

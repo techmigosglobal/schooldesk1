@@ -19,51 +19,58 @@ void main() {
     const _ScreenQaProfile(name: 'landscape', size: Size(844, 390)),
   ];
 
-  for (final profile in profiles) {
-    testWidgets('routed screen frames keep layout stable on ${profile.name}', (
-      tester,
-    ) async {
-      final layoutErrors = <String>[];
+  for (final isDark in [false, true]) {
+    for (final profile in profiles) {
+      testWidgets(
+        'routed screen frames keep layout stable on ${profile.name} in ${isDark ? 'dark' : 'light'} mode',
+        (tester) async {
+          final layoutErrors = <String>[];
 
-      for (final route in AppRoutes.routes.keys) {
-        final errors = <FlutterErrorDetails>[];
-        final previousOnError = FlutterError.onError;
-        FlutterError.onError = errors.add;
+          for (final route in AppRoutes.routes.keys) {
+            final errors = <FlutterErrorDetails>[];
+            final previousOnError = FlutterError.onError;
+            FlutterError.onError = errors.add;
 
-        await tester.binding.setSurfaceSize(profile.size);
-        try {
-          await tester.pumpWidget(
-            _RoutedScreenHarness(route: route, profile: profile),
+            await tester.binding.setSurfaceSize(profile.size);
+            try {
+              await tester.pumpWidget(
+                _RoutedScreenHarness(
+                  route: route,
+                  profile: profile,
+                  isDark: isDark,
+                ),
+              );
+              await tester.pump();
+              await tester.pump(const Duration(milliseconds: 150));
+
+              final routeErrors = errors.where(_isLayoutError).toList();
+              if (routeErrors.isNotEmpty) {
+                layoutErrors.add(
+                  '$route: ${routeErrors.map((e) => e.exceptionAsString()).join(' | ')}',
+                );
+              }
+
+              final exception = tester.takeException();
+              if (exception != null &&
+                  _isLayoutExceptionText(exception.toString())) {
+                layoutErrors.add('$route: $exception');
+              }
+            } finally {
+              await tester.pumpWidget(const SizedBox.shrink());
+              FlutterError.onError = previousOnError;
+              await tester.binding.setSurfaceSize(null);
+            }
+          }
+
+          expect(
+            layoutErrors,
+            isEmpty,
+            reason:
+                'All routed screen frames should avoid overflow, clipping, and invalid constraints on ${profile.name}.',
           );
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 150));
-
-          final routeErrors = errors.where(_isLayoutError).toList();
-          if (routeErrors.isNotEmpty) {
-            layoutErrors.add(
-              '$route: ${routeErrors.map((e) => e.exceptionAsString()).join(' | ')}',
-            );
-          }
-
-          final exception = tester.takeException();
-          if (exception != null &&
-              _isLayoutExceptionText(exception.toString())) {
-            layoutErrors.add('$route: $exception');
-          }
-        } finally {
-          await tester.pumpWidget(const SizedBox.shrink());
-          FlutterError.onError = previousOnError;
-          await tester.binding.setSurfaceSize(null);
-        }
-      }
-
-      expect(
-        layoutErrors,
-        isEmpty,
-        reason:
-            'All routed screen frames should avoid overflow, clipping, and invalid constraints on ${profile.name}.',
+        },
       );
-    });
+    }
   }
 
   test('all active routes use registered design-system metadata', () {
@@ -97,14 +104,21 @@ class _ScreenQaProfile {
 class _RoutedScreenHarness extends StatelessWidget {
   final String route;
   final _ScreenQaProfile profile;
+  final bool isDark;
 
-  const _RoutedScreenHarness({required this.route, required this.profile});
+  const _RoutedScreenHarness({
+    required this.route,
+    required this.profile,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
     final metadata = SchoolDeskScreenRegistry.byRoute(route);
     return MaterialApp(
       theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       home: MediaQuery(
         data: MediaQueryData(
           size: profile.size,

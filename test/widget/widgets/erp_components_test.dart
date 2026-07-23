@@ -144,7 +144,7 @@ void main() {
         SchoolDeskIllustratedActionTile(
           label: 'Attendance',
           subtitle: 'Daily records',
-          illustrationAsset: SchoolDeskUiIllustrations.fees,
+          illustrationAsset: SchoolDeskUiIllustrations.secureLogin,
           semanticLabel: 'Open attendance daily records',
           onTap: () => tapped = true,
         ),

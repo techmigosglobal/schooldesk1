@@ -1,7 +1,6 @@
-import 'dart:typed_data';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:printing/printing.dart';
 import 'package:video_player/video_player.dart';
 
@@ -19,6 +18,7 @@ class EventPostMediaPreview extends StatelessWidget {
   final EventPostMediaItem item;
   final double height;
   final bool compact;
+  final BoxFit imageFit;
   final VoidCallback? onImageTap;
 
   const EventPostMediaPreview({
@@ -26,6 +26,7 @@ class EventPostMediaPreview extends StatelessWidget {
     required this.item,
     this.height = 200,
     this.compact = false,
+    this.imageFit = BoxFit.cover,
     this.onImageTap,
   });
 
@@ -38,7 +39,7 @@ class EventPostMediaPreview extends StatelessWidget {
         child: EventPostImagePreview(
           url,
           height: height,
-          fit: BoxFit.cover,
+          fit: imageFit,
           fallbackBuilder: () => _fallback(
             context,
             Icons.broken_image_outlined,
@@ -319,6 +320,7 @@ class EventPostVideoPreview extends StatefulWidget {
   final double height;
   final bool autoPlay;
   final bool muted;
+  final bool showFullscreen;
 
   const EventPostVideoPreview({
     super.key,
@@ -326,6 +328,7 @@ class EventPostVideoPreview extends StatefulWidget {
     this.height = 200,
     this.autoPlay = false,
     this.muted = true,
+    this.showFullscreen = true,
   });
 
   @override
@@ -422,21 +425,40 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
             ),
           ),
           Positioned(
-            top: 8,
             right: 8,
-            child: IconButton.filledTonal(
-              tooltip: _muted ? 'Unmute video' : 'Mute video',
-              onPressed: () {
-                setState(() {
-                  _muted = !_muted;
-                  _controller.setVolume(_muted ? 0 : 1);
-                });
-              },
-              icon: Icon(
-                _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                size: 20,
-              ),
+            bottom: 42,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton.filledTonal(
+                  tooltip: _muted ? 'Unmute video' : 'Mute video',
+                  onPressed: () {
+                    setState(() {
+                      _muted = !_muted;
+                      _controller.setVolume(_muted ? 0 : 1);
+                    });
+                  },
+                  icon: Icon(
+                    _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                    size: 20,
+                  ),
+                ),
+                if (widget.showFullscreen) ...[
+                  const SizedBox(width: 6),
+                  IconButton.filledTonal(
+                    tooltip: 'Full screen',
+                    onPressed: _openFullscreen,
+                    icon: const Icon(Icons.fullscreen_rounded, size: 20),
+                  ),
+                ],
+              ],
             ),
+          ),
+          Positioned(
+            right: 8,
+            bottom: 6,
+            left: 8,
+            child: _VideoSeekBar(controller: _controller),
           ),
         ],
       ),
@@ -449,6 +471,130 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
       width: double.infinity,
       color: Colors.black,
       child: child,
+    );
+  }
+
+  Future<void> _openFullscreen() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            _FullscreenEventPostVideo(url: widget.url, muted: _muted),
+      ),
+    );
+  }
+}
+
+class _VideoSeekBar extends StatelessWidget {
+  final VideoPlayerController controller;
+
+  const _VideoSeekBar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final position = value.position > value.duration
+            ? value.duration
+            : value.position;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withAlpha(145),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Text(
+                _videoTime(position),
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: VideoProgressIndicator(
+                  controller,
+                  allowScrubbing: true,
+                  colors: const VideoProgressColors(
+                    playedColor: Colors.white,
+                    bufferedColor: Color(0x99FFFFFF),
+                    backgroundColor: Color(0x55FFFFFF),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _videoTime(value.duration),
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _videoTime(Duration value) {
+  String twoDigits(int number) => number.toString().padLeft(2, '0');
+  final minutes = twoDigits(value.inMinutes.remainder(60));
+  final seconds = twoDigits(value.inSeconds.remainder(60));
+  return value.inHours > 0
+      ? '${value.inHours}:$minutes:$seconds'
+      : '$minutes:$seconds';
+}
+
+class _FullscreenEventPostVideo extends StatefulWidget {
+  final String url;
+  final bool muted;
+
+  const _FullscreenEventPostVideo({required this.url, required this.muted});
+
+  @override
+  State<_FullscreenEventPostVideo> createState() =>
+      _FullscreenEventPostVideoState();
+}
+
+class _FullscreenEventPostVideoState extends State<_FullscreenEventPostVideo> {
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Center(
+            child: EventPostVideoPreview(
+              url: widget.url,
+              height: double.infinity,
+              autoPlay: true,
+              muted: widget.muted,
+              showFullscreen: false,
+            ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: IconButton.filledTonal(
+                tooltip: 'Exit full screen',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

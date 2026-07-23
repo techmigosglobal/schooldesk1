@@ -21,6 +21,7 @@ import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 export 'package:schooldesk1/features/shared/data/models/backend_models.dart';
 
 part 'api_modules/auth_api.dart';
+part 'api_modules/branches_api.dart';
 part 'api_modules/client_interceptors.dart';
 part 'api_modules/principal_api.dart';
 part 'api_modules/school_api.dart';
@@ -91,6 +92,7 @@ class BackendApiClient {
       client.setAuthToken(access);
       client.setCurrentRole(await TokenStorageService.getRoleName());
       client.setCurrentUserId(await TokenStorageService.getUserId());
+      await client.setActiveBranchId(await TokenStorageService.getSchoolId());
     }
   }
 
@@ -99,11 +101,13 @@ class BackendApiClient {
   String? _authToken;
   String? _currentRoleName;
   String? _currentUserId;
+  String? _activeBranchId;
   UserResponse? _cachedProfile;
 
   UserResponse? get cachedProfile => _cachedProfile;
   String? get currentRoleName => _currentRoleName;
   String? get currentUserId => _currentUserId;
+  String? get activeBranchId => _activeBranchId;
 
   void setAuthToken(String token) {
     _authToken = token;
@@ -123,11 +127,27 @@ class BackendApiClient {
         : normalized;
   }
 
+  Future<void> setActiveBranchId(String? schoolId) async {
+    final normalized = schoolId?.trim();
+    _activeBranchId = normalized == null || normalized.isEmpty
+        ? null
+        : normalized;
+    if (_activeBranchId == null) {
+      _dio.options.headers.remove('x-schooldesk-branch-id');
+    } else {
+      _dio.options.headers['x-schooldesk-branch-id'] = _activeBranchId;
+      await TokenStorageService.saveSchoolId(_activeBranchId!);
+    }
+    await invalidateCachedReads();
+  }
+
   void clearAuthToken() {
     _authToken = null;
     _currentRoleName = null;
     _currentUserId = null;
     _cachedProfile = null;
+    _activeBranchId = null;
+    _dio.options.headers.remove('x-schooldesk-branch-id');
   }
 
   bool get isAuthenticated => _authToken != null;

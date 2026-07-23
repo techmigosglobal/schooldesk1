@@ -128,7 +128,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
     final isWide = MediaQuery.of(context).size.width > 700;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         backgroundColor: _primaryColor,
         elevation: 0,

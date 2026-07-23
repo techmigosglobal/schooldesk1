@@ -588,9 +588,10 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                   value: 'assign_children',
                   child: Text('Assign Children'),
                 ),
+              const PopupMenuItem(value: 'edit', child: Text('Edit Access')),
               const PopupMenuItem(
-                value: 'edit',
-                child: Text('Edit Access / Reset Password'),
+                value: 'reset_credentials',
+                child: Text('Reset credentials'),
               ),
               PopupMenuItem(
                 value: u['status'] == 'Inactive' ? 'activate' : 'deactivate',
@@ -893,6 +894,62 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       case 'assign_children':
         _openChildAssignment(u);
         break;
+      case 'reset_credentials':
+        _resetCredentials(u);
+        break;
+    }
+  }
+
+  Future<void> _resetCredentials(Map<String, dynamic> user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reset credentials?'),
+        content: Text(
+          'A temporary password will be shown once for ${user['username'] ?? user['name'] ?? 'this account'}. They must change it after signing in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final result = await BackendApiClient.instance.resetUserCredentials(
+        user['id'].toString(),
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Temporary password'),
+          content: SelectableText(
+            '${result['temporary_password'] ?? ''}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('I have shared it securely'),
+            ),
+          ],
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Credential reset failed: $error'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
     }
   }
 

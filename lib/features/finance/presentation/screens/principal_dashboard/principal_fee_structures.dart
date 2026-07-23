@@ -181,7 +181,7 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: Text(
           'Fee Structures',

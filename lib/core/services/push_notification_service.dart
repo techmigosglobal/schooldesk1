@@ -440,6 +440,12 @@ class PushNotificationService {
     try {
       final service = await NotificationService.getInstance();
       await service.refresh();
+      final notificationId = (data['notification_id'] ?? data['id'] ?? '')
+          .toString()
+          .trim();
+      if (notificationId.isNotEmpty) {
+        await service.markAsRead(notificationId);
+      }
     } on Object catch (_) {
       // Navigation should still proceed if notification refresh fails.
     }

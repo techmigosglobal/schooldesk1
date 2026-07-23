@@ -111,7 +111,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFCFF),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       bottomNavigationBar: DesktopPlatform.isDesktopLayout(context)
           ? null
           : const PrincipalShellBottomBar(),

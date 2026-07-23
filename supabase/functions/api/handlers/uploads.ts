@@ -479,17 +479,6 @@ async function performReportExport(
   reportType: string,
   parameters: Record<string, any>,
 ): Promise<string> {
-  const escape = (value: unknown) => {
-    const text = `${value ?? ""}`.replace(/"/g, '""');
-    return /[",\n]/.test(text) ? `"${text}"` : text;
-  };
-
-  const toCsv = (headers: string[], rows: unknown[][]) => {
-    const headerLine = headers.join(",");
-    const lines = rows.map((row) => row.map(escape).join(","));
-    return [headerLine, ...lines].join("\n");
-  };
-
   let headers: string[] = ["Report Export"];
   let rows: unknown[][] = [["No data generated"]];
 
@@ -731,14 +720,64 @@ async function performReportExport(
     ]);
   }
 
-  const csvContent = toCsv(headers, rows);
+  const pdfEscape = (value: unknown) =>
+    `${value ?? ""}`
+      .replaceAll("\\", "\\\\")
+      .replaceAll("(", "\\(")
+      .replaceAll(")", "\\)")
+      .replace(/[\r\n]+/g, " ");
+  const reportLines = [
+    "SchoolDesk Report",
+    reportType.replaceAll("_", " "),
+    new Date().toISOString(),
+    "",
+    headers.join(" | "),
+    ...rows.map((row) => row.map(pdfEscape).join(" | ")),
+  ].flatMap((line) => {
+    const source = pdfEscape(line);
+    const chunks = source.match(/.{1,105}/g) ?? [""];
+    return chunks;
+  }).slice(0, 44);
+  const stream = [
+    "BT",
+    "/F1 10 Tf",
+    "50 780 Td",
+    "14 TL",
+    ...reportLines.flatMap((line, index) =>
+      index === 0 ? [`(${line}) Tj`] : ["T*", `(${line}) Tj`]
+    ),
+    "ET",
+  ].join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${
+      new TextEncoder().encode(stream).length
+    } >>\nstream\n${stream}\nendstream`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(new TextEncoder().encode(pdf).length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = new TextEncoder().encode(pdf).length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${offset.toString().padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${
+    objects.length + 1
+  } /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   const fileId = crypto.randomUUID();
-  const filePath = `exports/${school}/${fileId}.csv`;
+  const filePath = `exports/${school}/${fileId}.pdf`;
 
   const { error: uploadError } = await svc.storage.from("school-assets").upload(
     filePath,
-    new TextEncoder().encode(csvContent),
-    { contentType: "text/csv", upsert: true },
+    new TextEncoder().encode(pdf),
+    { contentType: "application/pdf", upsert: true },
   );
   if (uploadError) {
     console.error("Failed to upload report to storage:", uploadError);
@@ -759,6 +798,10 @@ export async function queueReportExport(
 ) {
   const id = crypto.randomUUID();
   const report_type = textValue(body.report_type, "generic");
+  const format = textValue(body.format, "pdf").toLowerCase();
+  if (format !== "pdf") {
+    throw new Error("Only PDF report exports are supported");
+  }
   const parameters = body.parameters ?? body;
 
   let status = "queued";
@@ -784,7 +827,7 @@ export async function queueReportExport(
     id,
     report_title: textValue(body.report_title ?? body.report, "Report export"),
     report_type,
-    format: textValue(body.format, "pdf").toLowerCase(),
+    format,
     scope: textValue(body.scope, "school"),
     parameters,
     status,
@@ -872,7 +915,9 @@ export async function handleEvents(
   const seg = parts[0];
 
   if (path === "/event-posts/pending" && method === "GET") {
-    if (!["principal", "coordinator"].includes(roleValue(user))) return fail("forbidden", 403);
+    if (!["principal", "coordinator"].includes(roleValue(user))) {
+      return fail("forbidden", 403);
+    }
     const { data, error } = await svc.from("event_posts").select("*").eq(
       "school_id",
       school,
@@ -926,7 +971,11 @@ export async function handleEvents(
     );
   }
   if (!seg && method === "GET") {
-    if (!["principal", "coordinator", "admin", "super_admin"].includes(roleValue(user))) {
+    if (
+      !["principal", "coordinator", "admin", "super_admin"].includes(
+        roleValue(user),
+      )
+    ) {
       return fail("forbidden", 403);
     }
     let q = svc.from("event_posts").select("*").eq(
@@ -1019,7 +1068,8 @@ export async function handleEvents(
     if (!existing) return fail("not found", 404);
     const userRole = roleValue(user);
     if (
-      !["principal", "coordinator"].includes(userRole) && `${existing.created_by ?? ""}` !== user.id
+      !["principal", "coordinator"].includes(userRole) &&
+      `${existing.created_by ?? ""}` !== user.id
     ) {
       return fail("forbidden", 403);
     }
@@ -1088,7 +1138,9 @@ export async function handleEvents(
     return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && parts[1] === "approve" && method === "POST") {
-    if (!["principal", "coordinator"].includes(roleValue(user))) return fail("forbidden", 403);
+    if (!["principal", "coordinator"].includes(roleValue(user))) {
+      return fail("forbidden", 403);
+    }
     const { data: existing, error: existingError } = await svc.from(
       "event_posts",
     )
@@ -1155,7 +1207,9 @@ export async function handleEvents(
     return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && parts[1] === "reject" && method === "POST") {
-    if (!["principal", "coordinator"].includes(roleValue(user))) return fail("forbidden", 403);
+    if (!["principal", "coordinator"].includes(roleValue(user))) {
+      return fail("forbidden", 403);
+    }
     const { data: existing, error: existingError } = await svc.from(
       "event_posts",
     )
@@ -1587,7 +1641,12 @@ export async function handleParent(
   const parentMatch = path.match(/^\/parents\/([^/]+)\/students$/);
   if (parentMatch && method === "GET") {
     const parentUserId = parentMatch[1];
-    const canManageParentLinks = ["principal", "coordinator", "admin", "super_admin"].includes(
+    const canManageParentLinks = [
+      "principal",
+      "coordinator",
+      "admin",
+      "super_admin",
+    ].includes(
       roleValue(user),
     );
     if (!canManageParentLinks && parentUserId !== user.id) {
@@ -1615,7 +1674,11 @@ export async function handleParent(
     );
   }
   if (parentMatch && method === "POST") {
-    if (!["principal", "coordinator", "admin", "super_admin"].includes(roleValue(user))) {
+    if (
+      !["principal", "coordinator", "admin", "super_admin"].includes(
+        roleValue(user),
+      )
+    ) {
       return fail("forbidden", 403);
     }
     const body = await req.json().catch(() => ({}));

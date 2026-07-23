@@ -236,9 +236,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     final parentEmail = parent.email.toLowerCase().trim();
     final parentPhone = parent.phone.trim();
     final parentName = parent.name.toLowerCase().trim();
-    final byId = {
-      for (final s in students) s.id.toLowerCase().trim(): s,
-    };
+    final byId = {for (final s in students) s.id.toLowerCase().trim(): s};
     final links = <GuardianStudentLink>[];
     final seenStudentIds = <String>{};
     for (final row in guardianRows) {
@@ -2227,7 +2225,7 @@ class _GuardianDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF8FD),
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         backgroundColor: const Color(0xFFEFF8FD),
         elevation: 0,

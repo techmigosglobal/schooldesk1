@@ -170,7 +170,7 @@ class _HelpScreenState extends State<HelpScreen>
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).schoolDesk;
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FA),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text('How to use the application'),
         bottom: _isSuperAdmin

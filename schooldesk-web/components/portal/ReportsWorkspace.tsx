@@ -1,22 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChartNoAxesCombined, Download, FileSpreadsheet, RefreshCw } from "@/lib/lucide-react";
+import { ChartNoAxesCombined, Download, RefreshCw } from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
 import type { Row } from "./types";
-import { api, downloadCsv, formatDate, money, nested, rowsFrom, stringValue } from "./utils";
-
-async function downloadRemoteFile(url: string, filename: string) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error("The generated export file could not be downloaded.");
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = objectUrl;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(objectUrl);
-}
+import { api, formatDate, money, nested, rowsFrom, stringValue } from "./utils";
 
 export function ReportsWorkspace({
   role,
@@ -83,40 +71,14 @@ export function ReportsWorkspace({
   }, [invoices, payments]);
   const todayAttendance = nested(dashboard, "today_attendance");
 
-  async function requestExport(kind: "operations" | "finance", format: "csv" | "pdf") {
-    try {
-      const title = kind === "finance" ? "Fee Operations Summary" : "Principal Operations Summary";
-      const path = kind === "finance" ? "fees/reports/exports" : "reports/exports";
-      const payload: Row = {
-        reportTitle: title,
-        reportType: kind === "finance" ? "fee_outstanding_report" : "principal_summary",
-        format,
-        scope: role,
-        parameters: {
-          total_students: students.length,
-          total_staff: staff.length,
-          total_sessions: sessions.length,
-          total_billed: totals.billed,
-          total_collected: totals.collected,
-        },
-      };
-      const exportResponse = (await api(path, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      })) as Row;
-      const downloadUrl = stringValue(exportResponse.download_url);
-      if (downloadUrl) {
-        await downloadRemoteFile(
-          downloadUrl,
-          `${kind}_${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "csv"}`
-        );
-        onNotify(`${title} downloaded.`);
-      } else {
-        onNotify(`${title} export requested. The backend will finish generating it shortly.`, "info");
-      }
-    } catch (event) {
-      setError(event instanceof Error ? event.message : "Unable to request export");
-    }
+  function previewPdf(kind: "operations" | "finance") {
+    const title = kind === "finance" ? "Fee Operations Summary" : "Principal Operations Summary";
+    const popup = window.open("", "_blank", "noopener,noreferrer");
+    if (!popup) { setError("Allow pop-ups to preview this PDF report."); return; }
+    const financeRows = kind === "finance" ? `<tr><td>Billed</td><td>${money(totals.billed)}</td></tr><tr><td>Collected</td><td>${money(totals.collected)}</td></tr><tr><td>Outstanding</td><td>${money(totals.outstanding)}</td></tr>` : "";
+    popup.document.write(`<!doctype html><title>${title}</title><style>body{font-family:Arial;padding:32px;color:#102a43}table{border-collapse:collapse;width:100%;max-width:680px}td{border:1px solid #cbd5e1;padding:10px}h1{margin-bottom:4px}@media print{button{display:none}}</style><h1>${title}</h1><p>Generated ${new Date().toLocaleString()}</p><table><tr><td>Students</td><td>${students.length}</td></tr><tr><td>Staff</td><td>${staff.length}</td></tr><tr><td>Attendance sessions</td><td>${sessions.length}</td></tr>${financeRows}</table><p><button onclick="window.print()">Preview / Save as PDF</button></p>`);
+    popup.document.close();
+    onNotify(`${title} is ready for PDF preview.`);
   }
 
   return (
@@ -220,42 +182,17 @@ export function ReportsWorkspace({
             <h3>Export center</h3>
           </div>
           <div className="ops-report-grid">
-            <button className="ops-report-card" onClick={() => void requestExport("operations", "csv")}>
-              <FileSpreadsheet size={18} />
-              <strong>Operations CSV</strong>
-              <span>School-wide summary with attendance and people metrics.</span>
-            </button>
-            <button className="ops-report-card" onClick={() => void requestExport("operations", "pdf")}>
+            <button className="ops-report-card" onClick={() => previewPdf("operations")}>
               <Download size={18} />
               <strong>Operations PDF</strong>
               <span>Leadership-ready summary for meetings and print-outs.</span>
             </button>
             {role === "principal" && (
               <>
-                <button className="ops-report-card" onClick={() => void requestExport("finance", "csv")}>
-                  <FileSpreadsheet size={18} />
-                  <strong>Finance CSV</strong>
-                  <span>Fee operations export with billed, paid, and outstanding totals.</span>
-                </button>
-                <button
-                  className="ops-report-card"
-                  onClick={() =>
-                    downloadCsv(
-                      `finance_snapshot_${new Date().toISOString().slice(0, 10)}.csv`,
-                      invoices.map((row) => ({
-                        invoice_number: row.invoice_number,
-                        student: `${row.student_name ?? row.first_name ?? ""}`.trim(),
-                        status: row.status,
-                        net_amount: row.net_amount,
-                        total_paid: row.total_paid,
-                        balance: row.balance,
-                      }))
-                    )
-                  }
-                >
+                <button className="ops-report-card" onClick={() => previewPdf("finance")}>
                   <Download size={18} />
-                  <strong>Invoice Snapshot</strong>
-                  <span>Quick CSV fallback generated directly from live portal data.</span>
+                  <strong>Finance PDF</strong>
+                  <span>Preview the live finance snapshot before saving as PDF.</span>
                 </button>
               </>
             )}

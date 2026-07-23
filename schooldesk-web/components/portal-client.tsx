@@ -12,6 +12,8 @@ import { ResourceModule } from "@/components/portal/ResourceModule";
 import { FeesWorkspace } from "@/components/portal/FeesWorkspace";
 import { WebsiteManager } from "@/components/portal/WebsiteManager";
 import { ReportsWorkspace } from "@/components/portal/ReportsWorkspace";
+import { AttendanceWorkspace } from "@/components/portal/AttendanceWorkspace";
+import { CommunicationsWorkspace } from "@/components/portal/CommunicationsWorkspace";
 import { PortalErrorBoundary } from "@/components/error-boundary";
 import { ChevronLeft, ChevronRight, Search } from "@/lib/lucide-react";
 import { QuickSearchModal } from "@/components/portal/QuickSearchModal";
@@ -177,6 +179,10 @@ export function PortalClient({ role }: { role: PortalRole }) {
               />
             ) : active === "reports" ? (
               <ReportsWorkspace role={role} onNotify={notify} />
+            ) : active === "attendance" ? (
+              <AttendanceWorkspace role={role} onNotify={notify} />
+            ) : active === "communications" ? (
+              <CommunicationsWorkspace role={role} onNotify={notify} />
             ) : active === "website" && role === "principal" ? (
               <WebsiteManager onNotify={notify} />
             ) : active === "fees" && role === "principal" ? (

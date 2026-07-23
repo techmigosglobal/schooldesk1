@@ -16,10 +16,11 @@ void main() {
     expect(source, contains('deleteAcademicYear('));
     expect(source, contains('cascadeConfirmed: true'));
 
-    expect(source, contains("values: const ['csv', 'xlsx', 'pdf']"));
-    expect(source, isNot(contains("values: const ['csv', 'excel', 'pdf']")));
+    expect(source, contains("static const String _format = 'pdf'"));
+    expect(source, contains("Text('PDF report')"));
+    expect(source, isNot(contains("values: const ['csv', 'xlsx', 'pdf']")));
 
-    expect(source, contains('ShareExportService'));
+    expect(source, contains('PdfService.getInstance().previewDocument'));
     expect(source, contains('downloadReportExport'));
     expect(api, contains('Future<Uint8List> downloadReportExport'));
     expect(api, contains('EnvConfig.apiOrigin'));

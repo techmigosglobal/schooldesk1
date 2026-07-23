@@ -217,8 +217,10 @@ class AppRoutes {
     feeMonitoring: (context) => const PrincipalFeeDashboard(),
     feeHome: (context) => const PrincipalFeeDashboard(),
     principalFees: (context) => const PrincipalFeeDashboard(),
-    principalFeeConcessions: (context) =>
-        const AdminFeesScreen(initialSection: 'concessions'),
+    principalFeeConcessions: (context) => const AdminFeesScreen(
+      initialSection: 'concessions',
+      concessionOnly: true,
+    ),
     feeStructures: (context) => const PrincipalFeeStructures(),
     '/principal/fee-structures': (context) => const PrincipalFeeStructures(),
     feeCollect: (context) => const PrincipalCollectFee(),

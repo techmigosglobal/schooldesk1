@@ -32,51 +32,57 @@ void main() {
     ),
   ];
 
-  for (final profile in profiles) {
-    testWidgets(
-      'global components avoid responsive breakage on ${profile.name}',
-      (tester) async {
-        final errors = <FlutterErrorDetails>[];
-        final previousOnError = FlutterError.onError;
-        FlutterError.onError = errors.add;
+  for (final isDark in [false, true]) {
+    for (final profile in profiles) {
+      testWidgets(
+        'global components avoid responsive breakage on ${profile.name} in ${isDark ? 'dark' : 'light'} mode',
+        (tester) async {
+          final errors = <FlutterErrorDetails>[];
+          final previousOnError = FlutterError.onError;
+          FlutterError.onError = errors.add;
 
-        await tester.binding.setSurfaceSize(profile.size);
-        try {
-          await tester.pumpWidget(_ResponsiveQaHarness(profile: profile));
-          await tester.pumpAndSettle();
+          await tester.binding.setSurfaceSize(profile.size);
+          try {
+            await tester.pumpWidget(
+              _ResponsiveQaHarness(profile: profile, isDark: isDark),
+            );
+            await tester.pumpAndSettle();
 
-          expect(
-            errors.where((error) {
-              final text = error.exceptionAsString().toLowerCase();
-              return text.contains('overflowed') ||
-                  text.contains('renderflex') ||
-                  text.contains('boxconstraints forces an infinite');
-            }),
-            isEmpty,
-            reason: 'Responsive errors in ${profile.name}',
-          );
-          expect(tester.takeException(), isNull);
+            expect(
+              errors.where((error) {
+                final text = error.exceptionAsString().toLowerCase();
+                return text.contains('overflowed') ||
+                    text.contains('renderflex') ||
+                    text.contains('boxconstraints forces an infinite');
+              }),
+              isEmpty,
+              reason: 'Responsive errors in ${profile.name}',
+            );
+            expect(tester.takeException(), isNull);
 
-          final navHeight = tester
-              .getSize(find.byType(SchoolDeskBottomNavigationBar))
-              .height;
-          expect(navHeight, greaterThanOrEqualTo(72));
-          expect(navHeight, lessThanOrEqualTo(104));
+            final navHeight = tester
+                .getSize(find.byType(SchoolDeskBottomNavigationBar))
+                .height;
+            expect(navHeight, greaterThanOrEqualTo(72));
+            expect(navHeight, lessThanOrEqualTo(104));
 
-          final cardCount = find.byType(SchoolDeskCard).evaluate().length;
-          expect(cardCount, greaterThan(0));
-          for (var index = 0; index < cardCount; index += 1) {
-            final rect = tester.getRect(find.byType(SchoolDeskCard).at(index));
-            expect(rect.left, greaterThanOrEqualTo(0));
-            expect(rect.right, lessThanOrEqualTo(profile.size.width + 0.5));
-            expect(rect.width, greaterThan(64));
+            final cardCount = find.byType(SchoolDeskCard).evaluate().length;
+            expect(cardCount, greaterThan(0));
+            for (var index = 0; index < cardCount; index += 1) {
+              final rect = tester.getRect(
+                find.byType(SchoolDeskCard).at(index),
+              );
+              expect(rect.left, greaterThanOrEqualTo(0));
+              expect(rect.right, lessThanOrEqualTo(profile.size.width + 0.5));
+              expect(rect.width, greaterThan(64));
+            }
+          } finally {
+            FlutterError.onError = previousOnError;
+            await tester.binding.setSurfaceSize(null);
           }
-        } finally {
-          FlutterError.onError = previousOnError;
-          await tester.binding.setSurfaceSize(null);
-        }
-      },
-    );
+        },
+      );
+    }
   }
 }
 
@@ -96,13 +102,16 @@ class _ResponsiveProfile {
 
 class _ResponsiveQaHarness extends StatelessWidget {
   final _ResponsiveProfile profile;
+  final bool isDark;
 
-  const _ResponsiveQaHarness({required this.profile});
+  const _ResponsiveQaHarness({required this.profile, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       home: MediaQuery(
         data: MediaQueryData(
           size: profile.size,

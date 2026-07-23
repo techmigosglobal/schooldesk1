@@ -236,30 +236,43 @@ export async function handleBirthdayAlerts(
 
   const rows: Record<string, unknown>[] = [];
   for (const [userId, group] of recipientMap.entries()) {
-    const studentNames = group.students.map((s) => s.name);
-    const studentIdsKey = group.students.map((s) => s.id).sort().join(",");
     const entityType = group.role === "parent" ? "birthday_wish" : "birthday";
-    const entityId = `${studentIdsKey}|${date}|${entityType}`;
-
-    rows.push({
-      school_id: school,
-      user_id: userId,
-      target_role: group.role,
-      title: birthdayTitle(studentNames),
-      body: birthdayBody(group.role, studentNames),
-      type: "birthday",
-      entity_type: entityType,
-      entity_id: entityId,
-      route: "/notification-center-screen",
-      priority: "high",
-      student_id: group.students.length === 1 ? group.students[0].id : null,
-      section_id: group.sectionId || null,
-      teacher_id: group.teacherId || null,
-      is_read: false,
-    });
+    // Store one notification per birthday student. A combined notification
+    // loses the student_id when two children share a birthday, preventing the
+    // dashboard from resolving and displaying every student's profile photo.
+    for (const student of group.students) {
+      const entityId = `${student.id}|${date}|${entityType}`;
+      rows.push({
+        school_id: school,
+        user_id: userId,
+        target_role: group.role,
+        title: birthdayTitle([student.name]),
+        body: birthdayBody(group.role, [student.name]),
+        type: "birthday",
+        entity_type: entityType,
+        entity_id: entityId,
+        route: "/notification-center-screen",
+        priority: "high",
+        student_id: student.id,
+        section_id: group.sectionId || null,
+        teacher_id: group.teacherId || null,
+        is_read: false,
+      });
+    }
   }
 
   if (rows.length > 0) {
+    // Remove only same-day legacy aggregate rows (which have no student_id)
+    // before inserting individual birthday profiles. This lets a re-run repair
+    // an already-created multi-birthday highlight without touching history.
+    const { error: legacyRowsError } = await svc.from("notification_logs")
+      .delete()
+      .eq("school_id", school)
+      .in("entity_type", ["birthday", "birthday_wish"])
+      .is("student_id", null)
+      .like("entity_id", `%|${date}|%`);
+    if (legacyRowsError) return fail(legacyRowsError.message);
+
     // Older deployments created the recipient uniqueness rule as an index
     // rather than a table constraint. PostgREST cannot always use that index
     // as an upsert conflict target, so filter known rows before inserting.
@@ -292,7 +305,9 @@ export async function handleBirthdayAlerts(
     }
 
     const eventRows = rows.map((row) => {
+      const studentId = text(row.student_id);
       const group = recipientMap.get(row.user_id as string)!;
+      const student = group.students.find((item) => item.id === studentId)!;
       return {
         school_id: row.school_id,
         user_id: row.user_id,
@@ -307,10 +322,8 @@ export async function handleBirthdayAlerts(
           student_id: row.student_id ?? "",
           section_id: row.section_id ?? "",
           teacher_id: row.teacher_id ?? "",
-          students: group.students,
-          photo_url: group.students.length === 1
-            ? group.students[0].photo_url
-            : "",
+          students: [student],
+          photo_url: student.photo_url,
         },
       };
     });

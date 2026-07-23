@@ -3,15 +3,14 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:printing/printing.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
-import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/share_export_service.dart';
+import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/academic_management_screen/academic_management_form_screens.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
@@ -290,7 +289,7 @@ class _AcademicYearClasswiseExportScreenState
   String _gradeId = 'all';
   String _sectionId = 'all';
   String _exportType = 'complete_classwise_data';
-  String _format = 'xlsx';
+  static const String _format = 'pdf';
   bool _loading = true;
   bool _exporting = false;
   List<GradeModel> _grades = const [];
@@ -436,10 +435,7 @@ class _AcademicYearClasswiseExportScreenState
                   ],
                 ),
                 const SizedBox(height: 18),
-                _FormatCard(
-                  value: _format,
-                  onChanged: (value) => setState(() => _format = value),
-                ),
+                const _FormatCard(),
                 const SizedBox(height: 24),
                 _BottomActions(
                   exporting: _exporting,
@@ -526,7 +522,7 @@ class _AcademicYearUsersExportScreenState
     extends State<AcademicYearUsersExportScreen> {
   final Set<String> _roles = {'principal', 'teacher', 'parent'};
   String _status = 'all';
-  String _format = 'xlsx';
+  static const String _format = 'pdf';
   bool _exporting = false;
   int _total = 0;
 
@@ -625,12 +621,7 @@ class _AcademicYearUsersExportScreenState
                   },
                 ),
                 const SizedBox(height: 24),
-                _Segmented(
-                  title: 'File Format',
-                  value: _format,
-                  values: const ['csv', 'xlsx', 'pdf'],
-                  onChanged: (value) => setState(() => _format = value),
-                ),
+                const _FormatCard(),
               ],
             ),
           ),
@@ -726,7 +717,7 @@ class _AcademicYearFeesExportScreenState
   String _sectionId = 'all';
   String _reportType = 'complete_fees_report';
   String _paymentStatus = 'all';
-  String _format = 'pdf';
+  static const String _format = 'pdf';
   bool _loading = true;
   bool _exporting = false;
   List<GradeModel> _grades = const [];
@@ -876,10 +867,7 @@ class _AcademicYearFeesExportScreenState
                       const SizedBox(height: 22),
                       const Divider(color: _ayBorder),
                       const SizedBox(height: 18),
-                      _FormatCard(
-                        value: _format,
-                        onChanged: (value) => setState(() => _format = value),
-                      ),
+                      const _FormatCard(),
                     ],
                   ),
                 ),
@@ -960,7 +948,7 @@ class _AyPageShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: principalDirectoryBackground,
+      backgroundColor: context.appTheme.background,
       bottomNavigationBar: DesktopPlatform.isDesktopLayout(context)
           ? null
           : const PrincipalShellBottomBar(),
@@ -1143,9 +1131,9 @@ class _YearChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ayBorder),
+        border: Border.all(color: context.appTheme.outlineVariant),
         boxShadow: const [
           BoxShadow(
             color: Color(0x1408142F),
@@ -1258,14 +1246,14 @@ class _SearchBox extends StatelessWidget {
         hintText: 'Search academic years...',
         prefixIcon: const Icon(Icons.search_rounded, size: 22),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: context.appTheme.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: _ayBorder),
+          borderSide: BorderSide(color: context.appTheme.outlineVariant),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: _ayBorder),
+          borderSide: BorderSide(color: context.appTheme.outlineVariant),
         ),
       ),
     );
@@ -1292,9 +1280,9 @@ class _FilterButton extends StatelessWidget {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _ayBorder),
+          border: Border.all(color: context.appTheme.outlineVariant),
         ),
         child: Row(
           children: [
@@ -1476,19 +1464,15 @@ class _CheckOption extends StatelessWidget {
 }
 
 class _FormatCard extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  const _FormatCard({required this.value, required this.onChanged});
+  const _FormatCard();
 
   @override
   Widget build(BuildContext context) {
-    return _AyCard(
-      child: _Segmented(
-        title: 'File Format',
-        value: value,
-        values: const ['csv', 'xlsx', 'pdf'],
-        onChanged: onChanged,
+    return const _AyCard(
+      child: ListTile(
+        leading: Icon(Icons.picture_as_pdf_outlined, color: _ayBlue),
+        title: Text('PDF report'),
+        subtitle: Text('Preview before printing, sharing, or saving.'),
       ),
     );
   }
@@ -1930,19 +1914,7 @@ String _labelize(String value) => value
     .join(' ');
 
 String _formatLabel(String value) {
-  switch (value.toLowerCase().trim()) {
-    case 'csv':
-      return 'CSV';
-    case 'xlsx':
-    case 'excel':
-      return 'Excel';
-    case 'pdf':
-      return 'PDF';
-    case 'json':
-      return 'JSON';
-    default:
-      return _labelize(value);
-  }
+  return value.toLowerCase().trim() == 'pdf' ? 'PDF' : _labelize(value);
 }
 
 double _ayResponsiveTextScale([BuildContext? context]) {
@@ -1956,7 +1928,7 @@ double _ayResponsiveTextScale([BuildContext? context]) {
 TextStyle _ayFont(
   double size, {
   BuildContext? context,
-  Color color = _ayInk,
+  Color? color,
   FontWeight fontWeight = FontWeight.w700,
 }) {
   return GoogleFonts.dmSans(
@@ -1967,24 +1939,16 @@ TextStyle _ayFont(
 }
 
 TextStyle _titleStyle(double size, {BuildContext? context}) =>
-    _ayFont(size, context: context, color: _ayInk, fontWeight: FontWeight.w900);
+    _ayFont(size, context: context, fontWeight: FontWeight.w900);
 
-TextStyle _labelStyle(
-  double size, {
-  BuildContext? context,
-  Color color = _ayInk,
-}) =>
+TextStyle _labelStyle(double size, {BuildContext? context, Color? color}) =>
     _ayFont(size, context: context, color: color, fontWeight: FontWeight.w800);
 
 TextStyle _bodyStyle({BuildContext? context}) =>
-    _ayFont(17, context: context, color: _ayInk, fontWeight: FontWeight.w600);
+    _ayFont(17, context: context, fontWeight: FontWeight.w600);
 
-TextStyle _mutedStyle(double size, {BuildContext? context}) => _ayFont(
-  size,
-  context: context,
-  color: _ayMuted,
-  fontWeight: FontWeight.w600,
-);
+TextStyle _mutedStyle(double size, {BuildContext? context}) =>
+    _ayFont(size, context: context, fontWeight: FontWeight.w600);
 
 Future<bool?> _confirmAcademicYearDelete(
   BuildContext context,
@@ -2112,54 +2076,9 @@ Future<void> _downloadExportArtifact(
     throw StateError('Export file was empty');
   }
 
-  if (format.toLowerCase().trim() == 'pdf') {
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: _exportFileName(downloadUrl, format, title),
-    );
-    if (context.mounted) {
-      _snack(context, '$title generated successfully');
-    }
-  } else {
-    await const ShareExportService().shareBytes(
-      bytes: bytes,
-      fileName: _exportFileName(downloadUrl, format, title),
-      mimeType: _exportMimeType(format),
-      title: title,
-      subject: title,
-      text: '$title generated from ${AppConstants.appName}.',
-      context: context,
-    );
-    if (context.mounted) {
-      _snack(context, '$title downloaded');
-    }
-  }
-}
-
-String _exportFileName(String downloadUrl, String format, String title) {
-  final path = Uri.tryParse(downloadUrl)?.path ?? '';
-  final segments = path.split('/').where((part) => part.isNotEmpty).toList();
-  final lastSegment = segments.isEmpty ? null : segments.last;
-  if (lastSegment != null && lastSegment.contains('.')) return lastSegment;
-  final safeTitle = title
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-      .replaceAll(RegExp(r'^_+|_+$'), '');
-  final extension = format == 'xlsx' || format == 'excel' ? 'xlsx' : format;
-  return '${safeTitle.isEmpty ? 'academic_export' : safeTitle}.$extension';
-}
-
-String _exportMimeType(String format) {
-  switch (format.toLowerCase().trim()) {
-    case 'csv':
-      return 'text/csv';
-    case 'xlsx':
-    case 'excel':
-      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    case 'pdf':
-      return 'application/pdf';
-    default:
-      return 'application/octet-stream';
+  await PdfService.getInstance().previewDocument(context, bytes, title);
+  if (context.mounted) {
+    _snack(context, '$title generated successfully');
   }
 }
 

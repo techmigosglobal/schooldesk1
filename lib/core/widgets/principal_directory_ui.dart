@@ -48,14 +48,14 @@ class PrincipalDirectoryScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: principalDirectoryBackground,
+      backgroundColor: context.appTheme.background,
       floatingActionButton: onAdd == null
           ? null
           : FloatingActionButton(
               heroTag: 'principal-directory-add-$title',
               tooltip: addTooltip,
               onPressed: onAdd,
-              backgroundColor: principalDirectoryAccent,
+              backgroundColor: context.appTheme.primary,
               foregroundColor: Colors.white,
               elevation: 8,
               shape: const CircleBorder(),
@@ -64,7 +64,7 @@ class PrincipalDirectoryScaffold extends StatelessWidget {
       bottomNavigationBar: const PrincipalShellBottomBar(),
       body: SafeArea(
         child: RefreshIndicator(
-          color: principalDirectoryAccent,
+          color: context.appTheme.primary,
           onRefresh: onRefresh,
           child: CustomScrollView(
             controller: controller,
@@ -260,14 +260,14 @@ class _PrincipalDirectorySearchBoxState
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _focused
-                ? principalDirectoryAccent
-                : const Color(0xFFE2E8F0),
+                ? context.appTheme.primary
+                : context.appTheme.outlineVariant,
             width: _focused ? 2 : 1,
           ),
           boxShadow: [
             BoxShadow(
               color: _focused
-                  ? principalDirectoryAccent.withAlpha(20)
+                  ? context.appTheme.primary.withAlpha(20)
                   : context.appTheme.onSurface.withAlpha(10),
               blurRadius: _focused ? 12 : 8,
               offset: const Offset(0, 3),
@@ -282,8 +282,8 @@ class _PrincipalDirectorySearchBoxState
             prefixIcon: Icon(
               Icons.search_rounded,
               color: _focused
-                  ? principalDirectoryAccent
-                  : principalDirectoryMuted,
+                  ? context.appTheme.primary
+                  : context.appTheme.muted,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -336,7 +336,9 @@ class PrincipalDirectoryChip extends StatelessWidget {
           color: selected ? null : context.appTheme.surface,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? Colors.transparent : const Color(0xFFD1D5DB),
+            color: selected
+                ? Colors.transparent
+                : context.appTheme.outlineVariant,
           ),
           boxShadow: selected
               ? [
@@ -355,7 +357,7 @@ class PrincipalDirectoryChip extends StatelessWidget {
               Icon(
                 icon,
                 size: 15,
-                color: selected ? Colors.white : principalDirectoryMuted,
+                color: selected ? Colors.white : context.appTheme.muted,
               ),
               const SizedBox(width: 6),
             ],
@@ -364,7 +366,7 @@ class PrincipalDirectoryChip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.dmSans(
-                color: selected ? Colors.white : principalDirectoryText,
+                color: selected ? Colors.white : context.appTheme.onSurface,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -491,7 +493,7 @@ class _MetricTile extends StatelessWidget {
                     style: GoogleFonts.dmSans(
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
-                      color: principalDirectoryText,
+                      color: context.appTheme.onSurface,
                     ),
                   ),
                 ),
@@ -503,7 +505,7 @@ class _MetricTile extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: principalDirectoryMuted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -546,8 +548,8 @@ class PrincipalDirectoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderColor = selected
-        ? principalDirectoryAccent
-        : const Color(0xFFE2E8F0);
+        ? context.appTheme.primary
+        : context.appTheme.outlineVariant;
     final semanticLabel = status == null || status!.isEmpty
         ? title
         : '$title, $status';
@@ -639,7 +641,7 @@ class PrincipalDirectoryCard extends StatelessWidget {
                                       style: GoogleFonts.dmSans(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w900,
-                                        color: principalDirectoryText,
+                                        color: context.appTheme.onSurface,
                                       ),
                                     ),
                                   ),
@@ -659,7 +661,7 @@ class PrincipalDirectoryCard extends StatelessWidget {
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                   height: 1.4,
-                                  color: principalDirectoryMuted,
+                                  color: context.appTheme.muted,
                                 ),
                               ),
                               if (chips.isNotEmpty) ...[

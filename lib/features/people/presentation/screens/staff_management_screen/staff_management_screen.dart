@@ -3334,7 +3334,7 @@ class _TeacherDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF8FD),
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         backgroundColor: const Color(0xFFEFF8FD),
         elevation: 0,

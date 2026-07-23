@@ -127,7 +127,10 @@ async function resolveStudentRecipients(
     const userId = text(principal.id);
     const recipientRole = text(principal.role_name).toLowerCase();
     if (userId && ["principal", "coordinator"].includes(recipientRole)) {
-      recipients.push({ userId, targetRole: recipientRole as "principal" | "coordinator" });
+      recipients.push({
+        userId,
+        targetRole: recipientRole as "principal" | "coordinator",
+      });
     }
   }
 
@@ -344,7 +347,15 @@ export async function handleHealthReminders(
     if (method !== "POST") return fail("method not allowed", 405);
     return runHealthReminderJob(req, url, svc, user);
   }
-  if (path !== "/health-reminders") return fail("not found", 404);
+  const reminderId = path.startsWith("/health-reminders/")
+    ? path.slice("/health-reminders/".length)
+    : "";
+  if (reminderId && !/^[0-9a-f-]{36}$/i.test(reminderId)) {
+    return fail("invalid health reminder id", 422);
+  }
+  if (!reminderId && path !== "/health-reminders") {
+    return fail("not found", 404);
+  }
   if (!user) return fail("unauthorized", 401);
 
   const school = sid(user);
@@ -415,6 +426,94 @@ export async function handleHealthReminders(
         "immediate delivery failed",
         deliveryError,
       );
+    }
+    return ok(normalize(data as Record<string, unknown>));
+  }
+
+  if ((method === "PATCH" || method === "DELETE") && reminderId) {
+    if (role(user) !== "parent") {
+      return fail("only parents can change health reminders", 403);
+    }
+    const { data: existing, error: existingError } = await svc.from(
+      "health_reminders",
+    ).select("*").eq("id", reminderId).eq("school_id", school).eq(
+      "created_by_parent_user_id",
+      user.id,
+    ).maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (!existing) return fail("health reminder not found", 404);
+
+    // Highlights are backed by notification logs. Removing the previous rows
+    // makes an edit immediately replace the displayed details, and makes a
+    // deletion disappear from recipient dashboards on their next refresh.
+    const clearLogs = async () => {
+      const { error } = await svc.from("notification_logs").delete()
+        .eq("school_id", school)
+        .eq("entity_type", "health_reminder")
+        .eq("entity_id", reminderId);
+      if (error) throw error;
+    };
+
+    if (method === "DELETE") {
+      try {
+        await clearLogs();
+      } catch (error) {
+        return fail(
+          error instanceof Error
+            ? error.message
+            : "Could not clear health notifications",
+        );
+      }
+      const { error } = await svc.from("health_reminders").delete()
+        .eq("id", reminderId).eq("school_id", school).eq(
+          "created_by_parent_user_id",
+          user.id,
+        );
+      if (error) return fail(error.message);
+      return ok({ id: reminderId, deleted: true });
+    }
+
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (!hasReminderDetail(body)) {
+      return fail("at least one health reminder detail required", 422);
+    }
+    const payload = {
+      reminder_date: cleanDate(body.reminder_date ?? existing.reminder_date),
+      condition: text(body.condition ?? body.conditions) || null,
+      medication: text(body.medication ?? body.medications) || null,
+      dosage: text(body.dosage) || null,
+      reminder_time: text(body.reminder_time) || null,
+      notes: text(body.notes) || null,
+      is_active: body.is_active ?? existing.is_active ?? true,
+    };
+    const { data, error } = await svc.from("health_reminders").update(payload)
+      .eq("id", reminderId).eq("school_id", school).eq(
+        "created_by_parent_user_id",
+        user.id,
+      ).select("*").single();
+    if (error) return fail(error.message);
+
+    try {
+      await clearLogs();
+      if (data.is_active) {
+        const resolved = await resolveStudentRecipients(
+          svc,
+          school,
+          text(data.student_id),
+        );
+        if (resolved) {
+          await notifyHealthRecipients(
+            svc,
+            school,
+            data as Record<string, unknown>,
+            resolved.studentName,
+            resolved.sectionId,
+            resolved.recipients,
+          );
+        }
+      }
+    } catch (deliveryError) {
+      console.error("updated health reminder delivery failed", deliveryError);
     }
     return ok(normalize(data as Record<string, unknown>));
   }

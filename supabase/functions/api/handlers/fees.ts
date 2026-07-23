@@ -2790,9 +2790,20 @@ export async function handleFees(
       Boolean,
     )[0];
     if (!seg && method === "GET") {
-      const { data, error } = await svc.from("fee_concessions").select(
+      let query = svc.from("fee_concessions").select(
         "*, student:students(first_name, last_name, admission_number, student_id_number), invoice:fee_invoices(invoice_number, total_amount, net_amount, paid_amount, balance), fee_structure:fee_structures(id, fee_category_id, category_id)",
-      ).eq("school_id", school).order("created_at", { ascending: false });
+      ).eq("school_id", school);
+      const studentId = text(url.searchParams.get("student_id"));
+      const invoiceId = text(url.searchParams.get("invoice_id"));
+      const status = text(url.searchParams.get("status")).toLowerCase();
+      if (studentId) query = query.eq("student_id", studentId);
+      if (invoiceId) query = query.eq("invoice_id", invoiceId);
+      if (["pending", "approved", "rejected"].includes(status)) {
+        query = query.eq("status", status);
+      }
+      const { data, error } = await query.order("created_at", {
+        ascending: false,
+      });
       if (error) return fail(error.message);
 
       // fee_structures keeps both category_id (legacy) and fee_category_id
@@ -2823,7 +2834,8 @@ export async function handleFees(
         hydratedStructures.map((structure) => [text(structure.id), structure]),
       );
 
-      return ok(rows.map((row: Record<string, unknown>) => {
+      const search = text(url.searchParams.get("q")).toLowerCase();
+      const normalized = rows.map((row: Record<string, unknown>) => {
         const student = (row.student as Record<string, unknown> | null) ?? {};
         const rawStructure =
           (row.fee_structure as Record<string, unknown> | null) ??
@@ -2844,7 +2856,15 @@ export async function handleFees(
           ),
           fee_item_name: text(category.name, "Fee"),
         };
-      }));
+      });
+      return ok(
+        search
+          ? normalized.filter((row) =>
+            `${row.student_name} ${row.student_identifier} ${row.fee_item_name}`
+              .toLowerCase().includes(search)
+          )
+          : normalized,
+      );
     }
     if (!seg && method === "POST") {
       const invoiceId = text(body.invoice_id);
@@ -2917,6 +2937,22 @@ export async function handleFees(
         }
         updates.status = status;
         if (status === "approved") updates.approved_by = user.id;
+      }
+      if (Object.hasOwn(body, "amount") || Object.hasOwn(body, "percentage")) {
+        const { data: invoice, error: invoiceError } = await svc.from(
+          "fee_invoices",
+        ).select("id, total_amount, balance, paid_amount")
+          .eq("id", current.invoice_id).eq("school_id", school).maybeSingle();
+        if (invoiceError) return fail(invoiceError.message);
+        if (!invoice) return fail("linked invoice not found", 404);
+        const proposedAmount = money(updates.amount);
+        const proposedPercentage = money(updates.percentage);
+        const effective = proposedAmount > 0
+          ? proposedAmount
+          : money(money(invoice.total_amount) * proposedPercentage / 100);
+        if (effective <= 0 || effective > money(invoice.balance)) {
+          return fail("concession must not exceed the outstanding balance");
+        }
       }
       const { data, error } = await svc.from("fee_concessions").update(updates)
         .eq("id", seg).eq("school_id", school).select().single();

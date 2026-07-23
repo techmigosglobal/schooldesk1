@@ -24,6 +24,8 @@ export function visibleModules(role: PortalRole) {
     "teachers",
     "classes",
     "timetable",
+    "attendance",
+    "communications",
     "reports",
     "website",
   ] as const;
@@ -35,6 +37,8 @@ export function visibleModules(role: PortalRole) {
         "teachers",
         "classes",
         "timetable",
+        "attendance",
+        "communications",
         "fees",
         "reports",
         "website",

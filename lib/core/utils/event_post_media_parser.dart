@@ -38,6 +38,10 @@ class EventPostMediaItem {
 
   static List<EventPostMediaItem> parseList(dynamic raw) {
     if (raw == null) return const [];
+    if (raw is Map) {
+      final item = _fromDynamic(raw);
+      return item.url.trim().isEmpty ? const [] : [item];
+    }
     if (raw is List) {
       return raw
           .map(_fromDynamic)
@@ -66,9 +70,15 @@ class EventPostMediaItem {
       final url = _text(map['url'] ?? map['media_url'] ?? map['mediaUrl']);
       final name = _text(map['name'] ?? map['filename'] ?? map['file_name']);
       final mimeType = _text(
-        map['mime_type'] ?? map['mimeType'] ?? map['content_type'],
+        map['mime_type'] ??
+            map['mimeType'] ??
+            map['media_type'] ??
+            map['mediaType'] ??
+            map['content_type'],
       );
-      final explicitKind = _text(map['kind'] ?? map['type']).toLowerCase();
+      final explicitKind = _text(
+        map['kind'] ?? map['type'] ?? map['media_kind'],
+      ).toLowerCase();
       final size = map['size'];
       return EventPostMediaItem(
         url: url,

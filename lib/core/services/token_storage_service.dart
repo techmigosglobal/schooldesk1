@@ -63,6 +63,7 @@ class TokenStorageService {
       _deleteAuthValue(_refreshKey),
       _deleteAuthValue(_roleKey),
       _deleteAuthValue(_userIdKey),
+      _deleteAuthValue(_schoolIdKey),
     ]);
   }
 

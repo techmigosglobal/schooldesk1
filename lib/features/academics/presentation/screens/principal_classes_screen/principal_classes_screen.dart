@@ -252,7 +252,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     final rows = _filteredClasses;
     final showAddFab = !_loading && _error == null && rows.isNotEmpty;
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F8FF),
+      backgroundColor: context.appTheme.background,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: showAddFab
           ? SizedBox(
@@ -1001,7 +1001,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     final rows = _filteredClasses;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F8FF),
+      backgroundColor: context.appTheme.background,
       body: SafeArea(
         child: DesktopMasterDetailLayout(
           masterWidth: 380,
@@ -1154,7 +1154,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     final healthColor = _healthColor(row);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF8FD),
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         backgroundColor: const Color(0xFFEFF8FD),
         elevation: 0,
@@ -3532,7 +3532,7 @@ class _ClassDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final className = _classText(row['class_name'], fallback: 'Class Details');
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF8FD),
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         backgroundColor: const Color(0xFFEFF8FD),
         elevation: 0,

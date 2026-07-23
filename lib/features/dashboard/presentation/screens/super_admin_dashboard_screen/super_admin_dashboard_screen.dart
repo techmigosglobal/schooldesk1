@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
+import 'package:schooldesk1/core/widgets/branch_switcher.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -31,6 +32,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   int _totalStudents = 0;
   int _totalStaff = 0;
   int _totalClasses = 0;
+  List<Map<String, dynamic>> _branchOverview = const [];
 
   String _firstName(String fullName) {
     final parts = fullName.trim().split(RegExp(r'\s+'));
@@ -53,6 +55,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         _api.getProfile(),
         _api.getCurrentSchool(),
         _api.getDashboard('super_admin', forceRefresh: true),
+        _api.getBranchOverview(),
       ]);
 
       final profile = results[0] as UserResponse;
@@ -70,6 +73,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         _totalStaff = sysMetrics['total_staff'] as int? ?? 0;
         _totalClasses = sysMetrics['total_classes'] as int? ?? 0;
         _systemStatus = 'Healthy';
+        _branchOverview = results[3] as List<Map<String, dynamic>>;
         _loading = false;
       });
     } on Object catch (_) {
@@ -146,10 +150,21 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                             StaggeredFadeIn(
                               children: [
                                 _buildHeader(context),
+                                const SizedBox(height: 12),
+                                BranchSwitcher(
+                                  canCreate: true,
+                                  onChanged: _loadData,
+                                ),
                                 const SizedBox(height: 18),
                                 _buildStatusCard(context),
                                 const SizedBox(height: 18),
                                 _buildStatsRow(context),
+                                if (_branchOverview.isNotEmpty) ...[
+                                  const SizedBox(height: 22),
+                                  _buildSectionTitle('Branch health'),
+                                  const SizedBox(height: 12),
+                                  _buildBranchOverview(context),
+                                ],
                                 const SizedBox(height: 22),
                                 _buildSectionTitle('System Management'),
                                 const SizedBox(height: 12),
@@ -248,6 +263,62 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBranchOverview(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: _branchOverview.map((branch) {
+        final label = branch['name']?.toString() ?? 'Branch';
+        final issues = branch['open_issues'] as int? ?? 0;
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Icon(
+                  Icons.account_tree_rounded,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      '${branch['students'] ?? 0} students · ${branch['staff'] ?? 0} staff · ${branch['classes'] ?? 0} classes',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              if (issues > 0)
+                Chip(
+                  avatar: const Icon(Icons.error_outline_rounded, size: 16),
+                  label: Text('$issues issues'),
+                )
+              else
+                const Icon(Icons.check_circle_rounded, color: Colors.green),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 

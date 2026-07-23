@@ -15,6 +15,7 @@ import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
+import 'package:schooldesk1/core/widgets/branch_switcher.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/principal_dashboard_desktop_shell.dart';
@@ -357,10 +358,17 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     final setupTotal = _data.setupSteps.isEmpty ? 1 : _data.setupSteps.length;
 
     return PrincipalDashboardDesktopBody(
-      header: _PrincipalAppHeader(
-        data: _data,
-        onNotifications: () =>
-            _open(AppRoutes.notificationCenter, arguments: _leadershipRole),
+      header: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _PrincipalAppHeader(
+            data: _data,
+            onNotifications: () =>
+                _open(AppRoutes.notificationCenter, arguments: _leadershipRole),
+          ),
+          const SizedBox(height: 12),
+          BranchSwitcher(onChanged: _loadDashboard),
+        ],
       ),
       searchBar: _DashboardSearchBar(
         onTap: () => _open(AppRoutes.globalSearch, arguments: _leadershipRole),
@@ -588,6 +596,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                   arguments: _leadershipRole,
                 ),
               ),
+              BranchSwitcher(onChanged: _loadDashboard),
               const SizedBox(height: 18),
               _DashboardSearchBar(
                 onTap: () =>
@@ -1268,15 +1277,23 @@ class _PrincipalHomePattern extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(color: Color(0xFFF3F7FC)),
-      child: CustomPaint(painter: _PrincipalHomePatternPainter()),
+    return DecoratedBox(
+      decoration: BoxDecoration(color: context.appTheme.background),
+      child: CustomPaint(
+        painter: _PrincipalHomePatternPainter(
+          color: context.appTheme.muted.withOpacity(
+            context.appTheme.isDark ? 0.035 : 0.08,
+          ),
+        ),
+      ),
     );
   }
 }
 
 class _PrincipalHomePatternPainter extends CustomPainter {
-  const _PrincipalHomePatternPainter();
+  final Color color;
+
+  const _PrincipalHomePatternPainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1300,7 +1317,7 @@ class _PrincipalHomePatternPainter extends CustomPainter {
             fontFamily: icon.fontFamily,
             package: icon.fontPackage,
             fontSize: 28,
-            color: const Color(0xFF94A3B8).withOpacity(0.08),
+            color: color,
           ),
         );
         textPainter.layout();
@@ -1314,7 +1331,8 @@ class _PrincipalHomePatternPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _PrincipalHomePatternPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _PrincipalAppHeader extends StatelessWidget {
@@ -1766,7 +1784,7 @@ class _DashboardSearchBar extends StatelessWidget {
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: context.appTheme.outlineVariant),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -1791,20 +1809,20 @@ class _DashboardSearchBar extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF94A3B8),
+                    color: context.appTheme.muted,
                   ),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                  color: context.appTheme.surfaceVariant,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   '⌘ K',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: const Color(0xFF64748B),
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1842,7 +1860,7 @@ class _SectionTitle extends StatelessWidget {
         Text(
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: const Color(0xFF111827),
+            color: context.appTheme.onSurface,
             fontWeight: FontWeight.w900,
             letterSpacing: 0,
           ),

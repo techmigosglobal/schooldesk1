@@ -152,57 +152,50 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
 
-
-  final isDesktop = DesktopBreakpoints.isDesktopWidth(
-
-
-        MediaQuery.sizeOf(context).width,
-
-
-      );
-
-
-      if (isDesktop) {
-        return DesktopScreenWrapper(
-          breadcrumbs: const ['Finance', 'Collect'],
-          title: 'Collect Fee',
-          actions: [
-            IconButton(
-              tooltip: 'Refresh',
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: _loadData,
-            ),
-          ],
-          maxWidth: 600,
-          child: Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: context.appTheme.outlineVariant),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
-                      ? FeeEmptyState(
-                          icon: Icons.cloud_off_rounded,
-                          title: 'Error',
-                          message: _error!,
-                          actionLabel: 'Retry',
-                          onAction: _loadData,
-                        )
-                      : _selectedInvoice == null
-                          ? _buildStudentPicker(embedded: true)
-                          : _buildPaymentForm(embedded: true),
-            ),
+    if (isDesktop) {
+      return DesktopScreenWrapper(
+        breadcrumbs: const ['Finance', 'Collect'],
+        title: 'Collect Fee',
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loadData,
           ),
-        );
-      }
+        ],
+        maxWidth: 600,
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: context.appTheme.outlineVariant),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? FeeEmptyState(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'Error',
+                    message: _error!,
+                    actionLabel: 'Retry',
+                    onAction: _loadData,
+                  )
+                : _selectedInvoice == null
+                ? _buildStudentPicker(embedded: true)
+                : _buildPaymentForm(embedded: true),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFF),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text(
           'Collect Fee',

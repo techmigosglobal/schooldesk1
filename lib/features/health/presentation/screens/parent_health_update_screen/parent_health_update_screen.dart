@@ -80,16 +80,32 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
     }
   }
 
-  void _showAddReminderDialog() {
+  void _showReminderDialog({Map<String, dynamic>? existing}) {
     final student = _children.isNotEmpty ? _children[_activeChildIndex] : null;
     if (student == null) return;
 
-    final conditionCtrl = TextEditingController();
-    final medicationCtrl = TextEditingController();
-    final dosageCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
-    DateTime reminderDate = DateTime.now();
-    bool active = true;
+    final conditionCtrl = TextEditingController(
+      text:
+          existing?['condition']?.toString() ??
+          existing?['conditions']?.toString() ??
+          '',
+    );
+    final medicationCtrl = TextEditingController(
+      text:
+          existing?['medication']?.toString() ??
+          existing?['medications']?.toString() ??
+          '',
+    );
+    final dosageCtrl = TextEditingController(
+      text: existing?['dosage']?.toString() ?? '',
+    );
+    final notesCtrl = TextEditingController(
+      text: existing?['notes']?.toString() ?? '',
+    );
+    DateTime reminderDate =
+        DateTime.tryParse(existing?['reminder_date']?.toString() ?? '') ??
+        DateTime.now();
+    bool active = existing?['is_active'] != false;
     bool saving = false;
 
     showModalBottomSheet(
@@ -114,7 +130,9 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Add Health Reminder',
+                      existing == null
+                          ? 'Add Health Reminder'
+                          : 'Edit Health Reminder',
                       style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -236,16 +254,25 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                                 'is_active': active,
                               };
                               try {
-                                await BackendApiClient.instance.dio.post(
-                                  '/health-reminders',
-                                  data: payload,
-                                );
+                                if (existing == null) {
+                                  await BackendApiClient.instance.dio.post(
+                                    '/health-reminders',
+                                    data: payload,
+                                  );
+                                } else {
+                                  await BackendApiClient.instance.dio.patch(
+                                    '/health-reminders/${existing['id']}',
+                                    data: payload,
+                                  );
+                                }
                                 if (mounted) {
                                   Navigator.pop(ctx);
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
+                                    SnackBar(
                                       content: Text(
-                                        'Health reminder saved. It will appear for the class team and principal at 4:00 PM on the selected date.',
+                                        existing == null
+                                            ? 'Health reminder saved. It will appear for the class team and principal at 4:00 PM on the selected date.'
+                                            : 'Health reminder updated.',
                                       ),
                                     ),
                                   );
@@ -256,8 +283,10 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                                   setModalState(() => saving = false);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: const Text(
-                                        'Could not save the health reminder. Please try again.',
+                                      content: Text(
+                                        existing == null
+                                            ? 'Could not save the health reminder. Please try again.'
+                                            : 'Could not update the health reminder. Please try again.',
                                       ),
                                       backgroundColor: Theme.of(
                                         context,
@@ -274,7 +303,13 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save_rounded),
-                      label: Text(saving ? 'Saving...' : 'Save Reminder'),
+                      label: Text(
+                        saving
+                            ? 'Saving...'
+                            : existing == null
+                            ? 'Save Reminder'
+                            : 'Save Changes',
+                      ),
                     ),
                   ],
                 ),
@@ -303,7 +338,7 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
         ),
       ],
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _children.isNotEmpty ? _showAddReminderDialog : null,
+        onPressed: _children.isNotEmpty ? _showReminderDialog : null,
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add Reminder'),
       ),
@@ -410,7 +445,11 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                       ),
                       const SizedBox(height: 12),
                       ..._healthRecords.map(
-                        (record) => _HealthRecordCard(record: record),
+                        (record) => _HealthRecordCard(
+                          record: record,
+                          onEdit: () => _showReminderDialog(existing: record),
+                          onDelete: () => _deleteReminder(record),
+                        ),
                       ),
                     ],
                   ),
@@ -418,6 +457,54 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _deleteReminder(Map<String, dynamic> record) async {
+    final reminderId = record['id']?.toString() ?? '';
+    if (reminderId.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete health reminder?'),
+        content: const Text(
+          'This removes the reminder and its visible health highlight for the class team.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await BackendApiClient.instance.dio.delete(
+        '/health-reminders/$reminderId',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Health reminder deleted.')));
+      await _loadHealthRecords(_children[_activeChildIndex]['id'].toString());
+    } on Object catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Could not delete the health reminder. Please try again.',
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 }
 
@@ -444,7 +531,14 @@ String _dateLabel(DateTime date) {
 
 class _HealthRecordCard extends StatelessWidget {
   final Map<String, dynamic> record;
-  const _HealthRecordCard({required this.record});
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _HealthRecordCard({
+    required this.record,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -552,6 +646,35 @@ class _HealthRecordCard extends StatelessWidget {
                           : Theme.of(context).colorScheme.outline,
                     ),
                   ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Manage health reminder',
+                  icon: Icon(
+                    Icons.more_vert_rounded,
+                    color: isActive
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.outline,
+                  ),
+                  onSelected: (action) {
+                    if (action == 'edit') onEdit();
+                    if (action == 'delete') onDelete();
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit_rounded),
+                        title: Text('Edit'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline_rounded),
+                        title: Text('Delete'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

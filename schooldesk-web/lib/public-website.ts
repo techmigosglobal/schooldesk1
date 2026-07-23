@@ -7,6 +7,7 @@ export type GalleryItem = {
   alt_text: string;
   caption: string;
   media_url: string;
+  media_type?: string;
 };
 
 export type PublicWebsite = {

@@ -21,6 +21,8 @@ class AccountAccessFormArgs {
 
   bool get isPrincipalOwner =>
       {'principal', 'coordinator'}.contains(ownerRole.toLowerCase());
+  bool get isSuperAdminOwner => ownerRole.toLowerCase() == 'super_admin';
+  bool get canActivateAccounts => isPrincipalOwner || isSuperAdminOwner;
   bool get isEdit => existing != null;
 }
 
@@ -57,9 +59,12 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
   String? _feedback;
 
   bool get _isPrincipalOwner => widget.args.isPrincipalOwner;
+  bool get _isSuperAdminOwner => widget.args.isSuperAdminOwner;
   bool get _isEdit => widget.args.isEdit;
 
-  List<String> get _manageableRoles => const ['Coordinator', 'Teacher', 'Parent'];
+  List<String> get _manageableRoles => _isSuperAdminOwner
+      ? const ['Principal', 'Coordinator', 'Teacher', 'Parent']
+      : const ['Coordinator', 'Teacher', 'Parent'];
 
   bool _isStaffManagedRole(String role) => role == 'Teacher';
 
@@ -192,7 +197,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
   }
 
   Widget _buildHeader() {
-    final approvalText = _isPrincipalOwner
+    final approvalText = widget.args.canActivateAccounts
         ? 'Accounts created here are activated directly for this school.'
         : 'New accounts are created inactive until the Principal approves them.';
     return Container(
@@ -512,7 +517,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
             : _designationController.text.trim(),
         password: password,
         accountRole: _role,
-        requestPrincipalApproval: !_isPrincipalOwner,
+        requestPrincipalApproval: !widget.args.canActivateAccounts,
       );
       return;
     }
@@ -524,7 +529,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
       fullName: _nameController.text.trim(),
       email: email,
       phone: _phoneController.text.trim(),
-      requestPrincipalApproval: !_isPrincipalOwner,
+      requestPrincipalApproval: !widget.args.canActivateAccounts,
     );
   }
 

@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 enum _AttendanceView { staff, students, classes, monitor, reports }
@@ -267,7 +268,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         if (!didPop) _setView(_AttendanceView.staff);
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF7FAFE),
+        backgroundColor: context.appTheme.background,
         body: SafeArea(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
@@ -1713,7 +1714,7 @@ class _StudentDetailPage extends StatelessWidget {
         ? student.attendancePercent
         : (present / records.length) * 100;
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFE),
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         title: Text(
           student.fullName.isEmpty ? 'Student Detail' : student.fullName,

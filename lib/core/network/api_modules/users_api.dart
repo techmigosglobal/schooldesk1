@@ -120,6 +120,22 @@ extension BackendUsersApi on BackendApiClient {
     }
   }
 
+  /// Returns a temporary password exactly once. It is never stored locally.
+  Future<Map<String, dynamic>> resetUserCredentials(String id) async {
+    try {
+      final response = await _dio.post('/users/$id/reset-credentials');
+      final data = _asMap(response.data);
+      if (data['success'] != true) {
+        throw ServerException(
+          message: data['error'] ?? 'Failed to reset credentials',
+        );
+      }
+      return _asMap(data['data']);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<String> uploadUserAvatar({
     required String userId,
     required String filePath,

@@ -36,6 +36,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   bool _runningPushDiagnostic = false;
   String? _error;
   String _parentFilter = 'all';
+  final Set<String> _visibilityReadScheduled = <String>{};
 
   bool get _isSchoolLeader => const {
     'principal',
@@ -713,6 +714,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     Color onSurfaceColor,
     Color mutedColor,
   ) {
+    if (!notif.isRead && _visibilityReadScheduled.add(notif.id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        if (mounted) await _service?.markAsRead(notif.id);
+      });
+    }
     final effectiveCategory = _isSchoolLeader
         ? _principalCategory(notif)
         : notif.category;
