@@ -9,7 +9,13 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   if (!request.cookies.get(cookieNames.access)?.value) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (role === "coordinator" && isFinancePath(joined)) return NextResponse.json({ error: "principal access required" }, { status: 403 });
   const requestBody = ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer();
-  const forward = async (token: string) => backendFetch(`${joined}${request.nextUrl.search}`, { method: request.method, headers: { Authorization: `Bearer ${token}`, ...(request.headers.get("content-type") ? { "Content-Type": request.headers.get("content-type")! } : {}) }, body: requestBody });
+  const branch = request.cookies.get(cookieNames.branch)?.value;
+  // Never silently fall back to a Principal's home branch. The user must make
+  // the branch choice explicitly before any scoped portal data can load.
+  if (role === "principal" && !branch && !joined.startsWith("branches")) {
+    return NextResponse.json({ error: "Select a branch before viewing school data." }, { status: 409 });
+  }
+  const forward = async (token: string) => backendFetch(`${joined}${request.nextUrl.search}`, { method: request.method, headers: { Authorization: `Bearer ${token}`, ...(branch ? { "x-schooldesk-branch-id": branch } : {}), ...(request.headers.get("content-type") ? { "Content-Type": request.headers.get("content-type")! } : {}) }, body: requestBody });
   let token = request.cookies.get(cookieNames.access)!.value; let upstream = await forward(token);
   if (upstream.ok && joined.startsWith("website/")) revalidateTag("school-public-website", "max");
   const response = new NextResponse(upstream.body, { status: upstream.status, headers: { "Content-Type": upstream.headers.get("content-type") || "application/json", "Cache-Control": "no-store" } });

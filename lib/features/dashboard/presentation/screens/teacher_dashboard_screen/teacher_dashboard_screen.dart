@@ -131,7 +131,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final shortName = _teacherName.split(' ').take(2).join(' ');
 
     return TeacherFlowScaffold(
-      title: 'Teacher',
+      title: 'ArishVille Pre school',
       subtitle: '$shortName · classroom flow',
       selectedIndex: TeacherNav.dashboard,
       actions: [

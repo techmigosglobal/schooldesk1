@@ -50,6 +50,8 @@ export async function handleWebsitePublic(
     { data: content, error: contentError },
     { data: gallery, error: galleryError },
     { data: eventPosts, error: eventPostsError },
+    { data: sections, error: sectionsError },
+    { data: entries, error: entriesError },
   ] = await Promise.all([
     svc.from("school_website_content").select(
       "hero_title, hero_body, mission_title, mission_body, updated_at",
@@ -65,10 +67,17 @@ export async function handleWebsitePublic(
       .eq("school_id", school).in("status", ["approved", "published"])
       .contains("destinations", JSON.stringify(["SCHOOL_GALLERY"]))
       .order("created_at", { ascending: false }),
+    svc.from("school_website_sections").select("section_key, title, body, image_url")
+      .eq("status", "published").order("created_at"),
+    svc.from("school_website_entries").select("id, entry_type, title, body, image_url, metadata, created_at")
+      .eq("status", "published").in("entry_type", ["program", "news_event", "testimonial"])
+      .order("created_at", { ascending: false }),
   ]);
   if (contentError) return fail(contentError.message);
   if (galleryError) return fail(galleryError.message);
   if (eventPostsError) return fail(eventPostsError.message);
+  if (sectionsError) return fail(sectionsError.message);
+  if (entriesError) return fail(entriesError.message);
   const publicGallery = (gallery ?? []).map((row) => galleryRow(svc, row));
   const mobileGallery = (eventPosts ?? []).flatMap((row) =>
     eventGalleryRows(row as Record<string, unknown>)
@@ -76,7 +85,24 @@ export async function handleWebsitePublic(
   return ok({
     content: content ?? {},
     gallery: [...mobileGallery, ...publicGallery],
+    sections: sections ?? [],
+    entries: entries ?? [],
   });
+}
+
+export async function handleWebsiteEnquiry(req: Request, svc: SupabaseClient) {
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  const name = text(body.name);
+  const phone = text(body.phone);
+  const email = text(body.email);
+  if (!name || !phone || !email) return fail("name, phone, and email are required", 422);
+  if (!/^\S+@\S+\.\S+$/.test(email)) return fail("valid email required", 422);
+  const { data, error } = await svc.from("school_website_entries").insert({
+    entry_type: "enquiry", title: name, body: text(body.message), status: "new",
+    submitted_at: new Date().toISOString(),
+    metadata: { phone, email, child_name: text(body.child_name), program: text(body.program) },
+  }).select("id").single();
+  return error ? fail(error.message) : ok({ id: data.id, message: "Thank you. Our admissions team will be in touch." });
 }
 
 export async function handleWebsite(

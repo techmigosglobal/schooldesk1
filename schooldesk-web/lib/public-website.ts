@@ -13,6 +13,8 @@ export type GalleryItem = {
 export type PublicWebsite = {
   content?: Record<string, string>;
   gallery?: GalleryItem[];
+  sections?: Array<{ section_key: string; title: string; body: string; image_url: string }>;
+  entries?: Array<{ id: string; entry_type: "program" | "news_event" | "testimonial"; title: string; body: string; image_url: string; metadata?: Record<string, string>; created_at: string }>;
 };
 
 export async function getPublicWebsite(): Promise<PublicWebsite> {

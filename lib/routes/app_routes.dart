@@ -8,6 +8,7 @@ import 'package:schooldesk1/features/documents/documents.dart';
 import 'package:schooldesk1/features/finance/finance.dart';
 import 'package:schooldesk1/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart';
 import 'package:schooldesk1/features/auth/auth.dart';
+import 'package:schooldesk1/features/auth/presentation/screens/demo_sandbox_screen.dart';
 import 'package:schooldesk1/features/reports/reports.dart';
 import 'package:schooldesk1/features/people/people.dart';
 import 'package:schooldesk1/features/calendar/calendar.dart';
@@ -35,6 +36,7 @@ class AppRoutes {
 
   // Loading
   static const String loginLoading = '/login-loading-screen';
+  static const String demoSandbox = '/demo-sandbox-screen';
 
   // Principal Module Routes
   static const String principalLogin = '/principal-login-screen';
@@ -202,6 +204,11 @@ class AppRoutes {
 
     // Principal
     loginLoading: (context) => const LoginLoadingScreen(),
+    demoSandbox: (context) => DemoSandboxScreen(
+      role:
+          (ModalRoute.of(context)?.settings.arguments as String?) ??
+          'principal',
+    ),
     principalLogin: (context) => const AuthLoginScreen(),
     principalDashboard: (context) => const PrincipalDashboardScreen(),
     coordinatorDashboard: (context) => const PrincipalDashboardScreen(),

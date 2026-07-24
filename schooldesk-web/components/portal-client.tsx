@@ -18,13 +18,16 @@ import { PortalErrorBoundary } from "@/components/error-boundary";
 import { ChevronLeft, ChevronRight, Search } from "@/lib/lucide-react";
 import { QuickSearchModal } from "@/components/portal/QuickSearchModal";
 
-export function PortalClient({ role }: { role: PortalRole }) {
+export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole; initialBranchId?: string }) {
   const [active, setActive] = useState("overview");
   const [createToken, setCreateToken] = useState(0);
   const [dashboardRefresh, setDashboardRefresh] = useState(0);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [quickSearchOpen, setQuickSearchOpen] = useState(false);
+  const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
+  const [activeBranch, setActiveBranch] = useState(initialBranchId);
+  const [branchSelected, setBranchSelected] = useState(role !== "principal" || Boolean(initialBranchId));
 
   const nav = visibleModules(role);
   const selected = modules.find((item) => item.id === active);
@@ -39,6 +42,25 @@ export function PortalClient({ role }: { role: PortalRole }) {
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (role !== "principal") return;
+    fetch("/api/backend/branches")
+      .then((response) => response.json())
+      .then((payload) => {
+        const rows = Array.isArray(payload.data) ? payload.data : [];
+        setBranches(rows.map((row: { id?: string; name?: string }) => ({ id: row.id ?? "", name: row.name ?? "Branch" })).filter((row: { id: string }) => Boolean(row.id)));
+      })
+      .catch(() => setBranches([]));
+  }, [role]);
+
+  async function changeBranch(branchId: string) {
+    const response = await fetch("/api/branch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchId }) });
+    if (!response.ok) return;
+    setActiveBranch(branchId);
+    setBranchSelected(true);
+    setDashboardRefresh((value) => value + 1);
+  }
 
   const navigate = (target: string) => {
     if (!(nav as readonly string[]).includes(target)) return;
@@ -144,6 +166,15 @@ export function PortalClient({ role }: { role: PortalRole }) {
             </h1>
           </div>
           <div className="ops-topbar-actions">
+            {role === "principal" && branches.length > 0 && (
+              <label className="branch-select">
+                <span className="sr-only">Active branch</span>
+                <select value={activeBranch} onChange={(event) => void changeBranch(event.target.value)}>
+                  <option value="" disabled>Select branch</option>
+                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                </select>
+              </label>
+            )}
             <button
               className="secondary-button"
               onClick={() => setQuickSearchOpen(true)}
@@ -169,7 +200,16 @@ export function PortalClient({ role }: { role: PortalRole }) {
         </header>
 
         <section className="portal-content ops-content">
-          <PortalErrorBoundary>
+          {role === "principal" && !branchSelected ? (
+            <div className="ops-branch-gate">
+              <h2>Select a branch to begin</h2>
+              <p>School data is deliberately hidden until you choose the branch you want to manage.</p>
+              <select value={activeBranch} onChange={(event) => void changeBranch(event.target.value)}>
+                <option value="" disabled>Select branch</option>
+                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </select>
+            </div>
+          ) : <PortalErrorBoundary>
             {active === "overview" ? (
               <DashboardPanel
                 role={role}
@@ -195,7 +235,7 @@ export function PortalClient({ role }: { role: PortalRole }) {
                 onNotify={notify}
               />
             ) : null}
-          </PortalErrorBoundary>
+          </PortalErrorBoundary>}
         </section>
       </div>
 

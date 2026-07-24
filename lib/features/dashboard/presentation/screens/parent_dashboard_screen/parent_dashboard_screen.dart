@@ -123,10 +123,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         _dashboard = dashboard;
         _children = children;
         _eventPosts = feedItems;
-        _schoolName = _schoolTitle(
-          Map<String, dynamic>.from(results[2] as Map? ?? const {}),
-          dashboard,
-        );
+        _schoolName = 'ArishVille Pre school';
         _activeChildIndex = selectedChildIndex;
         _loading = false;
       });
@@ -1743,29 +1740,6 @@ class _QuickAccessCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 String _text(dynamic value) => value?.toString().trim() ?? '';
-
-String _schoolTitle(
-  Map<String, dynamic> school,
-  Map<String, dynamic> dashboard,
-) {
-  final dashboardSchool = dashboard['school'];
-  final dashboardSchoolMap = dashboardSchool is Map
-      ? Map<String, dynamic>.from(dashboardSchool)
-      : const <String, dynamic>{};
-  for (final value in [
-    school['organization_name'],
-    school['school_name'],
-    school['name'],
-    school['display_name'],
-    dashboard['school_name'],
-    dashboardSchoolMap['school_name'],
-    dashboardSchoolMap['name'],
-  ]) {
-    final text = _text(value);
-    if (text.isNotEmpty) return text;
-  }
-  return 'School';
-}
 
 dynamic _normalizedFeedMedia(Map<String, dynamic> post) {
   final raw =

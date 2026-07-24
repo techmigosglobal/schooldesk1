@@ -42,6 +42,7 @@ part 'api_modules/monitoring_api.dart';
 part 'api_modules/notifications_api.dart';
 part 'api_modules/help_api.dart';
 part 'api_modules/issues_api.dart';
+part 'api_modules/demo_api.dart';
 
 typedef ApiErrorReporter = void Function(DioException error);
 

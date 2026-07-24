@@ -1,0 +1,6 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { PublicPage } from "@/components/public-site";
+import { getPublicWebsite } from "@/lib/public-website";
+export const metadata: Metadata = { title: "News & Events", description: "Celebrations, stories, and updates from Little Ville Preschool." };
+export default async function NewsEventsPage() { const entries = (await getPublicWebsite()).entries?.filter((entry) => entry.entry_type === "news_event") ?? []; return <PublicPage><section className="page-hero compact"><p className="eyebrow">News & events</p><h1>Little moments worth sharing.</h1><p>Stories, celebrations, and community updates from our preschool days.</p></section><section className="content-section values-grid">{entries.length ? entries.map((entry) => <article key={entry.id}><span>{entry.created_at ? new Date(entry.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Update"}</span><h2>{entry.title}</h2><p>{entry.body}</p></article>) : <article><span>Coming soon</span><h2>School stories</h2><p>Published school events and news will appear here.</p></article>}</section><section className="callout"><div><p className="eyebrow">Stay connected</p><h2>Want to know more about life at Little Ville?</h2></div><Link className="primary-button" href="/contact">Speak with us</Link></section></PublicPage>; }

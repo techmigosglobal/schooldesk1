@@ -11,6 +11,7 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/widgets/branch_switcher.dart';
+import 'package:schooldesk1/core/services/token_storage_service.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -116,6 +117,114 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     }
   }
 
+  Future<void> _manageDemo() async {
+    try {
+      var account = await _api.getDemoAccount();
+      if (account == null) {
+        final schoolId = await TokenStorageService.getSchoolId();
+        if (schoolId == null || schoolId.isEmpty) {
+          throw StateError(
+            'Select a school before creating the synthetic demo account.',
+          );
+        }
+        account = await _api.createDemoAccount(demoSchoolId: schoolId);
+        if (!mounted) return;
+        await _showDemoCredential(account, created: true);
+        return;
+      }
+      if (!mounted) return;
+      final currentAccount = account;
+      final action = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Shared mobile demo'),
+          content: Text(
+            'Username: ${currentAccount['username']}\nStatus: ${currentAccount['is_enabled'] == true ? 'Enabled' : 'Disabled'}\nPasswords rotate every 72 hours and may be revealed once after rotation.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'reveal'),
+              child: const Text('Reveal once'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(
+                context,
+                currentAccount['is_enabled'] == true ? 'disable' : 'enable',
+              ),
+              child: Text(
+                currentAccount['is_enabled'] == true
+                    ? 'Disable demo'
+                    : 'Enable demo',
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, 'reset'),
+              child: const Text('Reset now'),
+            ),
+          ],
+        ),
+      );
+      if (action == null) return;
+      if (action == 'enable' || action == 'disable') {
+        await _api.setDemoAccountEnabled(
+          currentAccount['id'].toString(),
+          action == 'enable',
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Demo access ${action == 'enable' ? 'enabled' : 'disabled'}.',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+        return;
+      }
+      final secret = action == 'reset'
+          ? await _api.resetDemoAccount(currentAccount['id'].toString())
+          : await _api.revealDemoAccount(currentAccount['id'].toString());
+      if (mounted) {
+        await _showDemoCredential(secret);
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Demo administration failed: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showDemoCredential(
+    Map<String, dynamic> value, {
+    bool created = false,
+  }) => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(
+        created ? 'Demo account created' : 'One-time demo credential',
+      ),
+      content: SelectableText(
+        'Username: ${value['username']}\nPassword: ${value['temporary_password']}\n\nShare this only with approved demo users. This password will not be shown again.',
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('I have shared it securely'),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -199,6 +308,13 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     icon: Icons.backup_rounded,
                                     accent: const Color(0xFF10B981),
                                     cardColor: const Color(0xFFECFDF5),
+                                  ),
+                                  _ModuleCard(
+                                    label: 'Mobile Demo',
+                                    onTap: _manageDemo,
+                                    icon: Icons.play_circle_outline_rounded,
+                                    accent: const Color(0xFFB7791F),
+                                    cardColor: const Color(0xFFFFF7E5),
                                   ),
                                 ]),
                                 const SizedBox(height: 22),

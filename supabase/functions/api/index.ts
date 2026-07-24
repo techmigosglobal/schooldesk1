@@ -48,7 +48,8 @@ import {
 import { handleHelp } from "./handlers/help.ts";
 import { handleAccess } from "./handlers/access.ts";
 import { handleIssues } from "./handlers/issues.ts";
-import { handleWebsite, handleWebsitePublic } from "./handlers/website.ts";
+import { handleWebsite, handleWebsiteEnquiry, handleWebsitePublic } from "./handlers/website.ts";
+import { handleDemo } from "./handlers/demo.ts";
 import { handleActivity, recordHttpActivity } from "./handlers/activity.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
@@ -421,6 +422,12 @@ Deno.serve(async (req: Request) => {
   if (path === "/website/public" && method === "GET") {
     return handleWebsitePublic(url, serviceClient());
   }
+  if (path === "/website/enquiries" && method === "POST") {
+    return handleWebsiteEnquiry(req, serviceClient());
+  }
+  if (path === "/demo/login" || path === "/jobs/demo-credential-rotation") {
+    return handleDemo(req, path, method, serviceClient(), null);
+  }
 
   // ── Schools setup (no prior auth for first-time setup) ────
   if (path === "/schools/setup" && method === "POST") {
@@ -465,6 +472,10 @@ Deno.serve(async (req: Request) => {
   const { user, client, svc } = await authedClient(req);
   if (!user || !client) {
     return cors({ success: false, error: "unauthorized" }, 401);
+  }
+
+  if (path.startsWith("/demo/admin")) {
+    return handleDemo(req, path, method, svc, user);
   }
 
   // Route dispatch
