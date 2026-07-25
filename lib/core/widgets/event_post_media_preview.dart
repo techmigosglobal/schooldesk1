@@ -11,6 +11,7 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 
 String resolveEventPostMediaUrl(String url) {
   if (url.isEmpty) return url;
+  if (url.startsWith('assets/')) return url;
   return resolveAttachmentUrl(url)?.toString() ?? url;
 }
 
@@ -304,6 +305,11 @@ class _MediaByteCache {
 Future<Uint8List> _downloadMediaBytes(String url) async {
   final cached = _MediaByteCache.get(url);
   if (cached != null) return cached;
+  if (url.startsWith('assets/')) {
+    final bytes = (await rootBundle.load(url)).buffer.asUint8List();
+    _MediaByteCache.put(url, bytes);
+    return bytes;
+  }
   final response = await BackendApiClient.instance.dio.get<List<int>>(
     url,
     options: Options(responseType: ResponseType.bytes),

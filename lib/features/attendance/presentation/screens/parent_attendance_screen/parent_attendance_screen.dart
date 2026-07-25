@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -32,11 +35,27 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   Map<int, List<Map<String, dynamic>>> _periodRowsByDay = {};
   bool _loading = true;
   int _attendanceRequestToken = 0;
+  RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'parent-attendance',
+      modules: const {'attendance'},
+      onRefresh: () {
+        if (mounted && _childRows.isNotEmpty) {
+          unawaited(_loadChildAttendance(_activeChildIndex));
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {

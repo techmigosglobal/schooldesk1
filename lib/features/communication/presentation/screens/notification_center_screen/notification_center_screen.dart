@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -36,7 +37,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   bool _runningPushDiagnostic = false;
   String? _error;
   String _parentFilter = 'all';
-  final Set<String> _visibilityReadScheduled = <String>{};
+  RealtimeRefreshSubscription? _realtimeSubscription;
 
   bool get _isSchoolLeader => const {
     'principal',
@@ -53,6 +54,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       vsync: this,
     );
     _init();
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'notification-center-${widget.role}',
+      modules: const {'notifications'},
+      onRefresh: () {
+        if (mounted) _init(forceRefresh: true);
+      },
+    );
   }
 
   Future<void> _init({bool forceRefresh = false}) async {
@@ -73,6 +81,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
   @override
   void dispose() {
+    _realtimeSubscription?.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -683,20 +692,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   }
 
   Future<void> _openNotification(AppNotification notif) async {
-    try {
-      await _service?.markAsRead(notif.id);
-    } on Object catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not mark notification as read: $error'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-    if (mounted) setState(() {});
-    if (!mounted) return;
     final target = NotificationRouteResolver.resolve(
       data: notif.routingData,
       currentRole: widget.role,
@@ -708,18 +703,28 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     }
   }
 
+  Future<void> _markAsRead(AppNotification notification) async {
+    if (notification.isRead) return;
+    try {
+      await _service?.markAsRead(notification.id);
+      if (mounted) setState(() {});
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not mark notification as read: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Widget _buildNotifCard(
     AppNotification notif,
     Color surfaceColor,
     Color onSurfaceColor,
     Color mutedColor,
   ) {
-    if (!notif.isRead && _visibilityReadScheduled.add(notif.id)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await Future<void>.delayed(const Duration(seconds: 1));
-        if (mounted) await _service?.markAsRead(notif.id);
-      });
-    }
     final effectiveCategory = _isSchoolLeader
         ? _principalCategory(notif)
         : notif.category;
@@ -789,6 +794,24 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                               shape: BoxShape.circle,
                             ),
                           ),
+                        if (!notif.isRead) ...[
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () => _markAsRead(notif),
+                              icon: const Icon(Icons.done_rounded, size: 16),
+                              label: const Text('Mark as read'),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 4),

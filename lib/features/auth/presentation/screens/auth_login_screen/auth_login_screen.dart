@@ -51,6 +51,11 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
     final password = _passwordCtrl.text;
 
     try {
+      if (RegExp(r'^demo\d+$', caseSensitive: false).hasMatch(username)) {
+        await _loginDemo(username, password);
+        return;
+      }
+
       // Reset any previous sign-out guard so RoleAccessService can re-initialize.
       RoleAccessService.resetSignOutGuard();
 
@@ -96,76 +101,20 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
     }
   }
 
-  Future<void> _openDemo() async {
-    final username = TextEditingController();
-    final password = TextEditingController();
-    final credentials = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Explore local demo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Use the shared demo credential issued by Super Admin. No real school data is shown.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: username,
-              decoration: const InputDecoration(labelText: 'Demo username'),
-            ),
-            TextField(
-              controller: password,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Demo password'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, {
-              'username': username.text,
-              'password': password.text,
-            }),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
-    username.dispose();
-    password.dispose();
-    if (credentials == null || !mounted) return;
+  Future<void> _loginDemo(String username, String password) async {
     try {
       final payload = await BackendApiClient.instance.loginDemo(
-        username: credentials['username'] ?? '',
-        password: credentials['password'] ?? '',
+        username: username,
+        password: password,
       );
       if (!mounted) return;
-      final role = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Choose a demo view'),
-          content: const Text(
-            'This opens fictional, device-local data. Sandbox changes never sync.',
-          ),
-          actions: ['principal', 'teacher', 'parent']
-              .map(
-                (role) => TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, role),
-                  child: Text(role[0].toUpperCase() + role.substring(1)),
-                ),
-              )
-              .toList(),
-        ),
-      );
-      if (role == null || !mounted) return;
-      await DemoSandboxService.instance.save(payload, role);
+      await DemoSandboxService.instance.saveLogin(payload);
       if (!mounted) return;
-      Navigator.pushNamed(context, AppRoutes.demoSandbox, arguments: role);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.demoRoleSelector,
+        (_) => false,
+      );
     } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -424,12 +373,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextButton.icon(
-              onPressed: _openDemo,
-              icon: const Icon(Icons.play_circle_outline_rounded, size: 16),
-              label: const Text('Explore local demo'),
             ),
             TextButton.icon(
               onPressed: () => Navigator.pushNamedAndRemoveUntil(

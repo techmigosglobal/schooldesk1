@@ -18,14 +18,36 @@ void main() {
     expect(handler, contains('nextDemoUsername'));
     expect(storage, contains('flutter_secure_storage'));
     expect(storage, contains('schooldesk_demo_snapshot'));
-    expect(storage, contains('saveSnapshot'));
+    expect(storage, contains('saveLogin'));
+    expect(storage, contains('clearSelectedRole'));
 
-    final screen = File(
-      'lib/features/auth/presentation/screens/demo_sandbox_screen.dart',
+    final login = File(
+      'lib/features/auth/presentation/screens/auth_login_screen/auth_login_screen.dart',
     ).readAsStringSync();
-    expect(screen, contains('Fictional offline preview'));
-    expect(screen, contains('saveSnapshot(next)'));
-    expect(screen, isNot(contains('BackendApiClient')));
+    final selector = File(
+      'lib/features/auth/presentation/screens/demo_role_selector_screen.dart',
+    ).readAsStringSync();
+    final localApi = File(
+      'lib/core/services/demo_local_api_service.dart',
+    ).readAsStringSync();
+    final main = File('lib/main.dart').readAsStringSync();
+    expect(login, contains("RegExp(r'^demo\\d+\$'"));
+    expect(login, isNot(contains('Explore local demo')));
+    expect(selector, contains("'principal'"));
+    expect(selector, contains("'teacher'"));
+    expect(selector, contains("'parent'"));
+    expect(selector, contains('beginLocalDemoSession'));
+    expect(localApi, contains('never over the network'));
+    expect(localApi, contains('local_mutations'));
+    expect(localApi, contains('awaitRoleSelection'));
+    expect(main, contains('_restoreLocalDemoSessionIfNeeded'));
+    expect(main, contains('isAwaitingRoleSelection'));
+
+    final logout = File(
+      'lib/core/services/logout_service.dart',
+    ).readAsStringSync();
+    expect(logout, contains('DemoLocalApiService.instance.isActive'));
+    expect(logout, contains('AppRoutes.demoRoleSelector'));
   });
 
   test('web proxy persists and forwards only validated branch context', () {

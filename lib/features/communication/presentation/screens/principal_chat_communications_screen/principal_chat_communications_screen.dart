@@ -12,6 +12,7 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
+import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 class PrincipalChatCommunicationsScreen extends StatefulWidget {
@@ -80,6 +81,7 @@ class _PrincipalChatCommunicationsScreenState
   // ── Realtime ──────────────────────────────────────────────────────────────
 
   void _subscribeRealtime({String conversationId = ''}) {
+    if (DemoLocalApiService.instance.isActive) return;
     if (_realtimeConversationId == conversationId && _realtimeChannel != null) {
       return;
     }

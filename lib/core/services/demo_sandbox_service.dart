@@ -10,11 +10,24 @@ class DemoSandboxService {
   static const _storage = FlutterSecureStorage();
   static const _snapshotKey = 'schooldesk_demo_snapshot';
   static const _roleKey = 'schooldesk_demo_role';
+  static const _activeKey = 'schooldesk_demo_active';
 
-  Future<void> save(Map<String, dynamic> payload, String role) async {
+  Future<void> saveLogin(Map<String, dynamic> payload) async {
     await _storage.write(key: _snapshotKey, value: jsonEncode(payload));
-    await _storage.write(key: _roleKey, value: role);
+    await _storage.write(key: _activeKey, value: 'true');
+    await _storage.delete(key: _roleKey);
   }
+
+  Future<void> selectRole(String role) =>
+      _storage.write(key: _roleKey, value: role.trim().toLowerCase());
+
+  Future<String?> selectedRole() => _storage.read(key: _roleKey);
+
+  Future<bool> isActive() async =>
+      (await _storage.read(key: _activeKey)) == 'true';
+
+  /// Keeps the verified local snapshot but sends the user back to role choice.
+  Future<void> clearSelectedRole() => _storage.delete(key: _roleKey);
 
   Future<Map<String, dynamic>?> snapshot() async {
     final raw = await _storage.read(key: _snapshotKey);
@@ -28,7 +41,9 @@ class DemoSandboxService {
   Future<void> saveSnapshot(Map<String, dynamic> value) =>
       _storage.write(key: _snapshotKey, value: jsonEncode(value));
 
-  Future<void> clear() => _storage.deleteAll(
-    aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-  );
+  Future<void> end() async {
+    await _storage.delete(key: _snapshotKey);
+    await _storage.delete(key: _roleKey);
+    await _storage.delete(key: _activeKey);
+  }
 }

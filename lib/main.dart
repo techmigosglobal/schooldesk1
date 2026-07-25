@@ -20,6 +20,8 @@ import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/error_reporting_service.dart';
+import 'package:schooldesk1/core/services/demo_local_api_service.dart';
+import 'package:schooldesk1/core/services/demo_sandbox_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/theme_provider.dart';
 import 'package:schooldesk1/core/widgets/animated_startup_splash.dart';
@@ -71,6 +73,7 @@ void main() async {
   );
 
   await BackendApiClient.initialize();
+  await _restoreLocalDemoSessionIfNeeded();
   if (EnvConfig.enableLogging) {
     developer.log(
       '[API CONFIG] Backend attached: ${BackendApiClient.instance.baseUrl}',
@@ -111,6 +114,39 @@ void main() async {
     ),
   );
   _deferStartupServices();
+}
+
+/// Restores only a verified fictional demo snapshot. This has no production
+/// token, no stored demo password, and routes subsequent operational calls to
+/// the on-device façade rather than the backend.
+Future<void> _restoreLocalDemoSessionIfNeeded() async {
+  final sandbox = DemoSandboxService.instance;
+  if (!await sandbox.isActive()) return;
+
+  final stored = await sandbox.snapshot();
+  if (stored == null) {
+    await sandbox.end();
+    return;
+  }
+
+  final selectedRole = (await sandbox.selectedRole())?.trim().toLowerCase();
+  const selectableRoles = {'principal', 'teacher', 'parent'};
+  if (selectedRole == null || !selectableRoles.contains(selectedRole)) {
+    DemoLocalApiService.instance.awaitRoleSelection();
+    return;
+  }
+
+  final nestedSnapshot = stored['snapshot'];
+  final snapshot = nestedSnapshot is Map
+      ? Map<String, dynamic>.from(nestedSnapshot)
+      : stored;
+  DemoLocalApiService.instance.start(role: selectedRole, snapshot: snapshot);
+  BackendApiClient.instance.beginLocalDemoSession(
+    role: selectedRole,
+    userId: DemoLocalApiService.localUserId,
+    schoolId: DemoLocalApiService.localSchoolId,
+  );
+  RoleAccessService.resetSignOutGuard();
 }
 
 /// The application-wide error boundary is deliberately a pure builder so every
@@ -159,10 +195,15 @@ Future<void> _withRetry(
 
 Future<void> _initializeDeferredStartupServices() async {
   // Session restore and role init are retried with backoff (network-dependent).
-  await _withRetry(
-    BackendApiClient.instance.restoreStoredSession,
-    name: 'restoreStoredSession',
-  );
+  // A demo deliberately has no live session to restore. In particular, do not
+  // let a stale production token replace its local role after startup.
+  if (!DemoLocalApiService.instance.isActive &&
+      !DemoLocalApiService.instance.isAwaitingRoleSelection) {
+    await _withRetry(
+      BackendApiClient.instance.restoreStoredSession,
+      name: 'restoreStoredSession',
+    );
+  }
   await _withRetry(
     RoleAccessService.initialize,
     name: 'RoleAccessService.initialize',
@@ -239,10 +280,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             );
           },
           debugShowCheckedModeBanner: false,
-          initialRoute: RouteAccessGuard.initialRouteFor(
-            isAuthenticated: BackendApiClient.instance.isAuthenticated,
-            currentRole: BackendApiClient.instance.currentRoleName,
-          ),
+          initialRoute: DemoLocalApiService.instance.isAwaitingRoleSelection
+              ? AppRoutes.demoRoleSelector
+              : RouteAccessGuard.initialRouteFor(
+                  isAuthenticated: BackendApiClient.instance.isAuthenticated,
+                  currentRole: BackendApiClient.instance.currentRoleName,
+                ),
           onGenerateRoute: (settings) {
             final routeName = settings.name;
             final builder = AppRoutes.routes[routeName];

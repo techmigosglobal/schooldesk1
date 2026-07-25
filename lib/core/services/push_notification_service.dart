@@ -15,6 +15,7 @@ import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/firebase_runtime_options.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 
@@ -177,6 +178,7 @@ class PushNotificationService {
   }
 
   Future<void> registerDeviceTokenIfPossible() async {
+    if (DemoLocalApiService.instance.isActive) return;
     if (!_firebaseAvailable || !BackendApiClient.instance.isAuthenticated) {
       _deviceRegistrationSucceeded = false;
       _lastRegistrationError = !_firebaseAvailable
@@ -221,6 +223,7 @@ class PushNotificationService {
   }
 
   Future<void> revokeCurrentToken() async {
+    if (DemoLocalApiService.instance.isActive) return;
     final token = _currentToken;
     if (token == null ||
         token.isEmpty ||

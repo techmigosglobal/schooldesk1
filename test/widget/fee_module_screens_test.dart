@@ -68,8 +68,9 @@ void main() {
       // Quick actions
       expect(find.text('Fee Structures'), findsWidgets);
       expect(find.text('Collect Fee'), findsOneWidget);
+      expect(find.text('Generate Invoice'), findsOneWidget);
       expect(find.text('Student Ledger & Dues'), findsOneWidget);
-      expect(find.text('Reports'), findsOneWidget);
+      expect(find.text('Reports & Exports'), findsOneWidget);
     });
 
     testWidgets('shows collection progress donut', (tester) async {

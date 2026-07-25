@@ -73,6 +73,107 @@ extension MonitoringApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> getErrorRetentionMetrics() async {
+    try {
+      final response = await _dio.get('/monitoring/error-events/retention');
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['message'] ?? 'Failed to load error retention metrics',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> updateErrorRetentionSettings({
+    required int warningKeepDays,
+    required int resolvedKeepDays,
+    required int resolvedFatalKeepDays,
+    required int maxRawEvents,
+  }) async {
+    try {
+      final response = await _dio.patch(
+        '/monitoring/error-events/retention',
+        data: {
+          'warning_keep_days': warningKeepDays,
+          'resolved_keep_days': resolvedKeepDays,
+          'resolved_fatal_keep_days': resolvedFatalKeepDays,
+          'max_raw_events': maxRawEvents,
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['message'] ?? 'Failed to update error retention settings',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> previewResolvedErrorCleanup({
+    DateTime? before,
+    String? severity,
+  }) => _cleanupResolvedErrorEvents(
+    preview: true,
+    before: before,
+    severity: severity,
+  );
+
+  Future<Map<String, dynamic>> clearResolvedErrorEvents({
+    DateTime? before,
+    String? severity,
+  }) => _cleanupResolvedErrorEvents(
+    preview: false,
+    before: before,
+    severity: severity,
+    confirmation: 'CLEAR RESOLVED ERROR EVENTS',
+  );
+
+  Future<Map<String, dynamic>> _cleanupResolvedErrorEvents({
+    required bool preview,
+    DateTime? before,
+    String? severity,
+    String? confirmation,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/monitoring/error-events/cleanup',
+        data: {
+          'preview': preview,
+          if (before != null) 'before': before.toUtc().toIso8601String(),
+          if (severity != null && severity.isNotEmpty) 'severity': severity,
+          if (confirmation != null) 'confirmation': confirmation,
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['message'] ?? 'Failed to clean resolved error events',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> deleteResolvedErrorEvent(String id) async {
+    try {
+      final response = await _dio.delete(
+        '/monitoring/error-events/$id',
+        data: {'confirmation': 'DELETE RESOLVED ERROR EVENT'},
+      );
+      final data = _asMap(response.data);
+      if (data['success'] != true) {
+        throw ServerException(
+          message: data['message'] ?? 'Failed to delete resolved error event',
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> backupDatabase() async {
     try {
       final response = await _dio.get('/monitoring/database/backup');

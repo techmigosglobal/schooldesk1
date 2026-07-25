@@ -16,6 +16,7 @@ import 'package:schooldesk1/features/shared/data/models/backend_models.dart';
 import 'package:schooldesk1/core/network/generated/schooldesk_api_models.dart';
 import 'package:schooldesk1/core/network/schooldesk_api.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
+import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 
 export 'package:schooldesk1/features/shared/data/models/backend_models.dart';
@@ -70,6 +71,7 @@ class BackendApiClient {
     );
 
     _dio.interceptors.addAll([
+      _DemoLocalApiInterceptor(),
       _AuthInterceptor(this),
       _ReadCacheOptionsInterceptor(this),
       _WriteCacheInvalidationInterceptor(this),
@@ -149,6 +151,20 @@ class BackendApiClient {
     _cachedProfile = null;
     _activeBranchId = null;
     _dio.options.headers.remove('x-schooldesk-branch-id');
+  }
+
+  /// Activates a memory-only local demo session. It deliberately does not
+  /// write any demo credential or operational token to normal auth storage.
+  void beginLocalDemoSession({
+    required String role,
+    required String userId,
+    required String schoolId,
+  }) {
+    _authToken = 'local-demo-session';
+    _currentRoleName = role.trim().toLowerCase();
+    _currentUserId = userId;
+    _activeBranchId = schoolId;
+    _dio.options.headers['x-schooldesk-branch-id'] = schoolId;
   }
 
   bool get isAuthenticated => _authToken != null;

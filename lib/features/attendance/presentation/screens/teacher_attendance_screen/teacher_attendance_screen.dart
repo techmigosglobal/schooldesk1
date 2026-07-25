@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -33,11 +34,25 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   String _academicYearId = '';
   String _timetableSlotId = '';
   int _periodNumber = 1;
+  RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadFlow();
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'teacher-attendance',
+      modules: const {'attendance'},
+      onRefresh: () {
+        if (mounted && !_saving) _loadFlow();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.dispose();
+    super.dispose();
   }
 
   Future<void> _loadFlow() async {

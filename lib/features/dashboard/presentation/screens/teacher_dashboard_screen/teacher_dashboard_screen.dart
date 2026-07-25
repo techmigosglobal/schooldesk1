@@ -5,6 +5,8 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/services/demo_local_api_service.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -39,6 +41,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   List<Map<String, dynamic>> _timetable = const [];
   int _weeklyTimetableCount = 0;
   List<AnnouncementModel> _announcements = const [];
+  RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
   void initState() {
@@ -50,6 +53,19 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     if (widget.loadData) {
       _loadDashboardData();
     }
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'teacher-dashboard',
+      modules: const {'announcements', 'event_posts', 'attendance'},
+      onRefresh: () {
+        if (mounted) _loadDashboardData();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDashboardData() async {
@@ -91,7 +107,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       setState(() {
         _roleScopeLoaded = true;
         _loading = false;
-        _error = 'Unable to load teacher dashboard from backend.';
+        _error = DemoLocalApiService.instance.isActive
+            ? 'Unable to load offline demo data.'
+            : 'Unable to load teacher dashboard from backend.';
       });
     }
   }
@@ -132,7 +150,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
     return TeacherFlowScaffold(
       title: 'ArishVille Pre school',
-      subtitle: '$shortName · classroom flow',
+      subtitle: DemoLocalApiService.instance.isActive
+          ? 'Offline Demo · $shortName · classroom flow'
+          : '$shortName · classroom flow',
       selectedIndex: TeacherNav.dashboard,
       actions: [
         IconButton(

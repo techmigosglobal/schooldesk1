@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -41,12 +42,22 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
   List<dynamic> _eventPosts = [];
   String _schoolName = 'School';
   Timer? _autoRefreshTimer;
+  RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadDashboardData(forceRefresh: true);
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'parent-dashboard',
+      modules: const {'announcements', 'event_posts', 'attendance', 'fees'},
+      onRefresh: () {
+        if (mounted) {
+          unawaited(_loadDashboardData(forceRefresh: true, showSpinner: false));
+        }
+      },
+    );
     _autoRefreshTimer = Timer.periodic(
       _autoRefreshInterval,
       (_) => _loadDashboardData(
@@ -313,6 +324,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
+    _realtimeSubscription?.dispose();
     super.dispose();
   }
 }

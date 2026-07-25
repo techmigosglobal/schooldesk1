@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -30,11 +31,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   double _collected = 0;
   double _pending = 0;
   List<Map<String, dynamic>> _alerts = const [];
+  RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadDashboardData();
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'admin-dashboard',
+      modules: const {'announcements', 'event_posts', 'attendance', 'fees'},
+      onRefresh: () {
+        if (mounted) _loadDashboardData();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDashboardData() async {

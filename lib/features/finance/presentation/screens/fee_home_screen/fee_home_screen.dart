@@ -446,8 +446,18 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           icon: Icons.payments_outlined,
           iconColor: const Color(0xFF16A34A),
           title: 'Collect Fee',
-          subtitle: 'Record cash or offline payments',
+          subtitle: 'Choose a class and student, then record a payment',
           onTap: () => Navigator.pushNamed(context, AppRoutes.feeCollect),
+        ),
+        FeeActionRow(
+          icon: Icons.receipt_long_outlined,
+          iconColor: const Color(0xFF7C3AED),
+          title: 'Generate Invoice',
+          subtitle: 'Create an invoice for a selected class or student',
+          onTap: () => Navigator.pushNamed(
+            context,
+            AppRoutes.principalInvoiceGenerationForm,
+          ),
         ),
         FeeActionRow(
           icon: Icons.account_balance_wallet_outlined,
@@ -460,8 +470,8 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         FeeActionRow(
           icon: Icons.bar_chart_outlined,
           iconColor: const Color(0xFF4F46E5),
-          title: 'Reports',
-          subtitle: 'Collection summaries and PDF exports',
+          title: 'Reports & Exports',
+          subtitle: 'Review summaries only when you need them',
           onTap: () => Navigator.pushNamed(context, AppRoutes.feeReports),
         ),
 
@@ -518,7 +528,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
   Widget _header() {
     return FeeHeader(
       title: 'Fees',
-      subtitle: 'Manage fee structures, collections, and reports',
+      subtitle: 'Collect fees and issue invoices with clear student context',
       leadingIcon: Icons.menu_rounded,
       onLeading: () => _scaffoldKey.currentState?.openDrawer(),
       trailing: IconButton(

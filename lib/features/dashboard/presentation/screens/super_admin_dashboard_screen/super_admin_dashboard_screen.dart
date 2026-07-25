@@ -12,6 +12,7 @@ import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/widgets/branch_switcher.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -34,6 +35,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   int _totalStaff = 0;
   int _totalClasses = 0;
   List<Map<String, dynamic>> _branchOverview = const [];
+  RealtimeRefreshSubscription? _realtimeSubscription;
 
   String _firstName(String fullName) {
     final parts = fullName.trim().split(RegExp(r'\s+'));
@@ -44,6 +46,19 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'super-admin-dashboard',
+      modules: const {'announcements', 'event_posts', 'attendance', 'fees'},
+      onRefresh: () {
+        if (mounted) _loadData();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {

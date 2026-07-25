@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 
 class ErrorReportingService {
   ErrorReportingService._();
@@ -17,6 +18,9 @@ class ErrorReportingService {
   final Queue<Map<String, dynamic>> _pendingReports = Queue();
   bool _flushing = false;
   static const String monitoringEndpoint = '/monitoring/error-events';
+  static const int _maxQueuedReports = 100;
+  static const int _maxMessageChars = 2048;
+  static const int _maxStackChars = 12288;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -72,7 +76,23 @@ class ErrorReportingService {
   }
 
   Future<void> _submit(Map<String, dynamic> payload) async {
-    _pendingReports.add(payload);
+    if (DemoLocalApiService.instance.isActive) return Future.value();
+    // Reporting must not become an unbounded in-memory queue during an outage.
+    // Prefer retaining fatal/error reports over older warning-level noise.
+    if (_pendingReports.length >= _maxQueuedReports) {
+      final warningIndex = _pendingReports.toList().indexWhere(
+        (item) => item['severity'] == 'warning' || item['severity'] == 'info',
+      );
+      if (warningIndex >= 0) {
+        _pendingReports.remove(_pendingReports.elementAt(warningIndex));
+      } else if (payload['severity'] == 'warning' ||
+          payload['severity'] == 'info') {
+        return;
+      } else {
+        _pendingReports.removeFirst();
+      }
+    }
+    _pendingReports.add(_sanitize(payload));
     if (!_flushing) {
       unawaited(_flush());
     }
@@ -123,5 +143,40 @@ class ErrorReportingService {
     final values = error.response?.headers[name];
     if (values == null || values.isEmpty) return '';
     return values.first;
+  }
+
+  Map<String, dynamic> _sanitize(Map<String, dynamic> payload) {
+    final metadata = Map<String, dynamic>.from(
+      payload['metadata'] as Map? ?? const <String, dynamic>{},
+    );
+    return {
+      ...payload,
+      'message': _redactAndTruncate(payload['message'], _maxMessageChars),
+      'error_type': _redactAndTruncate(payload['error_type'], 256),
+      'stack_trace': _redactAndTruncate(payload['stack_trace'], _maxStackChars),
+      'path': _redactAndTruncate(payload['path'], 512),
+      'metadata': metadata.map(
+        (key, value) => MapEntry(key, _redactAndTruncate(value, 512)),
+      ),
+    };
+  }
+
+  String _redactAndTruncate(Object? value, int maxChars) {
+    var result = value?.toString() ?? '';
+    result = result
+        .replaceAll(
+          RegExp(r'Bearer\s+[A-Za-z0-9._~+\/-]+', caseSensitive: false),
+          'Bearer [redacted]',
+        )
+        .replaceAll(
+          RegExp(
+            r'(password|token|secret|api[_-]?key)\s*[:=]\s*[^\s,}]+',
+            caseSensitive: false,
+          ),
+          r'$1=[redacted]',
+        );
+    return result.length <= maxChars
+        ? result
+        : '${result.substring(0, maxChars)}…';
   }
 }

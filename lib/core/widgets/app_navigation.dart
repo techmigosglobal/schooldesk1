@@ -152,13 +152,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               label: SchoolDeskGlossary.schoolProfile,
               route: AppRoutes.principalSchoolProfile,
             ),
-            SchoolDeskNavigationItem(
-              index: PrincipalNav.access,
-              icon: Icons.manage_accounts_outlined,
-              activeIcon: Icons.manage_accounts_rounded,
-              label: SchoolDeskGlossary.accessPermissions,
-              route: AppRoutes.principalUserManagement,
-            ),
           ],
         ),
         SchoolDeskNavigationSection(

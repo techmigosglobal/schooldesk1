@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/widgets/desktop_master_detail_layout.dart';
@@ -273,7 +274,10 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
               ),
             )
           : null,
-      bottomNavigationBar: const _ClassesDirectoryBottomBar(),
+      // Class Hub is a Principal destination, not a separate portal. Reuse the
+      // shared shell so labels, selected states, badges, and profile behaviour
+      // stay identical to the other Principal screens.
+      bottomNavigationBar: const PrincipalShellBottomBar(),
       body: SafeArea(
         child: RefreshIndicator(
           color: const Color(0xFF1478F2),
@@ -3235,133 +3239,6 @@ class _ClassesDirectoryEmptyCard extends StatelessWidget {
             label: const Text('Add Class'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ClassesDirectoryBottomBar extends StatelessWidget {
-  const _ClassesDirectoryBottomBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-          decoration: BoxDecoration(
-            color: context.appTheme.surface,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF7186A3).withAlpha(36),
-                blurRadius: 20,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              _ClassesBottomNavItem(
-                label: 'Home',
-                icon: Icons.home_rounded,
-                selected: true,
-                onTap: () => Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  AppRoutes.principalDashboard,
-                  (_) => false,
-                ),
-              ),
-              _ClassesBottomNavItem(
-                label: 'Search',
-                icon: Icons.search_rounded,
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.globalSearch,
-                  arguments: 'principal',
-                ),
-              ),
-              _ClassesBottomNavItem(
-                label: 'Alerts',
-                icon: Icons.notifications_none_rounded,
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.notificationCenter,
-                  arguments: 'principal',
-                ),
-              ),
-              _ClassesBottomNavItem(
-                label: 'Profile',
-                icon: Icons.person_outline_rounded,
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.profileScreen,
-                  arguments: 'principal',
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ClassesBottomNavItem extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ClassesBottomNavItem({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-    this.selected = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final compact = _classesCompact(context);
-    final color = selected ? _classesDirectoryBlue : _classesDirectoryInk;
-    return Expanded(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: label,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            constraints: BoxConstraints(minHeight: compact ? 54 : 60),
-            padding: EdgeInsets.symmetric(vertical: compact ? 6 : 7),
-            decoration: BoxDecoration(
-              color: selected ? const Color(0xFFEAF3FF) : Colors.transparent,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: color, size: compact ? 22 : 24),
-                SizedBox(height: compact ? 3 : 4),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    color: color,
-                    fontSize: compact ? 11.5 : 12.5,
-                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

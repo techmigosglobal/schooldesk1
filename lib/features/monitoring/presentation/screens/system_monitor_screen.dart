@@ -21,6 +21,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _events = const [];
+  Map<String, dynamic> _retention = const {};
 
   @override
   void initState() {
@@ -34,10 +35,16 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
       _error = null;
     });
     try {
-      final response = await _api.getErrorEvents(
-        status: _status == 'all' ? null : _status,
-        pageSize: 50,
-      );
+      final isSuperAdmin =
+          _api.currentRoleName?.trim().toLowerCase() == 'super_admin';
+      final results = await Future.wait([
+        _api.getErrorEvents(
+          status: _status == 'all' ? null : _status,
+          pageSize: 50,
+        ),
+        if (isSuperAdmin) _api.getErrorRetentionMetrics(),
+      ]);
+      final response = results.first;
       final data = response['data'];
       setState(() {
         _events = data is List
@@ -46,11 +53,163 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                   .map((e) => Map<String, dynamic>.from(e))
                   .toList()
             : const [];
+        _retention = isSuperAdmin && results.length > 1
+            ? Map<String, dynamic>.from(results[1] as Map)
+            : const {};
       });
     } on Object catch (error) {
       setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _editRetention() async {
+    final settings = Map<String, dynamic>.from(
+      _retention['settings'] as Map? ?? const {},
+    );
+    final warning = TextEditingController(
+      text: '${settings['warning_keep_days'] ?? 14}',
+    );
+    final resolved = TextEditingController(
+      text: '${settings['resolved_keep_days'] ?? 30}',
+    );
+    final fatal = TextEditingController(
+      text: '${settings['resolved_fatal_keep_days'] ?? 90}',
+    );
+    final maximum = TextEditingController(
+      text: '${settings['max_raw_events'] ?? 10000}',
+    );
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error retention limits'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _numberField(warning, 'Warnings/info days', '7–30 days'),
+              _numberField(resolved, 'Resolved errors days', '14–180 days'),
+              _numberField(fatal, 'Resolved fatal errors days', '30–365 days'),
+              _numberField(
+                maximum,
+                'Maximum raw events',
+                '1,000–100,000 per school',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save limits'),
+          ),
+        ],
+      ),
+    );
+    if (save != true) return;
+    try {
+      await _api.updateErrorRetentionSettings(
+        warningKeepDays: int.tryParse(warning.text) ?? 0,
+        resolvedKeepDays: int.tryParse(resolved.text) ?? 0,
+        resolvedFatalKeepDays: int.tryParse(fatal.text) ?? 0,
+        maxRawEvents: int.tryParse(maximum.text) ?? 0,
+      );
+      await _load();
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to save limits: $error')));
+    }
+  }
+
+  Widget _numberField(
+    TextEditingController controller,
+    String label,
+    String helper,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          labelText: label,
+          helperText: helper,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _clearResolvedEvents() async {
+    final before = DateTime.now().toUtc().subtract(const Duration(days: 30));
+    try {
+      final preview = await _api.previewResolvedErrorCleanup(before: before);
+      if (!mounted) return;
+      final count = preview['deleted_count'] ?? 0;
+      final confirm = TextEditingController();
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Clear resolved error events'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This will permanently remove $count resolved event(s) last seen more than 30 days ago. Open and fatal errors are never included.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: confirm,
+                decoration: const InputDecoration(
+                  labelText: 'Type CLEAR RESOLVED ERROR EVENTS',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(
+                context,
+                confirm.text == 'CLEAR RESOLVED ERROR EVENTS',
+              ),
+              child: const Text('Clear resolved events'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+      final result = await _api.clearResolvedErrorEvents(before: before);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${result['deleted_count'] ?? 0} resolved error event(s) cleared.',
+          ),
+        ),
+      );
+      await _load();
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to clear resolved events: $error')),
+      );
     }
   }
 
@@ -283,6 +442,8 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
             _buildFilters(),
             const SizedBox(height: 16),
             if (isSuperAdmin) ...[
+              _buildRetentionCard(),
+              const SizedBox(height: 16),
               Card(
                 color: Colors.white,
                 elevation: 2,
@@ -377,6 +538,74 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
     );
   }
 
+  Widget _buildRetentionCard() {
+    final settings = Map<String, dynamic>.from(
+      _retention['settings'] as Map? ?? const {},
+    );
+    final total = _retention['total_events'] ?? 0;
+    final open = _retention['open_events'] ?? 0;
+    final eligible = _retention['cleanup_eligible'] ?? 0;
+    return Card(
+      color: Colors.white,
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.monitor_heart_outlined,
+                  color: Colors.deepPurple,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Error retention',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$total raw events · $open open · ${_formatBytes(_retention['storage_bytes'])} used',
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Warnings ${settings['warning_keep_days'] ?? 14}d · resolved ${settings['resolved_keep_days'] ?? 30}d · fatal ${settings['resolved_fatal_keep_days'] ?? 90}d · max ${settings['max_raw_events'] ?? 10000}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _loading ? null : _editRetention,
+                  icon: const Icon(Icons.tune_rounded),
+                  label: const Text('Configure limits'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _loading || eligible == 0
+                      ? null
+                      : _clearResolvedEvents,
+                  icon: const Icon(Icons.cleaning_services_outlined),
+                  label: Text('Clear eligible ($eligible)'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFilters() {
     return SegmentedButton<String>(
       segments: const [
@@ -405,6 +634,8 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
   }
 
   Future<void> _showDetails(Map<String, dynamic> event) async {
+    final isSuperAdmin =
+        _api.currentRoleName?.trim().toLowerCase() == 'super_admin';
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -421,6 +652,9 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                 _detail('Source', event['source']),
                 _detail('Severity', event['severity']),
                 _detail('Status', event['status']),
+                _detail('Occurrences', event['occurrence_count']),
+                _detail('First seen', _localTime(event['first_seen_at'])),
+                _detail('Last seen', _localTime(event['last_seen_at'])),
                 _detail('Role', event['role']),
                 _detail('Path', event['path']),
                 _detail('Occurred', _localTime(event['occurred_at'])),
@@ -450,7 +684,8 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
-          if (_text(event['status'], fallback: 'open') != 'resolved')
+          if (isSuperAdmin &&
+              _text(event['status'], fallback: 'open') != 'resolved')
             FilledButton.icon(
               icon: const Icon(Icons.task_alt_rounded),
               label: const Text('Resolve'),
@@ -460,16 +695,83 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                     event['id'],
                     fallback: _text(event['error_id'], fallback: ''),
                   ),
-                  resolutionNote: 'Reviewed by Principal',
+                  resolutionNote: 'Reviewed by Super Admin',
                 );
                 if (!mounted) return;
                 Navigator.pop(context);
                 _load();
               },
             ),
+          if (isSuperAdmin &&
+              _text(event['status'], fallback: 'open') == 'resolved')
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const Text('Delete'),
+              onPressed: () => _confirmDeleteResolvedEvent(event),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteResolvedEvent(Map<String, dynamic> event) async {
+    final id = _text(event['id'], fallback: '');
+    if (id.isEmpty) return;
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete resolved error event'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This permanently removes this resolved event. Open and fatal events cannot be deleted from this action.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Type DELETE RESOLVED ERROR EVENT',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(
+              context,
+              controller.text == 'DELETE RESOLVED ERROR EVENT',
+            ),
+            child: const Text('Delete permanently'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _api.deleteResolvedErrorEvent(id);
+      if (!mounted) return;
+      Navigator.pop(context);
+      await _load();
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to delete error event: $error')),
+      );
+    }
   }
 
   Widget _detail(String label, dynamic value) {
@@ -516,7 +818,7 @@ class _ErrorEventTile extends StatelessWidget {
           child: Text(
             '${severity.toUpperCase()} · ${status.toUpperCase()}\n'
             '${_text(event['source'], fallback: 'unknown')} · $location\n'
-            '$occurred\nError: ${_text(event['error_id'], fallback: '-')} · Request: ${_text(event['request_id'], fallback: '-')}',
+            '$occurred · ${_text(event['occurrence_count'], fallback: '1')} occurrence(s)\nError: ${_text(event['error_id'], fallback: '-')} · Request: ${_text(event['request_id'], fallback: '-')}',
           ),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
@@ -565,4 +867,13 @@ class _MessagePanel extends StatelessWidget {
 String _text(dynamic value, {required String fallback}) {
   final text = value?.toString().trim() ?? '';
   return text.isEmpty ? fallback : text;
+}
+
+String _formatBytes(dynamic value) {
+  final bytes = value is num
+      ? value.toDouble()
+      : double.tryParse('${value ?? ''}') ?? 0;
+  if (bytes < 1024) return '${bytes.round()} B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }

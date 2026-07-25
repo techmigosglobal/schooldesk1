@@ -84,6 +84,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
             [];
         result.add(
           _ClassSubjects(
+            gradeId: gradeId,
+            sectionId: sectionId,
             className: _text(cls['class_name'], fallback: 'Class'),
             gradeName: _text(cls['grade_name']),
             sectionName: _text(cls['section_name']),
@@ -163,8 +165,11 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                   sliver: SliverList.separated(
                     itemCount: _classes.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 16),
-                    itemBuilder: (context, index) =>
-                        _ClassSubjectsCard(data: _classes[index]),
+                    itemBuilder: (context, index) => _ClassSubjectsCard(
+                      data: _classes[index],
+                      onManageSubjects: () =>
+                          _openClassSubjectSetup(_classes[index]),
+                    ),
                   ),
                 ),
               ],
@@ -257,6 +262,18 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
     );
   }
 
+  void _openClassSubjectSetup(_ClassSubjects classSubjects) {
+    Navigator.of(context).pushNamed(
+      AppRoutes.principalClasses,
+      arguments: {
+        'source': 'principal_subjects',
+        'action': 'subjects',
+        'sectionId': classSubjects.sectionId,
+        'gradeId': classSubjects.gradeId,
+      },
+    );
+  }
+
   Widget _buildSummaryBar() {
     if (_classes.isEmpty) return const SizedBox.shrink();
     final totalSubjects = _classes.fold<int>(
@@ -322,6 +339,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
 // Data Models
 
 class _ClassSubjects {
+  final String gradeId;
+  final String sectionId;
   final String className;
   final String gradeName;
   final String sectionName;
@@ -330,6 +349,8 @@ class _ClassSubjects {
   final List<String> subjects;
 
   const _ClassSubjects({
+    required this.gradeId,
+    required this.sectionId,
     required this.className,
     required this.gradeName,
     required this.sectionName,
@@ -343,8 +364,12 @@ class _ClassSubjects {
 
 class _ClassSubjectsCard extends StatelessWidget {
   final _ClassSubjects data;
+  final VoidCallback onManageSubjects;
 
-  const _ClassSubjectsCard({required this.data});
+  const _ClassSubjectsCard({
+    required this.data,
+    required this.onManageSubjects,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -407,6 +432,24 @@ class _ClassSubjectsCard extends StatelessWidget {
                       ),
                     ),
                     _SubjectCountBadge(count: data.subjects.length),
+                    PopupMenuButton<String>(
+                      tooltip: 'Manage ${data.className} subjects',
+                      onSelected: (value) {
+                        if (value == 'manage_subjects') onManageSubjects();
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'manage_subjects',
+                          child: ListTile(
+                            leading: Icon(Icons.edit_note_rounded),
+                            title: Text('Edit subjects'),
+                            subtitle: Text('Manage this class only'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
+                      icon: const Icon(Icons.more_vert_rounded),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),

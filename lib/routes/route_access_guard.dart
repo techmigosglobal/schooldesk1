@@ -20,6 +20,7 @@ class RouteAccessGuard {
     AppRoutes.teacherLogin,
     AppRoutes.parentLogin,
     AppRoutes.kioskLogin,
+    AppRoutes.demoRoleSelector,
   };
 
   static const Set<String> sharedProtectedRoutes = {

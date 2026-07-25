@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -27,12 +28,20 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
   List<Map<String, dynamic>> _exceptions = [];
   bool _loading = true;
   String? _error;
+  RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadData();
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'admin-attendance',
+      modules: const {'attendance'},
+      onRefresh: () {
+        if (mounted) _loadData();
+      },
+    );
   }
 
   Future<void> _loadData() async {
@@ -132,6 +141,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
 
   @override
   void dispose() {
+    _realtimeSubscription?.dispose();
     _tabController.dispose();
     super.dispose();
   }

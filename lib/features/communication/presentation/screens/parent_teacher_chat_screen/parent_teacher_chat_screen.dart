@@ -13,6 +13,7 @@ import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
+import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 class ParentTeacherChatScreen extends StatefulWidget {
@@ -60,6 +61,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   // ── Realtime ──────────────────────────────────────────────────────────────
 
   void _subscribeRealtime({String conversationId = ''}) {
+    if (DemoLocalApiService.instance.isActive) return;
     if (_realtimeConversationId == conversationId && _realtimeChannel != null) {
       return;
     }

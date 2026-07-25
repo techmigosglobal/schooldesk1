@@ -2,6 +2,18 @@ part of '../backend_api_client.dart';
 
 // ─── Auth Interceptor ─────────────────────────────────────────────────────────
 
+class _DemoLocalApiInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final demo = DemoLocalApiService.instance;
+    if (!demo.isActive || options.path.startsWith('/demo/')) {
+      handler.next(options);
+      return;
+    }
+    handler.resolve(demo.responseFor(options));
+  }
+}
+
 class _AuthInterceptor extends Interceptor {
   final BackendApiClient _client;
 

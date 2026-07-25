@@ -187,18 +187,11 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
 
   final List<String> _tabLabels = [
     'All',
-    'Accounts',
+    'People',
     'Leave',
-    'Admission',
-    'Fee',
-    'TC',
-    'Classes',
-    'Students',
     'Fees',
-    'Timetable',
-    'Documents',
-    'Communication',
-    'Event Posts',
+    'Academic',
+    'Content',
   ];
 
   @override
@@ -227,16 +220,14 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     return switch (initialTab.trim().toLowerCase()) {
       'leave' || 'student_leave' => 2,
       'accounts' || 'account' => 1,
-      'admission' => 3,
-      'fee' || 'fee_concession' => 4,
-      'tc' => 5,
-      'classes' || 'class' => 6,
-      'students' || 'student' => 7,
-      'fees' => 8,
-      'timetable' => 9,
-      'documents' || 'document' => 10,
-      'communication' => 11,
-      'event_posts' || 'event' => 12,
+      'admission' || 'student' || 'tc' => 1,
+      'fee' || 'fees' || 'fee_concession' => 3,
+      'timetable' || 'class' || 'academic_info' => 4,
+      'documents' ||
+      'document' ||
+      'communication' ||
+      'event_posts' ||
+      'event' => 5,
       _ => 0,
     };
   }
@@ -510,37 +501,34 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   }
 
   List<ApprovalModel> _getTypeFilteredApprovals(int tabIndex) {
-    // Tab labels (indices):
-    //  0=All  1=Accounts  2=Leave  3=Admission  4=Fee(Concession)  5=TC
-    //  6=Classes  7=Students  8=Fees  9=Timetable  10=Documents
-    //  11=Communication  12=Event Posts
     if (tabIndex == 0) return _allApprovals;
-    if (tabIndex == 2) {
-      // Leave tab shows both staff leave and student leave.
-      return _allApprovals
-          .where(
-            (a) =>
-                a.type == ApprovalType.leave ||
-                a.type == ApprovalType.studentLeave,
-          )
-          .toList();
-    }
-    const typeMap = {
-      1: ApprovalType.account,
-      3: ApprovalType.admission,
-      4: ApprovalType.feeConcession, // "Fee" tab = fee concessions
-      5: ApprovalType.tc,
-      6: ApprovalType.classApproval,
-      7: ApprovalType.student,
-      8: ApprovalType.fee, // "Fees" tab = fee approvals / payments
-      9: ApprovalType.timetable,
-      10: ApprovalType.document,
-      11: ApprovalType.communication,
-      12: ApprovalType.event,
+    const typeGroups = <int, Set<ApprovalType>>{
+      // Keep related operational decisions together. This replaces thirteen
+      // competing tabs with six predictable queues without hiding any type.
+      1: {
+        ApprovalType.account,
+        ApprovalType.admission,
+        ApprovalType.tc,
+        ApprovalType.student,
+      },
+      2: {ApprovalType.leave, ApprovalType.studentLeave},
+      3: {ApprovalType.fee, ApprovalType.feeConcession},
+      4: {
+        ApprovalType.classApproval,
+        ApprovalType.timetable,
+        ApprovalType.academicInfo,
+      },
+      5: {
+        ApprovalType.document,
+        ApprovalType.communication,
+        ApprovalType.event,
+      },
     };
-    final type = typeMap[tabIndex];
-    if (type == null) return _allApprovals; // safety: unknown tab shows all
-    return _allApprovals.where((a) => a.type == type).toList();
+    final types = typeGroups[tabIndex];
+    if (types == null) return _allApprovals;
+    return _allApprovals
+        .where((approval) => types.contains(approval.type))
+        .toList();
   }
 
   List<ApprovalModel> _getVisibleApprovals(int tabIndex) {
@@ -999,7 +987,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           _ApprovalQueueToolbar(
             allItems: allTypeItems,
             visibleCount: items.length,
-            sourceErrorCount: _sourceErrors.length,
             selectedStatus: _statusFilter,
             searchController: _searchController,
             onStatusChanged: (value) => setState(() => _statusFilter = value),
@@ -1200,7 +1187,6 @@ class _ApprovalSourceHealthBanner extends StatelessWidget {
 class _ApprovalQueueToolbar extends StatelessWidget {
   final List<ApprovalModel> allItems;
   final int visibleCount;
-  final int sourceErrorCount;
   final String selectedStatus;
   final TextEditingController searchController;
   final ValueChanged<String> onStatusChanged;
@@ -1209,7 +1195,6 @@ class _ApprovalQueueToolbar extends StatelessWidget {
   const _ApprovalQueueToolbar({
     required this.allItems,
     required this.visibleCount,
-    required this.sourceErrorCount,
     required this.selectedStatus,
     required this.searchController,
     required this.onStatusChanged,
@@ -1219,12 +1204,10 @@ class _ApprovalQueueToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pending = allItems.where((a) => a.status == 'pending').length;
-    final approved = allItems.where((a) => a.status == 'approved').length;
-    final rejected = allItems.where((a) => a.status == 'rejected').length;
     final changesRequested = allItems
         .where((a) => a.status == 'changes_requested')
         .length;
-    final resolved = approved + rejected + changesRequested;
+    final resolved = allItems.where((a) => a.status != 'pending').length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1237,38 +1220,16 @@ class _ApprovalQueueToolbar extends StatelessWidget {
             icon: Icons.hourglass_top_rounded,
           ),
           _ApprovalMetricChip(
-            label: 'Approved',
-            value: approved,
-            color: context.appTheme.success,
-            icon: Icons.check_circle_rounded,
-          ),
-          _ApprovalMetricChip(
-            label: 'Rejected',
-            value: rejected,
-            color: context.appTheme.error,
-            icon: Icons.cancel_rounded,
-          ),
-          _ApprovalMetricChip(
-            label: 'Changes',
-            value: changesRequested,
-            color: context.appTheme.warning,
-            icon: Icons.edit_note_rounded,
-          ),
-          _ApprovalMetricChip(
             label: 'Showing',
             value: visibleCount,
             color: context.appTheme.primary,
             icon: Icons.filter_alt_rounded,
           ),
           _ApprovalMetricChip(
-            label: 'Source issues',
-            value: sourceErrorCount,
-            color: sourceErrorCount == 0
-                ? context.appTheme.success
-                : context.appTheme.warning,
-            icon: sourceErrorCount == 0
-                ? Icons.cloud_done_rounded
-                : Icons.cloud_sync_rounded,
+            label: 'Resolved',
+            value: resolved,
+            color: context.appTheme.muted,
+            icon: Icons.task_alt_rounded,
           ),
         ];
 

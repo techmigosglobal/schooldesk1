@@ -8,7 +8,7 @@ import 'package:schooldesk1/features/documents/documents.dart';
 import 'package:schooldesk1/features/finance/finance.dart';
 import 'package:schooldesk1/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart';
 import 'package:schooldesk1/features/auth/auth.dart';
-import 'package:schooldesk1/features/auth/presentation/screens/demo_sandbox_screen.dart';
+import 'package:schooldesk1/features/auth/presentation/screens/demo_role_selector_screen.dart';
 import 'package:schooldesk1/features/reports/reports.dart';
 import 'package:schooldesk1/features/people/people.dart';
 import 'package:schooldesk1/features/calendar/calendar.dart';
@@ -36,7 +36,7 @@ class AppRoutes {
 
   // Loading
   static const String loginLoading = '/login-loading-screen';
-  static const String demoSandbox = '/demo-sandbox-screen';
+  static const String demoRoleSelector = '/demo-role-selector-screen';
 
   // Principal Module Routes
   static const String principalLogin = '/principal-login-screen';
@@ -204,11 +204,7 @@ class AppRoutes {
 
     // Principal
     loginLoading: (context) => const LoginLoadingScreen(),
-    demoSandbox: (context) => DemoSandboxScreen(
-      role:
-          (ModalRoute.of(context)?.settings.arguments as String?) ??
-          'principal',
-    ),
+    demoRoleSelector: (context) => const DemoRoleSelectorScreen(),
     principalLogin: (context) => const AuthLoginScreen(),
     principalDashboard: (context) => const PrincipalDashboardScreen(),
     coordinatorDashboard: (context) => const PrincipalDashboardScreen(),
@@ -221,9 +217,11 @@ class AppRoutes {
         ModalRoute.of(context)?.settings.arguments,
       ),
     ),
-    feeMonitoring: (context) => const PrincipalFeeDashboard(),
-    feeHome: (context) => const PrincipalFeeDashboard(),
-    principalFees: (context) => const PrincipalFeeDashboard(),
+    // One operational entry point prevents the older metrics-heavy dashboard
+    // and the daily collection flow from competing with each other.
+    feeMonitoring: (context) => const FeeHomeScreen(),
+    feeHome: (context) => const FeeHomeScreen(),
+    principalFees: (context) => const FeeHomeScreen(),
     principalFeeConcessions: (context) => const AdminFeesScreen(
       initialSection: 'concessions',
       concessionOnly: true,

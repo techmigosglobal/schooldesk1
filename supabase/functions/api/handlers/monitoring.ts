@@ -1,5 +1,6 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
+import { recordActivity } from "./activity.ts";
 
 function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -242,6 +243,14 @@ function parseResolveId(path: string): string | null {
   return match?.[1] ?? null;
 }
 
+function isErrorRetentionPath(path: string): boolean {
+  return path === "/monitoring/error-events/retention";
+}
+
+function isErrorCleanupPath(path: string): boolean {
+  return path === "/monitoring/error-events/cleanup";
+}
+
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -253,6 +262,37 @@ function integer(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function boundedText(value: unknown, max: number): string {
+  return text(value).slice(0, max);
+}
+
+function validSeverity(value: string): value is "info" | "warning" | "error" | "fatal" {
+  return ["info", "warning", "error", "fatal"].includes(value);
+}
+
+async function errorFingerprint(input: {
+  errorType: string;
+  message: string;
+  source: string;
+  path: string;
+  stackTrace: string;
+}): Promise<string> {
+  // Dynamic values such as IDs and line numbers make duplicate errors look
+  // unique.  Retain only the stable beginning of each field before hashing.
+  const normalized = [
+    input.errorType,
+    input.source,
+    input.path,
+    input.message.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "<id>").slice(0, 320),
+    input.stackTrace.replace(/:\d+(?::\d+)?/g, ":<line>").slice(0, 1200),
+  ].join("|").toLowerCase();
+  const bytes = new TextEncoder().encode(normalized);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((value) =>
+    value.toString(16).padStart(2, "0")
+  ).join("");
 }
 
 function mapContext(row: Record<string, unknown>): Record<string, unknown> {
@@ -278,8 +318,8 @@ function responseRow(row: Record<string, unknown>) {
     user_id: text(row["user_id"]),
     role: text(context["role"]),
     source: text(context["source"]),
-    severity: text(context["severity"]) || "error",
-    status: text(context["status"]) || "open",
+    severity: text(row["severity"]) || text(context["severity"]) || "error",
+    status: text(row["status"]) || text(context["status"]) || "open",
     request_id: text(context["request_id"]),
     error_id: text(context["error_id"]),
     method: text(context["method"]),
@@ -294,9 +334,13 @@ function responseRow(row: Record<string, unknown>) {
     app_version: text(context["app_version"]),
     device_info: text(context["device_info"]),
     occurred_at: text(context["occurred_at"]) || text(row["created_at"]),
-    resolved_at: text(context["resolved_at"]),
-    resolved_by: text(context["resolved_by"]),
-    resolution_note: text(context["resolution_note"]),
+    occurrence_count: integer(row["occurrence_count"]) ?? 1,
+    first_seen_at: text(row["first_seen_at"]) || text(row["created_at"]),
+    last_seen_at: text(row["last_seen_at"]) || text(row["created_at"]),
+    fingerprint: text(row["fingerprint"]),
+    resolved_at: text(row["resolved_at"]) || text(context["resolved_at"]),
+    resolved_by: text(row["resolved_by"]) || text(context["resolved_by"]),
+    resolution_note: text(row["resolution_note"]) || text(context["resolution_note"]),
     created_at: text(row["created_at"]),
   };
 }
@@ -428,37 +472,139 @@ export async function handleMonitoring(
 
   if (path === "/monitoring/error-events" && method === "POST") {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const severity = validSeverity(text(body["severity"]))
+      ? text(body["severity"])
+      : "error";
+    const message = boundedText(body["message"], 2048);
+    const errorType = boundedText(body["error_type"], 256);
+    const stackTrace = boundedText(body["stack_trace"], 12288);
     const context = {
-      source: text(body["source"]),
-      severity: text(body["severity"]) || "error",
+      source: boundedText(body["source"], 64),
+      severity,
       status: "open",
       role: metadataRole(body["metadata"]),
-      request_id: text(body["request_id"]),
-      error_id: text(body["error_id"]),
-      method: text(body["method"]),
-      path: text(body["path"]),
-      route_name: text(body["route_name"]),
-      screen: text(body["screen"]),
+      request_id: boundedText(body["request_id"], 128),
+      error_id: boundedText(body["error_id"], 128),
+      method: boundedText(body["method"], 12),
+      path: boundedText(body["path"], 512),
+      route_name: boundedText(body["route_name"], 256),
+      screen: boundedText(body["screen"], 256),
       status_code: integer(body["status_code"]) ?? 0,
       metadata: body["metadata"] ?? {},
-      app_version: text(body["app_version"]),
-      device_info: text(body["device_info"]),
-      occurred_at: text(body["occurred_at"]),
+      app_version: boundedText(body["app_version"], 128),
+      device_info: boundedText(body["device_info"], 256),
+      occurred_at: boundedText(body["occurred_at"], 64),
     };
-
-    const insertPayload = {
-      school_id: school,
-      user_id: user.id,
-      message: text(body["message"]),
-      error_type: text(body["error_type"]),
-      stack_trace: text(body["stack_trace"]),
-      context,
-    };
-    const { data, error } = await svc.from("error_events").insert(insertPayload)
-      .select()
-      .single();
+    const fingerprint = await errorFingerprint({
+      errorType,
+      message,
+      source: context.source,
+      path: context.path,
+      stackTrace,
+    });
+    const { data, error } = await svc.rpc("record_error_event", {
+      p_school_id: school,
+      p_user_id: user.id,
+      p_message: message,
+      p_error_type: errorType,
+      p_stack_trace: stackTrace,
+      p_context: context,
+      p_severity: severity,
+      p_fingerprint: fingerprint,
+    });
     if (error) return fail(error.message);
     return ok(responseRow(data as Record<string, unknown>));
+  }
+
+  if (isErrorRetentionPath(path) && method === "GET") {
+    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    const { data, error } = await svc.rpc("error_event_retention_metrics", {
+      p_school_id: school,
+    });
+    if (error) return fail(error.message);
+    return ok(data as Record<string, unknown>);
+  }
+
+  if (isErrorRetentionPath(path) && method === "PATCH") {
+    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const warningDays = integer(body["warning_keep_days"]);
+    const resolvedDays = integer(body["resolved_keep_days"]);
+    const fatalDays = integer(body["resolved_fatal_keep_days"]);
+    const maxRawEvents = integer(body["max_raw_events"]);
+    if (
+      warningDays == null || warningDays < 7 || warningDays > 30 ||
+      resolvedDays == null || resolvedDays < 14 || resolvedDays > 180 ||
+      fatalDays == null || fatalDays < 30 || fatalDays > 365 ||
+      maxRawEvents == null || maxRawEvents < 1000 || maxRawEvents > 100000
+    ) {
+      return fail("Retention settings are outside the allowed safe range", 422);
+    }
+    const { data, error } = await svc.from("error_event_retention_settings")
+      .upsert({
+        school_id: school,
+        warning_keep_days: warningDays,
+        resolved_keep_days: resolvedDays,
+        resolved_fatal_keep_days: fatalDays,
+        max_raw_events: maxRawEvents,
+        updated_by: user.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "school_id" }).select().single();
+    if (error) return fail(error.message);
+    await recordActivity(svc, {
+      schoolId: school,
+      userId: user.id,
+      actorRole: "super_admin",
+      action: "monitoring.error_retention_updated",
+      module: "monitoring",
+      eventType: "error_retention_updated",
+      summary: "Super Admin updated error-event retention settings",
+      entityType: "error_event_retention_settings",
+      entityId: school,
+      details: data as Record<string, unknown>,
+    });
+    return ok(data as Record<string, unknown>);
+  }
+
+  if (isErrorCleanupPath(path) && method === "POST") {
+    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const preview = body["preview"] !== false;
+    const confirmation = text(body["confirmation"]);
+    if (!preview && confirmation !== "CLEAR RESOLVED ERROR EVENTS") {
+      return fail("Type CLEAR RESOLVED ERROR EVENTS to confirm cleanup", 422);
+    }
+    const beforeRaw = text(body["before"]);
+    const before = beforeRaw ? new Date(beforeRaw) : new Date();
+    if (Number.isNaN(before.getTime())) return fail("Invalid cleanup date", 422);
+    const severity = text(body["severity"]);
+    if (severity && !validSeverity(severity)) return fail("Invalid severity", 422);
+    const { data, error } = await svc.rpc("cleanup_resolved_error_events", {
+      p_school_id: school,
+      p_before: before.toISOString(),
+      p_severity: severity || null,
+      p_preview: preview,
+    });
+    if (error) return fail(error.message);
+    if (!preview) {
+      await recordActivity(svc, {
+        schoolId: school,
+        userId: user.id,
+        actorRole: "super_admin",
+        action: "monitoring.error_events_cleared",
+        module: "monitoring",
+        eventType: "error_events_cleared",
+        summary: "Super Admin cleared resolved error events",
+        entityType: "error_events",
+        entityId: school,
+        details: {
+          before: before.toISOString(),
+          severity: severity || "all",
+          ...(data as Record<string, unknown>),
+        },
+      });
+    }
+    return ok({ ...(data as Record<string, unknown>), preview });
   }
 
   if (path === "/monitoring/error-events" && method === "GET") {
@@ -474,13 +620,13 @@ export async function handleMonitoring(
     const to = text(url.searchParams.get("to"));
     let query = svc.from("error_events").select("*", { count: "exact" })
       .eq("school_id", school);
-    if (status) query = query.contains("context", { status });
-    if (severity) query = query.contains("context", { severity });
+    if (status) query = query.eq("status", status);
+    if (severity) query = query.eq("severity", severity);
     if (source) query = query.contains("context", { source });
     if (requestId) query = query.contains("context", { request_id: requestId });
     if (from) query = query.gte("created_at", from);
     if (to) query = query.lte("created_at", to);
-    const { data, error, count } = await query.order("created_at", {
+    const { data, error, count } = await query.order("last_seen_at", {
       ascending: false,
     }).range((page - 1) * size, page * size - 1);
     if (error) return fail(error.message);
@@ -505,6 +651,38 @@ export async function handleMonitoring(
     return ok(responseRow(data as Record<string, unknown>));
   }
 
+  if (eventId && method === "DELETE") {
+    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (text(body["confirmation"]) !== "DELETE RESOLVED ERROR EVENT") {
+      return fail("Type DELETE RESOLVED ERROR EVENT to confirm deletion", 422);
+    }
+    const { data: existing, error: readError } = await svc.from("error_events")
+      .select("id, status, severity, message, occurrence_count")
+      .eq("school_id", school).eq("id", eventId).maybeSingle();
+    if (readError) return fail(readError.message);
+    if (!existing) return fail("Error event not found", 404);
+    if (existing.status !== "resolved") {
+      return fail("Only resolved error events can be permanently deleted", 422);
+    }
+    const { error } = await svc.from("error_events").delete()
+      .eq("school_id", school).eq("id", eventId);
+    if (error) return fail(error.message);
+    await recordActivity(svc, {
+      schoolId: school,
+      userId: user.id,
+      actorRole: "super_admin",
+      action: "monitoring.error_event_deleted",
+      module: "monitoring",
+      eventType: "error_event_deleted",
+      summary: "Super Admin permanently deleted a resolved error event",
+      entityType: "error_event",
+      entityId: eventId,
+      details: existing as Record<string, unknown>,
+    });
+    return ok({ id: eventId, deleted: true });
+  }
+
   const resolveId = parseResolveId(path);
   if (resolveId && method === "PATCH") {
     if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
@@ -518,16 +696,16 @@ export async function handleMonitoring(
 
     const existing = data as Record<string, unknown>;
     const context = mapContext(existing);
-    const updatedContext = {
-      ...context,
-      status: "resolved",
-      resolved_at: new Date().toISOString(),
-      resolved_by: user.id,
-      resolution_note: text(body["resolution_note"]),
-    };
+    const resolvedAt = new Date().toISOString();
+    const resolutionNote = boundedText(body["resolution_note"], 2048);
+    const updatedContext = { ...context, status: "resolved", resolved_at: resolvedAt, resolved_by: user.id, resolution_note: resolutionNote };
 
     const updated = await svc.from("error_events").update({
       context: updatedContext,
+      status: "resolved",
+      resolved_at: resolvedAt,
+      resolved_by: user.id,
+      resolution_note: resolutionNote,
     }).eq("school_id", school).eq("id", resolveId).select().single();
     if (updated.error) return fail(updated.error.message);
     return ok(responseRow(updated.data as Record<string, unknown>));

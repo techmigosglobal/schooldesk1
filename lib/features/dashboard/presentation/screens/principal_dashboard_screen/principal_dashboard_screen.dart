@@ -16,6 +16,7 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/branch_switcher.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/principal_dashboard_desktop_shell.dart';
@@ -37,6 +38,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
   Map<String, dynamic> _staffAttendanceSummary = const {};
   List<Map<String, dynamic>> _recentSchoolActivity = const [];
+  RealtimeRefreshSubscription? _realtimeSubscription;
 
   bool get _isCoordinator =>
       BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
@@ -62,6 +64,19 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       return;
     }
     _loadDashboard();
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'principal-dashboard',
+      modules: const {'announcements', 'event_posts', 'attendance', 'fees'},
+      onRefresh: () {
+        if (mounted) _loadDashboard();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDashboard() async {

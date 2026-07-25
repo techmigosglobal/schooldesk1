@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -32,6 +33,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   static const _headerColor = Color(0xFF1A6B4A);
   Timer? _autoRefreshTimer;
   NotificationService? _notificationService;
+  RealtimeRefreshSubscription? _realtimeSubscription;
   String _lastNotificationSignal = '';
 
   List<Map<String, dynamic>> _childrenData = [];
@@ -66,6 +68,16 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadData(forceRefresh: true);
+    _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'parent-fees',
+      modules: const {'fees'},
+      onRefresh: () {
+        _lastRefreshAt = null;
+        if (mounted) {
+          unawaited(_loadData(forceRefresh: true, showSpinner: false));
+        }
+      },
+    );
     unawaited(_bindFeeNotifications());
     _autoRefreshTimer = Timer.periodic(
       _autoRefreshInterval,
@@ -84,6 +96,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
+    _realtimeSubscription?.dispose();
     _notificationService?.removeListener(_onNotificationsChanged);
     super.dispose();
   }
