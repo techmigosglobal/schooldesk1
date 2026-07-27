@@ -1,0 +1,113 @@
+- generic [active] [ref=f3e1]:
+  - main [ref=f3e2]:
+    - generic [ref=f3e3]:
+      - link "Arish Ville Preschool home" [ref=f3e4] [cursor=pointer]:
+        - /url: /
+        - img "Arish Ville Preschool" [ref=f3e5]
+        - generic [ref=f3e6]:
+          - generic [ref=f3e7]: ArishVille
+          - generic [ref=f3e8]: Preschool
+      - group [ref=f3e9]:
+        - generic "Open site navigation" [ref=f3e10] [cursor=pointer]: Menu
+      - link "Staff login" [ref=f3e11] [cursor=pointer]:
+        - /url: /login
+    - generic [ref=f3e12]:
+      - paragraph [ref=f3e13]: Contact Little Ville
+      - heading "We’d love to hear from you." [level=1] [ref=f3e14]
+      - paragraph [ref=f3e15]: Ask a question, arrange a visit, or begin an admissions enquiry with our team.
+    - generic [ref=f3e16]:
+      - generic [ref=f3e17]:
+        - paragraph [ref=f3e18]: Visit Little Ville
+        - heading "Come and see the joy of a school day." [level=2] [ref=f3e19]
+        - paragraph [ref=f3e20]: "Plot No: 29, 1-42, PE/29, Chiranjeevi Nagar, Pragathi Enclave, Miyapur, Hyderabad, Telangana 500049."
+        - paragraph [ref=f3e21]: Admissions:We’ll respond personally to your enquiry and help you arrange a visit.
+        - link "Open in Google Maps ↗" [ref=f3e22] [cursor=pointer]:
+          - /url: https://maps.google.com/?cid=16601324200924959650
+        - iframe [ref=f3e23]:
+          - link "Open in Maps (opens in new tab)" [ref=f4e4] [cursor=pointer]:
+            - /url: about:invalid#zClosurez
+            - text: Open in Maps
+      - generic [ref=f3e24]:
+        - paragraph [ref=f3e25]: Admissions enquiry
+        - heading "Tell us a little about your family." [level=2] [ref=f3e26]
+        - generic [ref=f3e27]:
+          - generic [ref=f3e28]:
+            - text: Parent name
+            - textbox "Parent name" [ref=f3e29]:
+              - /placeholder: Your name
+          - generic [ref=f3e30]:
+            - text: Phone number
+            - textbox "Phone number" [ref=f3e31]:
+              - /placeholder: Your number
+          - generic [ref=f3e32]:
+            - text: Email address
+            - textbox "Email address" [ref=f3e33]:
+              - /placeholder: you@example.com
+          - generic [ref=f3e34]:
+            - text: Child’s name
+            - textbox "Child’s name" [ref=f3e35]
+          - generic [ref=f3e36]:
+            - text: Child’s age
+            - combobox "Child’s age" [ref=f3e37]:
+              - option "Select age" [disabled] [selected]
+              - option "1.5–6 years"
+              - option "2–3 years"
+              - option "3–4 years"
+              - option "4–5 years"
+              - option "5–6 years"
+          - generic [ref=f3e38]:
+            - text: Program of interest
+            - combobox "Program of interest" [ref=f3e39]:
+              - option "Select program" [disabled] [selected]
+              - option "Daycare"
+              - option "Playgroup"
+              - option "Nursery"
+              - option "PP1"
+              - option "PP2"
+          - generic [ref=f3e40]:
+            - text: How can we help?
+            - textbox "How can we help?" [ref=f3e41]:
+              - /placeholder: Tell us about your child or preferred visit time
+          - button "Send enquiry →" [ref=f3e42] [cursor=pointer]
+    - generic [ref=f3e43]:
+      - generic [ref=f3e44]:
+        - paragraph [ref=f3e45]: A warm welcome awaits
+        - heading "Ready to find the right program for your child?" [level=2] [ref=f3e46]
+      - link "Explore programs" [ref=f3e47] [cursor=pointer]:
+        - /url: /programs
+    - generic [ref=f3e48]:
+      - generic [ref=f3e49]:
+        - generic [ref=f3e50]:
+          - img "ArishVille Preschool" [ref=f3e51]
+          - generic [ref=f3e52]:
+            - generic [ref=f3e53]: ArishVille Preschool
+            - generic [ref=f3e54]: Learn Today, Lead Tomorrow.
+            - paragraph [ref=f3e55]: A happy first home for curiosity, confidence, and friendship.
+        - navigation "Explore ArishVille" [ref=f3e56]:
+          - generic [ref=f3e57]: Explore
+          - link "Home" [ref=f3e58] [cursor=pointer]:
+            - /url: /
+          - link "About" [ref=f3e59] [cursor=pointer]:
+            - /url: /about-us
+          - link "Programs" [ref=f3e60] [cursor=pointer]:
+            - /url: /programs
+          - link "Admissions & Contact" [ref=f3e61] [cursor=pointer]:
+            - /url: /admissions
+          - link "School Gallery" [ref=f3e62] [cursor=pointer]:
+            - /url: /gallery
+        - navigation "SchoolDesk access" [ref=f3e63]:
+          - generic [ref=f3e64]: SchoolDesk
+          - link "Staff login" [ref=f3e65] [cursor=pointer]:
+            - /url: /login
+          - link "Principal portal" [ref=f3e66] [cursor=pointer]:
+            - /url: /login/principal
+          - link "Coordinator portal" [ref=f3e67] [cursor=pointer]:
+            - /url: /login/coordinator
+          - link "Back to top ↑" [ref=f3e68] [cursor=pointer]:
+            - /url: "#top"
+      - generic [ref=f3e69]:
+        - generic [ref=f3e70]: © 2026 ArishVille Preschool. All rights reserved.
+        - link "Managed by Techmigos" [ref=f3e71] [cursor=pointer]:
+          - /url: https://techmigos.com
+  - button "Open Next.js Dev Tools" [ref=f3e78] [cursor=pointer]
+  - alert [ref=f3e82]

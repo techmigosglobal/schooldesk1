@@ -481,9 +481,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             cardColor: Color(0xFFEAF4FF),
           ),
           _AcademicModuleItem(
-            label: 'Event Approvals',
+            label: 'School Posts Approval',
             route: AppRoutes.principalEventApprovals,
-            illustration: SchoolDeskUiIllustrations.notices,
+            illustration: SchoolDeskUiIllustrations.schoolPostsApproval,
             fallbackIcon: Icons.fact_check_rounded,
             accent: const Color(0xFFEA580C),
             cardColor: const Color(0xFFFFF1E8),
@@ -715,9 +715,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     cardColor: Color(0xFFEAF4FF),
                   ),
                   _AcademicModuleItem(
-                    label: 'Event Approvals',
+                    label: 'School Posts Approval',
                     route: AppRoutes.principalEventApprovals,
-                    illustration: SchoolDeskUiIllustrations.notices,
+                    illustration: SchoolDeskUiIllustrations.schoolPostsApproval,
                     fallbackIcon: Icons.fact_check_rounded,
                     accent: const Color(0xFFEA580C),
                     cardColor: const Color(0xFFFFF1E8),
@@ -1032,6 +1032,7 @@ class _PrincipalHomeData {
   final String schoolLogoUrl;
   final String schoolBannerUrl;
   final int totalStudents;
+  final int activeUnassignedStudents;
   final int totalStaff;
   final int totalClasses;
   final int pendingApprovals;
@@ -1049,6 +1050,7 @@ class _PrincipalHomeData {
     required this.schoolLogoUrl,
     required this.schoolBannerUrl,
     required this.totalStudents,
+    required this.activeUnassignedStudents,
     required this.totalStaff,
     required this.totalClasses,
     required this.pendingApprovals,
@@ -1068,6 +1070,7 @@ class _PrincipalHomeData {
       schoolLogoUrl: '',
       schoolBannerUrl: '',
       totalStudents: 0,
+      activeUnassignedStudents: 0,
       totalStaff: 0,
       totalClasses: 0,
       pendingApprovals: 0,
@@ -1112,6 +1115,10 @@ class _PrincipalHomeData {
         ),
       ),
       totalStudents: _intValue(metrics['total_students'], 0),
+      activeUnassignedStudents: _intValue(
+        metrics['active_unassigned_students'],
+        0,
+      ),
       totalStaff: _intValue(metrics['total_staff'], 0),
       totalClasses: _intValue(metrics['total_classes'], 0),
       pendingApprovals: _intValue(metrics['pending_event_approvals'], 0),
@@ -1179,6 +1186,10 @@ class _PrincipalHomeData {
       schoolLogoUrl: schoolLogoUrl,
       schoolBannerUrl: schoolBannerUrl,
       totalStudents: _intValue(metrics['total_students'], studentsTotal),
+      activeUnassignedStudents: _intValue(
+        metrics['active_unassigned_students'],
+        0,
+      ),
       totalStaff: _intValue(metrics['total_staff'], staffTotal),
       totalClasses: _intValue(metrics['total_classes'], sections.length),
       pendingApprovals: pendingApprovals,
@@ -1203,6 +1214,13 @@ class _PrincipalHomeData {
           route: AppRoutes.academicManagement,
           isComplete: hasAcademicYear,
         ),
+        if (_intValue(metrics['active_unassigned_students'], 0) > 0)
+          _SetupStep(
+            title:
+                '${_intValue(metrics['active_unassigned_students'], 0)} student(s) need a class assignment',
+            route: AppRoutes.studentOversight,
+            isComplete: false,
+          ),
         _SetupStep(
           title: 'Classes & Sections Creation',
           route: AppRoutes.principalClasses,

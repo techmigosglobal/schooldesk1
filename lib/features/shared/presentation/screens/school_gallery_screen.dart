@@ -98,7 +98,7 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
       final actionLabel = role == 'teacher'
           ? 'Create Event Post'
           : const {'principal', 'coordinator'}.contains(role)
-          ? 'Review Event Approvals'
+          ? 'Review School Posts Approval'
           : null;
       final actionRoute = role == 'teacher'
           ? AppRoutes.teacherEventPosts

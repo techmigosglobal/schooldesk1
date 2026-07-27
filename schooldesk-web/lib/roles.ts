@@ -27,6 +27,7 @@ export function visibleModules(role: PortalRole) {
     "attendance",
     "communications",
     "reports",
+    "admission_inquiries",
     "website",
   ] as const;
   return role === "principal"
@@ -41,6 +42,7 @@ export function visibleModules(role: PortalRole) {
         "communications",
         "fees",
         "reports",
+        "admission_inquiries",
         "website",
       ]
     : base;

@@ -218,9 +218,8 @@ export async function handleDashboard(
       parentPaymentRequests,
       approvalRequests,
     ] = await Promise.all([
-      svc.from("students").select("id, status", {
+      svc.from("students").select("id, status, current_section_id", {
         count: "exact",
-        head: true,
       }).eq("school_id", school),
       svc.from("staff").select("id", { count: "exact", head: true }).eq(
         "school_id",
@@ -286,15 +285,27 @@ export async function handleDashboard(
       ? Math.round((todayPresent / todayMarked) * 100)
       : 0;
 
+    const activeAssignedStudents = (students.data ?? []).filter(
+      (student: Record<string, unknown>) =>
+        student.status === "active" &&
+        `${student.current_section_id ?? ""}`.trim().length > 0,
+    ).length;
+    const activeUnassignedStudents = (students.data ?? []).filter(
+      (student: Record<string, unknown>) =>
+        student.status === "active" &&
+        `${student.current_section_id ?? ""}`.trim().length === 0,
+    ).length;
+
     const base = {
-      total_students: students.count ?? 0,
+      total_students: activeAssignedStudents,
       total_staff: staff.count ?? 0,
       total_sections: sections.count ?? 0,
       pending_fee_balance: totalOutstanding,
       pending_leave_requests: pendingLeave.count ?? 0,
       recent_announcements: announcements.data ?? [],
       metrics: {
-        total_students: students.count ?? 0,
+        total_students: activeAssignedStudents,
+        active_unassigned_students: activeUnassignedStudents,
         total_staff: staff.count ?? 0,
         total_classes: sections.count ?? 0,
         pending_event_approvals: approvalRequests.data?.length ?? 0,

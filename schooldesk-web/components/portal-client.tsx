@@ -11,6 +11,8 @@ import { DashboardPanel } from "@/components/portal/DashboardPanel";
 import { ResourceModule } from "@/components/portal/ResourceModule";
 import { FeesWorkspace } from "@/components/portal/FeesWorkspace";
 import { WebsiteManager } from "@/components/portal/WebsiteManager";
+import { TickerManager } from "@/components/portal/TickerManager";
+import { AdmissionInquiriesWorkspace } from "@/components/portal/AdmissionInquiriesWorkspace";
 import { ReportsWorkspace } from "@/components/portal/ReportsWorkspace";
 import { AttendanceWorkspace } from "@/components/portal/AttendanceWorkspace";
 import { CommunicationsWorkspace } from "@/components/portal/CommunicationsWorkspace";
@@ -225,6 +227,10 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
               <CommunicationsWorkspace role={role} onNotify={notify} />
             ) : active === "website" && role === "principal" ? (
               <WebsiteManager onNotify={notify} />
+            ) : active === "website" && role === "coordinator" ? (
+              <TickerManager onNotify={notify} />
+            ) : active === "admission_inquiries" ? (
+              <AdmissionInquiriesWorkspace />
             ) : active === "fees" && role === "principal" ? (
               <FeesWorkspace onNotify={notify} />
             ) : selected ? (

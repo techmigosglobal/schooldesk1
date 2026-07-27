@@ -62,8 +62,8 @@ void main() {
       'lib/features/communication/presentation/screens/notification_center_screen/notification_center_screen.dart',
     ).readAsStringSync();
 
-    expect(approvals, contains("'People'"));
-    expect(approvals, contains("'Academic'"));
+    expect(approvals, contains("'Student & Accounts'"));
+    expect(approvals, contains("'Class & Academic'"));
     expect(approvals, contains("'Content'"));
     expect(approvals, isNot(contains("'Event Posts'")));
     expect(notifications, contains("label: const Text('Mark as read')"));

@@ -161,7 +161,8 @@ export const navMeta: Record<string, { icon: ComponentType<any>; label: string }
   communications: { icon: MessageSquareMore, label: "Communications" },
   fees: { icon: WalletCards, label: "Fees" },
   reports: { icon: ChartNoAxesCombined, label: "Reports" },
-  website: { icon: Images, label: "Gallery" },
+  admission_inquiries: { icon: MessageSquareMore, label: "Admission Inquiries" },
+  website: { icon: Images, label: "Public Website" },
 };
 
 export const modules: Module[] = [

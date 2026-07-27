@@ -76,6 +76,7 @@ class NotificationRouteResolver {
       'lesson_planner' || 'lesson_plan' => _lessonPlannerRouteFor(role),
       'health' || 'health_reminder' => _healthRouteFor(role),
       'birthday' || 'birthday_reminder' => _birthdayRouteFor(role),
+      'admission_inquiry' => AppRoutes.admissionInquiries,
       _ => AppRoutes.notificationCenter,
     };
     return NotificationRouteTarget(

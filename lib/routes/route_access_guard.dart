@@ -78,6 +78,7 @@ class RouteAccessGuard {
     AppRoutes.principalAccountEdit: {'principal'},
     AppRoutes.principalParentChildAssignment: {'principal'},
     AppRoutes.principalSchoolProfile: {'principal'},
+    AppRoutes.admissionInquiries: {'principal', 'coordinator'},
     AppRoutes.systemMonitor: {'principal'},
     // Super Admin routes
     AppRoutes.superAdminDashboard: {'super_admin'},

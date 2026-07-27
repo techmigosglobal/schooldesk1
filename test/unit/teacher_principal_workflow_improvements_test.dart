@@ -34,7 +34,7 @@ void main() {
     expect(source, isNot(contains("_SectionTitle('Today')")));
     expect(source, isNot(contains('_TodaySnapshotRow')));
     expect(source, contains('Review Attendance'));
-    expect(source, contains('Event Approvals'));
+    expect(source, contains('School Posts Approval'));
     expect(source, contains('Fee Requests'));
     expect(source, contains('Access Approvals'));
   });
@@ -90,7 +90,7 @@ void main() {
       ),
     );
     expect(teacherAttendance, contains('Request Correction'));
-    expect(principalNav, contains("label: 'Event Approvals'"));
+    expect(principalNav, contains("label: 'School Posts Approval'"));
     expect(teacherNav, contains("label: 'Event Posts'"));
     expect(routes, contains('TeacherEventPostScreen'));
     expect(routes, contains('PrincipalEventApprovalScreen'));

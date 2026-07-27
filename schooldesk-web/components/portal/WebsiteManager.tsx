@@ -12,13 +12,14 @@ import {
 import type { Row } from "./types";
 import { api, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
+import { TickerManager } from "./TickerManager";
 
 export function WebsiteManager({
   onNotify,
 }: {
   onNotify: (message: string) => void;
 }) {
-  const [tab, setTab] = useState<"gallery" | "copy">("gallery");
+  const [tab, setTab] = useState<"gallery" | "copy" | "ticker">("gallery");
   const [content, setContent] = useState<Row>({});
   const [gallery, setGallery] = useState<Row[]>([]);
   const [notice, setNotice] = useState("");
@@ -27,6 +28,7 @@ export function WebsiteManager({
   const [search, setSearch] = useState("");
   const [previewImage, setPreviewImage] = useState<Row | null>(null);
   const [previewFileUrl, setPreviewFileUrl] = useState<string>("");
+  const [previewFileType, setPreviewFileType] = useState<string>("");
   const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async (manual = false) => {
@@ -87,6 +89,7 @@ export function WebsiteManager({
       });
       onNotify("Gallery photo uploaded successfully.");
       setPreviewFileUrl("");
+      setPreviewFileType("");
       void load(true);
     } catch (event) {
       setNotice(event instanceof Error ? event.message : "Image upload failed");
@@ -125,8 +128,10 @@ export function WebsiteManager({
     const file = e.target.files?.[0];
     if (file) {
       setPreviewFileUrl(URL.createObjectURL(file));
+      setPreviewFileType(file.type);
     } else {
       setPreviewFileUrl("");
+      setPreviewFileType("");
     }
   }
 
@@ -173,6 +178,7 @@ export function WebsiteManager({
         >
           Public Homepage Copy
         </button>
+        <button type="button" className={tab === "ticker" ? "active" : ""} onClick={() => setTab("ticker")}>Breaking News Bar</button>
       </div>
 
       {tab === "gallery" ? (
@@ -183,11 +189,11 @@ export function WebsiteManager({
 
             <form action={upload}>
               <label className="field">
-                Photo file
+                Photo or video file
                 <input
                   name="file"
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
                   onChange={handleFileSelect}
                   required
                 />
@@ -195,7 +201,7 @@ export function WebsiteManager({
 
               {previewFileUrl && (
                 <div style={{ margin: "0.5rem 0", borderRadius: "10px", overflow: "hidden", border: "1px solid #d0e2e9", maxHeight: "160px", background: "#f5fafc" }}>
-                  <img src={previewFileUrl} alt="Upload preview" style={{ width: "100%", height: "160px", objectFit: "cover" }} />
+                  {previewFileType.startsWith("video/") ? <video src={previewFileUrl} controls style={{ width: "100%", height: "160px", objectFit: "cover" }} /> : <img src={previewFileUrl} alt="Upload preview" style={{ width: "100%", height: "160px", objectFit: "cover" }} />}
                 </div>
               )}
 
@@ -244,6 +250,7 @@ export function WebsiteManager({
                   const isPub = item.is_published !== false;
                   const imgUrl = stringValue(item.media_url || item.url);
                   const title = stringValue(item.title || "Untitled image");
+                  const isVideo = stringValue(item.media_type) === "video" || stringValue(item.media_type).startsWith("video/") || /\.(mp4|mov|webm)(\?|$)/i.test(imgUrl);
 
                   return (
                     <article
@@ -259,12 +266,7 @@ export function WebsiteManager({
                       }}
                     >
                       <div style={{ position: "relative", height: "140px", background: "#f0f4f7" }}>
-                        <img
-                          src={imgUrl}
-                          alt={stringValue(item.alt_text) || title}
-                          loading="lazy"
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        />
+                        {isVideo ? <video src={imgUrl} controls preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <img src={imgUrl} alt={stringValue(item.alt_text) || title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
                         <span
                           className={`student-status ${isPub ? "active" : "inactive"}`}
                           style={{ position: "absolute", top: "8px", right: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }}
@@ -312,7 +314,7 @@ export function WebsiteManager({
             )}
           </section>
         </div>
-      ) : (
+      ) : tab === "copy" ? (
         <section className="surface ops-form-surface" style={{ maxWidth: "680px" }}>
           <h3>Public Homepage Copy &amp; Story</h3>
           <p>These details revalidate the live public school website upon publishing.</p>
@@ -359,7 +361,7 @@ export function WebsiteManager({
             </button>
           </form>
         </section>
-      )}
+      ) : <TickerManager onNotify={onNotify} compact />}
 
       {previewImage && (
         <Dialog

@@ -62,6 +62,8 @@ class SchoolDeskUiIllustrations {
   static const attendance = 'assets/images/ui/illustration-attendance.png';
   static const homework = 'assets/images/ui/homework.png';
   static const notices = 'assets/images/ui/principal-events.png';
+  static const schoolPostsApproval =
+      'assets/images/ui/school-posts-approval.png';
   static const createposts = 'assets/images/ui/createposts.png';
   static const chat = 'assets/images/ui/illustration-chat.png';
   static const calendar = 'assets/images/ui/leaves.png';
@@ -600,7 +602,9 @@ class SchoolDeskBottomNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
-    final isTeacher = BackendApiClient.instance.currentRoleName?.trim().toLowerCase() == 'teacher';
+    final isTeacher =
+        BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+        'teacher';
 
     final barWidget = SafeArea(
       top: false,
@@ -610,12 +614,10 @@ class SchoolDeskBottomNavigationBar extends StatelessWidget {
         shadowColor: context.appTheme.onSurface.withAlpha(24),
         child: Container(
           decoration: BoxDecoration(
-            color: isTeacher 
-                ? const Color(0xFFEFFBFA).withOpacity(0.85)
-                : null,
+            color: isTeacher ? const Color(0xFFEFFBFA).withOpacity(0.85) : null,
             border: Border(
               top: BorderSide(
-                color: isTeacher 
+                color: isTeacher
                     ? const Color(0xFF0F9F8E).withOpacity(0.15)
                     : tokens.panelBorder,
               ),

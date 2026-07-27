@@ -1,0 +1,84 @@
+- generic [active] [ref=f9e1]:
+  - main [ref=f9e2]:
+    - generic [ref=f9e3]:
+      - link "Arish Ville Preschool home" [ref=f9e4] [cursor=pointer]:
+        - /url: /
+        - img "Arish Ville Preschool" [ref=f9e5]
+        - generic [ref=f9e6]:
+          - generic [ref=f9e7]: ArishVille
+          - generic [ref=f9e8]: Preschool
+      - group [ref=f9e9]:
+        - generic "Open site navigation" [ref=f9e10] [cursor=pointer]: Menu
+      - link "Staff login" [ref=f9e11] [cursor=pointer]:
+        - /url: /login
+    - generic [ref=f9e12]:
+      - paragraph [ref=f9e13]: Admissions
+      - heading "A lovely first step starts here." [level=1] [ref=f9e14]
+      - paragraph [ref=f9e15]: We are here to make your family’s preschool journey clear, warm, and personal.
+    - generic [ref=f9e16]:
+      - article [ref=f9e17]:
+        - text: "01"
+        - heading "Send an enquiry" [level=2] [ref=f9e18]
+        - paragraph [ref=f9e19]: Tell us about your child and the program you are considering.
+      - article [ref=f9e20]:
+        - text: "02"
+        - heading "Visit the campus" [level=2] [ref=f9e21]
+        - paragraph [ref=f9e22]: Meet our team and see how our learning spaces feel in person.
+      - article [ref=f9e23]:
+        - text: "03"
+        - heading "Begin together" [level=2] [ref=f9e24]
+        - paragraph [ref=f9e25]: Our admissions team will guide you through the next steps.
+    - region [ref=f9e26]:
+      - generic [ref=f9e27]:
+        - paragraph [ref=f9e28]: Admissions answers
+        - heading "Common family questions" [level=2] [ref=f9e29]
+      - article [ref=f9e30]:
+        - heading "Which preschool programs does ArishVille offer?" [level=3] [ref=f9e31]
+        - paragraph [ref=f9e32]: ArishVille offers Daycare for ages 1.5–6, Playgroup for 2–3, Nursery for 3–4, PP1 for 4–5, and PP2 for 5–6 years.
+      - article [ref=f9e33]:
+        - heading "How can I make an admissions enquiry?" [level=3] [ref=f9e34]
+        - paragraph [ref=f9e35]: Use the admissions enquiry form to share your contact details, your child’s age, program of interest, and a message. The admissions team will respond personally.
+      - article [ref=f9e36]:
+        - heading "Can our family visit the school?" [level=3] [ref=f9e37]
+        - paragraph [ref=f9e38]: Yes. You can request a campus visit through the enquiry form or by contacting ArishVille Preschool in Miyapur, Hyderabad.
+    - generic [ref=f9e39]:
+      - generic [ref=f9e40]:
+        - paragraph [ref=f9e41]: We’re ready to help
+        - heading "Questions about admissions, age groups, or availability?" [level=2] [ref=f9e42]
+      - link "Contact admissions" [ref=f9e43] [cursor=pointer]:
+        - /url: /contact
+    - generic [ref=f9e44]:
+      - generic [ref=f9e45]:
+        - generic [ref=f9e46]:
+          - img "ArishVille Preschool" [ref=f9e47]
+          - generic [ref=f9e48]:
+            - generic [ref=f9e49]: ArishVille Preschool
+            - generic [ref=f9e50]: Learn Today, Lead Tomorrow.
+            - paragraph [ref=f9e51]: A happy first home for curiosity, confidence, and friendship.
+        - navigation "Explore ArishVille" [ref=f9e52]:
+          - generic [ref=f9e53]: Explore
+          - link "Home" [ref=f9e54] [cursor=pointer]:
+            - /url: /
+          - link "About" [ref=f9e55] [cursor=pointer]:
+            - /url: /about-us
+          - link "Programs" [ref=f9e56] [cursor=pointer]:
+            - /url: /programs
+          - link "Admissions & Contact" [ref=f9e57] [cursor=pointer]:
+            - /url: /admissions
+          - link "School Gallery" [ref=f9e58] [cursor=pointer]:
+            - /url: /gallery
+        - navigation "SchoolDesk access" [ref=f9e59]:
+          - generic [ref=f9e60]: SchoolDesk
+          - link "Staff login" [ref=f9e61] [cursor=pointer]:
+            - /url: /login
+          - link "Principal portal" [ref=f9e62] [cursor=pointer]:
+            - /url: /login/principal
+          - link "Coordinator portal" [ref=f9e63] [cursor=pointer]:
+            - /url: /login/coordinator
+          - link "Back to top ↑" [ref=f9e64] [cursor=pointer]:
+            - /url: "#top"
+      - generic [ref=f9e65]:
+        - generic [ref=f9e66]: © 2026 ArishVille Preschool. All rights reserved.
+        - link "Managed by Techmigos" [ref=f9e67] [cursor=pointer]:
+          - /url: https://techmigos.com
+  - button "Open Next.js Dev Tools" [ref=f9e74] [cursor=pointer]

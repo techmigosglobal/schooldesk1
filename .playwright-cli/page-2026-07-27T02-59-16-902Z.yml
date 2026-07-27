@@ -1,0 +1,96 @@
+- generic [active] [ref=f11e1]:
+  - main [ref=f11e2]:
+    - generic [ref=f11e3]:
+      - link "Arish Ville Preschool home" [ref=f11e4] [cursor=pointer]:
+        - /url: /
+        - img "Arish Ville Preschool" [ref=f11e5]
+        - generic [ref=f11e6]:
+          - generic [ref=f11e7]: ArishVille
+          - generic [ref=f11e8]: Preschool
+      - navigation "Primary navigation" [ref=f11e9]:
+        - link "Home" [ref=f11e10] [cursor=pointer]:
+          - /url: /
+        - link "About" [ref=f11e11] [cursor=pointer]:
+          - /url: /about-us
+        - link "Programs" [ref=f11e12] [cursor=pointer]:
+          - /url: /programs
+        - link "Admissions" [ref=f11e13] [cursor=pointer]:
+          - /url: /admissions
+        - link "Campus & Safety" [ref=f11e14] [cursor=pointer]:
+          - /url: /campus-safety
+        - link "Gallery" [ref=f11e15] [cursor=pointer]:
+          - /url: /gallery
+        - link "News & Events" [ref=f11e16] [cursor=pointer]:
+          - /url: /news-events
+        - link "Contact" [ref=f11e17] [cursor=pointer]:
+          - /url: /contact
+      - link "Staff login" [ref=f11e18] [cursor=pointer]:
+        - /url: /login
+    - generic [ref=f11e19]:
+      - paragraph [ref=f11e20]: Welcome to ArishVille
+      - heading "A little world built for big beginnings." [level=1] [ref=f11e21]
+      - paragraph [ref=f11e22]: ArishVille Preschool is a warm, happy place where children are encouraged to wonder, create, connect, and grow at their own beautiful pace.
+    - generic [ref=f11e23]:
+      - generic [ref=f11e24]:
+        - paragraph [ref=f11e25]: Our story
+        - heading "Growing confidence, one joyful day at a time." [level=2] [ref=f11e26]
+        - paragraph [ref=f11e27]: "We believe the early years are a precious time: full of first questions, first friendships, and first proud “I did it!” moments. Our role is to make those moments feel safe, meaningful, and full of possibility."
+        - paragraph [ref=f11e28]: With caring adults, playful learning experiences, and a strong partnership with families, we give children a gentle foundation for the school years ahead.
+      - generic [ref=f11e29]:
+        - generic [ref=f11e30]: ABC
+        - generic [ref=f11e31]: ✦
+        - generic [ref=f11e32]: ☀
+    - generic [ref=f11e33]:
+      - article [ref=f11e34]:
+        - text: "01"
+        - heading "Children first" [level=2] [ref=f11e35]
+        - paragraph [ref=f11e36]: We notice each child’s interests, celebrate their efforts, and make room for their unique way of learning.
+      - article [ref=f11e37]:
+        - text: "02"
+        - heading "Play with purpose" [level=2] [ref=f11e38]
+        - paragraph [ref=f11e39]: Purposeful play helps children explore early language, numeracy, creativity, movement, and social skills naturally.
+      - article [ref=f11e40]:
+        - text: "03"
+        - heading "Families together" [level=2] [ref=f11e41]
+        - paragraph [ref=f11e42]: Open, caring communication helps families feel connected to the learning and growth happening every day.
+    - generic [ref=f11e43]:
+      - generic [ref=f11e44]:
+        - paragraph [ref=f11e45]: A place to belong
+        - heading "Ready for your child’s next little adventure?" [level=2] [ref=f11e46]
+      - link "Step inside ArishVille" [ref=f11e47] [cursor=pointer]:
+        - /url: /gallery
+    - generic [ref=f11e48]:
+      - generic [ref=f11e49]:
+        - generic [ref=f11e50]:
+          - img "ArishVille Preschool" [ref=f11e51]
+          - generic [ref=f11e52]:
+            - generic [ref=f11e53]: ArishVille Preschool
+            - generic [ref=f11e54]: Learn Today, Lead Tomorrow.
+            - paragraph [ref=f11e55]: A happy first home for curiosity, confidence, and friendship.
+        - navigation "Explore ArishVille" [ref=f11e56]:
+          - generic [ref=f11e57]: Explore
+          - link "Home" [ref=f11e58] [cursor=pointer]:
+            - /url: /
+          - link "About" [ref=f11e59] [cursor=pointer]:
+            - /url: /about-us
+          - link "Programs" [ref=f11e60] [cursor=pointer]:
+            - /url: /programs
+          - link "Admissions & Contact" [ref=f11e61] [cursor=pointer]:
+            - /url: /admissions
+          - link "School Gallery" [ref=f11e62] [cursor=pointer]:
+            - /url: /gallery
+        - navigation "SchoolDesk access" [ref=f11e63]:
+          - generic [ref=f11e64]: SchoolDesk
+          - link "Staff login" [ref=f11e65] [cursor=pointer]:
+            - /url: /login
+          - link "Principal portal" [ref=f11e66] [cursor=pointer]:
+            - /url: /login/principal
+          - link "Coordinator portal" [ref=f11e67] [cursor=pointer]:
+            - /url: /login/coordinator
+          - link "Back to top ↑" [ref=f11e68] [cursor=pointer]:
+            - /url: "#top"
+      - generic [ref=f11e69]:
+        - generic [ref=f11e70]: © 2026 ArishVille Preschool. All rights reserved.
+        - link "Managed by Techmigos" [ref=f11e71] [cursor=pointer]:
+          - /url: https://techmigos.com
+  - button "Open Next.js Dev Tools" [ref=f11e78] [cursor=pointer]

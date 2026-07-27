@@ -1,11 +1,14 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok } from "../index.ts";
+import { fail, ok, triggerPushProcessing } from "../index.ts";
 
 const bucket = "school-public-media";
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const schoolId = (user: User) => text(user.app_metadata?.school_id);
 const isPrincipal = (user: User) =>
   text(user.app_metadata?.role_name).toLowerCase() === "principal";
+const isLeader = (user: User) =>
+  ["principal", "coordinator"].includes(text(user.app_metadata?.role_name).toLowerCase());
+const programs = ["Daycare", "Playgroup", "Nursery", "PP1", "PP2"];
 
 function publicUrl(svc: SupabaseClient, path: string) {
   return svc.storage.from(bucket).getPublicUrl(path).data.publicUrl;
@@ -54,7 +57,7 @@ export async function handleWebsitePublic(
     { data: entries, error: entriesError },
   ] = await Promise.all([
     svc.from("school_website_content").select(
-      "hero_title, hero_body, mission_title, mission_body, updated_at",
+      "hero_title, hero_body, mission_title, mission_body, breaking_news_text, breaking_news_enabled, updated_at",
     ).eq("school_id", school).maybeSingle(),
     svc.from("school_website_gallery_items").select(
       "id, title, alt_text, caption, media_path, sort_order, created_at",
@@ -62,7 +65,7 @@ export async function handleWebsitePublic(
       .eq("school_id", school).eq("is_published", true).order("sort_order")
       .order("created_at", { ascending: false }),
     svc.from("event_posts").select(
-      "id, title, body, description, media_urls, created_at",
+      "id, title, body, media_urls, created_at",
     )
       .eq("school_id", school).in("status", ["approved", "published"])
       .contains("destinations", JSON.stringify(["SCHOOL_GALLERY"]))
@@ -90,19 +93,48 @@ export async function handleWebsitePublic(
   });
 }
 
-export async function handleWebsiteEnquiry(req: Request, svc: SupabaseClient) {
+export async function handleWebsiteEnquiry(req: Request, url: URL, svc: SupabaseClient) {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const name = text(body.name);
   const phone = text(body.phone);
   const email = text(body.email);
-  if (!name || !phone || !email) return fail("name, phone, and email are required", 422);
+  const school = text(url.searchParams.get("school_id"));
+  const childAge = text(body.child_age);
+  const program = text(body.program);
+  if (!school) return fail("school_id is required", 422);
+  if (!name || !phone || !email || !childAge || !program) return fail("name, phone, email, child age, and program are required", 422);
   if (!/^\S+@\S+\.\S+$/.test(email)) return fail("valid email required", 422);
-  const { data, error } = await svc.from("school_website_entries").insert({
-    entry_type: "enquiry", title: name, body: text(body.message), status: "new",
-    submitted_at: new Date().toISOString(),
-    metadata: { phone, email, child_name: text(body.child_name), program: text(body.program) },
+  if (!programs.includes(program)) return fail("invalid program", 422);
+  const { data, error } = await svc.from("admission_inquiries").insert({
+    school_id: school, source: text(body.source) || "homepage", parent_name: name,
+    phone, email, child_name: text(body.child_name), child_age: childAge, program,
+    message: text(body.message),
   }).select("id").single();
-  return error ? fail(error.message) : ok({ id: data.id, message: "Thank you. Our admissions team will be in touch." });
+  if (error) return fail(error.message);
+  const { data: leaders } = await svc.from("users").select("id, role_name")
+    .eq("school_id", school).eq("is_active", true).in("role_name", ["principal", "coordinator"]);
+  for (const leader of leaders ?? []) {
+    const title = "New admission inquiry";
+    const message = `${name} enquired about ${program}.`;
+    const { data: event } = await svc.from("notification_events").insert({
+      school_id: school, user_id: leader.id, event_type: "admission_inquiry",
+      event_data: { reference_type: "admission_inquiry", inquiry_id: data.id, message },
+    }).select("id").maybeSingle();
+    if (event?.id) triggerPushProcessing(event.id);
+    await svc.from("notification_logs").insert({ school_id: school, user_id: leader.id,
+      target_role: leader.role_name, title, body: message, type: "admission_inquiry",
+      entity_type: "admission_inquiry", entity_id: data.id, is_read: false });
+  }
+  return ok({ id: data.id, message: "Thank you. Our admissions team will be in touch." });
+}
+
+export async function handleAdmissionInquiries(svc: SupabaseClient, user: User) {
+  if (!isLeader(user)) return fail("leadership access required", 403);
+  const school = schoolId(user);
+  if (!school) return fail("school assignment is required", 403);
+  const { data, error } = await svc.from("admission_inquiries").select("*")
+    .eq("school_id", school).order("submitted_at", { ascending: false });
+  return error ? fail(error.message) : ok(data ?? []);
 }
 
 export async function handleWebsite(
@@ -114,13 +146,41 @@ export async function handleWebsite(
   svc: SupabaseClient,
   user: User,
 ): Promise<Response> {
-  if (!isPrincipal(user)) return fail("principal access required", 403);
   const school = schoolId(user);
   if (!school) return fail("school assignment is required", 403);
   const body = method === "GET" ||
       !req.headers.get("content-type")?.includes("application/json")
     ? {}
     : await req.json().catch(() => ({})) as Record<string, unknown>;
+
+  // Coordinators may manage only the public ticker; homepage copy and gallery
+  // remain principal-controlled.
+  if (path === "/website/ticker") {
+    if (!isLeader(user)) return fail("leadership access required", 403);
+    if (method === "GET") {
+      const { data, error } = await svc.from("school_website_content").select(
+        "breaking_news_text, breaking_news_enabled, updated_at",
+      ).eq("school_id", school).maybeSingle();
+      return error ? fail(error.message) : ok(data ?? {});
+    }
+    if (method === "PUT") {
+      const breakingNewsText = text(body.breaking_news_text);
+      const breakingNewsEnabled = body.breaking_news_enabled === true;
+      if (breakingNewsText.length > 240) return fail("breaking news text must be 240 characters or fewer", 422);
+      if (breakingNewsEnabled && !breakingNewsText) return fail("breaking news text is required when the ticker is enabled", 422);
+      const { data, error } = await svc.from("school_website_content").upsert({
+        school_id: school,
+        breaking_news_text: breakingNewsText,
+        breaking_news_enabled: breakingNewsEnabled,
+        updated_by: user.id,
+      }, { onConflict: "school_id" }).select(
+        "breaking_news_text, breaking_news_enabled, updated_at",
+      ).single();
+      return error ? fail(error.message) : ok(data);
+    }
+  }
+
+  if (!isPrincipal(user)) return fail("principal access required", 403);
 
   if (path === "/website/content") {
     if (method === "GET") {
@@ -163,11 +223,14 @@ export async function handleWebsite(
   if (path === "/website/gallery/upload" && method === "POST") {
     const form = await req.formData().catch(() => null);
     const file = form?.get("file");
-    if (!(file instanceof File) || !file.type.startsWith("image/")) {
-      return fail("an image file is required");
+    const allowedMedia = file instanceof File && (
+      file.type.startsWith("image/") || ["video/mp4", "video/webm", "video/quicktime"].includes(file.type)
+    );
+    if (!allowedMedia || !(file instanceof File)) {
+      return fail("an image or MP4, WebM, or MOV video is required");
     }
-    if (file.size > 10 * 1024 * 1024) {
-      return fail("images must be 10 MB or smaller");
+    if (file.size > (file.type.startsWith("video/") ? 50 : 10) * 1024 * 1024) {
+      return fail(file.type.startsWith("video/") ? "videos must be 50 MB or smaller" : "images must be 10 MB or smaller");
     }
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
     const mediaPath = `${school}/${crypto.randomUUID()}-${safeName}`;
@@ -184,8 +247,9 @@ export async function handleWebsite(
         title: text(form?.get("title")),
         alt_text: text(form?.get("alt_text")),
         caption: text(form?.get("caption")),
+        media_type: file.type,
         sort_order: Number(form?.get("sort_order") ?? 0) || 0,
-        is_published: form?.get("is_published") === "true",
+        is_published: form?.get("is_published") !== "false",
         created_by: user.id,
       }).select().single();
     if (error) {

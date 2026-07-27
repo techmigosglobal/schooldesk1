@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoaderCircle } from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
@@ -67,7 +68,7 @@ export function LoginForm({ role }: { role: PortalRole }) {
   return (
     <main className="login-page">
       <section className="login-card">
-        <a className="login-brand" href="/">
+        <Link className="login-brand" href="/" aria-label="Back to ArishVille Preschool website">
           <Image
             src="/branding/arishville-logo.png"
             alt="ArishVille Preschool"
@@ -75,7 +76,7 @@ export function LoginForm({ role }: { role: PortalRole }) {
             height={66}
           />
           <span>ArishVille Preschool</span>
-        </a>
+        </Link>
 
         <h1>{role === "principal" ? "Principal Portal" : "Coordinator Portal"}</h1>
         <p>Use your SchoolDesk username or email and password.</p>
@@ -137,6 +138,7 @@ export function LoginForm({ role }: { role: PortalRole }) {
             )}
           </button>
         </form>
+        <div className="login-return"><Link href="/login">← Choose another portal</Link><Link href="/">Back to school website</Link></div>
       </section>
     </main>
   );

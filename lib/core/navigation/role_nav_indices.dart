@@ -71,6 +71,7 @@ class PrincipalNav {
   static const analytics = 21;
   static const gallery = 22;
   static const eventPosts = 23;
+  static const admissionInquiries = 24;
 }
 
 class SuperAdminNav {

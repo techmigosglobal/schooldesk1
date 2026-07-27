@@ -13,7 +13,6 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/routes/app_routes.dart';
 
 enum _EventFilter {
   month,
@@ -56,6 +55,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   _EventFilter _filter = _EventFilter.month;
   _EventsDisplayMode _displayMode = _EventsDisplayMode.month;
   String? _activeLegendFilter;
+  bool _hideGeneratedHolidays = false;
 
   @override
   void initState() {
@@ -76,19 +76,26 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       final selectedYearId = _selectedAcademicYearId.isNotEmpty
           ? _selectedAcademicYearId
           : _currentAcademicYearId(years);
-      final rows = await api.getEvents(
-        academicYearId: selectedYearId.isEmpty ? null : selectedYearId,
-      );
-      final ptmRows = await api.getRawList(
-        '/parent-teacher-meetings',
-        queryParameters: selectedYearId.isEmpty
-            ? null
-            : {'academic_year_id': selectedYearId},
-      );
+      final results = await Future.wait<Object>([
+        api.getEvents(
+          academicYearId: selectedYearId.isEmpty ? null : selectedYearId,
+        ),
+        api.getRawList(
+          '/parent-teacher-meetings',
+          queryParameters: selectedYearId.isEmpty
+              ? null
+              : {'academic_year_id': selectedYearId},
+        ),
+        api.getCalendarPreferences(),
+      ]);
+      final rows = results[0] as List<Map<String, dynamic>>;
+      final ptmRows = results[1] as List<Map<String, dynamic>>;
+      final preferences = results[2] as Map<String, dynamic>;
       final events = [
         ...rows.map(_PrincipalEvent.fromApi),
         ...ptmRows.map(_PrincipalEvent.fromPtmApi),
-        ..._getBuiltInHolidays(selectedYearId, years),
+        if (preferences['hide_generated_holidays'] != true)
+          ..._getBuiltInHolidays(selectedYearId, years),
       ]..sort((a, b) => a.start.compareTo(b.start));
       if (!mounted) return;
       // Derive the display year from the selected academic year's start date so
@@ -115,6 +122,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         _academicYears = years;
         _selectedAcademicYearId = selectedYearId;
         _events = events;
+        _hideGeneratedHolidays = preferences['hide_generated_holidays'] == true;
         _selectedYear = derivedYear;
         _selectedMonth = effectiveSelectedDate.month;
         _selectedDate = effectiveSelectedDate;
@@ -196,6 +204,11 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         role.isEmpty ||
         role == 'principal' ||
         role == 'coordinator';
+  }
+
+  bool get _isPrincipal {
+    return BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+        'principal';
   }
 
   AcademicYearModel? get _selectedAcademicYear {
@@ -552,6 +565,79 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return confirmed == true;
   }
 
+  Future<void> _confirmCalendarReset() async {
+    final controller = TextEditingController();
+    var canReset = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Reset school calendar?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This removes all manually created events and PTM entries for this school. School posts and academic years are not affected. Generated holidays will stay hidden until you add fresh calendar entries.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Type RESET to confirm',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) => setDialogState(
+                  () => canReset = value.trim().toUpperCase() == 'RESET',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: canReset
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: context.appTheme.error,
+              ),
+              child: const Text('Reset calendar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (confirmed != true || !mounted) return;
+    try {
+      final result = await BackendApiClient.instance.resetSchoolCalendar();
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Calendar reset: ${result['events_deleted'] ?? 0} events and ${result['ptms_deleted'] ?? 0} PTM entries removed.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to reset calendar: $error'),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<bool> _deleteEvent(_PrincipalEvent event) async {
     if (event.id.isEmpty) return false;
     final confirmed = await _confirmDelete(event);
@@ -642,33 +728,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           ? 'Create and manage school events, holidays, PTMs, and milestones'
           : 'School events, holidays, PTMs, and milestones',
       drawer: _schoolCalendarDrawer(),
-      actions: [
-        if (_canManageEvents)
-          Semantics(
-            button: true,
-            label: 'Open pending event approvals',
-            child: IconButton(
-              tooltip: 'Approve event posts',
-              icon: const Icon(Icons.fact_check_rounded),
-              onPressed: () async {
-                final changed = await Navigator.pushNamed(
-                  context,
-                  AppRoutes.principalEventApprovals,
-                );
-                if (changed == true && mounted) await _loadData();
-              },
-            ),
-          ),
-        Semantics(
-          button: true,
-          label: 'Refresh school calendar',
-          child: IconButton(
-            tooltip: 'Refresh calendar',
-            onPressed: _loading ? null : _loadData,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ),
-      ],
+      actions: _isPrincipal
+          ? [
+              IconButton(
+                tooltip: 'Reset school calendar',
+                onPressed: _loading ? null : _confirmCalendarReset,
+                icon: const Icon(Icons.restart_alt_rounded),
+              ),
+            ]
+          : const [],
       floatingActionButton: _canManageEvents
           ? FloatingActionButton.extended(
               onPressed: () => _openCreateEvent(initialDate: _selectedDate),
@@ -791,7 +859,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '$upcoming upcoming  •  $holidays holidays',
+                    '$upcoming upcoming  •  ${_hideGeneratedHolidays ? 'custom holidays only' : '$holidays holidays'}',
                     style: GoogleFonts.dmSans(
                       color: Colors.white.withAlpha(220),
                       fontSize: 12,

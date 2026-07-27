@@ -10,8 +10,14 @@ export type GalleryItem = {
   media_type?: string;
 };
 
+/** The public-school website is intentionally a photo showcase. */
+export function isPublicGalleryImage(item: GalleryItem): boolean {
+  return item.media_type?.startsWith("image/") === true
+    || /\.(avif|gif|jpe?g|png|webp)(\?|$)/i.test(item.media_url);
+}
+
 export type PublicWebsite = {
-  content?: Record<string, string>;
+  content?: Record<string, string | boolean>;
   gallery?: GalleryItem[];
   sections?: Array<{ section_key: string; title: string; body: string; image_url: string }>;
   entries?: Array<{ id: string; entry_type: "program" | "news_event" | "testimonial"; title: string; body: string; image_url: string; metadata?: Record<string, string>; created_at: string }>;

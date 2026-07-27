@@ -11,5 +11,5 @@ export const metadata: Metadata = {
 
 export default async function HomePage() {
   const site = await getPublicWebsite();
-  return <PublicPage><PreschoolEssentials site={site} /></PublicPage>;
+  return <PublicPage showBreakingNews><PreschoolEssentials site={site} /></PublicPage>;
 }

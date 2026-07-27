@@ -48,7 +48,7 @@ import {
 import { handleHelp } from "./handlers/help.ts";
 import { handleAccess } from "./handlers/access.ts";
 import { handleIssues } from "./handlers/issues.ts";
-import { handleWebsite, handleWebsiteEnquiry, handleWebsitePublic } from "./handlers/website.ts";
+import { handleAdmissionInquiries, handleWebsite, handleWebsiteEnquiry, handleWebsitePublic } from "./handlers/website.ts";
 import { handleDemo } from "./handlers/demo.ts";
 import { handleActivity, recordHttpActivity } from "./handlers/activity.ts";
 
@@ -423,7 +423,7 @@ Deno.serve(async (req: Request) => {
     return handleWebsitePublic(url, serviceClient());
   }
   if (path === "/website/enquiries" && method === "POST") {
-    return handleWebsiteEnquiry(req, serviceClient());
+    return handleWebsiteEnquiry(req, url, serviceClient());
   }
   if (path === "/demo/login" || path === "/jobs/demo-credential-rotation") {
     return handleDemo(req, path, method, serviceClient(), null);
@@ -499,6 +499,9 @@ Deno.serve(async (req: Request) => {
   }
   if (path.startsWith("/dashboard")) {
     return handleDashboard(req, path, method, url, client, svc, user);
+  }
+  if (path === "/admission-inquiries" && method === "GET") {
+    return handleAdmissionInquiries(svc, user);
   }
   if (
     path.startsWith("/academic-years") || path.startsWith("/grades") ||

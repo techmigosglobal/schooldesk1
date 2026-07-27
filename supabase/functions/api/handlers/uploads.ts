@@ -720,42 +720,106 @@ async function performReportExport(
     ]);
   }
 
+  // A report export must be readable as a document, not a single text stream.
+  // Keep the renderer dependency-free for Deno while producing paginated tables
+  // with a branded header, metadata, repeated headers, and page numbers.
   const pdfEscape = (value: unknown) =>
     `${value ?? ""}`
       .replaceAll("\\", "\\\\")
       .replaceAll("(", "\\(")
       .replaceAll(")", "\\)")
       .replace(/[\r\n]+/g, " ");
-  const reportLines = [
-    "SchoolDesk Report",
-    reportType.replaceAll("_", " "),
-    new Date().toISOString(),
-    "",
-    headers.join(" | "),
-    ...rows.map((row) => row.map(pdfEscape).join(" | ")),
-  ].flatMap((line) => {
-    const source = pdfEscape(line);
-    const chunks = source.match(/.{1,105}/g) ?? [""];
-    return chunks;
-  }).slice(0, 44);
-  const stream = [
-    "BT",
-    "/F1 10 Tf",
-    "50 780 Td",
-    "14 TL",
-    ...reportLines.flatMap((line, index) =>
-      index === 0 ? [`(${line}) Tj`] : ["T*", `(${line}) Tj`]
-    ),
-    "ET",
-  ].join("\n");
+  const truncate = (value: unknown, length: number) => {
+    const text = pdfEscape(value).replace(/\s+/g, " ").trim();
+    return text.length <= length
+      ? text
+      : `${text.slice(0, Math.max(1, length - 1))}…`;
+  };
+  const columnCount = Math.max(1, headers.length);
+  const pageWidth = 792;
+  const pageHeight = 612;
+  const margin = 34;
+  const usableWidth = pageWidth - margin * 2;
+  const columnWidth = usableWidth / columnCount;
+  const rowsPerPage = 20;
+  const pages = Math.max(1, Math.ceil(Math.max(rows.length, 1) / rowsPerPage));
+  const pageStreams = Array.from({ length: pages }, (_, pageIndex) => {
+    const pageRows = rows.slice(
+      pageIndex * rowsPerPage,
+      (pageIndex + 1) * rowsPerPage,
+    );
+    const lines: string[] = [
+      "0.05 0.12 0.28 rg",
+      `0 ${pageHeight - 54} ${pageWidth} 54 re f`,
+      "BT /F2 18 Tf 34 580 Td 1 1 1 rg (SchoolDesk) Tj ET",
+      "BT /F1 10 Tf 144 581 Td 0.82 0.9 1 rg (Academic data export) Tj ET",
+      `BT /F2 13 Tf ${margin} 540 Td 0.03 0.09 0.2 rg (${
+        pdfEscape(
+          reportType.replaceAll("_", " ").replace(
+            /\b\w/g,
+            (c) => c.toUpperCase(),
+          ),
+        )
+      }) Tj ET`,
+      `BT /F1 8 Tf ${margin} 524 Td 0.3 0.36 0.45 rg (Generated ${
+        pdfEscape(new Date().toISOString().replace("T", " ").slice(0, 16))
+      } UTC  |  ${rows.length} record(s)) Tj ET`,
+      "0.09 0.36 0.75 rg",
+      `${margin} 498 ${usableWidth} 20 re f`,
+    ];
+    headers.forEach((header, index) => {
+      const x = margin + index * columnWidth + 4;
+      lines.push(
+        `BT /F2 7 Tf ${x.toFixed(2)} 505 Td 1 1 1 rg (${
+          truncate(header, Math.floor(columnWidth / 4.3))
+        }) Tj ET`,
+      );
+    });
+    const renderRows = pageRows.length
+      ? pageRows
+      : [["No records match the selected report scope."]];
+    renderRows.forEach((row, rowIndex) => {
+      const y = 478 - rowIndex * 19;
+      const shade = rowIndex % 2 === 0 ? "0.97 0.98 1 rg" : "1 1 1 rg";
+      lines.push(
+        shade,
+        `${margin} ${y - 4} ${usableWidth} 19 re f`,
+        "0.85 0.89 0.95 RG",
+        `${margin} ${y - 4} ${usableWidth} 19 re S`,
+      );
+      for (let index = 0; index < columnCount; index++) {
+        const x = margin + index * columnWidth + 4;
+        const value = row[index] ?? "";
+        lines.push(
+          `BT /F1 7 Tf ${x.toFixed(2)} ${y + 2} Td 0.08 0.13 0.22 rg (${
+            truncate(value, Math.floor(columnWidth / 4.3))
+          }) Tj ET`,
+        );
+      }
+    });
+    lines.push(
+      "0.35 0.4 0.48 rg",
+      `BT /F1 8 Tf ${margin} 22 Td (Confidential school record) Tj ET`,
+      `BT /F1 8 Tf ${pageWidth - 116} 22 Td (Page ${
+        pageIndex + 1
+      } of ${pages}) Tj ET`,
+    );
+    return lines.join("\n");
+  });
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    `<< /Type /Pages /Kids [${
+      pageStreams.map((_, index) => `${5 + index * 2} 0 R`).join(" ")
+    }] /Count ${pages} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${
-      new TextEncoder().encode(stream).length
-    } >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    ...pageStreams.flatMap((stream, index) => [
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents " +
+      (6 + index * 2) + " 0 R >>",
+      `<< /Length ${
+        new TextEncoder().encode(stream).length
+      } >>\nstream\n${stream}\nendstream`,
+    ]),
   ];
   let pdf = "%PDF-1.4\n";
   const offsets = [0];

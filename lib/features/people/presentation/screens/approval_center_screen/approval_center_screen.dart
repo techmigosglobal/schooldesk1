@@ -9,7 +9,6 @@ import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_audit_log_widget.dart';
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_item_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/routes/app_routes.dart';
 
 enum ApprovalType {
   account,
@@ -187,10 +186,10 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
 
   final List<String> _tabLabels = [
     'All',
-    'People',
+    'Student & Accounts',
     'Leave',
     'Fees',
-    'Academic',
+    'Class & Academic',
     'Content',
   ];
 
@@ -917,25 +916,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       title: 'Approval Center',
       subtitle: '$pendingCount items pending your action',
       drawer: drawer,
-      actions: [
-        IconButton(
-          tooltip: 'Refresh approval queue',
-          onPressed: _loading ? null : _loadData,
-          icon: const Icon(Icons.refresh_rounded),
-        ),
-        IconButton(
-          tooltip: 'Event post approvals',
-          onPressed: () async {
-            final changed = await Navigator.pushNamed(
-              context,
-              AppRoutes.principalEventApprovals,
-            );
-            if (changed == true && mounted) await _loadData();
-          },
-          icon: const Icon(Icons.fact_check_rounded),
-        ),
-        _PendingApprovalBadge(pendingCount: pendingCount),
-      ],
+      actions: [_PendingApprovalBadge(pendingCount: pendingCount)],
       bottom: TabBar(
         controller: _tabController,
         isScrollable: true,

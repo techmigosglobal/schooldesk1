@@ -1,0 +1,133 @@
+- generic [active] [ref=f12e1]:
+  - main [ref=f12e2]:
+    - generic [ref=f12e3]:
+      - link "Arish Ville Preschool home" [ref=f12e4] [cursor=pointer]:
+        - /url: /
+        - img "Arish Ville Preschool" [ref=f12e5]
+        - generic [ref=f12e6]:
+          - generic [ref=f12e7]: ArishVille
+          - generic [ref=f12e8]: Preschool
+      - navigation "Primary navigation" [ref=f12e9]:
+        - link "Home" [ref=f12e10] [cursor=pointer]:
+          - /url: /
+        - link "About" [ref=f12e11] [cursor=pointer]:
+          - /url: /about-us
+        - link "Programs" [ref=f12e12] [cursor=pointer]:
+          - /url: /programs
+        - link "Admissions" [ref=f12e13] [cursor=pointer]:
+          - /url: /admissions
+        - link "Campus & Safety" [ref=f12e14] [cursor=pointer]:
+          - /url: /campus-safety
+        - link "Gallery" [ref=f12e15] [cursor=pointer]:
+          - /url: /gallery
+        - link "News & Events" [ref=f12e16] [cursor=pointer]:
+          - /url: /news-events
+        - link "Contact" [ref=f12e17] [cursor=pointer]:
+          - /url: /contact
+      - link "Staff login" [ref=f12e18] [cursor=pointer]:
+        - /url: /login
+    - generic [ref=f12e19]:
+      - paragraph [ref=f12e20]: Contact Little Ville
+      - heading "We’d love to hear from you." [level=1] [ref=f12e21]
+      - paragraph [ref=f12e22]: Ask a question, arrange a visit, or begin an admissions enquiry with our team.
+    - generic [ref=f12e23]:
+      - generic [ref=f12e24]:
+        - paragraph [ref=f12e25]: Visit Little Ville
+        - heading "Come and see the joy of a school day." [level=2] [ref=f12e26]
+        - paragraph [ref=f12e27]: "Plot No: 29, 1-42, PE/29, Chiranjeevi Nagar, Pragathi Enclave, Miyapur, Hyderabad, Telangana 500049."
+        - paragraph [ref=f12e28]: Admissions:We’ll respond personally to your enquiry and help you arrange a visit.
+        - link "Open in Google Maps ↗" [ref=f12e29] [cursor=pointer]:
+          - /url: https://maps.google.com/?cid=16601324200924959650
+        - iframe [ref=f12e30]:
+          - generic [ref=f13e1]:
+            - link "Open in Maps (opens in new tab)" [ref=f13e4] [cursor=pointer]:
+              - /url: about:invalid#zClosurez
+              - text: Open in Maps
+            - generic [ref=f13e9]:
+              - region "Map" [ref=f13e10]
+              - iframe [ref=f13e28]:
+                
+      - generic [ref=f12e31]:
+        - paragraph [ref=f12e32]: Admissions enquiry
+        - heading "Tell us a little about your family." [level=2] [ref=f12e33]
+        - generic [ref=f12e34]:
+          - generic [ref=f12e35]:
+            - text: Parent name
+            - textbox "Parent name" [ref=f12e36]:
+              - /placeholder: Your name
+          - generic [ref=f12e37]:
+            - text: Phone number
+            - textbox "Phone number" [ref=f12e38]:
+              - /placeholder: Your number
+          - generic [ref=f12e39]:
+            - text: Email address
+            - textbox "Email address" [ref=f12e40]:
+              - /placeholder: you@example.com
+          - generic [ref=f12e41]:
+            - text: Child’s name
+            - textbox "Child’s name" [ref=f12e42]
+          - generic [ref=f12e43]:
+            - text: Child’s age
+            - combobox "Child’s age" [ref=f12e44]:
+              - option "Select age" [disabled] [selected]
+              - option "1.5–6 years"
+              - option "2–3 years"
+              - option "3–4 years"
+              - option "4–5 years"
+              - option "5–6 years"
+          - generic [ref=f12e45]:
+            - text: Program of interest
+            - combobox "Program of interest" [ref=f12e46]:
+              - option "Select program" [disabled] [selected]
+              - option "Daycare"
+              - option "Playgroup"
+              - option "Nursery"
+              - option "PP1"
+              - option "PP2"
+          - generic [ref=f12e47]:
+            - text: How can we help?
+            - textbox "How can we help?" [ref=f12e48]:
+              - /placeholder: Tell us about your child or preferred visit time
+          - button "Send enquiry →" [ref=f12e49] [cursor=pointer]
+    - generic [ref=f12e50]:
+      - generic [ref=f12e51]:
+        - paragraph [ref=f12e52]: A warm welcome awaits
+        - heading "Ready to find the right program for your child?" [level=2] [ref=f12e53]
+      - link "Explore programs" [ref=f12e54] [cursor=pointer]:
+        - /url: /programs
+    - generic [ref=f12e55]:
+      - generic [ref=f12e56]:
+        - generic [ref=f12e57]:
+          - img "ArishVille Preschool" [ref=f12e58]
+          - generic [ref=f12e59]:
+            - generic [ref=f12e60]: ArishVille Preschool
+            - generic [ref=f12e61]: Learn Today, Lead Tomorrow.
+            - paragraph [ref=f12e62]: A happy first home for curiosity, confidence, and friendship.
+        - navigation "Explore ArishVille" [ref=f12e63]:
+          - generic [ref=f12e64]: Explore
+          - link "Home" [ref=f12e65] [cursor=pointer]:
+            - /url: /
+          - link "About" [ref=f12e66] [cursor=pointer]:
+            - /url: /about-us
+          - link "Programs" [ref=f12e67] [cursor=pointer]:
+            - /url: /programs
+          - link "Admissions & Contact" [ref=f12e68] [cursor=pointer]:
+            - /url: /admissions
+          - link "School Gallery" [ref=f12e69] [cursor=pointer]:
+            - /url: /gallery
+        - navigation "SchoolDesk access" [ref=f12e70]:
+          - generic [ref=f12e71]: SchoolDesk
+          - link "Staff login" [ref=f12e72] [cursor=pointer]:
+            - /url: /login
+          - link "Principal portal" [ref=f12e73] [cursor=pointer]:
+            - /url: /login/principal
+          - link "Coordinator portal" [ref=f12e74] [cursor=pointer]:
+            - /url: /login/coordinator
+          - link "Back to top ↑" [ref=f12e75] [cursor=pointer]:
+            - /url: "#top"
+      - generic [ref=f12e76]:
+        - generic [ref=f12e77]: © 2026 ArishVille Preschool. All rights reserved.
+        - link "Managed by Techmigos" [ref=f12e78] [cursor=pointer]:
+          - /url: https://techmigos.com
+  - button "Open Next.js Dev Tools" [ref=f12e85] [cursor=pointer]
+  - alert [ref=f12e89]

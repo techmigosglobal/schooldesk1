@@ -6,9 +6,10 @@ const csp = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: http: https:",
-  "media-src 'self'",
+  "media-src 'self' https://ouvwogguttybmpgfgctc.supabase.co",
   "connect-src 'self'",
   "worker-src 'self' blob:",
+  "frame-src 'self' https://www.google.com https://www.google.co.in https://maps.google.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -37,4 +38,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-

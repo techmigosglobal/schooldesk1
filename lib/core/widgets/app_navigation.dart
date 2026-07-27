@@ -172,6 +172,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.studentOversight,
             ),
             SchoolDeskNavigationItem(
+              index: PrincipalNav.admissionInquiries,
+              icon: Icons.markunread_outlined,
+              activeIcon: Icons.markunread_rounded,
+              label: 'Admission Inquiries',
+              route: AppRoutes.admissionInquiries,
+            ),
+            SchoolDeskNavigationItem(
               index: PrincipalNav.guardians,
               icon: Icons.family_restroom_outlined,
               activeIcon: Icons.family_restroom_rounded,
@@ -260,7 +267,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               index: PrincipalNav.eventApprovals,
               icon: Icons.approval_outlined,
               activeIcon: Icons.approval_rounded,
-              label: 'Event Approvals',
+              label: 'School Posts Approval',
               route: AppRoutes.principalEventApprovals,
             ),
             SchoolDeskNavigationItem(

@@ -705,7 +705,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/principal-event-approvals-screen',
-      title: 'Event Approvals',
+      title: 'School Posts Approval',
       module: 'Communication',
       portal: 'principal',
     ),

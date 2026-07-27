@@ -1,0 +1,62 @@
+- generic [active] [ref=f8e1]:
+  - main [ref=f8e2]:
+    - generic [ref=f8e3]:
+      - link "Arish Ville Preschool home" [ref=f8e4] [cursor=pointer]:
+        - /url: /
+        - img "Arish Ville Preschool" [ref=f8e5]
+        - generic [ref=f8e6]:
+          - generic [ref=f8e7]: ArishVille
+          - generic [ref=f8e8]: Preschool
+      - group [ref=f8e9]:
+        - generic "Open site navigation" [ref=f8e10] [cursor=pointer]: Menu
+      - link "Staff login" [ref=f8e11] [cursor=pointer]:
+        - /url: /login
+    - generic [ref=f8e12]:
+      - paragraph [ref=f8e13]: News & events
+      - heading "School news, dates, and celebrations." [level=1] [ref=f8e14]
+      - paragraph [ref=f8e15]: Use this page for time-sensitive announcements, upcoming-event details, and event recaps. For everyday visual moments, visit our Gallery.
+    - article [ref=f8e17]:
+      - text: Coming soon
+      - heading "School stories" [level=2] [ref=f8e18]
+      - paragraph [ref=f8e19]: Published school events and news will appear here.
+    - generic [ref=f8e20]:
+      - generic [ref=f8e21]:
+        - paragraph [ref=f8e22]: Stay connected
+        - heading "Want to know more about life at ArishVille?" [level=2] [ref=f8e23]
+      - link "Speak with us" [ref=f8e24] [cursor=pointer]:
+        - /url: /contact
+    - generic [ref=f8e25]:
+      - generic [ref=f8e26]:
+        - generic [ref=f8e27]:
+          - img "ArishVille Preschool" [ref=f8e28]
+          - generic [ref=f8e29]:
+            - generic [ref=f8e30]: ArishVille Preschool
+            - generic [ref=f8e31]: Learn Today, Lead Tomorrow.
+            - paragraph [ref=f8e32]: A happy first home for curiosity, confidence, and friendship.
+        - navigation "Explore ArishVille" [ref=f8e33]:
+          - generic [ref=f8e34]: Explore
+          - link "Home" [ref=f8e35] [cursor=pointer]:
+            - /url: /
+          - link "About" [ref=f8e36] [cursor=pointer]:
+            - /url: /about-us
+          - link "Programs" [ref=f8e37] [cursor=pointer]:
+            - /url: /programs
+          - link "Admissions & Contact" [ref=f8e38] [cursor=pointer]:
+            - /url: /admissions
+          - link "School Gallery" [ref=f8e39] [cursor=pointer]:
+            - /url: /gallery
+        - navigation "SchoolDesk access" [ref=f8e40]:
+          - generic [ref=f8e41]: SchoolDesk
+          - link "Staff login" [ref=f8e42] [cursor=pointer]:
+            - /url: /login
+          - link "Principal portal" [ref=f8e43] [cursor=pointer]:
+            - /url: /login/principal
+          - link "Coordinator portal" [ref=f8e44] [cursor=pointer]:
+            - /url: /login/coordinator
+          - link "Back to top ↑" [ref=f8e45] [cursor=pointer]:
+            - /url: "#top"
+      - generic [ref=f8e46]:
+        - generic [ref=f8e47]: © 2026 ArishVille Preschool. All rights reserved.
+        - link "Managed by Techmigos" [ref=f8e48] [cursor=pointer]:
+          - /url: https://techmigos.com
+  - button "Open Next.js Dev Tools" [ref=f8e55] [cursor=pointer]

@@ -28,6 +28,7 @@ import 'package:schooldesk1/features/monitoring/presentation/screens/system_moni
 import 'package:schooldesk1/features/dashboard/presentation/screens/super_admin_dashboard_screen/super_admin_dashboard_screen.dart';
 import 'package:schooldesk1/features/shared/presentation/screens/help_screen/help_screen.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/issue_screen.dart';
+import 'package:schooldesk1/features/people/presentation/screens/admission_inquiries_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -102,6 +103,7 @@ class AppRoutes {
       '/principal-user-management-screen/assign-children';
   static const String principalSchoolProfile =
       '/principal-school-profile-screen';
+  static const String admissionInquiries = '/admission-inquiries-screen';
   static const String principalEventApprovals =
       '/principal-event-approvals-screen';
   static const String principalEventPosts = '/principal-event-posts-screen';
@@ -209,6 +211,7 @@ class AppRoutes {
     principalDashboard: (context) => const PrincipalDashboardScreen(),
     coordinatorDashboard: (context) => const PrincipalDashboardScreen(),
     principalSchoolProfile: (context) => const SchoolProfileScreen(),
+    admissionInquiries: (context) => const AdmissionInquiriesScreen(),
     staffManagement: (context) => const StaffManagementScreen(),
     staffForm: (context) => StaffFormScreen(args: _staffFormArgs(context)),
     studentOversight: (context) => const StudentOversightScreen(),

@@ -1,0 +1,90 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - link "Arish Ville Preschool home" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img "Arish Ville Preschool" [ref=e5]
+        - generic [ref=e6]:
+          - generic [ref=e7]: ArishVille
+          - generic [ref=e8]: Preschool
+      - navigation "Primary navigation" [ref=e9]:
+        - link "Home" [ref=e10] [cursor=pointer]:
+          - /url: /
+        - link "About" [ref=e11] [cursor=pointer]:
+          - /url: /about-us
+        - link "Programs" [ref=e12] [cursor=pointer]:
+          - /url: /programs
+        - link "Admissions" [ref=e13] [cursor=pointer]:
+          - /url: /admissions
+        - link "Campus & Safety" [ref=e14] [cursor=pointer]:
+          - /url: /campus-safety
+        - link "Gallery" [ref=e15] [cursor=pointer]:
+          - /url: /gallery
+        - link "News & Events" [ref=e16] [cursor=pointer]:
+          - /url: /news-events
+        - link "Contact" [ref=e17] [cursor=pointer]:
+          - /url: /contact
+      - link "Staff login" [ref=e19] [cursor=pointer]:
+        - /url: /login
+        - generic [ref=e21]: →
+    - generic [ref=e22]:
+      - paragraph [ref=e23]: ArishVille in moments
+      - heading "School Gallery" [level=1] [ref=e24]
+      - paragraph [ref=e25]: A visual archive of hands-on learning, creativity, and everyday joy. For announcements, event dates, and recaps, see News & Events.
+    - generic [ref=e27]:
+      - figure "Mango day Mango activity" [ref=e28]:
+        - generic "Mango day" [ref=e29]
+        - generic [ref=e30]:
+          - generic [ref=e31]: Mango day
+          - generic [ref=e32]: Mango activity
+      - figure "Children learning alphabets" [ref=e33]
+      - figure "World emoji day" [ref=e37]:
+        - img "World emoji day" [ref=e38]
+      - figure "World emoji day" [ref=e41]:
+        - img "World emoji day" [ref=e42]
+      - figure "World emoji day" [ref=e45]:
+        - img "World emoji day" [ref=e46]
+      - figure "World emoji day" [ref=e49]:
+        - img "World emoji day" [ref=e50]
+      - figure "World emoji day" [ref=e53]:
+        - img "World emoji day" [ref=e54]
+    - generic [ref=e57]:
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - img "ArishVille Preschool" [ref=e60]
+          - generic [ref=e61]:
+            - generic [ref=e62]: ArishVille Preschool
+            - generic [ref=e63]: Learn Today, Lead Tomorrow.
+            - paragraph [ref=e64]: A happy first home for curiosity, confidence, and friendship.
+        - navigation "Explore ArishVille" [ref=e65]:
+          - generic [ref=e66]: Explore
+          - link "Home" [ref=e67] [cursor=pointer]:
+            - /url: /
+          - link "About" [ref=e68] [cursor=pointer]:
+            - /url: /about-us
+          - link "Programs" [ref=e69] [cursor=pointer]:
+            - /url: /programs
+          - link "Admissions & Contact" [ref=e70] [cursor=pointer]:
+            - /url: /admissions
+          - link "School Gallery" [ref=e71] [cursor=pointer]:
+            - /url: /gallery
+        - navigation "SchoolDesk access" [ref=e72]:
+          - generic [ref=e73]: SchoolDesk
+          - link "Staff login" [ref=e74] [cursor=pointer]:
+            - /url: /login
+          - link "Principal portal" [ref=e75] [cursor=pointer]:
+            - /url: /login/principal
+          - link "Coordinator portal" [ref=e76] [cursor=pointer]:
+            - /url: /login/coordinator
+          - link "Back to top ↑" [ref=e77] [cursor=pointer]:
+            - /url: "#top"
+      - generic [ref=e78]:
+        - generic [ref=e79]: © 2026 ArishVille Preschool. All rights reserved.
+        - link "Developed and managed by Techmigos" [ref=e80] [cursor=pointer]:
+          - /url: https://techmigos.com
+          - generic [ref=e81]:
+            - text: Developed & managed by
+            - generic [ref=e82]: Techmigos
+            - generic [ref=e83]: ↗
+  - button "Open Next.js Dev Tools" [ref=e89] [cursor=pointer]
+  - alert [ref=e93]

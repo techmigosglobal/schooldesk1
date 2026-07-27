@@ -1,0 +1,247 @@
+- generic [active] [ref=f26e1]:
+  - main [ref=f26e2]:
+    - generic [ref=f26e3]:
+      - link "Arish Ville Preschool home" [ref=f26e4] [cursor=pointer]:
+        - /url: /
+        - img "Arish Ville Preschool" [ref=f26e5]
+        - generic [ref=f26e6]:
+          - generic [ref=f26e7]: ArishVille
+          - generic [ref=f26e8]: Preschool
+      - navigation "Primary navigation" [ref=f26e9]:
+        - link "Home" [ref=f26e10] [cursor=pointer]:
+          - /url: /
+        - link "About" [ref=f26e11] [cursor=pointer]:
+          - /url: /about-us
+        - link "Programs" [ref=f26e12] [cursor=pointer]:
+          - /url: /programs
+        - link "Admissions" [ref=f26e13] [cursor=pointer]:
+          - /url: /admissions
+        - link "Campus & Safety" [ref=f26e14] [cursor=pointer]:
+          - /url: /campus-safety
+        - link "Gallery" [ref=f26e15] [cursor=pointer]:
+          - /url: /gallery
+        - link "News & Events" [ref=f26e16] [cursor=pointer]:
+          - /url: /news-events
+        - link "Contact" [ref=f26e17] [cursor=pointer]:
+          - /url: /contact
+      - link "Staff login" [ref=f26e18] [cursor=pointer]:
+        - /url: /login
+    - complementary "School announcement" [ref=f26e19]:
+      - generic [ref=f26e21]:
+        - generic [ref=f26e22]:
+          - text: Test to get displayed on the homepage site
+          - generic [ref=f26e23]: ◆
+          - text: Test to get displayed on the homepage site
+          - generic [ref=f26e24]: ◆
+        - generic [ref=f26e25]:
+          - text: Test to get displayed on the homepage site
+          - generic [ref=f26e26]: ◆
+          - text: Test to get displayed on the homepage site
+          - generic [ref=f26e27]: ◆
+    - region "Little Ville Preschool introduction" [ref=f26e28]:
+      - img "Children discovering nature together" [ref=f26e29]
+      - generic [ref=f26e33]:
+        - heading [level=1] [ref=f26e34]:
+          - text: Where Curiosity Blossoms into
+          - emphasis [ref=f26e35]: Confidence.
+        - paragraph [ref=f26e36]: Empowering young minds through excellence in education, leadership, and personal growth.
+        - generic [ref=f26e37]:
+          - link "Explore programs →" [ref=f26e38] [cursor=pointer]:
+            - /url: "#programs"
+            - text: Explore programs
+            - generic [ref=f26e39]: →
+          - link "Enquire now →" [ref=f26e40] [cursor=pointer]:
+            - /url: "#enquire"
+            - text: Enquire now
+            - generic [ref=f26e41]: →
+      - generic [ref=f26e42]:
+        - button "Previous hero image" [ref=f26e43] [cursor=pointer]: ‹
+        - button "Show slide 1" [ref=f26e44] [cursor=pointer]
+        - button "Show slide 2" [ref=f26e45] [cursor=pointer]
+        - button "Show slide 3" [ref=f26e46] [cursor=pointer]
+        - button "Next hero image" [ref=f26e47] [cursor=pointer]: ›
+    - generic [ref=f26e48]:
+      - paragraph [ref=f26e49]: Rooted in care. Made for discovery.
+      - heading "A warm first school for confident little learners." [level=2] [ref=f26e50]
+      - text: Every child receives the attention, encouragement, and playful experiences they need to flourish.
+    - generic [ref=f26e51]:
+      - heading "Our Programs ❧" [level=2] [ref=f26e52]
+      - paragraph [ref=f26e53]: Thoughtfully designed programs that nurture every stage of early learning.
+      - generic [ref=f26e54]:
+        - article [ref=f26e55]:
+          - img "Daycare program at Little Ville" [ref=f26e56]
+          - generic [ref=f26e57]:
+            - generic [ref=f26e58]: ✦
+            - generic [ref=f26e59]:
+              - heading "Daycare" [level=3] [ref=f26e60]
+              - text: 1.5 – 2 Years
+          - paragraph [ref=f26e61]: A caring, secure day where children feel at home while they learn and play.
+        - article [ref=f26e62]:
+          - img "Playgroup program at Little Ville" [ref=f26e63]
+          - generic [ref=f26e64]:
+            - generic [ref=f26e65]: ✦
+            - generic [ref=f26e66]:
+              - heading "Playgroup" [level=3] [ref=f26e67]
+              - text: 2 – 3 Years
+          - paragraph [ref=f26e68]: A joyful first school experience filled with sensory play, music, and connection.
+        - article [ref=f26e69]:
+          - img "Nursery program at Little Ville" [ref=f26e70]
+          - generic [ref=f26e71]:
+            - generic [ref=f26e72]: ✦
+            - generic [ref=f26e73]:
+              - heading "Nursery" [level=3] [ref=f26e74]
+              - text: 3 – 4 Years
+          - paragraph [ref=f26e75]: Stories, movement, friendship, and child-led exploration build growing confidence.
+        - article [ref=f26e76]:
+          - img "PP1 program at Little Ville" [ref=f26e77]
+          - generic [ref=f26e78]:
+            - generic [ref=f26e79]: ✦
+            - generic [ref=f26e80]:
+              - heading "PP1" [level=3] [ref=f26e81]
+              - text: 4 – 5 Years
+          - paragraph [ref=f26e82]: Playful language and early numeracy experiences nurture independent thinkers.
+        - article [ref=f26e83]:
+          - img "PP2 program at Little Ville" [ref=f26e84]
+          - generic [ref=f26e85]:
+            - generic [ref=f26e86]: ✦
+            - generic [ref=f26e87]:
+              - heading "PP2" [level=3] [ref=f26e88]
+              - text: 5 – 6 Years
+          - paragraph [ref=f26e89]: Meaningful discovery and school-readiness experiences prepare confident learners.
+    - generic [ref=f26e90]:
+      - generic [ref=f26e91]:
+        - paragraph [ref=f26e92]: A safe campus, every day.
+        - heading [level=2] [ref=f26e93]:
+          - text: A Safe Campus.
+          - emphasis [ref=f26e94]: Every Day.
+        - paragraph [ref=f26e95]: Your child’s safety and well-being are our highest priority. Our campus is designed to be secure, welcoming, and child-friendly.
+        - list [ref=f26e96]:
+          - listitem [ref=f26e97]: ◉CCTV monitored campus
+          - listitem [ref=f26e98]: ◉Trained & verified staff
+          - listitem [ref=f26e99]: ◉Secure entry & exit
+          - listitem [ref=f26e100]: ◉Child-friendly infrastructure
+          - listitem [ref=f26e101]: ◉Regular safety drills
+      - img "Children learning in a safe, green preschool environment" [ref=f26e102]
+      - complementary [ref=f26e103]:
+        - generic [ref=f26e104]: ♢
+        - paragraph [ref=f26e105]: Safety is not just our policy,our promise.
+        - generic [ref=f26e106]: ❧
+    - generic [ref=f26e107]:
+      - generic [ref=f26e108]:
+        - generic [ref=f26e109]:
+          - heading "News & Events ❧" [level=2] [ref=f26e110]
+          - link "View all" [ref=f26e111] [cursor=pointer]:
+            - /url: /news-events
+        - article [ref=f26e112]:
+          - generic [ref=f26e113]:
+            - heading "Earth Day Celebration" [level=3] [ref=f26e114]
+            - text: School update
+            - paragraph [ref=f26e115]: Happy moments, creative learning, and experiences shared with our Little Ville families.
+        - article [ref=f26e116]:
+          - generic [ref=f26e117]:
+            - heading "Storytelling Week" [level=3] [ref=f26e118]
+            - text: School update
+            - paragraph [ref=f26e119]: Happy moments, creative learning, and experiences shared with our Little Ville families.
+        - article [ref=f26e120]:
+          - generic [ref=f26e121]:
+            - heading "Mini Sports Day" [level=3] [ref=f26e122]
+            - text: School update
+            - paragraph [ref=f26e123]: Happy moments, creative learning, and experiences shared with our Little Ville families.
+      - generic [ref=f26e124]:
+        - heading "What Parents Say ❧" [level=2] [ref=f26e125]
+        - generic [ref=f26e126]:
+          - generic [ref=f26e127]:
+            - generic [ref=f26e128]: G
+            - generic [ref=f26e129]:
+              - strong [ref=f26e130]: Google Reviews
+              - paragraph [ref=f26e131]: 5.0 ★★★★★ · 80 reviews
+          - blockquote [ref=f26e132]: “I truly believe this is one of the best schools to send your toddler. I explored several schools before choosing this one and what stands out is how actively they engage children through innovative and fun activities. It’s wonderful to see my little one Mayuka learning and growing instead of sitting idle like in a typical daycare setup. I am pleasantly surprised by the variety of activities organized every day just as Shilpa Ma’am had mentioned. The creativity and effort put in by the teachers are truly commendable and i sincerely appreciate their dedication.”
+          - generic [ref=f26e133]:
+            - generic [ref=f26e134]:
+              - generic [ref=f26e135]: Mounica Grandhe
+              - generic [ref=f26e136]: 3 months ago
+            - generic [ref=f26e137]:
+              - button "Previous Google review" [ref=f26e138] [cursor=pointer]: ‹
+              - button "Next Google review" [ref=f26e139] [cursor=pointer]: ›
+          - generic "1 of 5 Google reviews" [ref=f26e140]
+          - link "Read all reviews on Google ↗" [ref=f26e142] [cursor=pointer]:
+            - /url: https://maps.google.com/?cid=16601324200924959650&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA
+    - generic [ref=f26e143]:
+      - heading "Moments That Matter ❧" [level=2] [ref=f26e144]
+      - generic [ref=f26e145]:
+        - generic "Mango day" [ref=f26e146]
+        - generic "Children learning alphabets" [ref=f26e147]
+        - img "World emoji day" [ref=f26e148] [cursor=pointer]
+        - img "World emoji day" [ref=f26e149] [cursor=pointer]
+        - img "World emoji day" [ref=f26e150] [cursor=pointer]
+        - img "World emoji day" [ref=f26e151] [cursor=pointer]
+    - generic [ref=f26e152]:
+      - generic [ref=f26e153]:
+        - heading "We’d Love to Hear From You!" [level=2] [ref=f26e154]: We’d Love to HearFrom You!
+        - paragraph [ref=f26e155]: Have questions or want to know more about Little Ville? We’re here to help.
+        - generic [ref=f26e156]: ⌖ Little Ville Preschool, Miyapur, Hyderabad⌕ Contact the admissions team✉ admissions@littlevillepreschool.com
+        - iframe [ref=f26e158]:
+          - link "Maps (opens in new tab)" [ref=f27e4] [cursor=pointer]:
+            - /url: about:invalid#zClosurez
+            - text: Maps
+      - generic [ref=f26e159]:
+        - heading "Enquire Now" [level=2] [ref=f26e160]
+        - generic [ref=f26e161]:
+          - textbox "Parent Name" [ref=f26e162]
+          - textbox "Phone Number" [ref=f26e163]
+          - textbox "Email Address" [ref=f26e164]
+          - textbox "Child’s Name" [ref=f26e165]
+          - combobox [ref=f26e166]:
+            - option "Child’s Age" [disabled] [selected]
+            - option "1.5–6 years"
+            - option "2–3 years"
+            - option "3–4 years"
+            - option "4–5 years"
+            - option "5–6 years"
+          - combobox [ref=f26e167]:
+            - option "Program of Interest" [disabled] [selected]
+            - option "Daycare"
+            - option "Playgroup"
+            - option "Nursery"
+            - option "PP1"
+            - option "PP2"
+        - textbox "Message" [ref=f26e168]
+        - button "Submit enquiry →" [ref=f26e169] [cursor=pointer]:
+          - text: Submit enquiry
+          - generic [ref=f26e170]: →
+    - generic [ref=f26e171]:
+      - generic [ref=f26e172]:
+        - generic [ref=f26e173]:
+          - img "ArishVille Preschool" [ref=f26e174]
+          - generic [ref=f26e175]:
+            - generic [ref=f26e176]: ArishVille Preschool
+            - generic [ref=f26e177]: Learn Today, Lead Tomorrow.
+            - paragraph [ref=f26e178]: A happy first home for curiosity, confidence, and friendship.
+        - navigation "Explore ArishVille" [ref=f26e179]:
+          - generic [ref=f26e180]: Explore
+          - link "Home" [ref=f26e181] [cursor=pointer]:
+            - /url: /
+          - link "About" [ref=f26e182] [cursor=pointer]:
+            - /url: /about-us
+          - link "Programs" [ref=f26e183] [cursor=pointer]:
+            - /url: /programs
+          - link "Admissions & Contact" [ref=f26e184] [cursor=pointer]:
+            - /url: /admissions
+          - link "School Gallery" [ref=f26e185] [cursor=pointer]:
+            - /url: /gallery
+        - navigation "SchoolDesk access" [ref=f26e186]:
+          - generic [ref=f26e187]: SchoolDesk
+          - link "Staff login" [ref=f26e188] [cursor=pointer]:
+            - /url: /login
+          - link "Principal portal" [ref=f26e189] [cursor=pointer]:
+            - /url: /login/principal
+          - link "Coordinator portal" [ref=f26e190] [cursor=pointer]:
+            - /url: /login/coordinator
+          - link "Back to top ↑" [ref=f26e191] [cursor=pointer]:
+            - /url: "#top"
+      - generic [ref=f26e192]:
+        - generic [ref=f26e193]: © 2026 ArishVille Preschool. All rights reserved.
+        - link "Managed by Techmigos" [ref=f26e194] [cursor=pointer]:
+          - /url: https://techmigos.com
+  - button "Open Next.js Dev Tools" [ref=f26e201] [cursor=pointer]
+  - alert [ref=f26e205]

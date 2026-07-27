@@ -1,6 +1,35 @@
 part of '../backend_api_client.dart';
 
 extension BackendEventsApi on BackendApiClient {
+  Future<Map<String, dynamic>> getCalendarPreferences() async {
+    try {
+      final response = await _dio.get('/events/calendar-preferences');
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load calendar preferences',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> resetSchoolCalendar() async {
+    try {
+      final response = await _dio.post(
+        '/events/calendar-reset',
+        data: const {'confirmation': 'RESET'},
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to reset calendar',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getTerms(String academicYearId) async {
     try {
       final response = await _dio.get('/academic-years/$academicYearId/terms');
@@ -473,17 +502,28 @@ DioMediaType? _resolveMediaType(String? mimeType, String filename) {
     }
   }
   switch (filename.split('.').last.toLowerCase()) {
-    case 'mp4':  return DioMediaType('video', 'mp4');
-    case 'mov':  return DioMediaType('video', 'quicktime');
-    case 'm4v':  return DioMediaType('video', 'x-m4v');
-    case 'webm': return DioMediaType('video', 'webm');
+    case 'mp4':
+      return DioMediaType('video', 'mp4');
+    case 'mov':
+      return DioMediaType('video', 'quicktime');
+    case 'm4v':
+      return DioMediaType('video', 'x-m4v');
+    case 'webm':
+      return DioMediaType('video', 'webm');
     case 'jpg':
-    case 'jpeg': return DioMediaType('image', 'jpeg');
-    case 'png':  return DioMediaType('image', 'png');
-    case 'webp': return DioMediaType('image', 'webp');
-    case 'gif':  return DioMediaType('image', 'gif');
-    case 'heic': return DioMediaType('image', 'heic');
-    case 'pdf':  return DioMediaType('application', 'pdf');
-    default:     return null;
+    case 'jpeg':
+      return DioMediaType('image', 'jpeg');
+    case 'png':
+      return DioMediaType('image', 'png');
+    case 'webp':
+      return DioMediaType('image', 'webp');
+    case 'gif':
+      return DioMediaType('image', 'gif');
+    case 'heic':
+      return DioMediaType('image', 'heic');
+    case 'pdf':
+      return DioMediaType('application', 'pdf');
+    default:
+      return null;
   }
 }

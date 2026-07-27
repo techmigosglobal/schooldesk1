@@ -87,10 +87,10 @@ void main() {
 
     final calendarBlock = dashboard.substring(
       dashboard.indexOf("label: 'Calendar'"),
-      dashboard.indexOf("label: 'Event Approvals'"),
+      dashboard.indexOf("label: 'School Posts Approval'"),
     );
     final approvalsBlock = dashboard.substring(
-      dashboard.indexOf("label: 'Event Approvals'"),
+      dashboard.indexOf("label: 'School Posts Approval'"),
       dashboard.indexOf("label: 'Gallery'"),
     );
     final galleryBlock = dashboard.substring(
