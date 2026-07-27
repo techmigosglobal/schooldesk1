@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { isPublicGalleryImage, type GalleryItem, type PublicWebsite } from "@/lib/public-website";
+import { isPublicGalleryImage, type GalleryItem } from "@/lib/gallery";
+import type { PublicWebsite } from "@/lib/public-website";
 
 const heroSlides = [
   { image: "/preschool/hero-garden.png", alt: "Children discovering nature together", title: "Where Curiosity Blossoms into", accent: "Confidence.", body: "At Little Ville, every child is valued, every moment is meaningful, and every day is an adventure in learning." },
