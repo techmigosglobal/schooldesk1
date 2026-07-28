@@ -455,7 +455,14 @@ function getNotificationTemplate(
           event_type: "fee_due",
           reference_type: "fee",
           invoice_id: String(eventData.invoice_id || ""),
+          reference_id: String(
+            eventData.reference_id || eventData.invoice_id || "",
+          ),
+          student_id: String(eventData.student_id || ""),
+          balance: String(eventData.balance || eventData.amount || ""),
           due_date: String(eventData.due_date || ""),
+          stage: String(eventData.stage || ""),
+          route: String(eventData.route || "/parent-fees-screen"),
         },
       };
 

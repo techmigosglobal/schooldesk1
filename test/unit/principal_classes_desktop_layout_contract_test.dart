@@ -34,7 +34,7 @@ void main() {
       expect(screen, contains('_DesktopClassHubActionGrid'));
       expect(
         screen,
-        contains('final columns = constraints.maxWidth >= 920 ? 4 : 2'),
+        contains('final columns = constraints.maxWidth >= 920 ? 3 : 2'),
       );
     },
   );

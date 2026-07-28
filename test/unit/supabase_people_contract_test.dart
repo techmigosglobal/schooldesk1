@@ -113,7 +113,7 @@ void main() {
       expect(principal, contains('/principal/classes/import/dry-run'));
       expect(principal, contains('/principal/classes/import'));
       expect(principal, contains('/principal/classes/'));
-      expect(principal, contains('/instructions'));
+      expect(principal, isNot(contains('/instructions')));
       expect(principal, contains('method === "PUT"'));
       expect(principal, contains('method === "DELETE"'));
       expect(principal, contains('/principal/subjects'));

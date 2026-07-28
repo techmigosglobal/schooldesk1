@@ -182,7 +182,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               index: PrincipalNav.guardians,
               icon: Icons.family_restroom_outlined,
               activeIcon: Icons.family_restroom_rounded,
-              label: 'Parents & Guardians',
+              label: 'Parents',
               route: AppRoutes.guardianDirectory,
             ),
             SchoolDeskNavigationItem(

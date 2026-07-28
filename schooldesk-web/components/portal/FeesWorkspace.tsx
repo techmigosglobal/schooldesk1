@@ -165,9 +165,9 @@ export function FeesWorkspace({
       const result = (await api("fees/reports/exports", {
         method: "POST",
         body: JSON.stringify({
-          reportTitle: title,
-          reportType,
-          format: "csv",
+          report_title: title,
+          report_type: reportType,
+          format: "pdf",
           parameters: {
             invoice_count: state.invoices.length,
             payment_count: state.payments.length,
@@ -182,7 +182,7 @@ export function FeesWorkspace({
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `${title.toLowerCase().replaceAll(/\s+/g, "_")}.csv`;
+        link.download = `${title.toLowerCase().replaceAll(/\s+/g, "_")}.pdf`;
         link.click();
         URL.revokeObjectURL(url);
         onNotify(`${title} downloaded.`);

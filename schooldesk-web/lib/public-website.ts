@@ -3,7 +3,7 @@ import { env } from "@/lib/env";
 import type { GalleryItem } from "@/lib/gallery";
 
 export type { GalleryItem } from "@/lib/gallery";
-export { isPublicGalleryImage } from "@/lib/gallery";
+export { isPublicGalleryImage, isPublicGalleryMedia, isPublicGalleryVideo, uniqueGalleryItems } from "@/lib/gallery";
 
 export type PublicWebsite = {
   content?: Record<string, string | boolean>;

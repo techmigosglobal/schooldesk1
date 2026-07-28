@@ -422,7 +422,7 @@ class BulkCsvImportService {
         studentIds: studentIds,
       );
     }
-    final relationship = row.value('relationship', fallback: 'Parent/Guardian');
+    final relationship = row.value('relationship', fallback: 'Parent');
     for (final studentId in studentIds) {
       await api.createRaw('/guardians', {
         'student_id': studentId,
@@ -787,7 +787,7 @@ class BulkCsvImportService {
         );
       case BulkCsvImportTarget.parents:
         return const _CsvSchema(
-          label: 'parents and guardians',
+          label: 'parents',
           required: ['full_name', 'username', 'password'],
           displayHeaders: [
             'full_name',

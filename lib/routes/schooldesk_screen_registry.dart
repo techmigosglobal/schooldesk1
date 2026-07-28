@@ -154,7 +154,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/guardian-directory-screen',
-      title: 'Parents & Guardians',
+      title: 'Parents',
       module: 'People',
       portal: 'principal',
     ),
@@ -480,12 +480,6 @@ class SchoolDeskScreenRegistry {
       route: '/teacher-my-attendance-screen',
       title: 'My Attendance',
       module: 'Today',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/teacher-student-notes-screen',
-      title: 'Student Notes',
-      module: 'Academics',
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(

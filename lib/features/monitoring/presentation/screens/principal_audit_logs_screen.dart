@@ -312,7 +312,7 @@ class _AuditLogPresentation {
               : _friendlyAction(action, rawModule)
         : _sentenceCase(rawSummary);
     return _AuditLogPresentation(
-      title: title,
+      title: _parentFacingText(title),
       actor: displayActor,
       role: role,
       module: module,
@@ -358,7 +358,7 @@ class _AuditLogPresentation {
       'event-posts': 'School Feed',
       'events': 'Events',
       'fees': 'Fees',
-      'guardians': 'Parents and Guardians',
+      'guardians': 'Parents',
       'homework': 'Homework',
       'staff': 'Staff',
       'students': 'Students',
@@ -395,6 +395,12 @@ class _AuditLogPresentation {
         (part) => '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
       )
       .join(' ');
+
+  static String _parentFacingText(String value) => value
+      .replaceAll(RegExp(r'\bGuardians\b'), 'Parents')
+      .replaceAll(RegExp(r'\bguardians\b'), 'parents')
+      .replaceAll(RegExp(r'\bGuardian\b'), 'Parent')
+      .replaceAll(RegExp(r'\bguardian\b'), 'parent');
 
   static String _sentenceCase(String value) =>
       value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';

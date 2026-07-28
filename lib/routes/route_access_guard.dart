@@ -104,7 +104,6 @@ class RouteAccessGuard {
     AppRoutes.teacherHomeworkSubmissions: {'teacher'},
     AppRoutes.teacherEventPosts: {'teacher'},
     AppRoutes.teacherLessonPlanner: {'teacher'},
-    AppRoutes.teacherStudentNotes: {'teacher'},
     AppRoutes.teacherDocuments: {'teacher'},
     // Shared routes
     AppRoutes.schoolGallery: {'principal', 'teacher', 'parent'},

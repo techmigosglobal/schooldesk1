@@ -697,6 +697,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     );
   }
 
+  // ignore: unused_element
   Future<void> _importStaffCsv() async {
     final imported = await BulkCsvImportService.importCsv(
       context,
@@ -868,11 +869,13 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                 ),
               ),
             ),
-            IconButton(
-              onPressed: _importStaffCsv,
-              icon: const Icon(Icons.upload_file_rounded, size: 22),
-              tooltip: 'Upload staff CSV',
-            ),
+            // Temporarily hidden at product request; keep the CSV import
+            // workflow and handler available for future re-enablement.
+            // IconButton(
+            //   onPressed: _importStaffCsv,
+            //   icon: const Icon(Icons.upload_file_rounded, size: 22),
+            //   tooltip: 'Upload staff CSV',
+            // ),
           ],
         ),
       ),

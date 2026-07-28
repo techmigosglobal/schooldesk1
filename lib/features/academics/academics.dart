@@ -8,7 +8,6 @@ export 'presentation/screens/principal_classes_screen/principal_classes_screen.d
 export 'presentation/screens/principal_lesson_planner_screen.dart';
 export 'presentation/screens/principal_subjects_screen/principal_subjects_screen.dart';
 export 'presentation/screens/teacher_classes_screen/teacher_classes_screen.dart';
-export 'presentation/screens/teacher_student_notes_screen/teacher_student_notes_screen.dart';
 export 'presentation/screens/admin_timetable_screen/admin_timetable_screen.dart';
 export 'presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart';
 export 'presentation/screens/lesson_planner_screen.dart';

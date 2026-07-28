@@ -472,6 +472,834 @@ function documentRow(row: Record<string, unknown>) {
   };
 }
 
+type StructuredExportTable = {
+  title: string;
+  headers: string[];
+  rows: unknown[][];
+  weights?: number[];
+};
+
+async function performStructuredReportExport(
+  svc: SupabaseClient,
+  school: string,
+  tableName: string,
+  reportType: string,
+  parameters: Record<string, any>,
+): Promise<string> {
+  const value = (input: unknown, fallback = "") =>
+    String(input ?? "").trim() || fallback;
+  const amount = (input: unknown) => {
+    const parsed = Number(input ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const titleize = (input: string) =>
+    input.replaceAll("_", " ").replace(
+      /\b\w/g,
+      (letter) => letter.toUpperCase(),
+    );
+  const person = (input: Record<string, unknown> | null | undefined) =>
+    [value(input?.first_name), value(input?.last_name)].filter(Boolean).join(
+      " ",
+    ) || "Not assigned";
+  const currency = (input: unknown) =>
+    "INR " + amount(input).toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  const date = (input: unknown) => value(input).slice(0, 10) || "—";
+  const academicYear = value(parameters.academic_year, "Academic year");
+  const { data: schoolProfile, error: schoolError } = await svc
+    .from("schools")
+    .select("name, branch_code")
+    .eq("id", school)
+    .maybeSingle();
+  if (schoolError) throw schoolError;
+  const schoolName = value(schoolProfile?.name, "SchoolDesk");
+  const branchCode = value(schoolProfile?.branch_code);
+
+  let title = titleize(reportType || "Report export");
+  let scope = ["School-wide scope"];
+  let metrics: Array<{ label: string; value: string }> = [];
+  let tables: StructuredExportTable[] = [];
+
+  const loadSections = async () => {
+    let query = svc.from("sections").select(
+      "id, grade_id, academic_year_id, section_name, capacity, grade:grades(grade_name), class_teacher:staff!sections_class_teacher_id_fkey(first_name, last_name), co_teacher:staff!sections_co_teacher_id_fkey(first_name, last_name)",
+    ).eq("school_id", school);
+    if (value(parameters.academic_year_id)) {
+      query = query.eq("academic_year_id", value(parameters.academic_year_id));
+    }
+    if (value(parameters.grade_id)) {
+      query = query.eq("grade_id", value(parameters.grade_id));
+    }
+    if (value(parameters.section_id)) {
+      query = query.eq("id", value(parameters.section_id));
+    }
+    const { data, error } = await query.order("section_name");
+    if (error) throw error;
+    return (data ?? []) as Record<string, any>[];
+  };
+
+  if (tableName === "report_exports" && reportType === "users_wise_export") {
+    let query = svc.from("users").select(
+      "name, email, role_name, is_active, created_at",
+    ).eq("school_id", school);
+    const roles = Array.isArray(parameters.roles)
+      ? parameters.roles.map((item: unknown) => value(item)).filter(Boolean)
+      : [];
+    if (roles.length) query = query.in("role_name", roles);
+    if (value(parameters.status) && value(parameters.status) !== "all") {
+      query = query.eq("is_active", value(parameters.status) === "active");
+    }
+    const { data, error } = await query.order("name");
+    if (error) throw error;
+    const users = (data ?? []) as Record<string, any>[];
+    title = "Users-wise Data Export";
+    scope = [
+      "Roles: " + (roles.length ? roles.map(titleize).join(", ") : "All users"),
+      "Status: " + titleize(value(parameters.status, "all")),
+    ];
+    metrics = [
+      { label: "Matched users", value: String(users.length) },
+      {
+        label: "Active",
+        value: String(users.filter((row) => row.is_active).length),
+      },
+      {
+        label: "Inactive",
+        value: String(users.filter((row) => !row.is_active).length),
+      },
+    ];
+    tables = [{
+      title: "User accounts",
+      headers: ["Name", "Email", "Role", "Status", "Created"],
+      rows: users.map((row) => [
+        value(row.name, "—"),
+        value(row.email, "—"),
+        titleize(value(row.role_name, "user")),
+        row.is_active ? "Active" : "Inactive",
+        date(row.created_at),
+      ]),
+      weights: [1.4, 2.4, 1.1, 0.9, 1.1],
+    }];
+  } else if (tableName === "report_exports" && reportType === "admission_inquiry_summary") {
+    const { data, error } = await svc.from("admission_inquiries").select(
+      "parent_name, phone, email, child_name, child_age, program, message, submitted_at",
+    ).eq("school_id", school).order("submitted_at", { ascending: false });
+    if (error) throw error;
+    const inquiries = (data ?? []) as Record<string, any>[];
+    const programCounts = new Map<string, number>();
+    for (const inquiry of inquiries) {
+      const program = value(inquiry.program, "Not specified");
+      programCounts.set(program, (programCounts.get(program) ?? 0) + 1);
+    }
+    title = "Admission Inquiry Summary";
+    scope = ["Public website admissions inbox", "School-wide scope"];
+    metrics = [
+      { label: "Inquiries", value: String(inquiries.length) },
+      { label: "Programs", value: String(programCounts.size) },
+      { label: "Latest enquiry", value: date(inquiries[0]?.submitted_at) },
+    ];
+    tables = [
+      {
+        title: "Inquiry overview by program",
+        headers: ["Program", "Inquiries"],
+        rows: [...programCounts.entries()].map(([program, count]) => [program, count]),
+        weights: [3, 1],
+      },
+      {
+        title: "Recent family inquiries",
+        headers: ["Submitted", "Parent", "Child", "Program", "Phone", "Email", "Message"],
+        rows: inquiries.map((inquiry) => [
+          date(inquiry.submitted_at), value(inquiry.parent_name, "—"),
+          value(inquiry.child_name, "—"), value(inquiry.program, "—"),
+          value(inquiry.phone, "—"), value(inquiry.email, "—"), value(inquiry.message, "—"),
+        ]),
+        weights: [1, 1.3, 1.1, 1, 1.1, 1.7, 2.1],
+      },
+    ];
+  } else if (tableName === "report_exports") {
+    const sections = await loadSections();
+    const sectionIds = sections.map((row) => value(row.id)).filter(Boolean);
+    const sectionScope = Boolean(
+      value(parameters.academic_year_id) || value(parameters.grade_id) ||
+        value(parameters.section_id),
+    );
+    const emptyId = "00000000-0000-0000-0000-000000000000";
+    let studentsQuery = svc.from("students").select(
+      "first_name, last_name, admission_number, status, gender, date_of_birth, current_section_id",
+    ).eq("school_id", school);
+    if (sectionScope) {
+      studentsQuery = sectionIds.length
+        ? studentsQuery.in("current_section_id", sectionIds)
+        : studentsQuery.in("id", [emptyId]);
+    }
+    let subjectsQuery = svc.from("grade_subjects").select(
+      "grade_id, section_id, periods_per_week, subject:subjects(subject_name), section:sections(section_name, grade:grades(grade_name)), grade:grades(grade_name)",
+    ).eq("school_id", school);
+    if (value(parameters.academic_year_id)) {
+      subjectsQuery = subjectsQuery.eq(
+        "academic_year_id",
+        value(parameters.academic_year_id),
+      );
+    }
+    if (value(parameters.grade_id)) {
+      subjectsQuery = subjectsQuery.eq("grade_id", value(parameters.grade_id));
+    }
+    if (value(parameters.section_id)) {
+      subjectsQuery = subjectsQuery.eq(
+        "section_id",
+        value(parameters.section_id),
+      );
+    }
+    let timetableQuery = svc.from("timetable_slots").select(
+      "section_id, day_of_week, start_time, end_time, section:sections(section_name, grade:grades(grade_name)), subject:subjects(subject_name), staff:staff(first_name, last_name)",
+    ).eq("school_id", school);
+    if (value(parameters.academic_year_id)) {
+      timetableQuery = timetableQuery.eq(
+        "academic_year_id",
+        value(parameters.academic_year_id),
+      );
+    }
+    if (sectionScope) {
+      timetableQuery = sectionIds.length
+        ? timetableQuery.in("section_id", sectionIds)
+        : timetableQuery.in("section_id", [emptyId]);
+    }
+    const [studentsResponse, subjectsResponse, timetableResponse] =
+      await Promise.all([studentsQuery, subjectsQuery, timetableQuery]);
+    if (studentsResponse.error) throw studentsResponse.error;
+    if (subjectsResponse.error) throw subjectsResponse.error;
+    if (timetableResponse.error) throw timetableResponse.error;
+    const students = (studentsResponse.data ?? []) as Record<string, any>[];
+    const subjects = (subjectsResponse.data ?? []) as Record<string, any>[];
+    const timetable = (timetableResponse.data ?? []) as Record<string, any>[];
+    const sectionsById = new Map(
+      sections.map((row) => [value(row.id), row]),
+    );
+    const classSummary: StructuredExportTable = {
+      title: "Class summary",
+      headers: ["Class", "Section", "Capacity", "Class teacher", "Co-teacher"],
+      rows: sections.map((row) => [
+        value(row.grade?.grade_name, "—"),
+        value(row.section_name, "—"),
+        value(row.capacity, "—"),
+        person(row.class_teacher),
+        person(row.co_teacher),
+      ]),
+      weights: [1.2, 0.9, 0.8, 1.7, 1.7],
+    };
+    const studentList: StructuredExportTable = {
+      title: "Student roster",
+      headers: [
+        "Admission no.",
+        "Student",
+        "Gender",
+        "Date of birth",
+        "Class / section",
+        "Status",
+      ],
+      rows: students.map((row) => {
+        const section = sectionsById.get(value(row.current_section_id));
+        return [
+          value(row.admission_number, "—"),
+          [value(row.first_name), value(row.last_name)].filter(Boolean).join(
+            " ",
+          ) || "—",
+          titleize(value(row.gender, "—")),
+          date(row.date_of_birth),
+          [value(section?.grade?.grade_name), value(section?.section_name)]
+            .filter(Boolean)
+            .join(" / ") || "—",
+          titleize(value(row.status, "—")),
+        ];
+      }),
+      weights: [1.2, 2, 0.8, 1.1, 1.6, 0.9],
+    };
+    const subjectsMap: StructuredExportTable = {
+      title: "Subjects mapping",
+      headers: ["Class", "Section", "Subject", "Periods / week"],
+      rows: subjects.map((row) => [
+        value(row.section?.grade?.grade_name ?? row.grade?.grade_name, "—"),
+        value(row.section?.section_name, "All sections"),
+        value(row.subject?.subject_name, "—"),
+        value(row.periods_per_week, "—"),
+      ]),
+      weights: [1.2, 1.2, 2.5, 1.1],
+    };
+    const teacherMap: StructuredExportTable = {
+      title: "Teacher mapping",
+      headers: ["Class", "Section", "Class teacher", "Co-teacher"],
+      rows: classSummary.rows.map((row) => [row[0], row[1], row[3], row[4]]),
+      weights: [1.1, 1, 2.3, 2.3],
+    };
+    const timetableSummary: StructuredExportTable = {
+      title: "Timetable summary",
+      headers: ["Class", "Section", "Day", "Subject", "Teacher", "Time"],
+      rows: timetable.map((row) => [
+        value(row.section?.grade?.grade_name, "—"),
+        value(row.section?.section_name, "—"),
+        titleize(value(row.day_of_week, "—")),
+        value(row.subject?.subject_name, "—"),
+        person(row.staff),
+        [value(row.start_time), value(row.end_time)].filter(Boolean).join(
+          " – ",
+        ) || "—",
+      ]),
+      weights: [1, 0.9, 1, 1.7, 1.7, 1.2],
+    };
+    const selectedSection = sections.find((row) =>
+      value(row.id) === value(parameters.section_id)
+    );
+    const selectedGrade = selectedSection?.grade?.grade_name ||
+      sections[0]?.grade?.grade_name;
+    scope = value(parameters.section_id)
+      ? [
+        "Class: " + value(selectedGrade, "Selected class"),
+        "Section: " + value(selectedSection?.section_name, "Selected section"),
+      ]
+      : value(parameters.grade_id)
+      ? ["Class: " + value(selectedGrade, "Selected class")]
+      : ["All classes"];
+    metrics = [
+      { label: "Classes", value: String(sections.length) },
+      { label: "Students", value: String(students.length) },
+      { label: "Subjects", value: String(subjects.length) },
+      { label: "Timetable slots", value: String(timetable.length) },
+    ];
+    tables = reportType === "students_list"
+      ? [studentList]
+      : reportType === "subjects_mapping"
+      ? [subjectsMap]
+      : reportType === "teacher_mapping"
+      ? [teacherMap]
+      : reportType === "timetable_summary"
+      ? [timetableSummary]
+      : reportType === "complete_classwise_data"
+      ? [classSummary, studentList, subjectsMap, teacherMap, timetableSummary]
+      : [classSummary];
+  } else if (tableName === "fee_report_exports") {
+    const sections = await loadSections();
+    const sectionIds = sections.map((row) => value(row.id)).filter(Boolean);
+    const sectionScope = Boolean(
+      value(parameters.grade_id) || value(parameters.section_id),
+    );
+    const emptyId = "00000000-0000-0000-0000-000000000000";
+    let structuresQuery = svc.from("fee_structures").select(
+      "*, grade:grades(grade_name), section:sections(section_name)",
+    ).eq("school_id", school);
+    if (value(parameters.academic_year_id)) {
+      structuresQuery = structuresQuery.eq(
+        "academic_year_id",
+        value(parameters.academic_year_id),
+      );
+    }
+    if (value(parameters.grade_id)) {
+      structuresQuery = structuresQuery.eq(
+        "grade_id",
+        value(parameters.grade_id),
+      );
+    }
+    if (value(parameters.section_id)) {
+      structuresQuery = structuresQuery.eq(
+        "section_id",
+        value(parameters.section_id),
+      );
+    }
+    let studentIdsQuery = svc.from("students").select(
+      "id, current_section_id",
+    ).eq("school_id", school);
+    if (sectionScope) {
+      studentIdsQuery = sectionIds.length
+        ? studentIdsQuery.in("current_section_id", sectionIds)
+        : studentIdsQuery.in("id", [emptyId]);
+    }
+    const [structuresResponse, studentIdsResponse, categoriesResponse] =
+      await Promise.all([
+        structuresQuery.order("created_at"),
+        studentIdsQuery,
+        svc.from("fee_categories").select("id, name").eq("school_id", school),
+      ]);
+    if (structuresResponse.error) throw structuresResponse.error;
+    if (studentIdsResponse.error) throw studentIdsResponse.error;
+    if (categoriesResponse.error) throw categoriesResponse.error;
+    const structures = (structuresResponse.data ?? []) as Record<string, any>[];
+    const studentIds = (studentIdsResponse.data ?? [])
+      .map((row: Record<string, any>) => value(row.id))
+      .filter(Boolean);
+    const categoryNames = new Map(
+      (categoriesResponse.data ?? []).map((row: Record<string, any>) => [
+        value(row.id),
+        value(row.name, "Fee"),
+      ]),
+    );
+    const paymentStatus = value(parameters.payment_status, "all");
+    const today = new Date().toISOString().slice(0, 10);
+    let invoicesQuery = svc.from("fee_invoices").select(
+      "*, student:students(first_name, last_name, admission_number, current_section_id)",
+    ).eq("school_id", school);
+    if (value(parameters.academic_year_id)) {
+      invoicesQuery = invoicesQuery.eq(
+        "academic_year_id",
+        value(parameters.academic_year_id),
+      );
+    }
+    if (sectionScope) {
+      invoicesQuery = studentIds.length
+        ? invoicesQuery.in("student_id", studentIds)
+        : invoicesQuery.in("student_id", [emptyId]);
+    }
+    if (paymentStatus === "paid") {
+      invoicesQuery = invoicesQuery.eq("status", "paid");
+    } else if (paymentStatus === "partial") {
+      invoicesQuery = invoicesQuery.eq("status", "partial");
+    } else if (paymentStatus === "pending") {
+      invoicesQuery = invoicesQuery.eq("status", "pending");
+    } else if (paymentStatus === "overdue") {
+      invoicesQuery = invoicesQuery.gt("balance", 0).lt("due_date", today);
+    }
+    const { data: invoiceData, error: invoiceError } = await invoicesQuery
+      .order(
+        "due_date",
+      );
+    if (invoiceError) throw invoiceError;
+    const invoices = (invoiceData ?? []) as Record<string, any>[];
+    const invoiceRows = (rows: Record<string, any>[]) =>
+      rows.map((row) => {
+        const student = row.student ?? {};
+        const section = sections.find((item) =>
+          value(item.id) === value(student.current_section_id)
+        );
+        return [
+          value(row.invoice_number, "—"),
+          [value(student.first_name), value(student.last_name)].filter(Boolean)
+            .join(" ") || "—",
+          value(student.admission_number, "—"),
+          [value(section?.grade?.grade_name), value(section?.section_name)]
+            .filter(Boolean)
+            .join(" / ") || "—",
+          date(row.due_date),
+          currency(row.net_amount || row.total_amount),
+          currency(row.paid_amount),
+          currency(row.balance),
+          titleize(value(row.status, "—")),
+        ];
+      });
+    const paidRows = invoices.filter((row) => value(row.status) === "paid");
+    const pendingRows = invoices.filter((row) =>
+      ["pending", "partial"].includes(value(row.status))
+    );
+    const dueRows = invoices.filter((row) => amount(row.balance) > 0);
+    const reportInvoices = reportType === "paid_fees"
+      ? paidRows
+      : reportType === "pending_fees"
+      ? pendingRows
+      : reportType === "due_fees"
+      ? dueRows
+      : invoices;
+    const structuresForReport = paymentStatus === "all"
+      ? structures
+      : structures.filter((structure) =>
+        invoices.some((invoice) =>
+          value(invoice.fee_structure_id) === value(structure.id)
+        )
+      );
+    const structureTable: StructuredExportTable = {
+      title: "Fee structures",
+      headers: ["Fee", "Class", "Section", "Frequency", "Due date", "Amount"],
+      rows: structuresForReport.map((row) => [
+        categoryNames.get(value(row.fee_category_id || row.category_id)) ||
+        value(row.fee_type, "Fee"),
+        value(row.grade?.grade_name, "All classes"),
+        value(row.section?.section_name, "All sections"),
+        titleize(value(row.billing_mode || row.frequency, "—")),
+        date(row.due_date),
+        currency(row.amount),
+      ]),
+      weights: [1.8, 1.2, 1.2, 1.2, 1.1, 1.2],
+    };
+    const invoiceTable: StructuredExportTable = {
+      title: "Student fee invoices",
+      headers: [
+        "Invoice",
+        "Student",
+        "Admission no.",
+        "Class / section",
+        "Due",
+        "Billed",
+        "Paid",
+        "Balance",
+        "Status",
+      ],
+      rows: invoiceRows(reportInvoices),
+      weights: [1.1, 1.6, 1.1, 1.35, 0.85, 1, 1, 1, 0.85],
+    };
+    const totalBilled = reportInvoices.reduce(
+      (sum, row) => sum + amount(row.net_amount || row.total_amount),
+      0,
+    );
+    const totalPaid = reportInvoices.reduce(
+      (sum, row) => sum + amount(row.paid_amount),
+      0,
+    );
+    const totalBalance = reportInvoices.reduce(
+      (sum, row) => sum + amount(row.balance),
+      0,
+    );
+    title = titleize(reportType);
+    const selectedSection = sections.find((row) =>
+      value(row.id) === value(parameters.section_id)
+    );
+    const selectedGrade = selectedSection?.grade?.grade_name ||
+      sections[0]?.grade?.grade_name;
+    scope = [
+      ...(value(parameters.section_id)
+        ? [
+          "Class: " + value(selectedGrade, "Selected class"),
+          "Section: " +
+          value(selectedSection?.section_name, "Selected section"),
+        ]
+        : value(parameters.grade_id)
+        ? ["Class: " + value(selectedGrade, "Selected class")]
+        : ["All classes"]),
+      "Payment status: " + titleize(paymentStatus),
+    ];
+    metrics = [
+      { label: "Fee structures", value: String(structuresForReport.length) },
+      { label: "Invoices", value: String(reportInvoices.length) },
+      { label: "Billed", value: currency(totalBilled) },
+      { label: "Collected", value: currency(totalPaid) },
+      { label: "Outstanding", value: currency(totalBalance) },
+    ];
+    tables = reportType === "fee_structure"
+      ? [structureTable]
+      : reportType === "paid_fees"
+      ? [{ ...invoiceTable, title: "Paid fees", rows: invoiceRows(paidRows) }]
+      : reportType === "pending_fees"
+      ? [{
+        ...invoiceTable,
+        title: "Pending fees",
+        rows: invoiceRows(pendingRows),
+      }]
+      : reportType === "due_fees" ||
+          reportType === "fee_outstanding_report" ||
+          reportType === "outstanding_report"
+      ? [{ ...invoiceTable, title: "Due fees", rows: invoiceRows(dueRows) }]
+      : reportType === "complete_fees_report"
+      ? [structureTable, invoiceTable]
+      : [invoiceTable];
+  } else if (tableName === "attendance_report_exports") {
+    const { data, error } = await svc.from("attendance_summaries").select(
+      "*, student:students(first_name, last_name, admission_number)",
+    ).eq("school_id", school);
+    if (error) throw error;
+    const attendance = (data ?? []) as Record<string, any>[];
+    title = "Attendance report";
+    metrics = [{ label: "Students", value: String(attendance.length) }];
+    tables = [{
+      title: "Attendance summary",
+      headers: [
+        "Student",
+        "Admission no.",
+        "Total days",
+        "Present",
+        "Absent",
+        "Attendance",
+      ],
+      rows: attendance.map((row) => [
+        person(row.student),
+        value(row.student?.admission_number, "—"),
+        value(row.total_days, "0"),
+        value(row.present_days, "0"),
+        value(row.absent_days, "0"),
+        value(row.percentage, "0") + "%",
+      ]),
+      weights: [2.2, 1.5, 1, 1, 1, 1.2],
+    }];
+  }
+
+  const pdfEscape = (input: unknown) =>
+    value(input)
+      .replaceAll("\\", "\\\\")
+      .replaceAll("(", "\\(")
+      .replaceAll(")", "\\)")
+      .replace(/[\r\n]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replaceAll("—", "-")
+      .replaceAll("–", "-")
+      .replaceAll("•", "|")
+      .replace(/[^\x20-\x7E]/g, "?");
+  const wrap = (input: unknown, limit: number) => {
+    const source = pdfEscape(input) || "—";
+    const lines: string[] = [];
+    let line = "";
+    for (const word of source.split(" ")) {
+      const candidate = line ? line + " " + word : word;
+      if (candidate.length <= limit || !line) {
+        line = candidate;
+      } else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    if (line) lines.push(line);
+    return lines.length ? lines : ["—"];
+  };
+  const pageWidth = 842;
+  const pageHeight = 595;
+  const margin = 32;
+  const usableWidth = pageWidth - margin * 2;
+  const pages: string[][] = [];
+  let commands: string[] = [];
+  let cursorY = 0;
+  const textAt = (
+    target: string[],
+    lines: string[],
+    x: number,
+    y: number,
+    font: string,
+    size: number,
+    color: string,
+  ) => {
+    lines.forEach((line, index) => {
+      target.push(
+        "BT /" + font + " " + size + " Tf " + x.toFixed(2) + " " +
+          (y - index * (size + 2)).toFixed(2) + " Td " + color + " rg (" +
+          pdfEscape(line) + ") Tj ET",
+      );
+    });
+  };
+  const rect = (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: string,
+    stroke = false,
+  ) => {
+    commands.push(
+      color + (stroke ? " RG " : " rg ") + x.toFixed(2) + " " +
+        y.toFixed(2) + " " + width.toFixed(2) + " " + height.toFixed(2) +
+        " re " + (stroke ? "S" : "f"),
+    );
+  };
+  const startPage = (continuation = false) => {
+    commands = [];
+    rect(0, pageHeight - 64, pageWidth, 64, "0.05 0.14 0.31");
+    textAt(commands, [schoolName], margin, pageHeight - 31, "F2", 17, "1 1 1");
+    textAt(
+      commands,
+      [branchCode ? "Branch: " + branchCode : "Academic data export"],
+      margin,
+      pageHeight - 47,
+      "F1",
+      8,
+      "0.78 0.88 1",
+    );
+    textAt(
+      commands,
+      [continuation ? "Report continued" : title],
+      pageWidth - 290,
+      pageHeight - 34,
+      "F2",
+      11,
+      "1 1 1",
+    );
+    textAt(
+      commands,
+      ["Academic year: " + academicYear],
+      pageWidth - 290,
+      pageHeight - 48,
+      "F1",
+      8,
+      "0.78 0.88 1",
+    );
+    cursorY = pageHeight - 88;
+    if (!continuation) {
+      textAt(commands, [title], margin, cursorY, "F2", 16, "0.04 0.1 0.22");
+      cursorY -= 17;
+      textAt(
+        commands,
+        [scope.filter(Boolean).join("  •  ") || "School-wide scope"],
+        margin,
+        cursorY,
+        "F1",
+        8,
+        "0.29 0.36 0.48",
+      );
+      cursorY -= 20;
+      const metricWidth = usableWidth / Math.max(1, metrics.length);
+      metrics.forEach((metric, index) => {
+        const x = margin + index * metricWidth;
+        rect(x, cursorY - 31, metricWidth - 7, 30, "0.93 0.96 1");
+        textAt(
+          commands,
+          [metric.label],
+          x + 7,
+          cursorY - 10,
+          "F1",
+          7,
+          "0.29 0.36 0.48",
+        );
+        textAt(
+          commands,
+          [metric.value],
+          x + 7,
+          cursorY - 23,
+          "F2",
+          9,
+          "0.05 0.18 0.42",
+        );
+      });
+      cursorY -= 45;
+    }
+    pages.push(commands);
+  };
+  const header = (table: StructuredExportTable, widths: number[]) => {
+    rect(margin, cursorY - 18, usableWidth, 18, "0.1 0.31 0.66");
+    let x = margin;
+    table.headers.forEach((label, index) => {
+      textAt(
+        commands,
+        wrap(label, Math.max(7, Math.floor(widths[index] / 4.7))),
+        x + 4,
+        cursorY - 7,
+        "F2",
+        7,
+        "1 1 1",
+      );
+      x += widths[index];
+    });
+    cursorY -= 20;
+  };
+  const drawTable = (table: StructuredExportTable) => {
+    const weights = table.weights?.length === table.headers.length
+      ? table.weights
+      : table.headers.map(() => 1);
+    const totalWeight = weights.reduce((sum, item) => sum + item, 0);
+    const widths = weights.map((item) => usableWidth * item / totalWeight);
+    if (cursorY < 72) startPage(true);
+    textAt(commands, [table.title], margin, cursorY, "F2", 11, "0.04 0.1 0.22");
+    cursorY -= 15;
+    header(table, widths);
+    const rows = table.rows.length
+      ? table.rows
+      : [["No records match the selected report scope."]];
+    rows.forEach((row, rowIndex) => {
+      const linesByCell = table.headers.map((_, index) =>
+        wrap(row[index] ?? "", Math.max(7, Math.floor(widths[index] / 4.6)))
+      );
+      const lineCount = Math.max(...linesByCell.map((lines) => lines.length));
+      const rowHeight = Math.max(18, lineCount * 9 + 8);
+      if (cursorY - rowHeight < 42) {
+        startPage(true);
+        textAt(
+          commands,
+          [table.title],
+          margin,
+          cursorY,
+          "F2",
+          11,
+          "0.04 0.1 0.22",
+        );
+        cursorY -= 15;
+        header(table, widths);
+      }
+      rect(
+        margin,
+        cursorY - rowHeight,
+        usableWidth,
+        rowHeight,
+        rowIndex % 2 === 0 ? "0.97 0.98 1" : "1 1 1",
+      );
+      rect(
+        margin,
+        cursorY - rowHeight,
+        usableWidth,
+        rowHeight,
+        "0.82 0.87 0.94",
+        true,
+      );
+      let x = margin;
+      linesByCell.forEach((lines, index) => {
+        textAt(commands, lines, x + 4, cursorY - 10, "F1", 7, "0.08 0.13 0.22");
+        x += widths[index];
+      });
+      cursorY -= rowHeight;
+    });
+    cursorY -= 16;
+  };
+
+  if (!tables.length) {
+    tables = [{
+      title: "Report data",
+      headers: ["Status"],
+      rows: [["No data generated"]],
+    }];
+  }
+  startPage();
+  tables.forEach(drawTable);
+  pages.forEach((page, index) => {
+    textAt(
+      page,
+      ["Confidential school record"],
+      margin,
+      22,
+      "F1",
+      8,
+      "0.35 0.4 0.48",
+    );
+    textAt(
+      page,
+      ["Page " + (index + 1) + " of " + pages.length],
+      pageWidth - 106,
+      22,
+      "F1",
+      8,
+      "0.35 0.4 0.48",
+    );
+  });
+  const streams = pages.map((page) => page.join("\n"));
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [" +
+    streams.map((_, index) => String(5 + index * 2) + " 0 R").join(" ") +
+    "] /Count " + streams.length + " >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    ...streams.flatMap((stream, index) => [
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents " +
+      (6 + index * 2) + " 0 R >>",
+      "<< /Length " + new TextEncoder().encode(stream).length +
+      " >>\nstream\n" + stream + "\nendstream",
+    ]),
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(new TextEncoder().encode(pdf).length);
+    pdf += String(index + 1) + " 0 obj\n" + object + "\nendobj\n";
+  });
+  const xref = new TextEncoder().encode(pdf).length;
+  pdf += "xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n";
+  offsets.slice(1).forEach((offset) => {
+    pdf += offset.toString().padStart(10, "0") + " 00000 n \n";
+  });
+  pdf += "trailer\n<< /Size " + (objects.length + 1) +
+    " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
+  const fileId = crypto.randomUUID();
+  const filePath = "exports/" + school + "/" + fileId + ".pdf";
+  const { error: uploadError } = await svc.storage.from("school-assets").upload(
+    filePath,
+    new TextEncoder().encode(pdf),
+    { contentType: "application/pdf", upsert: true },
+  );
+  if (uploadError) throw uploadError;
+  return svc.storage.from("school-assets").getPublicUrl(filePath).data
+    .publicUrl;
+}
+
 async function performReportExport(
   svc: SupabaseClient,
   school: string,
@@ -870,15 +1698,39 @@ export async function queueReportExport(
 
   let status = "queued";
   let downloadUrl = "";
+  const structuredAcademicReports = new Set([
+    "class_summary",
+    "students_list",
+    "subjects_mapping",
+    "teacher_mapping",
+    "timetable_summary",
+    "complete_classwise_data",
+    "users_wise_export",
+    "admission_inquiry_summary",
+  ]);
+  const structuredFeeReports = new Set([
+    "fee_structure",
+    "student_fee_invoices",
+    "paid_fees",
+    "pending_fees",
+    "due_fees",
+    "complete_fees_report",
+  ]);
+  const usesStructuredAcademicExport = (tableName === "report_exports" &&
+    structuredAcademicReports.has(report_type)) ||
+    (tableName === "fee_report_exports" &&
+      structuredFeeReports.has(report_type));
 
   try {
-    downloadUrl = await performReportExport(
-      svc,
-      school,
-      tableName,
-      report_type,
-      parameters,
-    );
+    downloadUrl = await (usesStructuredAcademicExport
+      ? performStructuredReportExport
+      : performReportExport)(
+        svc,
+        school,
+        tableName,
+        report_type,
+        parameters,
+      );
     status = "completed";
   } catch (err) {
     console.error(
@@ -1804,6 +2656,9 @@ export async function handleReports(
 ): Promise<Response> {
   const school = sid(user);
   if (path === "/reports/exports" && method === "POST") {
+    if (!["principal", "coordinator"].includes(roleValue(user))) {
+      return fail("leadership access required", 403);
+    }
     try {
       const body = await req.json().catch(() => ({}));
       const data = await queueReportExport(
@@ -1823,6 +2678,9 @@ export async function handleReports(
     }
   }
   if (path === "/reports/exports" && method === "GET") {
+    if (!["principal", "coordinator"].includes(roleValue(user))) {
+      return fail("leadership access required", 403);
+    }
     const { data, error } = await svc.from("frontend_records").select("*").eq(
       "school_id",
       school,

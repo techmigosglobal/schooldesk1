@@ -348,7 +348,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     if (_loading) {
       return SchoolDeskModuleScaffold(
         title: 'My Fees',
-        subtitle: 'Fee overview, installments, and payment history',
+        subtitle: 'Fee overview, balances, and payment history',
         drawer: drawer,
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -357,7 +357,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     if (_error != null || _childrenData.isEmpty) {
       return SchoolDeskModuleScaffold(
         title: 'My Fees',
-        subtitle: 'Fee overview, installments, and payment history',
+        subtitle: 'Fee overview, balances, and payment history',
         drawer: drawer,
         body: Center(
           child: Padding(
@@ -392,7 +392,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
 
     return SchoolDeskModuleScaffold(
       title: 'My Fees',
-      subtitle: 'Fee overview, installments, and payment history',
+      subtitle: 'Fee overview, balances, and payment history',
       drawer: drawer,
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,

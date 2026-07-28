@@ -107,7 +107,10 @@ void main() {
       expect(source, contains('fee_receipts'));
       expect(source, contains('payment_id'));
       expect(source, contains('receipt_id'));
-      expect(source, contains('payment amount must be'));
+      expect(
+        source,
+        contains('payment amount cannot exceed the remaining balance'),
+      );
     },
   );
 
@@ -132,7 +135,7 @@ void main() {
 
     expect(source, contains('receiptsByPaymentId'));
     expect(source, contains('receipt_number: text('));
-    expect(source, contains('"*, fee_invoice_items(*), payments(*)"'));
+    expect(source, contains('fee_invoice_items(*), payments(*)'));
   });
 
   test('fee structure delete clears generated dues and collection rows', () {

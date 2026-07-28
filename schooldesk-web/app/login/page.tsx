@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 
-export default function StaffLoginSelectionPage() {
+export default function LeadershipLoginSelectionPage() {
   return (
     <main className="login-page">
       <section className="login-card login-role-card">
@@ -15,7 +15,7 @@ export default function StaffLoginSelectionPage() {
           <span>ArishVille Preschool</span>
         </Link>
 
-        <p className="login-kicker">SchoolDesk staff access</p>
+        <p className="login-kicker">SchoolDesk leadership access</p>
         <h1>Welcome back</h1>
         <p className="login-lead">Choose your workspace to continue securely. Your role controls what you can access.</p>
 
@@ -28,10 +28,10 @@ export default function StaffLoginSelectionPage() {
           <Link className="login-role-option" href="/login/coordinator">
             <span className="login-role-eyebrow">Operations workspace</span>
             <strong>Coordinator Portal <b aria-hidden="true">→</b></strong>
-            <span>Daily school operations, attendance, classes, and communications.</span>
+            <span>Daily operations, class planning, admissions, and academic reporting.</span>
           </Link>
         </div>
-        <div className="login-return"><Link href="/">← Back to school website</Link><span>Need a different staff role? Please contact the principal.</span></div>
+        <div className="login-return"><Link href="/">← Back to school website</Link><span>Only Principal and Coordinator accounts can use this website.</span></div>
       </section>
     </main>
   );

@@ -6,7 +6,6 @@ import {
   UserCog,
   Building2,
   CalendarClock,
-  ClipboardCheck,
   MessageSquareMore,
   WalletCards,
   ChartNoAxesCombined,
@@ -121,11 +120,6 @@ export interface Dashboard {
   total_sections?: number;
   pending_leave_requests?: number;
   metrics?: Record<string, number>;
-  today_attendance?: {
-    attendance_pct?: number;
-    present?: number;
-    marked?: number;
-  };
   fees?: {
     collection_pct?: number;
     total_paid?: number;
@@ -157,8 +151,6 @@ export const navMeta: Record<string, { icon: ComponentType<any>; label: string }
   teachers: { icon: UserCog, label: "Teachers" },
   classes: { icon: Building2, label: "Classes & Subjects" },
   timetable: { icon: CalendarClock, label: "Timetables" },
-  attendance: { icon: ClipboardCheck, label: "Attendance" },
-  communications: { icon: MessageSquareMore, label: "Communications" },
   fees: { icon: WalletCards, label: "Fees" },
   reports: { icon: ChartNoAxesCombined, label: "Reports" },
   admission_inquiries: { icon: MessageSquareMore, label: "Admission Inquiries" },

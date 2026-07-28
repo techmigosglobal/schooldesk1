@@ -734,9 +734,6 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       case 'subjects':
         await _openSubjectSetup(row);
         break;
-      case 'note':
-        await _openInstructionSheet(row);
-        break;
     }
   }
 
@@ -770,76 +767,6 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     );
     if (!mounted) return;
     await _load();
-  }
-
-  Future<void> _openInstructionSheet(Map<String, dynamic> row) async {
-    setState(() => _selectedSectionId = _text(row['section_id']));
-    final controller = TextEditingController();
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Class Observation',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              minLines: 4,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                labelText: 'Observation / instruction',
-                prefixIcon: Icon(Icons.rate_review_outlined),
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () async {
-                final message = controller.text.trim();
-                if (message.isEmpty) return;
-                try {
-                  await BackendApiClient.instance
-                      .createPrincipalClassInstruction(
-                        sectionId: _text(row['section_id']),
-                        title: 'Class observation',
-                        message: message,
-                        type: 'observation',
-                        priority: 'normal',
-                      );
-                  if (context.mounted) Navigator.pop(context, true);
-                } on Object catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Failed to save observation: $e'),
-                        backgroundColor: Theme.of(context).colorScheme.error,
-                      ),
-                    );
-                  }
-                }
-              },
-              icon: const Icon(Icons.send_outlined),
-              label: const Text('Save observation'),
-            ),
-          ],
-        ),
-      ),
-    );
-    controller.dispose();
-    if (result == true) {
-      await _load();
-    }
   }
 
   void _openRoute(String route, Map<String, dynamic> row) {
@@ -1355,7 +1282,6 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // Observation Action Card
           Card(
             color: Colors.white,
             shape: RoundedRectangleBorder(
@@ -1378,7 +1304,6 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                     onAttendance: () =>
                         _openRoute(AppRoutes.principalAttendance, row),
                     onFees: () => _openFeesModule(row),
-                    onObservation: () => _openInstructionSheet(row),
                   ),
                 ],
               ),
@@ -1402,13 +1327,11 @@ class _DesktopClassHubActionGrid extends StatelessWidget {
   final VoidCallback onStudents;
   final VoidCallback onAttendance;
   final VoidCallback onFees;
-  final VoidCallback onObservation;
 
   const _DesktopClassHubActionGrid({
     required this.onStudents,
     required this.onAttendance,
     required this.onFees,
-    required this.onObservation,
   });
 
   @override
@@ -1417,11 +1340,10 @@ class _DesktopClassHubActionGrid extends StatelessWidget {
       (Icons.groups_rounded, 'Students', onStudents),
       (Icons.fact_check_rounded, 'Attendance', onAttendance),
       (Icons.account_balance_wallet_rounded, 'Fees', onFees),
-      (Icons.rate_review_rounded, 'Observation', onObservation),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 920 ? 4 : 2;
+        final columns = constraints.maxWidth >= 920 ? 3 : 2;
         const spacing = 10.0;
         final itemWidth =
             (constraints.maxWidth - spacing * (columns - 1)) / columns;
@@ -3470,13 +3392,6 @@ class _ClassDetailPage extends StatelessWidget {
                   label: 'Academic Year',
                   value: _resolveAcademicYearLabel(row['academic_year_id']),
                 ),
-                _ClassDetailRow(
-                  label: 'Latest Instruction',
-                  value: _classText(
-                    row['latest_instruction'],
-                    fallback: 'No recent instruction',
-                  ),
-                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -3506,12 +3421,6 @@ class _ClassDetailPage extends StatelessWidget {
                   title: 'Setup subjects',
                   subtitle: 'Assign subjects and teachers for this class',
                   onTap: () => Navigator.pop(context, 'subjects'),
-                ),
-                _ClassActionTile(
-                  icon: Icons.rate_review_outlined,
-                  title: 'Send observation',
-                  subtitle: 'Save a principal note for this class',
-                  onTap: () => Navigator.pop(context, 'note'),
                 ),
                 _ClassActionTile(
                   icon: Icons.delete_outline_rounded,

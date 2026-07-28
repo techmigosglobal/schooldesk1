@@ -191,8 +191,6 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
           return TeacherNav.eventPosts;
         case AppRoutes.teacherLessonPlanner:
           return TeacherNav.lessonPlanner;
-        case AppRoutes.teacherStudentNotes:
-          return TeacherNav.studentNotes;
         case AppRoutes.schoolGallery:
           return TeacherNav.gallery;
         case AppRoutes.teacherCommunication:

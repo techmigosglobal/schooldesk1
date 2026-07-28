@@ -12,6 +12,14 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
+String _parentFacingRelationship(String value) {
+  final normalized = value.trim().toLowerCase();
+  if (normalized == 'guardian' || normalized == 'parent/guardian') {
+    return 'Parent';
+  }
+  return value.trim();
+}
+
 class GuardianDirectoryScreen extends StatefulWidget {
   final String ownerRole;
 
@@ -342,7 +350,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         if (!emailMatches && !phoneMatches && !nameMatches) continue;
         return _GuardianMetadata(
           relationship: _stringValue(row['relationship']).isEmpty
-              ? 'Parent/Guardian'
+              ? 'Parent'
               : _stringValue(row['relationship']),
           occupation: _stringValue(row['occupation']),
           annualIncome: double.tryParse('${row['annual_income'] ?? ''}') ?? 0,
@@ -352,7 +360,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       }
     }
     return const _GuardianMetadata(
-      relationship: 'Parent/Guardian',
+      relationship: 'Parent',
       occupation: '',
       annualIncome: 0,
       canPickup: false,
@@ -452,11 +460,11 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
-          'Remove selected guardians',
+          'Remove selected parents',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
         ),
         content: Text(
-          'Permanently remove ${selected.length} selected guardian${selected.length == 1 ? '' : 's'}, their parent login, linked student assignments, and guardian profile rows?',
+          'Permanently remove ${selected.length} selected parent${selected.length == 1 ? '' : 's'}, their login, linked student assignments, and parent profile rows?',
         ),
         actions: [
           TextButton(
@@ -493,7 +501,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       SnackBar(
         content: Text(
           failures.isEmpty
-              ? '$removed guardian${removed == 1 ? '' : 's'} removed'
+              ? '$removed parent${removed == 1 ? '' : 's'} removed'
               : '$removed removed, ${failures.length} failed',
         ),
         backgroundColor: failures.isEmpty
@@ -503,6 +511,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     );
   }
 
+  // ignore: unused_element
   Future<void> _importParentsCsv() async {
     final imported = await BulkCsvImportService.importCsv(
       context,
@@ -547,7 +556,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                   child: Center(
                     child: EmptyStateWidget(
                       icon: Icons.cloud_off_rounded,
-                      title: 'Unable to load guardians',
+                      title: 'Unable to load parents',
                       description: _loadError!,
                       actionLabel: 'Retry',
                       onAction: _loadData,
@@ -560,9 +569,9 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                   child: Center(
                     child: EmptyStateWidget(
                       icon: Icons.family_restroom_rounded,
-                      title: 'No parents or guardians found',
+                      title: 'No parents found',
                       description:
-                          'Adjust your search or filters to find guardians.',
+                          'Adjust your search or filters to find parents.',
                     ),
                   ),
                 )
@@ -653,7 +662,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  'All Parents & Guardians Directory',
+                  'All Parents Directory',
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   style: GoogleFonts.dmSans(
@@ -664,11 +673,12 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                 ),
               ),
             ),
-            IconButton(
-              onPressed: _importParentsCsv,
-              icon: const Icon(Icons.upload_file_rounded, size: 22),
-              tooltip: 'Upload parents CSV',
-            ),
+            // Temporarily hidden at product request; keep the CSV workflow intact.
+            // IconButton(
+            //   onPressed: _importParentsCsv,
+            //   icon: const Icon(Icons.upload_file_rounded, size: 22),
+            //   tooltip: 'Upload parents CSV',
+            // ),
           ],
         ),
       ),
@@ -690,7 +700,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       child: Column(
         children: [
           _SearchBox(
-            hint: 'Search parents, guardians, or students...',
+            hint: 'Search parents or students...',
             onChanged: (value) {
               _searchQuery = value;
               _applyFilters();
@@ -704,7 +714,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
               physics: const BouncingScrollPhysics(),
               children: [
                 _DirectoryChip(
-                  label: 'All Guardians',
+                  label: 'All Parents',
                   selected:
                       _selectedStatus == 'All' &&
                       _selectedRelationship == 'All',
@@ -718,7 +728,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                 _DirectoryChip(
                   label: _selectedRelationship == 'All'
                       ? 'Relationship'
-                      : _selectedRelationship,
+                      : _parentFacingRelationship(_selectedRelationship),
                   selected: _selectedRelationship != 'All',
                   onTap: () => _chooseFilter(
                     title: 'Relationship',
@@ -761,7 +771,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         child: TextButton(
           onPressed: _loadMoreGuardians,
           child: Text(
-            _loadingMore ? 'Loading...' : 'Load more guardians',
+            _loadingMore ? 'Loading...' : 'Load more parents',
             style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
           ),
         ),
@@ -792,7 +802,11 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                     (option) => ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      title: Text(option == 'All' ? 'All $title' : option),
+                      title: Text(
+                        option == 'All'
+                            ? 'All $title'
+                            : _parentFacingRelationship(option),
+                      ),
                       trailing: option == selected
                           ? const Icon(
                               Icons.check_rounded,
@@ -876,7 +890,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(isEdit ? 'Guardian updated' : 'Guardian added'),
+        content: Text(isEdit ? 'Parent updated' : 'Parent added'),
         backgroundColor: context.appTheme.success,
       ),
     );
@@ -1057,7 +1071,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(active ? 'Guardian activated' : 'Guardian deactivated'),
+          content: Text(active ? 'Parent activated' : 'Parent deactivated'),
           backgroundColor: context.appTheme.success,
         ),
       );
@@ -1072,11 +1086,11 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          'Remove Guardian',
+          'Remove Parent',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
         ),
         content: Text(
-          'Permanently remove ${guardian.name}, their parent login, linked student assignments, and guardian profile rows?',
+          'Permanently remove ${guardian.name}, their login, linked student assignments, and parent profile rows?',
         ),
         actions: [
           TextButton(
@@ -1100,7 +1114,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Guardian permanently removed'),
+          content: const Text('Parent permanently removed'),
           backgroundColor: context.appTheme.success,
         ),
       );
@@ -1309,7 +1323,7 @@ class _GuardianDirectoryCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${guardian.relationship} - ${guardian.childSummary}',
+                      '${_parentFacingRelationship(guardian.relationship)} - ${guardian.childSummary}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
@@ -1476,7 +1490,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
   final _admissionCtrl = TextEditingController();
   final ImagePicker _picker = ImagePicker();
 
-  String _relationship = 'Parent/Guardian';
+  String _relationship = 'Parent';
   String? _selectedStudentId;
   XFile? _photoFile;
   String _existingPhotoUrl = '';
@@ -1549,7 +1563,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
     final croppedPath = await SchoolDeskImageCropper.cropSquareImage(
       context: context,
       sourcePath: image.path,
-      title: 'Crop Guardian Photo',
+      title: 'Crop Parent Photo',
     );
     if (croppedPath == null || !mounted) return;
     setState(() => _photoFile = XFile(croppedPath));
@@ -1602,7 +1616,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
       setState(() {
         _saving = false;
         _error =
-            '${_isEdit ? 'Update' : 'Add'} guardian failed: ${error.toString()}';
+            '${_isEdit ? 'Update' : 'Add'} parent failed: ${error.toString()}';
       });
     }
   }
@@ -1684,7 +1698,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
                     const _InlineNotice(
                       icon: Icons.verified_rounded,
                       text:
-                          'Guardian profile, parent login, and linked students will sync with the central academic server on submission.',
+                          'Parent profile, login, and linked students will sync with the central academic server on submission.',
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
@@ -1714,7 +1728,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
       if (_relationship.trim().isNotEmpty) _relationship,
     }.toList();
     return _FormCard(
-      title: 'Guardian Details',
+      title: 'Parent Details',
       children: [
         Center(
           child: InkWell(
@@ -1762,9 +1776,9 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
                 enabled: !_saving,
                 hint: 'Select relationship',
                 items: relationshipItems,
-                labelBuilder: (value) => value,
+                labelBuilder: _parentFacingRelationship,
                 onChanged: (value) =>
-                    setState(() => _relationship = value ?? 'Guardian'),
+                    setState(() => _relationship = value ?? 'Parent'),
               ),
             ),
             _LabeledField(
@@ -1783,7 +1797,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
         const _FieldLabel('Email'),
         _TextInput(
           controller: _emailCtrl,
-          hint: 'guardian@example.com',
+          hint: 'parent@example.com',
           enabled: !_saving,
           keyboardType: TextInputType.emailAddress,
           validator: _optionalEmail,
@@ -1835,7 +1849,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
               ? null
               : (value) => setState(() => _isPrimary = value),
           title: Text(
-            'Primary Guardian',
+            'Primary Parent',
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w900,
@@ -2027,7 +2041,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                _isEdit ? 'Edit Guardian Profile' : 'Add Guardian Profile',
+                _isEdit ? 'Edit Parent Profile' : 'Add Parent Profile',
                 maxLines: 1,
                 style: GoogleFonts.dmSans(
                   fontSize: 16,
@@ -2125,7 +2139,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
               ),
             )
           : Text(
-              _isEdit ? 'Save Guardian' : 'Add Guardian',
+              _isEdit ? 'Save Parent' : 'Add Parent',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.dmSans(
@@ -2154,7 +2168,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
       _incomeCtrl.text = guardian?.annualIncome == 0 || guardian == null
           ? ''
           : guardian.annualIncome.toStringAsFixed(0);
-      _relationship = guardian?.relationship ?? 'Parent/Guardian';
+      _relationship = guardian?.relationship ?? 'Parent';
       _selectedStudentId = null;
       _resetPassword = false;
       _passwordVisible = false;
@@ -2234,14 +2248,14 @@ class _GuardianDetailPage extends StatelessWidget {
           PopupMenuButton<String>(
             onSelected: (value) => Navigator.pop(context, value),
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'edit', child: Text('Edit Guardian')),
+              const PopupMenuItem(value: 'edit', child: Text('Edit Parent')),
               PopupMenuItem(
                 value: 'toggle',
                 child: Text(guardian.isActive ? 'Deactivate' : 'Activate'),
               ),
               const PopupMenuItem(
                 value: 'delete',
-                child: Text('Remove Guardian'),
+                child: Text('Remove Parent'),
               ),
             ],
           ),
@@ -2262,7 +2276,10 @@ class _GuardianDetailPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 18),
-                _DetailRow(label: 'Relationship', value: guardian.relationship),
+                _DetailRow(
+                  label: 'Relationship',
+                  value: _parentFacingRelationship(guardian.relationship),
+                ),
                 _DetailRow(label: 'Phone', value: _fallback(guardian.phone)),
                 _DetailRow(label: 'Email', value: _fallback(guardian.email)),
                 _DetailRow(

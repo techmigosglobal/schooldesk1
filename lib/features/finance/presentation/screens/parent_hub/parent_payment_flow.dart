@@ -6,7 +6,6 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 class ParentPaymentFlow extends StatefulWidget {
@@ -27,7 +26,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   Map<String, dynamic> _paymentConfig = const {};
   Map<String, dynamic>? _paymentIntent;
 
-  final Set<String> _selectedMonthNames = <String>{};
+  final _amountController = TextEditingController();
   final _remarksController = TextEditingController();
   final _utrController = TextEditingController();
 
@@ -47,64 +46,18 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   Map<String, dynamic> get _selectedFee =>
       _fees.isEmpty ? const <String, dynamic>{} : _fees.first;
 
-  bool get _isTuition => isTuitionInvoice(_selectedFee);
-
-  String get _selectedFeeLabel => _text(
-    _selectedFee['component'],
-    fallback: _isTuition ? 'Tuition' : 'Fee',
-  );
-
-  static const List<String> _monthNames = [
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-    'January',
-    'February',
-    'March',
-  ];
-
-  List<String> get _allowedMonthNames {
-    final configured =
-        (_selectedFee['allowed_month_names'] is List
-                ? (_selectedFee['allowed_month_names'] as List)
-                      .map((value) => '$value'.trim())
-                      .where((value) => value.isNotEmpty)
-                      .toList()
-                : const <String>[])
-            .cast<String>();
-    if (configured.isEmpty && _isTuition) {
-      return _monthNames;
-    }
-    return configured;
-  }
-
-  List<String> get _paidMonthNames =>
-      (_selectedFee['paid_month_names'] is List
-              ? (_selectedFee['paid_month_names'] as List)
-                    .map((value) => '$value'.trim())
-                    .where((value) => value.isNotEmpty)
-                    .toList()
-              : const <String>[])
-          .cast<String>();
-
-  List<String> get _unpaidMonthNames => _allowedMonthNames
-      .where((month) => !_paidMonthNames.contains(month))
-      .toList(growable: false);
+  String get _selectedFeeLabel =>
+      _text(_selectedFee['component'], fallback: 'Fee');
 
   double get _totalAmount {
-    final balance = (_selectedFee['amount'] as num?)?.toDouble() ?? 0.0;
-    if (_isTuition) {
-      final monthly =
-          (_selectedFee['monthly_amount'] as num?)?.toDouble() ??
-          (balance / 10);
-      return monthly * _selectedMonthNames.length;
-    }
-    return balance;
+    return double.tryParse(
+          _amountController.text.replaceAll(RegExp(r'[^\d.]'), ''),
+        ) ??
+        0.0;
   }
+
+  double get _remainingBalance =>
+      (_selectedFee['amount'] as num?)?.toDouble() ?? 0.0;
 
   String get _upiId => _text(_paymentConfig['upi_id']);
   String get _qrImageUrl => _text(_paymentConfig['qr_image_url']);
@@ -140,22 +93,20 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       _utrController.text = _text(_resubmissionRequest['transaction_id']);
       _currentStep = 2; // Jump to payment step for clarification resubmission
     }
-    _seedMonthSelection();
+    _seedPaymentAmount();
     _loadPaymentConfig(forceRefresh: true);
   }
 
   @override
   void dispose() {
+    _amountController.dispose();
     _remarksController.dispose();
     _utrController.dispose();
     super.dispose();
   }
 
-  void _seedMonthSelection() {
-    _selectedMonthNames.clear();
-    if (_isTuition && _unpaidMonthNames.isNotEmpty) {
-      _selectedMonthNames.add(_unpaidMonthNames.first);
-    }
+  void _seedPaymentAmount() {
+    _amountController.text = _remainingBalance.toStringAsFixed(2);
   }
 
   Future<void> _loadPaymentConfig({bool forceRefresh = false}) async {
@@ -194,10 +145,13 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
 
   Future<void> _proceedToPay() async {
     if (_fees.isEmpty) return;
-    if (_isTuition && _selectedMonthNames.isEmpty) {
+    final amount = _totalAmount;
+    if (amount <= 0 || amount > _remainingBalance) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select at least one month to pay.'),
+        SnackBar(
+          content: Text(
+            'Enter an amount between ₹0.01 and ${_money(_remainingBalance)}.',
+          ),
         ),
       );
       return;
@@ -208,11 +162,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       final intent = await BackendApiClient.instance.createFeePaymentIntent(
         invoiceId: '${_selectedFee['id']}',
         paymentMethod: 'upi',
-        selectedMonthNames: _isTuition
-            ? _selectedMonthNames.toList()
-            : const [],
-        selectedMonths: _isTuition ? _selectedMonthNames.length : 0,
-        selectedTerms: 0,
+        amount: amount,
         remarks: _remarksController.text.trim(),
       );
       if (!mounted) return;
@@ -298,10 +248,6 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           transactionRef: _utrController.text.trim(),
           screenshotPath: _proofPath!,
           screenshotName: _proofName!,
-          selectedMonthNames: _isTuition
-              ? _selectedMonthNames.toList()
-              : const [],
-          selectedMonths: _isTuition ? _selectedMonthNames.length : 0,
           remarks: _remarksController.text.trim(),
         );
       }
@@ -520,7 +466,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
 
   Widget _buildStep1() {
     final componentName = _selectedFeeLabel;
-    final amountDue = (_selectedFee['amount'] as num?)?.toDouble() ?? 0.0;
+    final amountDue = _remainingBalance;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -541,113 +487,61 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           ),
           child: Column(
             children: [
-              _infoRow('Total Outstanding', _money(amountDue)),
-              if (_isTuition) ...[
-                const Divider(height: 24),
-                _infoRow(
-                  'Monthly Rate',
-                  _money(
-                    (_selectedFee['monthly_amount'] as num?)?.toDouble() ??
-                        amountDue / 10,
+              _infoRow('Remaining Balance', _money(amountDue)),
+              const Divider(height: 24),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: context.appTheme.primary,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You can pay any amount up to this balance.',
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 13,
+                        height: 1.35,
+                        color: context.appTheme.muted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
-        if (_isTuition) ...[
-          const SizedBox(height: 20),
-          Text(
-            'Select Months to Pay',
-            style: GoogleFonts.ibmPlexSans(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
+        const SizedBox(height: 20),
+        Text(
+          'Payment Amount',
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Installments must be paid continuously from the first unpaid month.',
-            style: GoogleFonts.ibmPlexSans(
-              fontSize: 12,
-              color: context.appTheme.muted,
-            ),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _amountController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+          ],
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            prefixText: '₹ ',
+            labelText: 'Amount to pay',
+            helperText: 'Maximum ${_money(_remainingBalance)}',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _unpaidMonthNames.map((month) {
-              final isSelected = _selectedMonthNames.contains(month);
-              final selectedInOrder = _unpaidMonthNames
-                  .where(_selectedMonthNames.contains)
-                  .toList(growable: false);
-              final nextMonth =
-                  selectedInOrder.length < _unpaidMonthNames.length
-                  ? _unpaidMonthNames[selectedInOrder.length]
-                  : null;
-              final canAdd = !isSelected && month == nextMonth;
-              final canRemove =
-                  isSelected &&
-                  selectedInOrder.length > 1 &&
-                  selectedInOrder.last == month;
-              return FilterChip(
-                selected: isSelected,
-                label: Text(month),
-                onSelected: canAdd || canRemove
-                    ? (val) {
-                        setState(() {
-                          if (val) {
-                            _selectedMonthNames.add(month);
-                          } else if (canRemove) {
-                            _selectedMonthNames.remove(month);
-                          }
-                        });
-                      }
-                    : null,
-                selectedColor: const Color(0xFF1A6B4A).withOpacity(0.15),
-                checkmarkColor: const Color(0xFF1A6B4A),
-                labelStyle: GoogleFonts.ibmPlexSans(
-                  color: isSelected
-                      ? const Color(0xFF1A6B4A)
-                      : context.appTheme.onSurface,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  fontSize: 12,
-                ),
-              );
-            }).toList(),
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
           ),
-        ],
-        if (!_isTuition) ...[
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: context.appTheme.warningContainer.withAlpha(90),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: context.appTheme.warning.withAlpha(60)),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  color: context.appTheme.warning,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '$_selectedFeeLabel is payable as one full amount. Month selection is only available for tuition.',
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 12,
-                      height: 1.35,
-                      color: context.appTheme.onSurface,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        const SizedBox(height: 32),
+        ),
+        const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -659,9 +553,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _isTuition
-                    ? 'Paying for ${_selectedMonthNames.length} month(s)'
-                    : '$_selectedFeeLabel: one-time payment',
+                'Payment amount',
                 style: GoogleFonts.ibmPlexSans(
                   fontWeight: FontWeight.w600,
                   color: context.appTheme.primary,

@@ -104,7 +104,6 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
   String _query = '';
 
   // ── Payment form ─────────────────────────────────────────────────────────
-  final Set<String> _selectedMonths = {};
   _PaymentMode _paymentMode = _PaymentMode.cash;
   DateTime _paymentDate = DateTime.now();
 
@@ -203,11 +202,6 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
     );
   }
 
-  bool get _isTuition =>
-      _selectedInvoice != null && isTuitionInvoice(_selectedInvoice);
-  List<String> get _unpaidMonths =>
-      _selectedInvoice != null ? unpaidInvoiceMonths(_selectedInvoice) : [];
-
   // ── Current step for the progress indicator ──────────────────────────────
 
   int get _currentStep {
@@ -256,50 +250,12 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
     }
   }
 
-  // ── Amount helpers ───────────────────────────────────────────────────────
-
-  void _recalculateAmount() {
-    final inv = _selectedInvoice;
-    if (inv == null) return;
-    if (!_isTuition) {
-      _amountController.text = money(numValue(inv['balance']));
-      return;
-    }
-    final monthly = numValue(inv['monthly_amount']);
-    if (_selectedMonths.isEmpty || monthly <= 0) {
-      _amountController.text = money(0);
-      return;
-    }
-    final allUnpaid = _unpaidMonths;
-    final amount = _selectedMonths.length == allUnpaid.length
-        ? numValue(inv['balance'])
-        : monthly * _selectedMonths.length;
-    _amountController.text = money(amount);
-  }
-
-  void _selectMonthsFromAmount() {
-    final inv = _selectedInvoice;
-    if (!_isTuition || inv == null) return;
-    final amount =
-        double.tryParse(
-          _amountController.text.replaceAll(RegExp(r'[^\d.]'), ''),
-        ) ??
-        0.0;
-    final monthly = numValue(inv['monthly_amount']);
-    final allUnpaid = _unpaidMonths;
-    _selectedMonths.clear();
-    if (allUnpaid.isEmpty || monthly <= 0 || amount <= 0) return;
-    final count = (amount / monthly).round().clamp(1, allUnpaid.length);
-    _selectedMonths.addAll(allUnpaid.take(count));
-  }
-
   // ── Navigation helpers ───────────────────────────────────────────────────
 
   void _backToStudents() {
     setState(() {
       _selectedStudentId = '';
       _selectedInvoiceId = '';
-      _selectedMonths.clear();
       _amountController.clear();
     });
   }
@@ -309,7 +265,6 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
       _selectedSectionLabel = '';
       _selectedStudentId = '';
       _selectedInvoiceId = '';
-      _selectedMonths.clear();
       _amountController.clear();
       _searchCtrl.clear();
       _query = '';
@@ -319,7 +274,6 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
   void _backToFeeTypes() {
     setState(() {
       _selectedInvoiceId = '';
-      _selectedMonths.clear();
       _amountController.clear();
     });
   }
@@ -961,7 +915,6 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
           borderRadius: BorderRadius.circular(14),
           onTap: () => setState(() {
             _selectedStudentId = '${student['student_id']}';
-            _selectedMonths.clear();
           }),
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -1214,16 +1167,10 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
               : () {
                   setState(() {
                     _selectedInvoiceId = '${inv['id']}';
-                    _selectedMonths.clear();
-                    // Auto-select first unpaid month for tuition
-                    if (isTuitionInvoice(inv)) {
-                      final unpaid = unpaidInvoiceMonths(inv);
-                      if (unpaid.isNotEmpty) {
-                        _selectedMonths.add(unpaid.first);
-                      }
-                    }
+                    _amountController.text = numValue(
+                      inv['balance'],
+                    ).toStringAsFixed(2);
                   });
-                  _recalculateAmount();
                 },
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -1350,8 +1297,6 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
                           child: Text(
                             isPartial
                                 ? 'Partially paid · ₹${paid.toStringAsFixed(0)} paid · Select to pay ₹${balance.toStringAsFixed(0)} balance'
-                                : isTuitionInvoice(inv)
-                                ? 'Monthly tuition · Select to choose months and pay'
                                 : 'Select to record payment of ${money(balance)}',
                             style: GoogleFonts.ibmPlexSans(
                               fontSize: 11,
@@ -1506,200 +1451,37 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
 
         const SizedBox(height: 20),
 
-        // Month selector (tuition only)
-        if (_isTuition && _unpaidMonths.isNotEmpty) ...[
-          _sectionHeader(
-            'Select Months to Pay',
-            subtitle:
-                'Monthly tuition — ₹${numValue(inv['monthly_amount']).toStringAsFixed(0)}/month',
-            icon: Icons.calendar_month_rounded,
-            color: const Color(0xFF1A6B4A),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8F5EE),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFB8E0C7)),
           ),
-          const SizedBox(height: 10),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Month grid
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: allowedInvoiceMonths(inv).map((month) {
-                    final isPaid = paidInvoiceMonths(inv).contains(month);
-                    final isSelected = _selectedMonths.contains(month);
-                    final nextIdx = _selectedMonths.length;
-                    final canAdd =
-                        !isPaid &&
-                        (isSelected || _unpaidMonths.indexOf(month) == nextIdx);
-                    final canRemove =
-                        isSelected &&
-                        _selectedMonths.length > 1 &&
-                        _selectedMonths.last == month;
-
-                    Color bgColor;
-                    Color textColor;
-                    Color borderColor;
-                    FontWeight fontWeight;
-
-                    if (isPaid) {
-                      bgColor = const Color(0xFFDCFCE7);
-                      textColor = const Color(0xFF1A6B4A);
-                      borderColor = const Color(0xFF1A6B4A);
-                      fontWeight = FontWeight.w700;
-                    } else if (isSelected) {
-                      bgColor = const Color(0xFF1A6B4A);
-                      textColor = Colors.white;
-                      borderColor = const Color(0xFF1A6B4A);
-                      fontWeight = FontWeight.w700;
-                    } else if (canAdd || canRemove) {
-                      bgColor = Colors.white;
-                      textColor = const Color(0xFF374151);
-                      borderColor = const Color(0xFFD1D5DB);
-                      fontWeight = FontWeight.w600;
-                    } else {
-                      bgColor = const Color(0xFFF9FAFB);
-                      textColor = const Color(0xFF9CA3AF);
-                      borderColor = const Color(0xFFE5E7EB);
-                      fontWeight = FontWeight.w500;
-                    }
-
-                    return GestureDetector(
-                      onTap: (canAdd || canRemove)
-                          ? () {
-                              setState(() {
-                                if (isSelected && canRemove) {
-                                  _selectedMonths.remove(month);
-                                } else if (canAdd) {
-                                  _selectedMonths.add(month);
-                                }
-                              });
-                              _recalculateAmount();
-                            }
-                          : null,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: bgColor,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: borderColor,
-                            width: isSelected ? 2 : 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (isPaid)
-                              Icon(
-                                Icons.check_circle,
-                                size: 14,
-                                color: textColor,
-                              ),
-                            if (isPaid) const SizedBox(width: 4),
-                            Text(
-                              month,
-                              style: GoogleFonts.ibmPlexSans(
-                                fontSize: 12,
-                                fontWeight: fontWeight,
-                                color: textColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-
-                // Month selection summary
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      size: 14,
-                      color: context.appTheme.muted,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        _selectedMonths.isEmpty
-                            ? 'Select the next unpaid month to continue'
-                            : 'Selected: ${_unpaidMonths.where(_selectedMonths.contains).join(', ')}',
-                        style: GoogleFonts.ibmPlexSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: context.appTheme.muted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (paidInvoiceMonths(inv).isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    'Already paid: ${paidInvoiceMonths(inv).join(', ')}',
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 11,
-                      color: const Color(0xFF16A34A),
-                      fontWeight: FontWeight.w500,
-                    ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.account_balance_wallet_rounded,
+                color: Color(0xFF1A6B4A),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Record any amount up to the current balance. Previous month allocations remain available only in receipt history.',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 13,
+                    height: 1.35,
+                    color: const Color(0xFF14532D),
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text(
-                      'Payable now',
-                      style: GoogleFonts.ibmPlexSans(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      money(
-                        _amountController.text.isEmpty
-                            ? 0
-                            : double.tryParse(
-                                    _amountController.text.replaceAll(
-                                      RegExp(r'[^\d.]'),
-                                      '',
-                                    ),
-                                  ) ??
-                                  0,
-                      ),
-                      style: GoogleFonts.ibmPlexSans(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: const Color(0xFF1A6B4A),
-                      ),
-                    ),
-                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-        ],
+        ),
+        const SizedBox(height: 20),
 
         // Amount
         _sectionHeader(
@@ -1716,6 +1498,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
           ],
           decoration: InputDecoration(
             labelText: 'Amount to Record',
+            helperText: 'Maximum ${money(numValue(inv['balance']))}',
             prefixText: '₹ ',
             filled: true,
             fillColor: Colors.white,
@@ -1729,7 +1512,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
             fontWeight: FontWeight.bold,
             fontSize: 16,
           ),
-          onChanged: (_) => _selectMonthsFromAmount(),
+          onChanged: (_) => setState(() {}),
         ),
 
         const SizedBox(height: 20),
@@ -2023,16 +1806,15 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
       );
       return;
     }
-    // Validate tuition month selection
-    if (_isTuition && _selectedMonths.isEmpty && amount > 0) {
+    final balance = numValue(inv['balance']);
+    if (amount > balance) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Please select at least one month for tuition payment.',
+            'Payment cannot be more than the remaining ${money(balance)}.',
           ),
         ),
       );
-      setState(() => _saving = false);
       return;
     }
 
@@ -2049,10 +1831,6 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
           transactionId: _transactionController.text.trim().isEmpty
               ? null
               : _transactionController.text.trim(),
-          selectedMonthNames: _isTuition
-              ? _unpaidMonths.where(_selectedMonths.contains).toList()
-              : const [],
-          selectedMonths: _isTuition ? _selectedMonths.length : 0,
         ),
       );
       if (!mounted) return;
@@ -2089,7 +1867,6 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
       setState(() {
         _selectedStudentId = '';
         _selectedInvoiceId = '';
-        _selectedMonths.clear();
       });
       _amountController.clear();
       _transactionController.clear();

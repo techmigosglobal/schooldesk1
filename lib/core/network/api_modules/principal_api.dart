@@ -217,38 +217,6 @@ extension BackendPrincipalApi on BackendApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> createPrincipalClassInstruction({
-    required String sectionId,
-    required String message,
-    String title = '',
-    String type = 'instruction',
-    String priority = 'normal',
-    bool sendNotice = false,
-  }) async {
-    try {
-      final response = await _dio.post(
-        '/principal/classes/$sectionId/instructions',
-        data: {
-          'title': title.trim(),
-          'message': message.trim(),
-          'type': type.trim().isEmpty ? 'instruction' : type.trim(),
-          'priority': priority.trim().isEmpty ? 'normal' : priority.trim(),
-          'send_notice': sendNotice,
-          'target_route': '/principal-classes-screen',
-        },
-      );
-      final data = _asMap(response.data);
-      if (data['success'] == true) {
-        return _asMap(data['data']);
-      }
-      throw ServerException(
-        message: data['error'] ?? 'Failed to save class instruction',
-      );
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
-  }
-
   Future<Map<String, dynamic>> getPrincipalSubjectsOverview() async {
     try {
       final response = await _dio.get('/principal/subjects');

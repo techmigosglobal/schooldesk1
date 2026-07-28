@@ -27,7 +27,7 @@ export function PublicHeader() {
       <summary aria-label="Open site navigation">Menu <span aria-hidden="true">☰</span></summary>
       <nav aria-label="Mobile navigation">{navigation.map(([href, label]) => <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}>{label}</Link>)}</nav>
     </details>
-    <Link className="outline-button staff-login-button" href="/login"><span>Staff login</span><b aria-hidden="true">→</b></Link>
+    <Link className="outline-button leadership-login-button" href="/login"><span>Leadership login</span><b aria-hidden="true">→</b></Link>
     </div>
   </header>;
 }
@@ -37,7 +37,7 @@ export function PublicFooter() {
     <div className="footer-main">
       <div className="footer-brand"><Image src="/branding/arishville-logo.png" alt="ArishVille Preschool" width={54} height={54}/><div><b>ArishVille Preschool</b><span>Learn Today, Lead Tomorrow.</span><p>A happy first home for curiosity, confidence, and friendship.</p></div></div>
       <nav className="footer-links" aria-label="Explore ArishVille"><b>Explore</b><Link href="/">Home</Link><Link href="/about-us">About</Link><Link href="/programs">Programs</Link><Link href="/admissions">Admissions &amp; Contact</Link><Link href="/gallery">School Gallery</Link></nav>
-      <nav className="footer-links" aria-label="SchoolDesk access"><b>SchoolDesk</b><Link href="/login">Staff login</Link><Link href="/login/principal">Principal portal</Link><Link href="/login/coordinator">Coordinator portal</Link><a href="#top">Back to top ↑</a></nav>
+      <nav className="footer-links" aria-label="SchoolDesk access"><b>SchoolDesk</b><Link href="/login">Leadership login</Link><Link href="/login/principal">Principal portal</Link><Link href="/login/coordinator">Coordinator portal</Link><a href="#top">Back to top ↑</a></nav>
     </div>
     <div className="footer-bottom"><span>© {new Date().getFullYear()} ArishVille Preschool. All rights reserved.</span><a className="managed-by" href="https://techmigos.com" target="_blank" rel="noreferrer" aria-label="Developed and managed by Techmigos"><Image src="/branding/techmigos-logo.png" alt="" width={24} height={24} style={{ width: "auto", height: "auto" }}/><span>Developed &amp; managed by <b>Techmigos</b><i aria-hidden="true">↗</i></span></a></div>
   </footer>;

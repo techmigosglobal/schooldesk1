@@ -359,16 +359,6 @@ class _AdminPaymentRequestsScreenState
               fallback: '-',
             ),
           ),
-          if (_num(request['selected_months']) > 0)
-            _detailRow(
-              'Selected',
-              '${_num(request['selected_months']).toInt()} month(s)',
-            ),
-          if (_num(request['selected_terms']) > 0)
-            _detailRow(
-              'Selected',
-              '${_num(request['selected_terms']).toInt()} term(s)',
-            ),
           if (_text(request['transaction_id']).isNotEmpty)
             _detailRow('Transaction', _text(request['transaction_id'])),
           if (_text(request['proof_url']).isNotEmpty)

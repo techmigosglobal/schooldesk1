@@ -34,7 +34,6 @@ class TeacherNav {
   static const diary = 7;
   static const eventPosts = 8;
   static const lessonPlanner = 9;
-  static const studentNotes = 10;
   static const gallery = 11;
   static const communication = 12;
   static const ptm = 13;

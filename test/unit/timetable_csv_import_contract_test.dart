@@ -162,7 +162,7 @@ void main() {
     expect(adminTimetable, contains('_buildDayWiseEditor'));
     expect(adminTimetable, contains('_deleteDayCell'));
     expect(adminTimetable, isNot(contains('_deletePeriodColumn')));
-    expect(adminTimetable, contains('_reflowSelectedDay'));
+    expect(adminTimetable, contains('_renumberDay'));
     expect(adminTimetable, contains('staffId: cell.staffId'));
     expect(timetableApi, contains('String staffId = \'\''));
     expect(timetableApi, contains("'staff_id': null"));

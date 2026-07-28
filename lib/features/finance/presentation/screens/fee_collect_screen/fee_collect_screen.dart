@@ -46,7 +46,6 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
   final _transactionController = TextEditingController();
   final _notesController = TextEditingController();
   final _searchCtrl = TextEditingController();
-  final Set<String> _selectedMonths = {};
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -108,46 +107,6 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
     return _dueInvoices.firstWhereOrNull(
       (i) => i['student_id'] == _selectedStudentId,
     );
-  }
-
-  bool get _isTuition =>
-      _selectedInvoice != null && isTuitionInvoice(_selectedInvoice);
-  List<String> get _unpaidMonths =>
-      _selectedInvoice != null ? unpaidInvoiceMonths(_selectedInvoice) : [];
-
-  void _recalculateAmount() {
-    final inv = _selectedInvoice;
-    if (inv == null) return;
-    if (!_isTuition) {
-      _amountController.text = money(numValue(inv['balance']));
-      return;
-    }
-    final monthly = numValue(inv['monthly_amount']);
-    if (_selectedMonths.isEmpty || monthly <= 0) {
-      _amountController.text = money(0);
-      return;
-    }
-    final allUnpaid = _unpaidMonths;
-    final amount = _selectedMonths.length == allUnpaid.length
-        ? numValue(inv['balance'])
-        : monthly * _selectedMonths.length;
-    _amountController.text = money(amount);
-  }
-
-  void _selectMonthsFromAmount() {
-    final inv = _selectedInvoice;
-    if (!_isTuition || inv == null) return;
-    final amount =
-        double.tryParse(
-          _amountController.text.replaceAll(RegExp(r'[^\d.]'), ''),
-        ) ??
-        0;
-    final monthly = numValue(inv['monthly_amount']);
-    final allUnpaid = _unpaidMonths;
-    _selectedMonths.clear();
-    if (allUnpaid.isEmpty || monthly <= 0 || amount <= 0) return;
-    final count = (amount / monthly).round().clamp(1, allUnpaid.length);
-    _selectedMonths.addAll(allUnpaid.take(count));
   }
 
   @override
@@ -253,9 +212,10 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
             onTap: () {
               setState(() {
                 _selectedStudentId = inv['student_id'];
-                _selectedMonths.clear();
+                _amountController.text = numValue(
+                  inv['balance'],
+                ).toStringAsFixed(2);
               });
-              _recalculateAmount();
             },
             child: Row(
               children: [
@@ -330,7 +290,7 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
               TextButton(
                 onPressed: () => setState(() {
                   _selectedStudentId = '';
-                  _selectedMonths.clear();
+                  _amountController.clear();
                 }),
                 child: const Text('Change'),
               ),
@@ -355,62 +315,29 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        if (_isTuition && _unpaidMonths.isNotEmpty) ...[
-          const FeeSectionTitle('Select Tuition Months'),
-          const SizedBox(height: 4),
-          Text(
-            'Pick continuous unpaid months.',
-            style: TextStyle(fontSize: 12, color: context.appTheme.muted),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8F5EE),
+            borderRadius: BorderRadius.circular(12),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: allowedInvoiceMonths(inv).map((month) {
-              final isPaid = paidInvoiceMonths(inv).contains(month);
-              final isSelected = _selectedMonths.contains(month);
-              final nextIdx = _selectedMonths.length;
-              final canAdd =
-                  !isPaid &&
-                  (isSelected || _unpaidMonths.indexOf(month) == nextIdx);
-              final canRemove =
-                  isSelected &&
-                  _selectedMonths.length > 1 &&
-                  _selectedMonths.last == month;
-              return FilterChip(
-                label: Text(isPaid ? '$month ✓' : month),
-                selected: isPaid || isSelected,
-                onSelected: (canAdd || canRemove)
-                    ? (_) {
-                        setState(() {
-                          if (isSelected && canRemove) {
-                            _selectedMonths.remove(month);
-                          } else if (canAdd) {
-                            _selectedMonths.add(month);
-                          }
-                        });
-                        _recalculateAmount();
-                      }
-                    : null,
-                selectedColor: isPaid
-                    ? context.appTheme.success.withOpacity(0.16)
-                    : context.appTheme.primaryContainer,
-              );
-            }).toList(),
+          child: const Text(
+            'Record any amount up to the current balance. Historical month allocations remain on past receipts only.',
           ),
-          const SizedBox(height: 12),
-        ],
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: _amountController,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
           ],
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Amount',
+            helperText: 'Maximum ${money(numValue(inv['balance']))}',
             prefixText: '₹ ',
           ),
-          onChanged: (_) => _selectMonthsFromAmount(),
+          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
         const FeeSectionTitle('Payment Mode'),
@@ -511,7 +438,7 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
         OutlinedButton(
           onPressed: () => setState(() {
             _selectedStudentId = '';
-            _selectedMonths.clear();
+            _amountController.clear();
           }),
           child: const Text('Back to Students'),
         ),
@@ -541,6 +468,16 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Enter a valid amount.')));
+      return;
+    }
+    if (amount > numValue(inv['balance'])) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Amount cannot be more than ${money(numValue(inv['balance']))}.',
+          ),
+        ),
+      );
       return;
     }
     setState(() => _saving = true);
@@ -582,7 +519,6 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
       );
       setState(() {
         _selectedStudentId = '';
-        _selectedMonths.clear();
       });
       _amountController.clear();
       _transactionController.clear();

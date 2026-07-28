@@ -1306,7 +1306,9 @@ export async function handlePrincipal(
   user: User,
 ): Promise<Response> {
   const school = sid(user);
-  if (!isSchoolLeader(user)) return fail("school leadership access required", 403);
+  if (!isSchoolLeader(user)) {
+    return fail("school leadership access required", 403);
+  }
   const includeFees = roleName(user) !== "coordinator";
   const body = method !== "GET"
     ? await req.json().catch(() => ({})) as Record<string, unknown>
@@ -1618,51 +1620,6 @@ export async function handlePrincipal(
       section_id: sectionId,
       deleted_grade_id: deletedGradeId,
     });
-  }
-
-  if (
-    path.match(/^\/principal\/classes\/[^/]+\/instructions$/) &&
-    method === "POST"
-  ) {
-    const sectionId = path.split("/")[3];
-    try {
-      const log = await createAuditLog(
-        svc,
-        school,
-        user.id,
-        text(body.type) || "instruction",
-        "section",
-        sectionId,
-        {
-          title: text(body.title),
-          message: text(body.message),
-          priority: text(body.priority) || "normal",
-          route: text(body.target_route),
-        },
-      );
-      const section = await firstRow(
-        svc.from("sections").select("*").eq("id", sectionId).eq(
-          "school_id",
-          school,
-        ).limit(1),
-      );
-      await notifyStaffIfLinked(
-        svc,
-        school,
-        text(section?.class_teacher_id),
-        text(body.title) || "Class instruction",
-        text(body.message),
-        "section",
-        sectionId,
-      );
-      return ok(log);
-    } catch (error) {
-      return fail(
-        error instanceof Error
-          ? error.message
-          : "Failed to save class instruction",
-      );
-    }
   }
 
   if (path === "/principal/subjects" && method === "GET") {

@@ -60,7 +60,7 @@ export async function handleWebsitePublic(
       "hero_title, hero_body, mission_title, mission_body, breaking_news_text, breaking_news_enabled, updated_at",
     ).eq("school_id", school).maybeSingle(),
     svc.from("school_website_gallery_items").select(
-      "id, title, alt_text, caption, media_path, sort_order, created_at",
+      "id, title, alt_text, caption, media_path, media_type, sort_order, created_at",
     )
       .eq("school_id", school).eq("is_published", true).order("sort_order")
       .order("created_at", { ascending: false }),

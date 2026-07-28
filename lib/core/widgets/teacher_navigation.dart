@@ -207,13 +207,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherHomework,
             ),
             SchoolDeskNavigationItem(
-              index: TeacherNav.studentNotes,
-              icon: Icons.sticky_note_2_outlined,
-              activeIcon: Icons.sticky_note_2_rounded,
-              label: 'Student Notes',
-              route: AppRoutes.teacherStudentNotes,
-            ),
-            SchoolDeskNavigationItem(
               index: TeacherNav.gallery,
               icon: Icons.photo_library_outlined,
               activeIcon: Icons.photo_library_rounded,

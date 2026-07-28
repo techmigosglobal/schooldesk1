@@ -600,7 +600,7 @@ class _AcademicYearUsersExportScreenState
               ),
               _CheckOption(
                 icon: Icons.groups_2_outlined,
-                label: 'Parents / Guardians',
+                label: 'Parents',
                 value: _roles.contains('parent'),
                 onChanged: (value) => _toggleRole('parent', value),
               ),

@@ -1,51 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { motion } from "framer-motion";
 import {
-  Activity,
   Building2,
   CalendarClock,
-  CheckCircle2,
   ChevronRight,
   CircleAlert,
+  FileText,
   GraduationCap,
+  HeartHandshake,
+  Images,
   RefreshCw,
+  ShieldCheck,
   UsersRound,
   WalletCards,
 } from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
-import type { Dashboard } from "./types";
-import { api, money } from "./utils";
+import type { Dashboard, Row } from "./types";
+import { api, money, rowsFrom } from "./utils";
 
-function AnimatedValue({ value }: { value: number | string }) {
-  const numeric = typeof value === "number" ? value : Number.parseInt(String(value), 10);
-  const isNumber = !Number.isNaN(numeric) && typeof value === "number";
-  const [current, setCurrent] = useState(0);
+type DashboardMetric = {
+  id: string;
+  label: string;
+  value: number | string;
+  detail: string;
+  tone: "forest" | "sun" | "navy" | "sky" | "violet" | "mint";
+  icon: typeof UsersRound;
+  target: string;
+};
 
-  useEffect(() => {
-    if (!isNumber) return;
-    let start = 0;
-    const duration = 800; // ms
-    const stepTime = 16;
-    const steps = duration / stepTime;
-    const increment = numeric / steps;
-
-    const timer = setInterval(() => {
-      start += increment;
-      if (start >= numeric) {
-        setCurrent(numeric);
-        clearInterval(timer);
-      } else {
-        setCurrent(Math.floor(start));
-      }
-    }, stepTime);
-
-    return () => clearInterval(timer);
-  }, [numeric, isNumber]);
-
-  if (!isNumber) return <span>{value}</span>;
-  return <span>{current}</span>;
+function formattedCount(value: number | string) {
+  return typeof value === "number" ? new Intl.NumberFormat("en-IN").format(value) : value;
 }
 
 export function DashboardPanel({
@@ -59,27 +45,28 @@ export function DashboardPanel({
   onCreate: (module: string) => void;
   refreshNonce: number;
 }) {
-  const [data, setData] = useState<Dashboard>({});
+  const [dashboard, setDashboard] = useState<Dashboard>({});
+  const [inquiries, setInquiries] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [refreshedAt, setRefreshedAt] = useState<string>("");
+  const [refreshedAt, setRefreshedAt] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const payload = (await api("dashboard")) as Dashboard;
-      setData(payload || {});
-      setRefreshedAt(
-        new Date().toLocaleTimeString("en-IN", {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      );
+      const [dashboardData, inquiryData] = await Promise.all([
+        api("dashboard"),
+        api("admission-inquiries").catch(() => []),
+      ]);
+      setDashboard((dashboardData as Dashboard) || {});
+      setInquiries(rowsFrom(inquiryData));
+      setRefreshedAt(new Intl.DateTimeFormat("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date()));
     } catch (event) {
-      setError(
-        event instanceof Error ? event.message : "Unable to load dashboard metrics"
-      );
+      setError(event instanceof Error ? event.message : "Unable to load the leadership overview");
     } finally {
       setLoading(false);
     }
@@ -89,263 +76,234 @@ export function DashboardPanel({
     void load();
   }, [load, refreshNonce]);
 
-  useEffect(() => {
-    const timer = setInterval(() => void load(), 60_000);
-    return () => clearInterval(timer);
-  }, [load]);
-
-  const metrics = [
+  const metrics: DashboardMetric[] = [
     {
       id: "students",
-      label: "Enrolled Learners",
-      value: data.total_students ?? 0,
-      sub: "Active nursery & preschool profiles",
+      label: "Students",
+      value: dashboard.total_students ?? 0,
+      detail: "Active learner profiles",
+      tone: "forest",
       icon: UsersRound,
-      tone: "blue",
-      action: "students",
+      target: "students",
+    },
+    {
+      id: "parents",
+      label: "Parents",
+      value: dashboard.metrics?.total_parents ?? "View directory",
+      detail: "Family accounts and contacts",
+      tone: "sun",
+      icon: HeartHandshake,
+      target: "parents",
     },
     {
       id: "teachers",
-      label: "Educators & Staff",
-      value: data.total_staff ?? 0,
-      sub: "Active teacher profiles",
+      label: "Teachers",
+      value: dashboard.total_staff ?? 0,
+      detail: "Educators and support staff",
+      tone: "navy",
       icon: GraduationCap,
-      tone: "green",
-      action: "teachers",
+      target: "teachers",
     },
     {
       id: "classes",
-      label: "Class Sections",
-      value: data.total_sections ?? 0,
-      sub: "Configured grade rooms",
+      label: "Classes",
+      value: dashboard.total_sections ?? 0,
+      detail: "Configured learning spaces",
+      tone: "sky",
       icon: Building2,
-      tone: "violet",
-      action: "classes",
+      target: "classes",
     },
-    {
-      id: "timetable",
-      label: "Timetables",
-      value: data.total_sections ? `${data.total_sections} Classes` : "Active",
-      sub: "Teaching slots configured",
-      icon: CalendarClock,
-      tone: "teal",
-      action: "timetable",
-    },
+    ...(role === "principal"
+      ? [{
+          id: "fees",
+          label: "Fee collection",
+          value: dashboard.fees?.collection_pct !== undefined
+            ? `${Math.round(dashboard.fees.collection_pct)}%`
+            : "Open ledger",
+          detail: dashboard.fees?.total_paid !== undefined
+            ? `${money(dashboard.fees.total_paid)} collected`
+            : "Review live balances",
+          tone: "sun" as const,
+          icon: WalletCards,
+          target: "fees",
+        }]
+      : [{
+          id: "inquiries",
+          label: "New inquiries",
+          value: inquiries.length,
+          detail: "Public admissions inbox",
+          tone: "mint" as const,
+          icon: FileText,
+          target: "admission_inquiries",
+        }]),
   ];
 
-  const tasks = [
+  const attentionItems = [
     {
-      id: "students",
-      title: "Enroll new student",
-      sub: "Add learner profile & parent contact",
+      id: "inquiries",
+      title: "Admission inquiries",
+      detail: inquiries.length
+        ? inquiries.length === 1
+          ? "1 family inquiry ready for follow-up"
+          : `${inquiries.length} family inquiries ready for follow-up`
+        : "No unanswered public inquiries right now",
+      count: inquiries.length,
+      target: "admission_inquiries",
+      tone: "sun",
+    },
+    {
+      id: "classes",
+      title: "Classes and subjects",
+      detail: dashboard.total_sections
+        ? `${dashboard.total_sections} learning space${dashboard.total_sections === 1 ? "" : "s"} configured`
+        : "Set up the first class section",
+      count: dashboard.total_sections ?? 0,
+      target: "classes",
+      tone: "forest",
+    },
+    ...(role === "principal" ? [{
+      id: "fees",
+      title: "Fee collection",
+      detail: dashboard.fees?.collection_pct !== undefined
+        ? `${Math.round(dashboard.fees.collection_pct)}% of the current collection target is recorded`
+        : "Review invoices, balances, and payment requests",
+      count: dashboard.fees?.collection_pct !== undefined
+        ? `${Math.round(dashboard.fees.collection_pct)}%`
+        : "",
+      target: "fees",
+      tone: "violet",
+    }] : []),
+  ];
+
+  const quickActions = [
+    {
+      id: "student",
+      label: "Add student",
+      icon: UsersRound,
       action: () => onCreate("students"),
     },
     {
-      id: "teachers",
-      title: "Add teacher account",
-      sub: "Grant staff portal credentials",
-      action: () => onCreate("teachers"),
-    },
-    {
       id: "timetable",
-      title: "Manage timetable",
-      sub: "Update daily teaching schedules",
+      label: "View timetable",
+      icon: CalendarClock,
       action: () => onNavigate("timetable"),
     },
-    ...(role === "principal"
-      ? [
-          {
-            id: "fees",
-            title: "Review fee ledger",
-            sub:
-              data.fees?.total_paid !== undefined
-                ? `${money(data.fees.total_paid)} collected`
-                : "Open fee workspace",
-            action: () => onNavigate("fees"),
-          },
-          {
-            id: "website",
-            title: "Gallery & website",
-            sub: "Update homepage story & gallery",
-            action: () => onNavigate("website"),
-          },
-        ]
-      : []),
-  ];
-
-  const healthItems = [
     {
-      id: "classes",
-      label: "Classes & Subjects",
-      detail: `${data.total_sections ?? 0} active class sections configured`,
-      actionLabel: "Open classes",
-      icon: CheckCircle2,
-      tone: "green",
-      action: () => onNavigate("classes"),
+      id: "reports",
+      label: "Open reports",
+      icon: FileText,
+      action: () => onNavigate("reports"),
     },
-    {
-      id: "leave",
-      label: "Staff leave",
-      detail: data.pending_leave_requests
-        ? `${data.pending_leave_requests} request${data.pending_leave_requests === 1 ? "" : "s"} waiting for review`
-        : "No pending leave applications",
-      actionLabel: "Review staff",
-      icon: CalendarClock,
-      tone: "blue",
-      action: () => onNavigate("teachers"),
-    },
-    ...(role === "principal"
-      ? [
-          {
-            id: "fees",
-            label: "Fee collections",
-            detail:
-              data.fees?.collection_pct !== undefined
-                ? `${data.fees.collection_pct}% of this month’s target collected`
-                : "Monthly billing is active",
-            actionLabel: "Open ledger",
-            icon: WalletCards,
-            tone: "violet",
-            action: () => onNavigate("fees"),
-          },
-        ]
-      : []),
+    ...(role === "principal" ? [{
+      id: "reminders",
+      label: "Fee reminders",
+      icon: WalletCards,
+      action: () => onNavigate("fees"),
+    }, {
+      id: "media",
+      label: "Manage media",
+      icon: Images,
+      action: () => onNavigate("website"),
+    }] : [{
+      id: "admissions",
+      label: "Open inquiries",
+      icon: HeartHandshake,
+      action: () => onNavigate("admission_inquiries"),
+    }]),
   ];
 
   return (
-    <div className="ops-dashboard ops-principal-overview">
-      <header className="ops-overview-hero">
+    <section className="leadership-dashboard" aria-labelledby="leadership-overview-title">
+      <header className="leadership-hero">
         <div>
-          <p className="ops-kicker">School day at a glance</p>
-          <h2>Everything your school needs today.</h2>
-          <p>Monitor people, learning spaces, schedules, and operations.</p>
+          <p className="leadership-greeting">Good morning, {role === "principal" ? "Principal" : "Coordinator"}</p>
+          <h2 id="leadership-overview-title">Here&apos;s what&apos;s happening at ArishVille Preschool.</h2>
+          <p>Follow people, learning spaces, admissions, and the school day from one focused workspace.</p>
         </div>
-        <div className="ops-overview-sync" aria-live="polite">
-          <span className="ops-sync-status"><i className="pulse-dot" />Live data</span>
-          <small>{refreshedAt ? `Updated ${refreshedAt}` : "Fetching the latest update"}</small>
-          <button className="ops-refresh-button" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={15} className={loading ? "spin" : ""} />
-            Refresh
+        <div className="leadership-sync" aria-live="polite">
+          <span><i />Live school data</span>
+          <small>{refreshedAt ? `Updated ${refreshedAt}` : "Preparing the latest overview"}</small>
+          <button type="button" onClick={() => void load()} disabled={loading}>
+            <RefreshCw size={15} className={loading ? "spin" : ""} /> Refresh
           </button>
         </div>
       </header>
 
-      {error && (
-        <div className="ops-inline-error">
-          <CircleAlert size={16} />
-          {error}
-        </div>
-      )}
+      {error && <div className="ops-inline-error"><CircleAlert size={16} />{error}</div>}
 
-      <div className="ops-metric-grid">
-        {loading ? (
-          <div className="ops-metric-skeleton" style={{ gridColumn: "1/-1" }}>
-            <div className="skeleton skeleton-card" />
-            <div className="skeleton skeleton-card" />
-            <div className="skeleton skeleton-card" />
-            <div className="skeleton skeleton-card" />
-          </div>
-        ) : (
-          metrics.map((m, index) => {
-            const Icon = m.icon;
-            return (
-              <motion.button
-                type="button"
-                key={m.id}
-                className={`ops-metric-card ${m.tone}`}
-                onClick={() => onNavigate(m.action ?? m.id)}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.28, delay: index * 0.06 }}
-                whileHover={{ y: -3, transition: { duration: 0.15 } }}
-              >
-                <div className="ops-metric-top">
-                  <span className="ops-metric-icon">
-                    <Icon size={18} />
-                  </span>
-                  <ChevronRight size={16} className="ops-metric-arrow" />
-                </div>
-                <small>{m.label}</small>
-                <div className="ops-metric-value">
-                  <AnimatedValue value={m.value} />
-                </div>
-                <p className="ops-metric-sub">{m.sub}</p>
-              </motion.button>
-            );
-          })
-        )}
+      <div className="leadership-metrics" aria-busy={loading}>
+        {metrics.map((metric, index) => {
+          const Icon = metric.icon;
+          return (
+            <motion.button
+              key={metric.id}
+              type="button"
+              className={`leadership-metric ${metric.tone}`}
+              onClick={() => onNavigate(metric.target)}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, delay: index * 0.04 }}
+              whileHover={{ y: -3 }}
+            >
+              <span className="leadership-metric-icon"><Icon size={19} /></span>
+              <span className="leadership-metric-copy">
+                <small>{metric.label}</small>
+                <b>{loading ? "—" : formattedCount(metric.value)}</b>
+                <em>{metric.detail}</em>
+              </span>
+              <ChevronRight size={16} className="leadership-metric-arrow" />
+            </motion.button>
+          );
+        })}
       </div>
 
-      <div className="ops-overview-grid">
-        <motion.section
-          className="ops-panel ops-today-panel"
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.32, delay: 0.24 }}
-        >
-          <div className="ops-panel-header ops-overview-panel-header">
-            <div>
-              <p className="ops-kicker">Daily operations</p>
-              <h3>Today&apos;s operating picture</h3>
-            </div>
-            <span className="ops-panel-caption">Keep the day moving</span>
+      <div className={`leadership-grid ${role === "principal" ? "has-media" : ""}`}>
+        <section className="leadership-panel leadership-attention">
+          <div className="leadership-panel-heading">
+            <div><span className="leadership-panel-icon attention"><CircleAlert size={18} /></span><h3>Needs attention</h3></div>
+            <button type="button" onClick={() => onNavigate("admission_inquiries")}>View inquiries <ChevronRight size={15} /></button>
           </div>
-
-          <div className="ops-health-items">
-            {healthItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <article key={item.id} className={`ops-health-row ${item.tone}`}>
-                  <span className="ops-health-icon"><Icon size={18} /></span>
-                  <div className="ops-health-info">
-                    <b>{item.label}</b>
-                    <p>{item.detail}</p>
-                    {item.id === "fees" && data.fees?.collection_pct !== undefined && (
-                      <span className="ops-progress-track" aria-label={`${data.fees.collection_pct}% collected`}>
-                        <i style={{ width: `${Math.min(100, Math.max(0, data.fees.collection_pct))}%` }} />
-                      </span>
-                    )}
-                  </div>
-                  <button className="ops-row-action" onClick={item.action}>
-                    {item.actionLabel}<ChevronRight size={15} />
-                  </button>
-                </article>
-              );
-            })}
-          </div>
-        </motion.section>
-
-        <motion.section
-          className="ops-panel ops-actions-panel"
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.32, delay: 0.3 }}
-        >
-          <div className="ops-panel-header ops-overview-panel-header">
-            <div>
-              <p className="ops-kicker">Shortcuts</p>
-              <h3>Start here</h3>
-            </div>
-          </div>
-
-          <div className="ops-task-list">
-            {tasks.map((task) => (
-              <button
-                key={task.id}
-                className="ops-task-item"
-                onClick={task.action}
-              >
-                <span className="ops-task-number">{String(tasks.indexOf(task) + 1).padStart(2, "0")}</span>
-                <div className="ops-task-copy">
-                  <b>{task.title}</b>
-                  <small>{task.sub}</small>
-                </div>
-                <ChevronRight size={17} />
+          <div className="leadership-attention-list">
+            {attentionItems.map((item) => (
+              <button key={item.id} type="button" className={`leadership-attention-row ${item.tone}`} onClick={() => onNavigate(item.target)}>
+                <span><b>{item.title}</b><small>{item.detail}</small></span>
+                {item.count !== "" && <i>{item.count}</i>}
               </button>
             ))}
           </div>
-        </motion.section>
+        </section>
+
+        {role === "principal" && <section className="leadership-panel leadership-collection">
+          <div className="leadership-panel-heading">
+            <div><span className="leadership-panel-icon collection"><WalletCards size={18} /></span><h3>Collection progress</h3></div>
+            <button type="button" onClick={() => onNavigate("fees")}>Open fees <ChevronRight size={15} /></button>
+          </div>
+          <div className="leadership-progress-content">
+            <div className="leadership-progress-ring" style={{ "--progress": `${Math.max(0, Math.min(100, Number(dashboard.fees?.collection_pct ?? 0)))}%` } as CSSProperties}>
+              <b>{Math.round(Number(dashboard.fees?.collection_pct ?? 0))}%</b><span>Collected</span>
+            </div>
+            <div><p><i className="collected" />Collected <strong>{money(dashboard.fees?.total_paid ?? 0)}</strong></p><p><i className="target" />Collection target <strong>Live fee ledger</strong></p><button type="button" onClick={() => onNavigate("fees")}>Review balances <ChevronRight size={15} /></button></div>
+          </div>
+        </section>}
+
+        {role === "principal" && <section className="leadership-panel leadership-media-rail">
+          <div className="leadership-panel-heading">
+            <div><span className="leadership-panel-icon media"><Images size={18} /></span><h3>Gallery &amp; Media Assets</h3></div>
+            <button type="button" onClick={() => onNavigate("website")}>Manage <ChevronRight size={15} /></button>
+          </div>
+          <div className="leadership-media-preview"><Images size={23} /><p>Curate approved photos and videos for the public school gallery.</p><button type="button" onClick={() => onNavigate("website")}>Open media library</button></div>
+        </section>}
       </div>
-    </div>
+
+      <section className="leadership-panel leadership-actions">
+        <div className="leadership-panel-heading"><div><span className="leadership-panel-icon actions"><ShieldCheck size={18} /></span><h3>Quick actions</h3></div></div>
+        <div className="leadership-action-list">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return <button key={action.id} type="button" onClick={action.action}><span><Icon size={19} /></span><b>{action.label}</b><ChevronRight size={15} /></button>;
+          })}
+        </div>
+      </section>
+    </section>
   );
 }

@@ -143,7 +143,6 @@ class AppRoutes {
       '/teacher-homework-screen/submissions';
   static const String teacherEventPosts = '/teacher-event-posts-screen';
   static const String teacherLessonPlanner = '/teacher-lesson-planner-screen';
-  static const String teacherStudentNotes = '/teacher-student-notes-screen';
   static const String teacherDocuments = '/teacher-documents-screen';
 
   // Parent Module Routes
@@ -356,7 +355,6 @@ class AppRoutes {
     ),
     teacherEventPosts: (context) => const TeacherEventPostScreen(),
     teacherLessonPlanner: (context) => const TeacherLessonPlannerScreen(),
-    teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
     teacherDocuments: (context) => const TeacherDocumentsScreen(),
     teacherCalendar: (context) =>
         const EventsCalendarScreen(portal: SchoolCalendarPortal.teacher),

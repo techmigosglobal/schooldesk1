@@ -66,9 +66,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
   Future<Map<String, dynamic>> createFeePaymentIntent({
     required String invoiceId,
     required String paymentMethod,
-    List<String> selectedMonthNames = const [],
-    int selectedMonths = 0,
-    int selectedTerms = 0,
+    required double amount,
     String remarks = '',
   }) async {
     try {
@@ -77,10 +75,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
         data: {
           'invoice_id': invoiceId.trim(),
           'payment_method': paymentMethod.trim(),
-          if (selectedMonthNames.isNotEmpty)
-            'selected_month_names': selectedMonthNames,
-          if (selectedMonths > 0) 'selected_months': selectedMonths,
-          if (selectedTerms > 0) 'selected_terms': selectedTerms,
+          'amount': amount.toStringAsFixed(2),
           if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
         },
       );
@@ -105,9 +100,6 @@ extension BackendFeePaymentsApi on BackendApiClient {
     required String transactionRef,
     required String screenshotPath,
     required String screenshotName,
-    List<String> selectedMonthNames = const [],
-    int selectedMonths = 0,
-    int selectedTerms = 0,
     String remarks = '',
   }) async {
     try {
@@ -122,10 +114,6 @@ extension BackendFeePaymentsApi on BackendApiClient {
           'amount': amount.toStringAsFixed(2),
           'payment_method': paymentMethod.trim(),
           'transaction_ref': transactionRef.trim(),
-          if (selectedMonthNames.isNotEmpty)
-            'selected_month_names': selectedMonthNames.join(','),
-          if (selectedMonths > 0) 'selected_months': selectedMonths,
-          if (selectedTerms > 0) 'selected_terms': selectedTerms,
           if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
           'screenshot': await MultipartFile.fromFile(
             screenshotPath,

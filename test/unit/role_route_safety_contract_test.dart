@@ -182,7 +182,6 @@ void main() {
         'teacherMyAttendance',
         'teacherEventPosts',
         'teacherLessonPlanner',
-        'teacherStudentNotes',
         'teacherDocuments',
         'schoolGallery',
         'teacherCommunication',
@@ -202,6 +201,11 @@ void main() {
       expect(
         teacherNavigationSource,
         isNot(contains('AppRoutes.teacherPerformance')),
+      );
+      expect(
+        teacherNavigationSource,
+        isNot(contains('AppRoutes.teacherStudentNotes')),
+        reason: 'Student Notes is no longer an available teacher workflow',
       );
       expect(
         teacherNavigationSource,

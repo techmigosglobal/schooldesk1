@@ -14,8 +14,6 @@ import { WebsiteManager } from "@/components/portal/WebsiteManager";
 import { TickerManager } from "@/components/portal/TickerManager";
 import { AdmissionInquiriesWorkspace } from "@/components/portal/AdmissionInquiriesWorkspace";
 import { ReportsWorkspace } from "@/components/portal/ReportsWorkspace";
-import { AttendanceWorkspace } from "@/components/portal/AttendanceWorkspace";
-import { CommunicationsWorkspace } from "@/components/portal/CommunicationsWorkspace";
 import { PortalErrorBoundary } from "@/components/error-boundary";
 import { ChevronLeft, ChevronRight, Search } from "@/lib/lucide-react";
 import { QuickSearchModal } from "@/components/portal/QuickSearchModal";
@@ -131,6 +129,7 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
             const meta = navMeta[id];
             if (!meta) return null;
             const Icon = meta.icon;
+            const label = role === "coordinator" && id === "website" ? "Ticker" : meta.label;
             return (
               <button
                 key={id}
@@ -139,10 +138,10 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
                   setCreateToken(0);
                 }}
                 className={active === id ? "active" : ""}
-                title={meta.label}
+                title={label}
               >
                 {typeof Icon === "function" ? <Icon size={17} /> : <span aria-hidden>•</span>}
-                {!collapsed && <span>{meta.label}</span>}
+                {!collapsed && <span>{label}</span>}
               </button>
             );
           })}
@@ -221,10 +220,6 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
               />
             ) : active === "reports" ? (
               <ReportsWorkspace role={role} onNotify={notify} />
-            ) : active === "attendance" ? (
-              <AttendanceWorkspace role={role} onNotify={notify} />
-            ) : active === "communications" ? (
-              <CommunicationsWorkspace role={role} onNotify={notify} />
             ) : active === "website" && role === "principal" ? (
               <WebsiteManager onNotify={notify} />
             ) : active === "website" && role === "coordinator" ? (

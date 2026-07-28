@@ -379,9 +379,13 @@ class _HelpScreenState extends State<HelpScreen>
                                         ],
                                         if (route.isNotEmpty) ...[
                                           const SizedBox(height: 8),
-                                          FilledButton.tonalIcon(
+                                          FilledButton.icon(
                                             onPressed: () =>
                                                 _openWorkflow(item),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor: tokens.primary,
+                                              foregroundColor: tokens.onPrimary,
+                                            ),
                                             icon: const Icon(
                                               Icons.open_in_new_rounded,
                                             ),

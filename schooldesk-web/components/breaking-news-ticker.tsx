@@ -18,10 +18,10 @@ export function BreakingNewsTicker() {
   if (!ticker.breaking_news_enabled || !message) return null;
 
   return (
-    <aside className="breaking-news" aria-label="School announcement">
+    <aside className="breaking-news" aria-label={`School announcement: ${message}`}>
       <div className="breaking-news-viewport">
         <div className="breaking-news-track">
-          <span>{message}<i aria-hidden="true">◆</i>{message}<i aria-hidden="true">◆</i></span>
+          <span title={message}>{message}<i aria-hidden="true">◆</i>{message}<i aria-hidden="true">◆</i></span>
           <span aria-hidden="true">{message}<i>◆</i>{message}<i>◆</i></span>
         </div>
       </div>

@@ -617,6 +617,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     );
   }
 
+  // ignore: unused_element
   Future<void> _importStudentsCsv() async {
     final imported = await BulkCsvImportService.importCsv(
       context,
@@ -789,20 +790,22 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                 ),
               ),
             ),
-            PopupMenuButton<String>(
-              tooltip: 'Export',
-              icon: const Icon(Icons.file_download_outlined, size: 22),
-              onSelected: _requestStudentReportExport,
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'pdf', child: Text('PDF')),
-                PopupMenuItem(value: 'csv', child: Text('CSV')),
-              ],
-            ),
-            IconButton(
-              onPressed: _importStudentsCsv,
-              icon: const Icon(Icons.upload_file_rounded, size: 22),
-              tooltip: 'Upload students CSV',
-            ),
+            // Temporarily hidden at product request; keep the student CSV/PDF
+            // handlers available for future re-enablement.
+            // PopupMenuButton<String>(
+            //   tooltip: 'Export',
+            //   icon: const Icon(Icons.file_download_outlined, size: 22),
+            //   onSelected: _requestStudentReportExport,
+            //   itemBuilder: (context) => const [
+            //     PopupMenuItem(value: 'pdf', child: Text('PDF')),
+            //     PopupMenuItem(value: 'csv', child: Text('CSV')),
+            //   ],
+            // ),
+            // IconButton(
+            //   onPressed: _importStudentsCsv,
+            //   icon: const Icon(Icons.upload_file_rounded, size: 22),
+            //   tooltip: 'Upload students CSV',
+            // ),
           ],
         ),
       ),
@@ -902,6 +905,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     return '${EnvConfig.apiOrigin}/$value';
   }
 
+  // ignore: unused_element
   Future<void> _requestStudentReportExport(String format) async {
     final normalizedFormat = format.trim().toLowerCase();
     final students = List<StudentModel>.unmodifiable(_filteredStudents);
@@ -1026,8 +1030,8 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         'Gender',
         'Date of Birth',
         'Status',
-        'Guardian',
-        'Guardian Phone',
+        'Parent',
+        'Parent Phone',
       ],
       ...students.map((student) {
         final row = _studentReportRow(student);
@@ -1639,9 +1643,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           ),
           const SizedBox(height: 16),
           _FormCard(
-            title: 'Parent / Guardian Details',
+            title: 'Parent Details',
             children: [
-              _DetailRow(label: 'Guardian', value: student.guardianName),
+              _DetailRow(label: 'Parent', value: student.guardianName),
               _DetailRow(label: 'Phone', value: student.guardianPhone),
               _DetailRow(
                 label: 'Parent Logins',
@@ -3581,7 +3585,7 @@ class _StudentDetailPage extends StatelessWidget {
             _FormCard(
               title: 'Parent',
               children: [
-                _DetailRow(label: 'Guardian', value: student.guardianName),
+                _DetailRow(label: 'Parent', value: student.guardianName),
                 _DetailRow(label: 'Phone', value: student.guardianPhone),
                 _DetailRow(
                   label: 'Parent Logins',

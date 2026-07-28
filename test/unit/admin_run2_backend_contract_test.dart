@@ -103,7 +103,7 @@ void main() {
     expect(decisionScreen, isNot(contains('showDialog(')));
   });
 
-  test('admin fee write actions use routed input screens without popup forms', () {
+  test('admin fee structure and direct collection actions use routed input screens without popup forms', () {
     final adminFees = File(
       'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
     ).readAsStringSync();
@@ -117,27 +117,23 @@ void main() {
     ).readAsStringSync();
 
     expect(adminFees, contains('AppRoutes.principalFeeStructureForm'));
-    expect(adminFees, contains('AppRoutes.principalInvoiceGenerationForm'));
     expect(adminFees, contains('AppRoutes.principalPaymentRecordForm'));
     expect(adminFees, contains('AdminFeeStructureFormArgs'));
-    expect(adminFees, contains('AdminInvoiceGenerationFormArgs'));
     expect(adminFees, contains('AdminPaymentRecordFormArgs'));
+    expect(adminFees, isNot(contains('AppRoutes.principalInvoiceGenerationForm')));
+    expect(adminFees, isNot(contains('AdminInvoiceGenerationFormArgs')));
     expect(adminFees, isNot(contains('_showCreateFeeStructureDialog')));
     expect(adminFees, isNot(contains('_showGenerateInvoiceDialog')));
     expect(adminFees, isNot(contains('_showRecordPaymentDialog')));
     expect(adminFees, isNot(contains('_showEditFeeDialog')));
     expect(adminFees, isNot(contains('showDialog(')));
     expect(feeForms, contains('AdminFeeStructureFormScreen'));
-    expect(feeForms, contains('AdminInvoiceGenerationFormScreen'));
     expect(feeForms, contains('AdminPaymentRecordFormScreen'));
     expect(feeForms, contains('createFeeStructure('));
-    expect(feeForms, contains("createRaw('/fees/invoices/generate'"));
     expect(feeForms, contains('recordPayment('));
     expect(feeForms, isNot(contains('showDialog(')));
     expect(routes, contains('principalFeeStructureForm'));
     expect(routes, contains('AdminFeeStructureFormScreen'));
-    expect(routes, contains('principalInvoiceGenerationForm'));
-    expect(routes, contains('PrincipalInvoiceGenerate'));
     expect(routes, contains('principalPaymentRecordForm'));
     expect(routes, contains('AdminPaymentRecordFormScreen'));
     expect(
@@ -145,7 +141,6 @@ void main() {
       contains('AppRoutes.principalFeeStructureForm: {\'principal\'}'),
     );
     expect(registry, contains('/principal-fees-screen/fee-structure'));
-    expect(registry, contains('/principal-fees-screen/invoice-generation'));
     expect(registry, contains('/principal-fees-screen/payment-record'));
   });
 

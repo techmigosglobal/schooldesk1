@@ -264,7 +264,7 @@ extension BackendUsersApi on BackendApiClient {
       final data = response.data as Map<String, dynamic>;
       if (data['success'] != true && data['message'] == null) {
         throw ServerException(
-          message: data['error'] ?? 'Failed to link guardian to student',
+          message: data['error'] ?? 'Failed to link parent to student',
         );
       }
     } on DioException catch (e) {
