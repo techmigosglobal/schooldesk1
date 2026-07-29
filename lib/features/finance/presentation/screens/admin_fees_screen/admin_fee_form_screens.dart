@@ -758,7 +758,6 @@ class _AdminInvoiceGenerationFormScreenState
   bool _includeOneTime = false;
   bool _includeYearly = false;
   bool _generating = false;
-  int _selectedInstallmentCount = 3;
 
   bool get _hasReferenceData =>
       widget.args.academicYears.isNotEmpty &&
@@ -774,10 +773,6 @@ class _AdminInvoiceGenerationFormScreenState
       .fold<double>(0, (sum, fee) {
         final amount = _numValue(fee['amount']);
         final frequency = _feeFrequency(fee);
-        if (frequency == 'term') {
-          final count = _selectedInstallmentCount;
-          return sum + (amount / count);
-        }
         if (frequency == 'one_time') {
           return _includeOneTime ? sum + amount : sum;
         }
@@ -1056,27 +1051,6 @@ class _AdminInvoiceGenerationFormScreenState
           validator: _dateValidator,
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<int>(
-          value: _selectedInstallmentCount,
-          decoration: const InputDecoration(
-            labelText: 'Installment count (splits annual amount)',
-          ),
-          items: List.generate(12, (index) => index + 1)
-              .map(
-                (count) => DropdownMenuItem(
-                  value: count,
-                  child: Text(
-                    '$count ${count == 1 ? 'Installment' : 'Installments'}',
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: _generating
-              ? null
-              : (value) =>
-                    setState(() => _selectedInstallmentCount = value ?? 3),
-        ),
-        const SizedBox(height: 12),
         SwitchListTile.adaptive(
           value: _includeOneTime,
           onChanged: _generating
@@ -1143,7 +1117,6 @@ class _AdminInvoiceGenerationFormScreenState
             if (_scope == 'section') 'section_id': _selectedSectionId,
             if (_scope == 'student') 'student_id': _selectedStudentId,
             'term_id': _selectedTermId,
-            'installment_count': _selectedInstallmentCount,
             'include_one_time': _includeOneTime,
             'include_yearly': _includeYearly,
             'invoice_label': _labelController.text.trim(),

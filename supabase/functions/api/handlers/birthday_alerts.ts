@@ -78,10 +78,7 @@ export async function handleBirthdayAlerts(
   const authHeader = req.headers.get("Authorization") ?? "";
   const token = authHeader.replace("Bearer ", "").trim();
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-  const isServiceRole = token.length > 0 && (
-    token === serviceKey ||
-    token === "18fd0a5339c8e5e81c3122a7607608e48631ef47cf3f5ac72c3486f7d115ee41"
-  );
+  const isServiceRole = token.length > 0 && token === serviceKey;
 
   const configuredSecret = text(Deno.env.get("BIRTHDAY_ALERT_JOB_SECRET"));
   const suppliedSecret = text(

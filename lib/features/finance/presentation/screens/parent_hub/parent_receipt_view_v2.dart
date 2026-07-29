@@ -74,6 +74,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
           'receipt_no': receiptNo,
           'school_name': invoice['school_name'] ?? 'School',
           'amount': (pr['amount'] as num?)?.toDouble() ?? 0.0,
+          'invoice_total': ((invoice['net_amount'] ?? invoice['total_amount']) as num?)?.toDouble() ?? 0.0,
+          'cumulative_paid': (invoice['paid_amount'] as num?)?.toDouble() ?? 0.0,
+          'balance': (invoice['balance'] as num?)?.toDouble() ?? 0.0,
           'payment_mode':
               receipt['payment_method'] ??
               pr['payment_method'] ??
@@ -390,9 +393,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
             'amount': amount,
           },
         ],
-        totalAmount: amount,
-        paidAmount: amount,
-        balance: 0,
+        totalAmount: (_receiptData['invoice_total'] as num?)?.toDouble() ?? amount,
+        paidAmount: (_receiptData['cumulative_paid'] as num?)?.toDouble() ?? amount,
+        balance: (_receiptData['balance'] as num?)?.toDouble() ?? 0,
         paymentMode: _text(_receiptData['payment_mode'], fallback: 'UPI'),
         paymentDate: paidAt,
         schoolName: schoolName,
@@ -400,6 +403,8 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         schoolLogo: assets[0],
         authorizedSignature: assets[1],
         authorizedSignatoryName: _text(_school['principal_name']),
+        transactionReference: _text(_receiptData['transaction_ref']),
+        thisPaymentAmount: amount,
       );
       if (!mounted) return;
       await const ShareExportService().shareBytes(

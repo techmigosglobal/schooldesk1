@@ -67,10 +67,7 @@ void main() {
 
       // Quick actions
       expect(find.text('Fee Structures'), findsWidgets);
-      expect(find.text('Collect Fee'), findsOneWidget);
-      expect(find.text('Generate Invoice'), findsOneWidget);
-      expect(find.text('Student Ledger & Dues'), findsOneWidget);
-      expect(find.text('Reports & Exports'), findsOneWidget);
+      expect(find.text('Collect Payment'), findsOneWidget);
     });
 
     testWidgets('shows collection progress donut', (tester) async {
@@ -279,7 +276,7 @@ void main() {
       expect(find.text('Confirm Payment'), findsOneWidget);
     });
 
-    testWidgets('shows tuition month selector for tuition invoices', (
+    testWidgets('uses a direct payment amount instead of tuition month selection', (
       tester,
     ) async {
       _setLargeSurface(tester);
@@ -292,9 +289,8 @@ void main() {
       await tester.tap(find.text('Aarav Sharma'));
       await tester.pumpAndSettle();
 
-      // Tuition months should be visible as FilterChips
-      expect(find.text('Select Tuition Months'), findsOneWidget);
-      expect(find.byType(FilterChip), findsWidgets);
+      expect(find.text('Select Tuition Months'), findsNothing);
+      expect(find.textContaining('Amount'), findsWidgets);
     });
 
     testWidgets('payment mode chips are selectable', (tester) async {

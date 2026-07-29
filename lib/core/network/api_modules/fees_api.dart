@@ -104,10 +104,7 @@ extension BackendFeesApi on BackendApiClient {
     bool isActive = true,
     int dueDay = 10,
     double lateFinePerDay = 0,
-    int installmentCount = 3,
-    String installmentMethod = 'equal',
     String effectiveFrom = '',
-    List<Map<String, dynamic>> installments = const [],
     bool replaceExisting = false,
   }) async {
     try {
@@ -126,11 +123,8 @@ extension BackendFeesApi on BackendApiClient {
           'is_active': isActive,
           'due_day': dueDay,
           'late_fine_per_day': lateFinePerDay,
-          'installment_count': installmentCount,
-          'installment_method': installmentMethod.trim(),
           if (effectiveFrom.trim().isNotEmpty)
             'effective_from': effectiveFrom.trim(),
-          if (installments.isNotEmpty) 'installments': installments,
           'replace_existing': replaceExisting,
         },
       );
@@ -167,10 +161,7 @@ extension BackendFeesApi on BackendApiClient {
     bool? isActive,
     int? dueDay,
     double? lateFinePerDay,
-    int? installmentCount,
-    String? installmentMethod,
     String? effectiveFrom,
-    List<Map<String, dynamic>>? installments,
   }) async {
     try {
       final payload = <String, dynamic>{};
@@ -188,17 +179,8 @@ extension BackendFeesApi on BackendApiClient {
       if (lateFinePerDay != null) {
         payload['late_fine_per_day'] = lateFinePerDay;
       }
-      if (installmentCount != null) {
-        payload['installment_count'] = installmentCount;
-      }
-      if (installmentMethod != null) {
-        payload['installment_method'] = installmentMethod;
-      }
       if (effectiveFrom != null) {
         payload['effective_from'] = effectiveFrom;
-      }
-      if (installments != null) {
-        payload['installments'] = installments;
       }
       final response = await _dio.put(
         '/fees/structures/${structureId.trim()}',
@@ -474,10 +456,8 @@ extension BackendFeesApi on BackendApiClient {
     String invoiceDate = '',
     required String dueDate,
     String invoiceLabel = '',
-    String termId = '',
     bool includeOneTime = false,
     bool includeYearly = false,
-    int installmentCount = 0,
   }) async {
     try {
       final response = await _dio.post(
@@ -490,10 +470,8 @@ extension BackendFeesApi on BackendApiClient {
           if (invoiceDate.trim().isNotEmpty) 'invoice_date': invoiceDate.trim(),
           'due_date': dueDate.trim(),
           'invoice_label': invoiceLabel.trim(),
-          'term_id': termId.trim(),
           'include_one_time': includeOneTime,
           'include_yearly': includeYearly,
-          if (installmentCount > 0) 'installment_count': installmentCount,
         },
       );
       final data = response.data as Map<String, dynamic>;

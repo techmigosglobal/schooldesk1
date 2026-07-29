@@ -80,7 +80,16 @@ class LogoutService {
     //    notified of the logout in the background.
     final refreshToken = await TokenStorageService.getRefreshToken();
 
-    // 2. Clear client-side state immediately.
+    // 2. Revoke the device token while the authenticated session is still
+    // available. This prevents a shared device from receiving private pushes
+    // after another user signs in.
+    try {
+      await PushNotificationService.instance.revokeCurrentToken();
+    } on Object catch (_) {
+      // Logout must remain available when the device is offline.
+    }
+
+    // 3. Clear client-side state immediately.
     RoleAccessService.clear();
     BackendApiClient.instance.clearAuthToken();
     // Reset the notification singleton so stale notifications from this user
@@ -88,7 +97,7 @@ class LogoutService {
     NotificationService.resetInstance();
     await TokenStorageService.clear();
 
-    // 3. Navigate to landing page right away — do not await any network call.
+    // 4. Navigate to landing page right away — do not await any network call.
     if (navigator.mounted) {
       navigator.pushNamedAndRemoveUntil(
         AppRoutes.landingPage,
@@ -96,7 +105,7 @@ class LogoutService {
       );
     }
 
-    // 4. Background cleanup — best-effort, never blocks the UI.
+    // 5. Background cleanup — best-effort, never blocks the UI.
     _backgroundCleanup(refreshToken: refreshToken);
 
     // Allow future sign-outs after a short delay.
@@ -106,13 +115,8 @@ class LogoutService {
   }
 
   static void _backgroundCleanup({String? refreshToken}) {
-    // Fire-and-forget: revoke push token, unsubscribe topics, notify backend.
+    // Fire-and-forget: unsubscribe topics and notify the backend.
     Future(() async {
-      try {
-        await PushNotificationService.instance.revokeCurrentToken();
-      } on Object catch (_) {
-        // Ignore — token may already be stale.
-      }
       try {
         for (final role in SchoolDeskRole.values) {
           await NotificationTopicManager().cleanupTopicsForRole(role);

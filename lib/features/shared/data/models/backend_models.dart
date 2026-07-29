@@ -1276,9 +1276,6 @@ class PaymentRequest {
   final String? transactionId;
   final String? proofUrl;
   final String? remarks;
-  final List<String> selectedMonthNames;
-  final int selectedMonths;
-  final int selectedTerms;
 
   const PaymentRequest({
     required this.invoiceId,
@@ -1289,9 +1286,6 @@ class PaymentRequest {
     this.transactionId,
     this.proofUrl,
     this.remarks,
-    this.selectedMonthNames = const [],
-    this.selectedMonths = 0,
-    this.selectedTerms = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1307,10 +1301,6 @@ class PaymentRequest {
     if (transactionId != null) 'transaction_ref': transactionId,
     if (proofUrl != null) 'proof_url': proofUrl,
     if (remarks != null) 'remarks': remarks,
-    if (selectedMonthNames.isNotEmpty)
-      'selected_month_names': selectedMonthNames,
-    if (selectedMonths > 0) 'selected_months': selectedMonths,
-    if (selectedTerms > 0) 'selected_terms': selectedTerms,
   };
 
   Map<String, dynamic> toParentPaymentRequestJson() => {
@@ -1322,10 +1312,6 @@ class PaymentRequest {
     if (transactionId != null) 'transaction_id': transactionId,
     if (proofUrl != null) 'proof_url': proofUrl,
     if (remarks != null) 'remarks': remarks,
-    if (selectedMonthNames.isNotEmpty)
-      'selected_month_names': selectedMonthNames,
-    if (selectedMonths > 0) 'selected_months': selectedMonths,
-    if (selectedTerms > 0) 'selected_terms': selectedTerms,
   };
 }
 

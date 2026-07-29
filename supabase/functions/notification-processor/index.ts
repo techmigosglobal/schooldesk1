@@ -1126,6 +1126,17 @@ async function processNotificationEvent(
 
 Deno.serve(async (req: Request) => {
   try {
+    const authorization = req.headers.get("authorization") ?? "";
+    const suppliedKey = authorization.replace(/^Bearer\s+/i, "").trim() ||
+      (req.headers.get("apikey") ?? "").trim();
+    const processorKey = Deno.env.get("NOTIFICATION_PROCESSOR_SECRET") ||
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    if (!processorKey || suppliedKey !== processorKey) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     if (body.healthcheck === true) {
       const result = await runHealthCheck();
@@ -1166,27 +1177,17 @@ Deno.serve(async (req: Request) => {
     let sentCount = 0;
     let invalidTokenCount = 0;
     let transientFailureCount = 0;
-    const failures: Array<
-      { event_id: string; reason: string; debug_info?: any }
-    > = [];
-    const debug_details: any[] = [];
+    const failures: Array<{ event_id: string; reason: string }> = [];
     for (const event of events as NotificationEvent[]) {
       const result = await processNotificationEvent(event);
       if (result.processed) processedCount++;
       sentCount += result.sentCount;
       invalidTokenCount += result.invalidTokenCount;
       transientFailureCount += result.transientFailureCount;
-      debug_details.push({
-        event_id: event.id,
-        processed: result.processed,
-        results: result.debug_info,
-        reason: result.reason,
-      });
       if (!result.processed) {
         failures.push({
           event_id: event.id,
           reason: result.reason ?? "unknown",
-          debug_info: result.debug_info,
         });
       }
     }
@@ -1200,7 +1201,6 @@ Deno.serve(async (req: Request) => {
         invalid_tokens: invalidTokenCount,
         transient_failures: transientFailureCount,
         failures,
-        debug_details,
       }),
       { status: 200 },
     );

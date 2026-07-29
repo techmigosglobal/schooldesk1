@@ -247,12 +247,18 @@ class AppRoutes {
     principalFeeStructureForm: (context) => AdminFeeStructureFormScreen(
       args: _principalFeeStructureFormArgs(context),
     ),
-    principalInvoiceGenerationForm: (context) => PrincipalInvoiceGenerate(
-      args: _principalInvoiceGenerationFormArgs(context),
-    ),
-    '/principal/invoice-generate': (context) => PrincipalInvoiceGenerate(
-      args: _principalInvoiceGenerationFormArgs(context),
-    ),
+    principalInvoiceGenerationForm: (context) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      return args is AdminInvoiceGenerationFormArgs
+          ? PrincipalInvoiceGenerate(args: args)
+          : const FeeHomeScreen();
+    },
+    '/principal/invoice-generate': (context) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      return args is AdminInvoiceGenerationFormArgs
+          ? PrincipalInvoiceGenerate(args: args)
+          : const FeeHomeScreen();
+    },
     principalPaymentRecordForm: (context) => AdminPaymentRecordFormScreen(
       args: _principalPaymentRecordFormArgs(context),
     ),
@@ -651,21 +657,6 @@ class AppRoutes {
       grades: [],
       sections: [],
       feeCategories: [],
-      ownerRole: 'principal',
-    );
-  }
-
-  static AdminInvoiceGenerationFormArgs _principalInvoiceGenerationFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AdminInvoiceGenerationFormArgs) return args;
-    return const AdminInvoiceGenerationFormArgs(
-      academicYears: [],
-      grades: [],
-      sections: [],
-      students: [],
-      feeStructures: [],
       ownerRole: 'principal',
     );
   }

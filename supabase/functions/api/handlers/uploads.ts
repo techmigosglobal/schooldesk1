@@ -1289,15 +1289,22 @@ async function performStructuredReportExport(
   pdf += "trailer\n<< /Size " + (objects.length + 1) +
     " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
   const fileId = crypto.randomUUID();
-  const filePath = "exports/" + school + "/" + fileId + ".pdf";
-  const { error: uploadError } = await svc.storage.from("school-assets").upload(
+  const isFinanceExport = tableName === "fee_report_exports";
+  const bucket = isFinanceExport ? "finance-documents" : "school-assets";
+  const filePath = (isFinanceExport ? "reports/" : "exports/") + school + "/" + fileId + ".pdf";
+  const { error: uploadError } = await svc.storage.from(bucket).upload(
     filePath,
     new TextEncoder().encode(pdf),
     { contentType: "application/pdf", upsert: true },
   );
   if (uploadError) throw uploadError;
-  return svc.storage.from("school-assets").getPublicUrl(filePath).data
-    .publicUrl;
+  if (!isFinanceExport) {
+    return svc.storage.from(bucket).getPublicUrl(filePath).data.publicUrl;
+  }
+  const { data: signed, error: signedError } = await svc.storage.from(bucket)
+    .createSignedUrl(filePath, 10 * 60);
+  if (signedError) throw signedError;
+  return signed?.signedUrl ?? "";
 }
 
 async function performReportExport(

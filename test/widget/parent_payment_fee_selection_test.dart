@@ -48,7 +48,7 @@ void main() {
     BackendApiClient.instance.clearAuthToken();
   });
 
-  testWidgets('Tuition label overrides stale other type and shows months', (
+  testWidgets('balance-first payment accepts a direct amount without month allocation', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -60,10 +60,8 @@ void main() {
               {
                 'id': 'tuition-invoice',
                 'component': 'Tuition',
-                'fee_type': 'other',
-                'billing_mode': 'one_time',
+                'fee_type': 'tuition',
                 'amount': 10.0,
-                'monthly_amount': 1.0,
               },
             ],
           ),
@@ -73,17 +71,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tuition'), findsOneWidget);
-    expect(find.text('Select Months to Pay'), findsOneWidget);
-    expect(find.text('June'), findsOneWidget);
-    expect(find.text('Paying for 1 month(s)'), findsOneWidget);
+    expect(find.text('Select Months to Pay'), findsNothing);
     expect(find.textContaining('Book & Kit'), findsNothing);
 
     await tester.tap(find.text('Continue to Pay'));
     await tester.pumpAndSettle();
 
     expect(intentPayload['invoice_id'], 'tuition-invoice');
-    expect(intentPayload['selected_month_names'], <String>['June']);
-    expect(intentPayload['selected_months'], 1);
+    expect(intentPayload['amount'], '10.00');
+    expect(intentPayload.containsKey('selected_month_names'), isFalse);
+    expect(intentPayload.containsKey('selected_months'), isFalse);
     expect(find.text('Pay to School UPI ID'), findsOneWidget);
     expect(find.byKey(const Key('payment-config-qr-image')), findsOneWidget);
     expect(find.text('school@test'), findsOneWidget);
@@ -116,7 +113,7 @@ void main() {
     expect(find.text('Copied UPI ID: school@test'), findsOneWidget);
   });
 
-  testWidgets('one-time summary retains the actually selected fee label', (
+  testWidgets('payment summary retains the selected fee label', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -139,7 +136,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Activity Fee'), findsOneWidget);
-    expect(find.text('Activity Fee: one-time payment'), findsOneWidget);
+    expect(find.text('Remaining Balance'), findsOneWidget);
     expect(find.textContaining('Book & Kit'), findsNothing);
     expect(find.text('Select Months to Pay'), findsNothing);
   });

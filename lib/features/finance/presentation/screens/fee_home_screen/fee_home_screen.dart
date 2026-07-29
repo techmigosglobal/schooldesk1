@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_widgets.dart';
+import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
 
 class FeeHomeScreen extends StatefulWidget {
   const FeeHomeScreen({super.key});
@@ -587,6 +588,14 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           onTap: () => Navigator.pushNamed(
             context,
             AppRoutes.principalInvoiceGenerationForm,
+            arguments: AdminInvoiceGenerationFormArgs(
+              academicYears: _academicYears,
+              grades: _grades,
+              sections: _sections,
+              students: const [],
+              feeStructures: _feeStructures,
+              ownerRole: 'principal',
+            ),
           ),
         ),
         FeeActionRow(

@@ -10,7 +10,7 @@ import 'package:printing/printing.dart';
 /// The two fee documents have deliberately different semantics. An account
 /// statement describes a student's entire fee position; a payment receipt is
 /// evidence for one finalized payment.
-enum FeeDocumentKind { accountStatement, paymentReceipt }
+enum FeeDocumentKind { accountStatement, paymentReceipt, feeInvoice }
 
 /// PDF generation service for receipts, marksheets, ID cards, and reports.
 class PdfService {
@@ -219,27 +219,35 @@ class PdfService {
     required double balance,
     required String paymentMode,
     required DateTime paymentDate,
-    String schoolName = 'Public School',
-    String schoolAddress = '123 Education Lane, Knowledge City - 400001',
+    String schoolName = '',
+    String schoolAddress = '',
     Uint8List? schoolLogo,
     Uint8List? authorizedSignature,
     String authorizedSignatoryName = '',
+    String transactionReference = '',
+    double? thisPaymentAmount,
   }) async {
     final pdf = await _createDocument();
     final isAccountStatement = documentKind == FeeDocumentKind.accountStatement;
+    final isInvoice = documentKind == FeeDocumentKind.feeInvoice;
     final documentTitle = isAccountStatement
         ? 'FEE ACCOUNT STATEMENT'
+        : isInvoice
+        ? 'FEE INVOICE'
         : 'FEE PAYMENT RECEIPT';
     final documentNumberLabel = isAccountStatement
         ? 'Statement No.'
+        : isInvoice
+        ? 'Invoice No.'
         : 'Receipt No.';
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
         build: (context) {
-          return pw.Column(
+          return [
+            pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               // Header
@@ -347,7 +355,7 @@ class PdfService {
                     ),
                     pw.SizedBox(height: 4),
                     _buildAmountRow(
-                      'Amount Paid',
+                      isInvoice ? 'Paid to Date' : 'Cumulative Paid',
                       '₹${paidAmount.toStringAsFixed(2)}',
                       color: _accentColor,
                     ),
@@ -363,9 +371,16 @@ class PdfService {
                   ],
                 ),
               ),
-              if (!isAccountStatement) ...[
+              if (!isAccountStatement && !isInvoice) ...[
                 pw.SizedBox(height: 12),
-                _buildInfoPair('Payment Method', paymentMode),
+                pw.Row(
+                  children: [
+                    pw.Expanded(child: _buildInfoPair('This Payment', '₹${(thisPaymentAmount ?? paidAmount).toStringAsFixed(2)}')),
+                    pw.Expanded(child: _buildInfoPair('Payment Method', paymentMode)),
+                    if (transactionReference.trim().isNotEmpty)
+                      pw.Expanded(child: _buildInfoPair('Reference', transactionReference.trim())),
+                  ],
+                ),
               ],
               pw.SizedBox(height: 24),
               _buildDivider(),
@@ -415,7 +430,8 @@ class PdfService {
                   ],
                 ),
             ],
-          );
+            ),
+          ];
         },
       ),
     );

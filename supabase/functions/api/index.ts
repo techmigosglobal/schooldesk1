@@ -244,7 +244,8 @@ export function triggerPushProcessing(eventIds: string | string[]) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   if (!supabaseUrl) return;
 
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const serviceRoleKey = Deno.env.get("NOTIFICATION_PROCESSOR_SECRET") ??
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const promise = fetch(`${supabaseUrl}/functions/v1/notification-processor`, {
     method: "POST",
     headers: {
@@ -283,7 +284,8 @@ export async function invokeNotificationProcessor(
     };
   }
 
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const serviceRoleKey = Deno.env.get("NOTIFICATION_PROCESSOR_SECRET") ??
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   try {
     const response = await fetch(
       `${supabaseUrl}/functions/v1/notification-processor`,

@@ -196,29 +196,16 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                   fallback: _feeTypeLabel(feeType),
                 ),
                 'fee_type': feeType,
-                'billing_mode': inv['billing_mode'],
-                'priority': inv['priority'],
-                'frequency': _billingModeLabel(_text(inv['billing_mode'])),
                 'amount': balance,
                 'paidAmount': paid,
                 'totalAmount': total,
                 'dueDate': (inv['due_date'] ?? '').toString(),
                 'status': _statusFromFeeRow(inv),
-                'monthly_amount': inv['monthly_amount'],
-                'term_amount': inv['term_amount'],
-                'term_count': inv['term_count'],
-                'allowed_month_names': inv['allowed_month_names'],
-                'paid_month_names': inv['paid_month_names'],
-                'unpaid_month_names': inv['unpaid_month_names'],
                 'rejection_reason': inv['rejection_reason'],
                 'items': _invoiceItems(inv),
                 'student': inv['student'],
               };
-            }).toList()..sort((a, b) {
-              final left = (a['priority'] as num?)?.toInt() ?? 99;
-              final right = (b['priority'] as num?)?.toInt() ?? 99;
-              return left.compareTo(right);
-            });
+            }).toList();
 
         for (final inv in invoices) {
           final payments = inv['payments'];
@@ -1019,15 +1006,6 @@ class _ParentFeeHubState extends State<ParentFeeHub>
             'status':
                 'Paid ${_money((fee['paidAmount'] as num?)?.toDouble() ?? 0)} · Due ${_money((fee['amount'] as num?)?.toDouble() ?? 0)}',
           },
-        for (final fee in _feeStructure)
-          if (fee['paid_month_names'] is List &&
-              (fee['paid_month_names'] as List).isNotEmpty)
-            {
-              'description':
-                  'Months Paid: ${(fee['paid_month_names'] as List).join(', ')}',
-              'amount': 0.0,
-              'status': _text(fee['component']),
-            },
       ];
       final schoolMap = Map<String, dynamic>.from(school);
       final assets = await Future.wait([
@@ -1247,21 +1225,6 @@ class _ParentFeeHubState extends State<ParentFeeHub>
             feeType[0].toUpperCase() +
             feeType.substring(1).replaceAll('_', ' ');
         return '$label Fee';
-    }
-  }
-
-  String _billingModeLabel(String mode) {
-    switch (mode) {
-      case 'monthly':
-        return 'Monthly';
-      case 'one_time':
-        return 'One Time';
-      case 'term':
-        return 'Per Term';
-      case 'yearly':
-        return 'Yearly';
-      default:
-        return 'Monthly';
     }
   }
 

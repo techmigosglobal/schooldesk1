@@ -25,16 +25,12 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
   String _scope = 'class';
   late String _selectedYearId;
   late String _selectedGradeId;
-  String _selectedTermId = '';
   String _selectedSectionId = '';
   String _selectedStudentId = '';
 
-  List<Map<String, dynamic>> _terms = [];
-  bool _loadingTerms = false;
   bool _includeOneTime = true;
   bool _includeYearly = false;
   bool _generating = false;
-  int _selectedInstallmentCount = 3;
 
   bool get _hasReferenceData =>
       widget.args.academicYears.isNotEmpty && widget.args.grades.isNotEmpty;
@@ -49,9 +45,6 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
         .fold<double>(0.0, (sum, fee) {
           final amount = _numValue(fee['amount']);
           final frequency = _feeFrequency(fee);
-          if (frequency == 'term') {
-            return sum + (amount / _selectedInstallmentCount);
-          }
           if (frequency == 'one_time') {
             return _includeOneTime ? sum + amount : sum;
           }
@@ -77,13 +70,6 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
     }).toList()..sort((a, b) => a.fullName.compareTo(b.fullName));
   }
 
-  String get _selectedTermLabel {
-    final match = _terms.firstWhereOrNull(
-      (t) => '${t['id']}' == _selectedTermId,
-    );
-    return match != null ? '${match['term_name'] ?? ''}'.trim() : '';
-  }
-
   @override
   void initState() {
     super.initState();
@@ -102,13 +88,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
       text: _defaultDueDate(dueDay: seed['due_day'] as int?),
     );
 
-    _loadTerms().then((_) {
-      if (mounted) {
-        setState(() {
-          _labelController.text = _defaultInvoiceLabel();
-        });
-      }
-    });
+    _labelController.text = _defaultInvoiceLabel();
   }
 
   @override
@@ -129,25 +109,6 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
     return options.isEmpty ? '' : options.first;
   }
 
-  Future<void> _loadTerms() async {
-    if (_selectedYearId.isEmpty) return;
-    setState(() => _loadingTerms = true);
-    try {
-      final list = await BackendApiClient.instance.getRawList(
-        '/fees/terms',
-        queryParameters: {'academic_year_id': _selectedYearId},
-      );
-      if (!mounted) return;
-      setState(() {
-        _terms = list;
-        _selectedTermId = list.isEmpty ? '' : '${list.first['id'] ?? ''}';
-        _loadingTerms = false;
-      });
-    } on Object catch (_) {
-      if (mounted) setState(() => _loadingTerms = false);
-    }
-  }
-
   Future<void> _generate() async {
     if (!_formKey.currentState!.validate()) return;
     if (_estimatedTotal <= 0) {
@@ -166,8 +127,6 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
             'grade_id': _selectedGradeId,
             if (_scope == 'section') 'section_id': _selectedSectionId,
             if (_scope == 'student') 'student_id': _selectedStudentId,
-            if (_selectedTermId.isNotEmpty) 'term_id': _selectedTermId,
-            'installment_count': _selectedInstallmentCount,
             'include_one_time': _includeOneTime,
             'include_yearly': _includeYearly,
             'invoice_label': _labelController.text.trim(),
@@ -203,7 +162,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
           await notifService.triggerInvoiceGeneratedAlert(
             invoiceCount: createdCount,
             classLabel: gradeLabel,
-            termLabel: _selectedTermLabel,
+            termLabel: _labelController.text.trim(),
           );
         } on Object catch (_) {}
       }
@@ -228,7 +187,6 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
 
   String _defaultInvoiceLabel() {
     final now = DateTime.now();
-    if (_selectedTermId.isNotEmpty) return _selectedTermLabel;
     final current = widget.args.academicYears.firstWhereOrNull(
       (year) => year.isCurrent,
     );
@@ -248,7 +206,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
         return value;
       }
     }
-    return isTuitionInvoice(fee) ? 'Tuition' : 'Fee';
+    return 'Fee';
   }
 
   String _defaultDueDate({int? dueDay}) {
@@ -340,7 +298,6 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                       onChanged: (v) {
                         if (v == null) return;
                         setState(() => _selectedYearId = v);
-                        _loadTerms();
                       },
                     ),
                     const SizedBox(height: 12),
@@ -465,45 +422,6 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    if (_loadingTerms)
-                      const Center(child: CircularProgressIndicator())
-                    else if (_terms.isEmpty)
-                      InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Installment Term (Optional)',
-                          prefixIcon: Icon(Icons.info_outline_rounded),
-                        ),
-                        child: Text(
-                          'No terms configured — invoices will use the selected due date.',
-                          style: GoogleFonts.ibmPlexSans(
-                            fontSize: 12,
-                            color: context.appTheme.muted,
-                          ),
-                        ),
-                      )
-                    else
-                      DropdownButtonFormField<String>(
-                        value: _selectedTermId.isEmpty ? null : _selectedTermId,
-                        decoration: const InputDecoration(
-                          labelText: 'Installment Term',
-                        ),
-                        items: _terms
-                            .map(
-                              (t) => DropdownMenuItem(
-                                value: '${t['id']}',
-                                child: Text('${t['term_name']}'),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) {
-                          setState(() {
-                            _selectedTermId = v ?? '';
-                            _labelController.text = _defaultInvoiceLabel();
-                          });
-                        },
-                        validator: (_) => null,
-                      ),
-                    const SizedBox(height: 12),
                     TextFormField(
                       controller: _labelController,
                       decoration: const InputDecoration(
@@ -523,24 +441,6 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? 'Due date is required'
                           : null,
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<int>(
-                      value: _selectedInstallmentCount,
-                      decoration: const InputDecoration(
-                        labelText: 'Installments Count (for tuition)',
-                      ),
-                      items: List.generate(12, (index) => index + 1)
-                          .map(
-                            (val) => DropdownMenuItem(
-                              value: val,
-                              child: Text('$val installment(s)'),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        setState(() => _selectedInstallmentCount = v ?? 3);
-                      },
                     ),
                     const SizedBox(height: 16),
                     CheckboxListTile(

@@ -50,19 +50,6 @@ function normalizeFeeType(value: unknown, fallback = "") {
   return "other";
 }
 
-const monthNames = [
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-  "January",
-  "February",
-  "March",
-];
-
 const defaultFeeCategories = [
   {
     name: "Tuition",
@@ -107,29 +94,6 @@ async function ensureDefaultFeeCategories(
   if (insertError) throw insertError;
 }
 
-const monthNameLookup = new Map(
-  monthNames.map((month, index) => [month.toLowerCase(), index]),
-);
-
-function selectedMonthNamesFrom(value: unknown) {
-  const raw = Array.isArray(value) ? value : text(value).split(",");
-  const selected = raw.map((item) => text(item)).filter((item) =>
-    monthNames.map((m) => m.toLowerCase()).includes(item.toLowerCase())
-  );
-  return [
-    ...new Set(
-      selected.map((item) =>
-        monthNames.find((month) => month.toLowerCase() === item.toLowerCase())!
-      ),
-    ),
-  ];
-}
-
-function monthNamesEqual(left: string[], right: string[]) {
-  return left.length === right.length &&
-    left.every((month, index) => month === right[index]);
-}
-
 function invoiceFeeType(invoice: Record<string, unknown>) {
   const items = Array.isArray(invoice.fee_invoice_items)
     ? invoice.fee_invoice_items
@@ -145,41 +109,6 @@ function invoiceFeeType(invoice: Record<string, unknown>) {
   const direct = normalizeFeeType(invoice.fee_type, "");
   if (direct) return direct;
   return "tuition";
-}
-
-function invoiceBillingMode(invoice: Record<string, unknown>) {
-  if (invoiceFeeType(invoice) === "tuition") return "monthly";
-  const direct = text(invoice.billing_mode).toLowerCase().replaceAll("-", "_")
-    .replaceAll(" ", "_");
-  if (direct) return direct;
-  return "one_time";
-}
-
-function invoiceAllowedMonthNames(invoice: Record<string, unknown>) {
-  const configured = selectedMonthNamesFrom(invoice.allowed_month_names);
-  if (configured.length > 0) return configured;
-  const feeType = invoiceFeeType(invoice);
-  const billingMode = invoiceBillingMode(invoice);
-  if (feeType !== "tuition" || billingMode === "one_time") return [];
-  if (billingMode === "monthly") return [...monthNames];
-  return [];
-}
-
-function invoicePaidMonthNames(invoice: Record<string, unknown>) {
-  const paid = selectedMonthNamesFrom(invoice.paid_month_names);
-  return paid.sort((left, right) =>
-    (monthNameLookup.get(left.toLowerCase()) ?? 99) -
-    (monthNameLookup.get(right.toLowerCase()) ?? 99)
-  );
-}
-
-function invoiceMonthlyAmount(invoice: Record<string, unknown>) {
-  const configured = money(invoice.monthly_amount);
-  if (configured > 0) return configured;
-  const allowedCount = invoiceAllowedMonthNames(invoice).length || 10;
-  return money(
-    money(invoice.net_amount ?? invoice.total_amount) / allowedCount,
-  );
 }
 
 function invoiceComponentLabel(invoice: Record<string, unknown>) {
@@ -198,132 +127,17 @@ function invoiceComponentLabel(invoice: Record<string, unknown>) {
 }
 
 function decorateInvoice(invoice: Record<string, unknown>) {
-  const feeType = invoiceFeeType(invoice);
-  const billingMode = invoiceBillingMode(invoice);
-  const allowedMonthNames = invoiceAllowedMonthNames(invoice);
-  const paidMonthNames = invoicePaidMonthNames(invoice);
-  const unpaidMonthNames = allowedMonthNames.filter((month) =>
-    !paidMonthNames.includes(month)
-  );
-  const monthlyAmount = feeType === "tuition"
-    ? invoiceMonthlyAmount(invoice)
-    : 0;
   return {
     ...invoice,
-    fee_type: feeType,
-    billing_mode: billingMode,
-    priority: feeType === "tuition" ? 2 : 1,
+    fee_type: invoiceFeeType(invoice),
     fee_item_name: text(invoice.fee_item_name, invoiceComponentLabel(invoice)),
-    monthly_amount: monthlyAmount,
-    term_amount: money(invoice.term_amount),
-    term_count: Math.max(0, parseInt(text(invoice.term_count, "0")) || 0),
-    allowed_month_names: allowedMonthNames,
-    paid_month_names: paidMonthNames,
-    unpaid_month_names: unpaidMonthNames,
+    balance: money(invoice.balance ?? invoice.net_amount ?? invoice.total_amount),
   };
 }
 
-function validateInvoiceSelection(
-  invoice: Record<string, unknown>,
-  selectedMonthNames: string[],
-  selectedMonths: number,
-  selectedTerms: number,
-) {
-  const decorated = decorateInvoice(invoice);
-  const feeType = text(decorated.fee_type);
-  const billingMode = text(decorated.billing_mode);
-  const balance = money(
-    invoice.balance ?? invoice.net_amount ?? invoice.total_amount,
-  );
-
-  // One-time fees: book_kit or any fee with one_time billing mode.
-  if (feeType !== "tuition" || billingMode === "one_time") {
-    if (
-      selectedMonthNames.length > 0 || selectedMonths > 0 || selectedTerms > 0
-    ) {
-      throw new Error("This fee is one-time only and cannot be split");
-    }
-    return {
-      amount: balance,
-      selectedMonthNames: [] as string[],
-      selectedMonths: 0,
-      selectedTerms: 0,
-      paidMonthNames: decorated.paid_month_names as string[],
-    };
-  }
-
-  // Monthly fees: month-by-month installment payment.
-  if (billingMode === "monthly") {
-    if (selectedMonthNames.length > 10 || selectedMonths > 10) {
-      throw new Error(
-        "selected_months cannot exceed the June–March cycle of 10",
-      );
-    }
-    if (selectedTerms > 0) {
-      throw new Error("selected_terms cannot exceed configured academic terms");
-    }
-
-    const unpaidMonthNames = decorated.unpaid_month_names as string[];
-    if (unpaidMonthNames.length === 0) {
-      throw new Error("All monthly installments are already paid");
-    }
-
-    let months = selectedMonthNames.length > 0
-      ? selectedMonthNames
-      : unpaidMonthNames.slice(0, Math.max(1, selectedMonths));
-    months = selectedMonthNamesFrom(months);
-    if (months.length === 0) {
-      throw new Error("Select at least one monthly installment");
-    }
-    if (months.length > unpaidMonthNames.length) {
-      throw new Error(
-        "Selected months exceed the remaining unpaid installments",
-      );
-    }
-    const expectedPrefix = unpaidMonthNames.slice(0, months.length);
-    if (!monthNamesEqual(months, expectedPrefix)) {
-      throw new Error(
-        "Monthly installments must be paid in order without skipping",
-      );
-    }
-
-    const monthlyAmount = invoiceMonthlyAmount(invoice);
-    const amount = months.length === unpaidMonthNames.length
-      ? balance
-      : money(monthlyAmount * months.length);
-    return {
-      amount,
-      selectedMonthNames: months,
-      selectedMonths: months.length,
-      selectedTerms: 0,
-      paidMonthNames: decorated.paid_month_names as string[],
-    };
-  }
-
-  // Lump-sum fees: term, yearly, or any other billing mode — pay full balance.
-  if (balance <= 0) {
-    throw new Error("This fee has already been fully paid");
-  }
-  return {
-    amount: balance,
-    selectedMonthNames: [] as string[],
-    selectedMonths: 0,
-    selectedTerms: 0,
-    paidMonthNames: decorated.paid_month_names as string[],
-  };
-}
-
-/**
- * Balance-first validation for all new clients.  Legacy month payloads still
- * work only when no amount is supplied, so an already-installed older parent
- * app does not fail during rollout.  New payments never persist allocations.
- */
 function validateInvoicePaymentAmount(
   invoice: Record<string, unknown>,
   requestedAmount: unknown,
-  legacyMonthNames: string[] = [],
-  legacyMonths = 0,
-  legacyTerms = 0,
 ) {
   const balance = money(
     invoice.balance ?? invoice.net_amount ?? invoice.total_amount,
@@ -336,19 +150,9 @@ function validateInvoicePaymentAmount(
         `payment amount cannot exceed the remaining balance of ${balance.toFixed(2)}`,
       );
     }
-    return {
-      amount,
-      selectedMonthNames: [] as string[],
-      selectedMonths: 0,
-      selectedTerms: 0,
-    };
+    return { amount };
   }
-  return validateInvoiceSelection(
-    invoice,
-    legacyMonthNames,
-    legacyMonths,
-    legacyTerms,
-  );
+  throw new Error("payment amount must be greater than zero");
 }
 
 function dueDateFrom(dueDate: unknown, dueDay: unknown) {
@@ -375,20 +179,6 @@ async function parentCanAccessStudent(
     .maybeSingle();
   if (error) throw error;
   return Boolean(data);
-}
-
-function _invoicePayableAmount(
-  invoice: Record<string, unknown>,
-  selectedMonthNames: string[],
-  selectedMonths: number,
-  selectedTerms: number,
-) {
-  return validateInvoiceSelection(
-    invoice,
-    selectedMonthNames,
-    selectedMonths,
-    selectedTerms,
-  ).amount;
 }
 
 function configRecordId(scope: string, gradeId = "", sectionId = ""): string {
@@ -485,47 +275,6 @@ async function resolveScopedPaymentConfig(
     if (config && isEnabled && hasPaymentDestination) return data;
   }
   return null;
-}
-
-async function applyInvoiceAllocationUpdate(
-  svc: SupabaseClient,
-  school: string,
-  invoice: Record<string, unknown>,
-  amount: number,
-  selectedMonthNames: string[],
-) {
-  const decorated = decorateInvoice(invoice);
-  const feeType = text(decorated.fee_type);
-  const paidMonthNames = feeType === "tuition"
-    ? [
-      ...new Set([
-        ...(decorated.paid_month_names as string[]),
-        ...selectedMonthNames,
-      ]),
-    ]
-    : [];
-  const newPaid = money(invoice.paid_amount) + amount;
-  const newBalance = Math.max(0, money(invoice.net_amount) - newPaid);
-  const status = newBalance <= 0 ? "paid" : "partial";
-  const payload: Record<string, unknown> = {
-    paid_amount: newPaid,
-    balance: newBalance,
-    status,
-    updated_at: new Date().toISOString(),
-  };
-  if (feeType === "tuition") {
-    payload.paid_month_names = paidMonthNames;
-  }
-  const { error } = await svc.from("fee_invoices").update(payload)
-    .eq("id", text(invoice.id))
-    .eq("school_id", school);
-  if (error) throw error;
-  return {
-    paidAmount: newPaid,
-    balance: newBalance,
-    status,
-    paidMonthNames,
-  };
 }
 
 async function attachFeeCategories(
@@ -703,12 +452,15 @@ async function attachPaymentRequestRelations(
 
   return await Promise.all(rows.map(async (row) => {
     const storedProof = text(row.proof_url);
-    const proofUrl = storedProof.startsWith("payment-proofs/")
+    const proofPath = storedProof.startsWith("payment-proofs/")
+      ? storedProof.slice("payment-proofs/".length)
+      : storedProof;
+    const proofUrl = storedProof
       ? (await svc.storage.from("payment-proofs").createSignedUrl(
-        storedProof,
+        proofPath,
         10 * 60,
       )).data?.signedUrl ?? ""
-      : storedProof;
+      : "";
     return {
       ...row,
       proof_url: proofUrl,
@@ -960,10 +712,6 @@ async function applyFeeInvoiceSyncPlan(
       fee_type: row.feeType,
       billing_mode: row.billingMode,
       priority: row.priority,
-      monthly_amount: row.billingMode === "monthly"
-        ? money(row.nextNet / 10)
-        : 0,
-      allowed_month_names: row.billingMode === "monthly" ? monthNames : [],
       updated_at: new Date().toISOString(),
     }).eq("id", invoiceId).eq("school_id", school);
     if (invoiceUpdate.error) throw new Error(invoiceUpdate.error.message);
@@ -983,77 +731,12 @@ async function deleteInvoiceWorkflowRows(
   school: string,
   invoiceIds: string[],
 ) {
-  if (invoiceIds.length === 0) {
-    return {
-      deleted_invoices: 0,
-      deleted_receipts: 0,
-      deleted_payments: 0,
-      deleted_requests: 0,
-    };
-  }
-  const scoped = await svc.from("fee_invoices").select("id").eq(
-    "school_id",
-    school,
-  ).in("id", invoiceIds);
-  if (scoped.error) throw new Error(scoped.error.message);
-  const ids = (scoped.data ?? []).map((row) => text(row.id)).filter(Boolean);
-  if (ids.length === 0) {
-    return {
-      deleted_invoices: 0,
-      deleted_receipts: 0,
-      deleted_payments: 0,
-      deleted_requests: 0,
-    };
-  }
-
-  // Delete receipts by payment IDs, since fee_receipts are linked to payments.
-  const paymentIds = await svc.from("payments").select("id").eq(
-    "school_id",
-    school,
-  ).in("invoice_id", ids);
-  if (paymentIds.error) throw new Error(paymentIds.error.message);
-  const paymentIdList = (paymentIds.data ?? []).map((row) => text(row.id))
-    .filter(Boolean);
-
-  const receiptDelete = paymentIdList.length === 0
-    ? { error: null, count: 0 }
-    : await svc.from("fee_receipts").delete().in("payment_id", paymentIdList);
-  if (receiptDelete.error) throw new Error(receiptDelete.error.message);
-
-  // Delete parent payment requests
-  const requestDelete = await svc.from("parent_payment_requests").delete().eq(
-    "school_id",
-    school,
-  ).in("invoice_id", ids);
-  if (requestDelete.error) throw new Error(requestDelete.error.message);
-
-  // Delete payments (cascades to receipts via ON DELETE CASCADE)
-  const paymentDelete = await svc.from("payments").delete().eq(
-    "school_id",
-    school,
-  ).in("invoice_id", ids);
-  if (paymentDelete.error) throw new Error(paymentDelete.error.message);
-
-  // Delete invoice items (normally cascades from invoices via ON DELETE CASCADE)
-  const invoiceItemsDelete = await svc.from("fee_invoice_items").delete().in(
-    "invoice_id",
-    ids,
-  );
-  if (invoiceItemsDelete.error) {
-    throw new Error(invoiceItemsDelete.error.message);
-  }
-  // Delete invoices themselves
-  const invoiceDelete = await svc.from("fee_invoices").delete().eq(
-    "school_id",
-    school,
-  ).in("id", ids);
-  if (invoiceDelete.error) throw new Error(invoiceDelete.error.message);
-
   return {
-    deleted_invoices: ids.length,
-    deleted_receipts: receiptDelete.count ?? 0,
-    deleted_payments: paymentDelete.count ?? 0,
-    deleted_requests: requestDelete.count ?? 0,
+    retained_invoices: invoiceIds.length,
+    retained_receipts: 0,
+    retained_payments: 0,
+    retained_requests: 0,
+    reason: "Financial history is immutable; archive the structure instead.",
   };
 }
 
@@ -1062,40 +745,14 @@ async function deleteFeeStructureWorkflowRows(
   school: string,
   structureId: string,
 ) {
-  // 1. Get all invoice IDs related to this fee structure
-  const invoiceIds = await invoiceIdsForFeeStructure(svc, school, structureId);
-
-  // 2. Delete invoice-related workflow (payments, receipts, requests, invoices, items)
-  const invoiceDeletionStats = await deleteInvoiceWorkflowRows(
-    svc,
-    school,
-    invoiceIds,
-  );
-
-  // 3. Delete fee_installments (linked to this structure)
-  const installmentsDelete = await svc.from("fee_installments").delete().eq(
-    "fee_structure_id",
-    structureId,
-  );
-  if (installmentsDelete.error) {
-    throw new Error(installmentsDelete.error.message);
-  }
-
-  // 4. Delete fee_concessions (linked to this structure)
-  const concessionDelete = await svc.from("fee_concessions").delete().eq(
-    "school_id",
-    school,
-  ).eq("fee_structure_id", structureId);
-  if (concessionDelete.error) throw new Error(concessionDelete.error.message);
-
-  return {
-    deleted_invoices: invoiceDeletionStats.deleted_invoices,
-    deleted_receipts: invoiceDeletionStats.deleted_receipts,
-    deleted_payments: invoiceDeletionStats.deleted_payments,
-    deleted_requests: invoiceDeletionStats.deleted_requests,
-    deleted_installments: installmentsDelete.count ?? 0,
-    deleted_concessions: concessionDelete.count ?? 0,
-  };
+  const { data, error } = await svc.from("fee_structures").update({
+    archived_at: new Date().toISOString(),
+    is_active: false,
+    updated_at: new Date().toISOString(),
+  }).eq("id", structureId).eq("school_id", school).select("id").maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Fee structure not found");
+  return { archived_structure_id: structureId, deleted_invoices: 0 };
 }
 
 /**
@@ -1376,9 +1033,6 @@ export async function handleFees(
       due_date: input.due_date ?? null,
       due_day: input.due_day ?? 10,
       late_fine_per_day: input.late_fine_per_day ?? 0,
-      // Tuition is always the June-March monthly ledger in this product. Keep
-      // the stored frequency aligned with the billing mode so admins never see
-      // a misleading "yearly" structure that is actually billed monthly.
       frequency: normalizedFrequency,
       fee_type: feeType,
       billing_mode: feeType === "tuition" || feeType === "daycare_hourly"
@@ -1439,12 +1093,14 @@ export async function handleFees(
       return ok(data);
     }
     if (seg && method === "DELETE") {
-      const { error } = await svc.from("fee_categories").delete().eq(
-        "id",
-        seg,
-      ).eq("school_id", school);
+      const { error } = await svc.from("fee_categories").update({
+        is_active: false,
+        archived_at: new Date().toISOString(),
+        archived_by: user.id,
+        updated_at: new Date().toISOString(),
+      }).eq("id", seg).eq("school_id", school);
       if (error) return fail(error.message);
-      return ok({ success: true });
+      return ok({ success: true, archived_category_id: seg });
     }
   }
 
@@ -1643,49 +1299,12 @@ export async function handleFees(
     }
 
     if (seg && method === "DELETE") {
-      const removePending = url.searchParams.get("remove_pending") !== "false";
-      let cleanup: Record<string, unknown> = { deleted_invoices: 0 };
-      if (removePending) {
-        try {
-          cleanup = await deleteFeeStructureWorkflowRows(svc, school, seg);
-        } catch (error) {
-          return fail(
-            error instanceof Error
-              ? error.message
-              : "failed to clear fee structure dues",
-          );
-        }
+      try {
+        const archived = await deleteFeeStructureWorkflowRows(svc, school, seg);
+        return ok({ success: true, ...archived });
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to archive fee structure");
       }
-      const { error } = await svc.from("fee_structures").delete().eq(
-        "id",
-        seg,
-      ).eq("school_id", school);
-      if (error) return fail(error.message);
-
-      // Reconciliation sweep: after the structure is deleted (which sets
-      // fee_structure_id = NULL via ON DELETE SET NULL), clean up any remaining
-      // orphaned unpaid invoices that have no fee_structure_id link.
-      if (removePending) {
-        try {
-          const { data: orphanedInvoices } = await svc.from("fee_invoices")
-            .select("id")
-            .eq("school_id", school)
-            .neq("status", "paid")
-            .is("fee_structure_id", null);
-          const orphanIds = (orphanedInvoices ?? [])
-            .map((r: Record<string, unknown>) => text(r.id))
-            .filter(Boolean);
-          if (orphanIds.length > 0) {
-            await deleteInvoiceWorkflowRows(svc, school, orphanIds);
-          }
-          (cleanup as Record<string, unknown>).reconciled_orphans =
-            orphanIds.length;
-        } catch (_) {
-          // Best-effort reconciliation — don't fail the whole request.
-        }
-      }
-
-      return ok({ success: true, ...cleanup });
     }
   }
 
@@ -1911,6 +1530,10 @@ export async function handleFees(
         structuresQuery = structuresQuery.or(
           `section_id.is.null,section_id.eq.${sectionId}`,
         );
+      } else {
+        // A grade-wide batch must never include a structure configured for a
+        // different section of the same grade.
+        structuresQuery = structuresQuery.is("section_id", null);
       }
       const { data: rawStructures, error: structuresError } =
         await structuresQuery;
@@ -2072,11 +1695,6 @@ export async function handleFees(
             priority: parseInt(
               text(structure.priority, feeType === "tuition" ? "2" : "1"),
             ) || (feeType === "tuition" ? 2 : 1),
-            monthly_amount: billingMode === "monthly" ? money(total / 10) : 0,
-            term_amount: 0,
-            term_count: 0,
-            allowed_month_names: billingMode === "monthly" ? monthNames : [],
-            paid_month_names: [],
           }).select().single();
           if (invoiceError) {
             if (invoiceError.message.toLowerCase().includes("duplicate")) {
@@ -2194,13 +1812,6 @@ export async function handleFees(
     }
 
     if ((seg === "intent" || seg === "request") && method === "POST") {
-      const selectedMonthNames = selectedMonthNamesFrom(
-        body.selected_month_names,
-      );
-      const selectedMonths = parseInt(
-        text(body.selected_months, `${selectedMonthNames.length || 0}`),
-      ) || 0;
-      const selectedTerms = parseInt(text(body.selected_terms, "0")) || 0;
       const { data: invoice, error: invoiceError } = body.invoice_id
         ? await svc.from("fee_invoices").select("*").eq("id", body.invoice_id)
           .eq("school_id", school).maybeSingle()
@@ -2236,9 +1847,6 @@ export async function handleFees(
         selection = validateInvoicePaymentAmount(
           invoice as Record<string, unknown>,
           body.amount ?? body.amount_paid,
-          selectedMonthNames,
-          selectedMonths,
-          selectedTerms,
         );
       } catch (error) {
         return fail(
@@ -2261,11 +1869,9 @@ export async function handleFees(
         payment_method: body.payment_method ?? "upi",
         request_reference: reference,
         payment_date: new Date().toISOString().split("T")[0],
-        selected_months: 0,
-        selected_month_names: [],
-        selected_terms: 0,
         remarks: body.remarks ?? "",
         status: "initiated",
+        idempotency_key: text(body.idempotency_key) || crypto.randomUUID(),
       }).select().single();
       if (requestError) return fail(requestError.message);
       return ok({
@@ -2274,9 +1880,6 @@ export async function handleFees(
         invoice_id: body.invoice_id ?? null,
         payment_method: body.payment_method ?? "",
         amount: selection.amount,
-        selected_months: 0,
-        selected_month_names: [],
-        selected_terms: 0,
         remarks: body.remarks ?? "",
       });
     }
@@ -2292,17 +1895,6 @@ export async function handleFees(
         form.get("payment_request_id") ?? form.get("request_id"),
       );
       const requestReference = text(form.get("request_reference"));
-      const selectedMonthNames = selectedMonthNamesFrom(
-        form.get("selected_month_names"),
-      );
-      const selectedMonths = parseInt(
-        text(
-          form.get("selected_months"),
-          `${selectedMonthNames.length || 0}`,
-        ),
-      ) || 0;
-      const selectedTerms = parseInt(text(form.get("selected_terms"), "0")) ||
-        0;
       let existingRequest: Record<string, unknown> | null = null;
       if (requestId || requestReference) {
         let requestQuery = svc.from("parent_payment_requests").select("*").eq(
@@ -2354,11 +1946,6 @@ export async function handleFees(
         selection = validateInvoicePaymentAmount(
           invoice as Record<string, unknown>,
           existingRequest?.amount ?? form.get("amount"),
-          selectedMonthNames.length > 0
-            ? selectedMonthNames
-            : selectedMonthNamesFrom(existingRequest?.selected_month_names),
-          selectedMonths || money(existingRequest?.selected_months),
-          selectedTerms || money(existingRequest?.selected_terms),
         );
       } catch (error) {
         return fail(
@@ -2410,15 +1997,14 @@ export async function handleFees(
           form.get("payment_date"),
           new Date().toISOString().split("T")[0],
         ),
-        selected_months: 0,
-        selected_month_names: [],
-        selected_terms: 0,
         proof_url: proofUrl,
         proof_file_name: screenshot?.name ?? null,
         proof_content_type: screenshot?.type ?? null,
         proof_size: screenshot?.size ?? null,
         remarks: `${form.get("remarks") ?? ""}`,
-        status: "pending_verification",
+        status: existingRequest?.status === "clarification_required"
+          ? "resubmitted"
+          : "pending_verification",
         updated_at: new Date().toISOString(),
       };
       const { data, error } = existingRequest
@@ -2593,21 +2179,11 @@ export async function handleFees(
         .maybeSingle();
       if (invoiceError) return fail(invoiceError.message);
       if (!invoice) return fail("Invoice not found", 404);
-      const selectedMonthNames = selectedMonthNamesFrom(
-        body.selected_month_names,
-      );
-      const selectedMonths = parseInt(
-        text(body.selected_months, `${selectedMonthNames.length || 0}`),
-      ) || 0;
-      const selectedTerms = parseInt(text(body.selected_terms, "0")) || 0;
       let selection;
       try {
         selection = validateInvoicePaymentAmount(
           invoice as Record<string, unknown>,
           amount,
-          selectedMonthNames,
-          selectedMonths,
-          selectedTerms,
         );
       } catch (error) {
         return fail(
@@ -2634,14 +2210,12 @@ export async function handleFees(
           : new Date().toISOString(),
         p_notes: text(body.remarks),
         p_created_by: user.id,
-        p_selected_month_names: [],
-        p_selected_months: 0,
+        p_idempotency_key: text(body.idempotency_key) || crypto.randomUUID(),
       }).single();
       if (error) return fail(error.message);
       const atomicPayment = payment as Record<string, unknown>;
       return ok({
         ...atomicPayment,
-        selected_month_names: [],
       });
     }
   }
@@ -2709,7 +2283,6 @@ export async function handleFees(
         balance_amount: money(
           invoice.balance ?? invoice.net_amount ?? invoice.total_amount,
         ),
-        monthly_amount: decorated.monthly_amount,
       };
     }));
   }
@@ -2791,7 +2364,10 @@ export async function handleFees(
       if (!isAdminOrPrincipal(user)) {
         return fail("admin or principal access required", 403);
       }
-      const status = text(body.status, "pending");
+      const status = text(body.status).toLowerCase();
+      if (!["approved", "rejected", "clarification_required"].includes(status)) {
+        return fail("status must be approved, rejected, or clarification_required", 400);
+      }
       const { data: existing, error: existingError } = await svc.from(
         "parent_payment_requests",
       )
@@ -2801,9 +2377,12 @@ export async function handleFees(
         .maybeSingle();
       if (existingError) return fail(existingError.message);
       if (!existing) return fail("not found", 404);
+      if (!["pending_verification", "resubmitted"].includes(text(existing.status))) {
+        return fail("Only pending or resubmitted payment requests can be decided", 409);
+      }
       let paymentId: string | null = null;
       let receiptId: string | null = null;
-      if (["approved", "completed", "paid"].includes(status)) {
+      if (status === "approved") {
         const { data: invoice } = await svc.from("fee_invoices").select("*")
           .eq("id", existing.invoice_id)
           .eq("school_id", school)
@@ -2814,9 +2393,6 @@ export async function handleFees(
           selection = validateInvoicePaymentAmount(
             invoice as Record<string, unknown>,
             existing.amount,
-            selectedMonthNamesFrom(existing.selected_month_names),
-            money(existing.selected_months),
-            money(existing.selected_terms),
           );
         } catch (validationError) {
           return fail(
@@ -2836,9 +2412,8 @@ export async function handleFees(
           p_paid_at: existing.payment_date ?? new Date().toISOString(),
           p_notes: existing.remarks ?? "",
           p_created_by: user.id,
-          p_selected_month_names: [],
-          p_selected_months: 0,
           p_request_id: seg,
+          p_idempotency_key: `request:${seg}`,
         }).single();
         const { data: payment, error: paymentError } = paymentResponse;
         if (paymentError) return fail(paymentError.message);
@@ -2847,7 +2422,7 @@ export async function handleFees(
         receiptId = text(atomicPayment.receipt_id);
       }
       const { data, error } = await svc.from("parent_payment_requests").update({
-        status: body.status ?? "pending",
+        status,
         admin_remarks: body.admin_remarks ?? null,
         reviewed_by: user.id,
         reviewed_at: new Date().toISOString(),
@@ -2860,7 +2435,7 @@ export async function handleFees(
       try {
         const parentUserId = text(existing.parent_user_id);
         if (parentUserId) {
-          const isApproved = ["approved", "completed", "paid"].includes(status);
+          const isApproved = status === "approved";
           const statusLabel = isApproved
             ? "approved"
             : (status === "clarification_required"

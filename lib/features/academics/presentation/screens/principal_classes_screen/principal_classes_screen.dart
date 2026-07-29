@@ -5603,7 +5603,6 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
             amount: component.amount,
             dueDay: component.dueDay,
             lateFinePerDay: component.lateFinePerDay,
-            installmentCount: _installmentCountFor(component),
           );
           final createdId = _classText(created['id']);
           if (createdId.isNotEmpty) structureIdsToSync.add(createdId);
@@ -5617,7 +5616,6 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
             amount: component.amount,
             dueDay: component.dueDay,
             lateFinePerDay: component.lateFinePerDay,
-            installmentCount: _installmentCountFor(component),
           );
           structureIdsToSync.add(component.structureId);
         }
@@ -8874,15 +8872,6 @@ String _feeFrequencyLabel(String frequency) {
     'monthly' => 'Monthly',
     'term' => 'Term',
     _ => frequency.trim().isEmpty ? 'Term' : frequency.trim(),
-  };
-}
-
-int _installmentCountFor(_FeeComponentDraft component) {
-  return switch (component.frequencyPayload) {
-    'monthly' => 12,
-    'yearly' => 1,
-    'one_time' => 1,
-    _ => 3,
   };
 }
 

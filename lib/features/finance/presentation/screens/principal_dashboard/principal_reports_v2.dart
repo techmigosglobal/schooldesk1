@@ -492,19 +492,6 @@ class _PrincipalReportsState extends State<PrincipalReports> {
           )
           .toList();
 
-      // Add paid months detail for tuition
-      final paidMonths = accountInvoices
-          .expand(paidInvoiceMonths)
-          .toSet()
-          .toList();
-      if (paidMonths.isNotEmpty) {
-        items.add({
-          'description': 'Months Paid: ${paidMonths.join(', ')}',
-          'amount': 0,
-          'status': '—',
-        });
-      }
-
       final pdfService = PdfService.getInstance();
       final assets = await Future.wait([
         _schoolLogoBytes(),

@@ -23,8 +23,8 @@ void main() {
       feesHandler,
       contains('payment amount cannot exceed the remaining balance'),
     );
-    expect(feesHandler, contains('p_selected_month_names: []'));
-    expect(feesHandler, contains('p_selected_months: 0'));
+    expect(feesHandler, contains('p_idempotency_key'));
+    expect(feesHandler, isNot(contains('selected_month_names')));
     expect(parentFlow, contains('amount: amount'));
     expect(parentFlow, contains(r'Maximum ${_money(_remainingBalance)}'));
     expect(parentFlow, isNot(contains('Select Months to Pay')));

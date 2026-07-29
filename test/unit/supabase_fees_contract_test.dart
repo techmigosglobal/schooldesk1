@@ -86,11 +86,10 @@ void main() {
         'supabase/functions/api/handlers/fees.ts',
       ).readAsStringSync();
 
-      expect(source, contains('selectedMonthNamesFrom'));
-      expect(source, contains('invoicePayableAmount'));
+      expect(source, contains('validateInvoicePaymentAmount'));
       expect(source, contains('parentCanAccessStudent'));
       expect(source, contains('fee_invoice_items'));
-      expect(source, contains('monthly_amount'));
+      expect(source, isNot(contains('selected_month_names')));
       expect(source, contains('parent_payment_requests'));
       expect(source, contains('attachPaymentRequestRelations'));
       expect(
@@ -138,25 +137,16 @@ void main() {
     expect(source, contains('fee_invoice_items(*), payments(*)'));
   });
 
-  test('fee structure delete clears generated dues and collection rows', () {
+  test('fee structure delete archives history instead of deleting it', () {
     final source = File(
       'supabase/functions/api/handlers/fees.ts',
     ).readAsStringSync();
 
     expect(source, contains('deleteFeeStructureWorkflowRows'));
-    expect(source, contains('invoiceIdsForFeeStructure'));
-    expect(source, contains('deleteInvoiceWorkflowRows'));
-    expect(source, contains('url.searchParams.get("remove_pending")'));
-    expect(source, contains('svc.from("fee_receipts").delete()'));
-    expect(
-      source,
-      contains('svc.from("fee_receipts").delete().in("payment_id"'),
-    );
-    expect(source, contains('svc.from("parent_payment_requests").delete()'));
-    expect(source, contains('svc.from("payments").delete()'));
-    expect(source, contains('svc.from("fee_invoices").delete()'));
-    expect(source, contains('svc.from("fee_concessions").delete()'));
-    expect(source, contains('deleted_invoices'));
+    expect(source, contains('archived_at'));
+    expect(source, contains('Financial history is immutable'));
+    expect(source, isNot(contains('svc.from("fee_receipts").delete()')));
+    expect(source, isNot(contains('svc.from("payments").delete()')));
   });
 
   test(
@@ -328,7 +318,7 @@ void main() {
           ? source.substring(start, end)
           : source;
 
-      expect(section, contains('status: "pending_verification"'));
+      expect(section, contains('"pending_verification"'));
       expect(section, contains('"parent_payment_requests"'));
       expect(section, contains('proof_url'));
       expect(section, contains('proof_file_name'));
@@ -339,34 +329,20 @@ void main() {
   );
 
   test(
-    'tuition selection validation enforces the June–March cycle and one-time fees',
+    'payment validation enforces a direct positive amount within the balance',
     () {
       final source = File(
         'supabase/functions/api/handlers/fees.ts',
       ).readAsStringSync();
-      final start = source.indexOf('function validateInvoiceSelection');
-      final end = source.indexOf('async function applyInvoiceAllocationUpdate');
+      final start = source.indexOf('function validateInvoicePaymentAmount');
+      final end = source.indexOf('function dueDateFrom');
       final section = start >= 0 && end > start
           ? source.substring(start, end)
           : source;
 
-      expect(
-        section,
-        contains('This fee is one-time only and cannot be split'),
-      );
-      expect(section, contains('Select at least one monthly installment'));
-      expect(
-        section,
-        contains('Monthly installments must be paid in order without skipping'),
-      );
-      expect(
-        section,
-        contains('selected_months cannot exceed the June–March cycle of 10'),
-      );
-      expect(
-        section,
-        contains('selected_terms cannot exceed configured academic terms'),
-      );
+      expect(section, contains('payment amount cannot exceed the remaining balance'));
+      expect(section, contains('payment amount must be greater than zero'));
+      expect(section, isNot(contains('selected_months')));
     },
   );
 
@@ -415,29 +391,24 @@ void main() {
   );
 
   test(
-    'DELETE fee structure handler includes reconciliation sweep for orphaned invoices',
+    'DELETE fee structure handler archives the selected structure',
     () {
       final source = File(
         'supabase/functions/api/handlers/fees.ts',
       ).readAsStringSync();
 
       // Find the DELETE handler section
-      final deleteStart = source.indexOf('if (seg && method === "DELETE") {');
-      // Find the reconciliation sweep section (after the structure is deleted)
-      final reconciliationStart = source.indexOf('Reconciliation sweep');
-      expect(reconciliationStart, isPositive);
-
-      final section = source.substring(reconciliationStart);
-      // Must query for orphaned invoices after structure deletion
-      expect(section, contains('fee_invoices'));
-      expect(section, contains('.is("fee_structure_id", null)'));
-      expect(section, contains('.neq("status", "paid")'));
-      // Must clean up orphaned invoices via deleteInvoiceWorkflowRows
-      expect(section, contains('deleteInvoiceWorkflowRows'));
-      // Must report reconciled_orphans count in response
-      expect(section, contains('reconciled_orphans'));
-      // Must be best-effort (wrapped in try/catch)
-      expect(section, contains('Best-effort reconciliation'));
+      final structuresStart = source.indexOf(
+        'const base = path.startsWith("/fee-structures")',
+      );
+      final deleteStart = source.indexOf(
+        'if (seg && method === "DELETE") {',
+        structuresStart,
+      );
+      expect(deleteStart, isPositive);
+      final section = source.substring(deleteStart, deleteStart + 500);
+      expect(section, contains('deleteFeeStructureWorkflowRows'));
+      expect(section, contains('archive fee structure'));
     },
   );
 
@@ -458,7 +429,7 @@ void main() {
   );
 
   test(
-    'deleteFeeStructureWorkflowRows cleans up installments and concessions',
+    'deleteFeeStructureWorkflowRows archives the structure and retains finance records',
     () {
       final source = File(
         'supabase/functions/api/handlers/fees.ts',
@@ -470,17 +441,9 @@ void main() {
       final end = source.indexOf('export async function handleFees');
       final section = source.substring(start, end);
 
-      // Must call invoiceIdsForFeeStructure first
-      expect(section, contains('invoiceIdsForFeeStructure'));
-      // Must call deleteInvoiceWorkflowRows for invoice cleanup
-      expect(section, contains('deleteInvoiceWorkflowRows'));
-      // Must delete fee_installments
-      expect(section, contains('fee_installments'));
-      // Must delete fee_concessions
-      expect(section, contains('fee_concessions'));
-      // Must return deletion stats
-      expect(section, contains('deleted_installments'));
-      expect(section, contains('deleted_concessions'));
+      expect(section, contains('archived_at'));
+      expect(section, contains('is_active: false'));
+      expect(section, isNot(contains('.delete()')));
     },
   );
 

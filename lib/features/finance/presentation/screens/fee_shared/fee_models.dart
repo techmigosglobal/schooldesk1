@@ -224,9 +224,6 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     'status': _textValue(row['status'], fallback: 'pending'),
     'invoice_number': _textValue(row['invoice_number']),
     'fee_type': _textValue(row['fee_type']),
-    'monthly_amount': _numValue(row['monthly_amount']),
-    'allowed_month_names': row['allowed_month_names'] ?? [],
-    'paid_month_names': row['paid_month_names'] ?? [],
   };
 }
 
@@ -252,41 +249,6 @@ List<Map<String, dynamic>> normalizePayments(Map<String, dynamic> invoice) {
       'transaction_id': _textValue(row['transaction_id'], fallback: 'N/A'),
     };
   }).toList();
-}
-
-// ── Invoice month helpers ────────────────────────────────────────────────────
-
-List<String> invoiceMonthList(Map<String, dynamic>? invoice, String key) {
-  final raw = invoice?[key];
-  if (raw is! List) return const <String>[];
-  return raw.map((v) => '$v'.trim()).where((v) => v.isNotEmpty).toList();
-}
-
-bool isTuitionInvoice(Map<String, dynamic>? invoice) {
-  final label = [
-    invoice?['fee_item_name'],
-    invoice?['component'],
-    invoice?['category_name'],
-  ].map(_textValue).join(' ').toLowerCase();
-  if (label.contains('book') ||
-      label.contains('kit') ||
-      label.contains('uniform')) {
-    return false;
-  }
-  final feeType = _textValue(invoice?['fee_type']).toLowerCase();
-  return feeType.contains('tuition') || label.contains('tuition');
-}
-
-List<String> allowedInvoiceMonths(Map<String, dynamic>? invoice) =>
-    invoiceMonthList(invoice, 'allowed_month_names');
-
-List<String> paidInvoiceMonths(Map<String, dynamic>? invoice) =>
-    invoiceMonthList(invoice, 'paid_month_names');
-
-List<String> unpaidInvoiceMonths(Map<String, dynamic>? invoice) {
-  final allowed = allowedInvoiceMonths(invoice);
-  final paid = paidInvoiceMonths(invoice).toSet();
-  return allowed.where((month) => !paid.contains(month)).toList();
 }
 
 // ── Common type-safe helpers ─────────────────────────────────────────────────
