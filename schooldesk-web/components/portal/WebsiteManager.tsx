@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleAlert, Eye, Images, Pencil, Plus, RefreshCw, Trash2 } from "@/lib/lucide-react";
+import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import { api, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
@@ -33,6 +34,7 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [operation, setOperation] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<MediaFilter>("all");
   const [preview, setPreview] = useState<Row | null>(null);
@@ -70,12 +72,15 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
   }, [filter, gallery, search]);
 
   async function saveContent(form: FormData) {
+    setOperation("copy");
     try {
       await api("website/content", { method: "PUT", body: JSON.stringify(Object.fromEntries(form)) });
       onNotify("Public website copy published. Visitors will see the update shortly.");
       void load(true);
     } catch (event) {
       setNotice(event instanceof Error ? event.message : "Unable to save homepage copy");
+    } finally {
+      setOperation("");
     }
   }
 
@@ -100,6 +105,7 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
   }
 
   async function updateMedia(item: Row, form: FormData) {
+    setOperation(`edit:${item.id}`);
     try {
       await api(`website/gallery/${item.id}`, { method: "PUT", body: JSON.stringify({ title: form.get("title"), alt_text: form.get("alt_text"), caption: form.get("caption"), sort_order: Number(form.get("sort_order") || 0), is_published: form.get("is_published") === "true" }) });
       setEditing(null);
@@ -107,25 +113,31 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
       void load(true);
     } catch (event) {
       setNotice(event instanceof Error ? event.message : "Unable to update media details");
+    } finally {
+      setOperation("");
     }
   }
 
   async function toggle(item: Row) {
+    setOperation(`toggle:${item.id}`);
     try {
       await api(`website/gallery/${item.id}`, { method: "PUT", body: JSON.stringify({ title: item.title, alt_text: item.alt_text, caption: item.caption, sort_order: Number(item.sort_order || 0), is_published: item.is_published === false }) });
       onNotify(item.is_published === false ? "Media published to the website." : "Media moved to draft.");
       void load(true);
     } catch (event) { setNotice(event instanceof Error ? event.message : "Unable to update media status"); }
+    finally { setOperation(""); }
   }
 
   async function deleteMedia(item: Row) {
     if (!confirm(`Delete "${stringValue(item.title || "Untitled media")}"? This also removes its stored file.`)) return;
+    setOperation(`delete:${item.id}`);
     try {
       await api(`website/gallery/${item.id}`, { method: "DELETE" });
       onNotify("Media removed from the gallery.");
       if (preview?.id === item.id) setPreview(null);
       void load(true);
     } catch (event) { setNotice(event instanceof Error ? event.message : "Unable to delete media"); }
+    finally { setOperation(""); }
   }
 
   function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
@@ -142,10 +154,10 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
     <div className="ops-module-heading"><div><div className="ops-module-icon green"><Images size={20} /></div><div><p className="ops-kicker">Public publishing</p><h2>Gallery &amp; Media Assets</h2><p>Curate approved public images and videos with publication controls, accessible descriptions, and a live media library.</p></div></div><div className="ops-actions"><button className="secondary-button" type="button" onClick={() => void load(true)} disabled={refreshing}><RefreshCw size={16} className={refreshing ? "spin" : ""} /> Refresh</button></div></div>
     {notice && <div className="ops-inline-error"><CircleAlert size={16} />{notice}</div>}
     <div className="media-tabs" role="tablist"><button role="tab" aria-selected={tab === "gallery"} className={tab === "gallery" ? "active" : ""} onClick={() => setTab("gallery")}>Media library ({gallery.length})</button><button role="tab" aria-selected={tab === "copy"} className={tab === "copy" ? "active" : ""} onClick={() => setTab("copy")}>Homepage copy</button><button role="tab" aria-selected={tab === "ticker"} className={tab === "ticker" ? "active" : ""} onClick={() => setTab("ticker")}>Breaking news</button></div>
-    {tab === "gallery" ? <div className="media-library-layout">
-      <section className="surface media-upload-panel"><h3>Upload approved media</h3><p>Images: JPG, PNG, WebP up to 10 MB. Videos: MP4, WebM, MOV up to 50 MB.</p><form action={upload}><label className="field">Image or video<input name="file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" onChange={handleFileSelect} required /></label>{previewFileUrl && <div className="media-file-preview">{previewFileType.startsWith("video/") ? <video src={previewFileUrl} controls preload="metadata" /> : <img src={previewFileUrl} alt="Selected upload preview" />}</div>}<label className="field">Title<input name="title" placeholder="e.g. Nature exploration" /></label><label className="field">Accessible description<input name="alt_text" required placeholder="Describe the children and activity shown" /></label><label className="field">Caption <small>(optional)</small><input name="caption" placeholder="Short public caption" /></label><label className="field">Display order <small>(lower appears first)</small><input name="sort_order" type="number" min="0" defaultValue="0" /></label><button className="primary-button" disabled={uploading} type="submit"><Plus size={16} />{uploading ? "Uploading…" : "Upload to gallery"}</button></form></section>
-      <section className="surface media-library-panel"><div className="media-library-toolbar"><div><h3>Public media library</h3><small>{visibleGallery.length} item{visibleGallery.length === 1 ? "" : "s"} shown</small></div><label className="media-search"><span className="sr-only">Search media</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search media" /></label></div><div className="media-filter-row" aria-label="Filter media">{(["all", "image", "video", "published", "draft"] as MediaFilter[]).map((item) => <button key={item} type="button" className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "all" ? "All" : item[0].toUpperCase() + item.slice(1)}</button>)}</div>{loading ? <div className="skeleton-container"><div className="skeleton skeleton-row" /><div className="skeleton skeleton-row" /></div> : visibleGallery.length ? <div className="media-library-grid">{visibleGallery.map((item) => { const video = isVideo(item); const published = item.is_published !== false; const url = mediaUrl(item); const title = stringValue(item.title || "Untitled media"); return <article key={stringValue(item.id)}><div className="media-library-cover">{video ? <video src={url} controls preload="metadata" /> : <img src={url} alt={stringValue(item.alt_text) || title} loading="lazy" decoding="async" />}<span className={published ? "published" : "draft"}>{published ? "Published" : "Draft"}</span><i>{video ? "Video" : "Image"}</i></div><div className="media-library-copy"><b>{title}</b><small>{stringValue(item.caption) || "No caption"}</small><div><button type="button" onClick={() => void toggle(item)}>{published ? "Unpublish" : "Publish"}</button><button type="button" aria-label={`Preview ${title}`} onClick={() => setPreview(item)}><Eye size={15} /></button><button type="button" aria-label={`Edit ${title}`} onClick={() => setEditing(item)}><Pencil size={15} /></button><button type="button" className="danger" aria-label={`Delete ${title}`} onClick={() => void deleteMedia(item)}><Trash2 size={15} /></button></div></div></article>; })}</div> : <p className="ops-empty">No media matches the current search and filter.</p>}</section>
-    </div> : tab === "copy" ? <section className="surface media-copy-panel"><h3>Public homepage copy</h3><p>These changes are validated by the backend and revalidated for public visitors.</p><form action={saveContent} className="ops-detail-form"><label className="field">Hero title<input name="hero_title" required defaultValue={stringValue(content.hero_title)} /></label><label className="field">Hero description<textarea name="hero_body" rows={3} required defaultValue={stringValue(content.hero_body)} /></label><label className="field">Mission title<input name="mission_title" required defaultValue={stringValue(content.mission_title)} /></label><label className="field">Mission statement<textarea name="mission_body" rows={3} required defaultValue={stringValue(content.mission_body)} /></label><button className="primary-button" type="submit">Publish website copy</button></form></section> : <TickerManager onNotify={onNotify} compact />}
+    {loading && tab !== "ticker" ? <PortalModuleSkeleton variant="split" label="Loading website and media settings" /> : tab === "gallery" ? <div className="media-library-layout">
+      <section className="surface media-upload-panel"><h3>Upload approved media</h3><p>Images: JPG, PNG, WebP up to 10 MB. Videos: MP4, WebM, MOV up to 50 MB.</p><form action={upload}><label className="field">Image or video<input name="file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" onChange={handleFileSelect} required /></label>{previewFileUrl && <div className="media-file-preview">{previewFileType.startsWith("video/") ? <video src={previewFileUrl} controls preload="metadata" /> : <img src={previewFileUrl} alt="Selected upload preview" />}</div>}<label className="field">Title<input name="title" placeholder="e.g. Nature exploration" /></label><label className="field">Accessible description<input name="alt_text" required placeholder="Describe the children and activity shown" /></label><label className="field">Caption <small>(optional)</small><input name="caption" placeholder="Short public caption" /></label><label className="field">Display order <small>(lower appears first)</small><input name="sort_order" type="number" min="0" defaultValue="0" /></label><button className="primary-button" disabled={uploading} aria-busy={uploading} type="submit">{uploading ? <LoadingIndicator label="Uploading…" compact announce={false} /> : <><Plus size={16} />Upload to gallery</>}</button></form></section>
+      <section className="surface media-library-panel"><div className="media-library-toolbar"><div><h3>Public media library</h3><small>{visibleGallery.length} item{visibleGallery.length === 1 ? "" : "s"} shown</small></div><label className="media-search"><span className="sr-only">Search media</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search media" /></label></div><div className="media-filter-row" aria-label="Filter media">{(["all", "image", "video", "published", "draft"] as MediaFilter[]).map((item) => <button key={item} type="button" className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "all" ? "All" : item[0].toUpperCase() + item.slice(1)}</button>)}</div>{visibleGallery.length ? <div className="media-library-grid">{visibleGallery.map((item) => { const video = isVideo(item); const published = item.is_published !== false; const url = mediaUrl(item); const title = stringValue(item.title || "Untitled media"); const itemId = stringValue(item.id); return <article key={itemId}><div className="media-library-cover">{video ? <video src={url} controls preload="metadata" /> : <img src={url} alt={stringValue(item.alt_text) || title} loading="lazy" decoding="async" />}<span className={published ? "published" : "draft"}>{published ? "Published" : "Draft"}</span><i>{video ? "Video" : "Image"}</i></div><div className="media-library-copy"><b>{title}</b><small>{stringValue(item.caption) || "No caption"}</small><div><button type="button" disabled={operation === `toggle:${itemId}`} aria-busy={operation === `toggle:${itemId}`} onClick={() => void toggle(item)}>{operation === `toggle:${itemId}` ? <LoadingIndicator label="Updating…" compact announce={false} /> : published ? "Unpublish" : "Publish"}</button><button type="button" aria-label={`Preview ${title}`} onClick={() => setPreview(item)}><Eye size={15} /></button><button type="button" aria-label={`Edit ${title}`} onClick={() => setEditing(item)}><Pencil size={15} /></button><button type="button" className="danger" aria-label={operation === `delete:${itemId}` ? `Deleting ${title}` : `Delete ${title}`} disabled={operation === `delete:${itemId}`} onClick={() => void deleteMedia(item)}>{operation === `delete:${itemId}` ? <span className="activity-spinner" aria-hidden="true" /> : <Trash2 size={15} />}</button></div></div></article>; })}</div> : <p className="ops-empty">No media matches the current search and filter.</p>}</section>
+    </div> : tab === "copy" ? <section className="surface media-copy-panel"><h3>Public homepage copy</h3><p>These changes are validated by the backend and revalidated for public visitors.</p><form action={saveContent} className="ops-detail-form"><label className="field">Hero title<input name="hero_title" required defaultValue={stringValue(content.hero_title)} /></label><label className="field">Hero description<textarea name="hero_body" rows={3} required defaultValue={stringValue(content.hero_body)} /></label><label className="field">Mission title<input name="mission_title" required defaultValue={stringValue(content.mission_title)} /></label><label className="field">Mission statement<textarea name="mission_body" rows={3} required defaultValue={stringValue(content.mission_body)} /></label><button className="primary-button" type="submit" disabled={operation === "copy"} aria-busy={operation === "copy"}>{operation === "copy" ? <LoadingIndicator label="Publishing…" compact announce={false} /> : "Publish website copy"}</button></form></section> : <TickerManager onNotify={onNotify} compact />}
     {preview && <Dialog kicker="Media preview" title={stringValue(preview.title || "Gallery media")} onClose={() => setPreview(null)}>
       <div className="media-dialog-preview">
         {isVideo(preview)
@@ -155,6 +167,6 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
       </div>
       <div className="dialog-footer"><button className="secondary-button" type="button" onClick={() => setPreview(null)}>Close preview</button></div>
     </Dialog>}
-    {editing && <Dialog kicker="Media details" title={stringValue(editing.title || "Edit media")} onClose={() => setEditing(null)}><form action={(form) => updateMedia(editing, form)} className="ops-detail-form"><label className="field">Title<input name="title" required defaultValue={stringValue(editing.title)} /></label><label className="field">Accessible description<input name="alt_text" required defaultValue={stringValue(editing.alt_text)} /></label><label className="field">Caption<input name="caption" defaultValue={stringValue(editing.caption)} /></label><label className="field">Display order<input name="sort_order" type="number" min="0" defaultValue={stringValue(editing.sort_order || 0)} /></label><label className="check-field"><input name="is_published" type="checkbox" value="true" defaultChecked={editing.is_published !== false} />Published on the public website</label><div className="dialog-footer"><button className="secondary-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit">Save media details</button></div></form></Dialog>}
+    {editing && <Dialog kicker="Media details" title={stringValue(editing.title || "Edit media")} onClose={() => setEditing(null)}><form action={(form) => updateMedia(editing, form)} className="ops-detail-form"><label className="field">Title<input name="title" required defaultValue={stringValue(editing.title)} /></label><label className="field">Accessible description<input name="alt_text" required defaultValue={stringValue(editing.alt_text)} /></label><label className="field">Caption<input name="caption" defaultValue={stringValue(editing.caption)} /></label><label className="field">Display order<input name="sort_order" type="number" min="0" defaultValue={stringValue(editing.sort_order || 0)} /></label><label className="check-field"><input name="is_published" type="checkbox" value="true" defaultChecked={editing.is_published !== false} />Published on the public website</label><div className="dialog-footer"><button className="secondary-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit" disabled={operation === `edit:${editing.id}`} aria-busy={operation === `edit:${editing.id}`}>{operation === `edit:${editing.id}` ? <LoadingIndicator label="Saving…" compact announce={false} /> : "Save media details"}</button></div></form></Dialog>}
   </section>;
 }

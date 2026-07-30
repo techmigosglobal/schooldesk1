@@ -17,6 +17,7 @@ import {
   WalletCards,
 } from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
+import { LoadingIndicator } from "@/components/loading-skeletons";
 import type { Dashboard, Row } from "./types";
 import { api, money, rowsFrom } from "./utils";
 
@@ -37,6 +38,7 @@ function formattedCount(value: number | string) {
 function DashboardLoadingState({ role }: { role: PortalRole }) {
   return (
     <div className="leadership-dashboard-skeleton" role="status" aria-label="Loading the leadership overview">
+      <LoadingIndicator label="Refreshing school overview…" announce={false} />
       <div className="leadership-metrics">
         {Array.from({ length: 5 }, (_, index) => (
           <div className="skeleton skeleton-card" key={index} />

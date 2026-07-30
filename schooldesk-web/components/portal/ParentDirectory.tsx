@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Trash2,
 } from "@/lib/lucide-react";
+import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import {
   api,
@@ -224,11 +225,7 @@ export function ParentDirectory({
 
       <div className="table-card surface ops-table-surface student-directory-table-wrap">
         {loading ? (
-          <div className="skeleton-container" style={{ padding: "1rem" }}>
-            {Array.from({ length: 5 }, (_, index) => (
-              <div className="skeleton skeleton-row" key={index} />
-            ))}
-          </div>
+          <PortalModuleSkeleton variant="table" rows={5} label="Loading parent records" />
         ) : filteredParents.length ? (
           <>
             <table className="data-table student-directory-table">
@@ -385,7 +382,7 @@ export function ParentDirectory({
               Cancel
             </button>
             <button className="danger-button" type="button" disabled={deleting} onClick={() => void deleteParent()}>
-              {deleting ? "Deleting…" : "Delete parent"}
+              {deleting ? <LoadingIndicator label="Deleting…" compact announce={false} /> : "Delete parent"}
             </button>
           </div>
         </Dialog>

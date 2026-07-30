@@ -10,6 +10,7 @@ import {
   RefreshCw,
   WalletCards,
 } from "@/lib/lucide-react";
+import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { FeeState, Row } from "./types";
 import {
   api,
@@ -70,6 +71,7 @@ export function FeesWorkspace({
     "structures" | "invoices" | "collections" | "requests" | "concessions" | "reports"
   >("structures");
   const [loading, setLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -161,6 +163,7 @@ export function FeesWorkspace({
   }, [state.invoices, search, statusFilter]);
 
   async function requestFinanceExport(reportType: string, title: string) {
+    setBusyAction(`export:${reportType}`);
     try {
       const result = (await api("fees/reports/exports", {
         method: "POST",
@@ -191,10 +194,13 @@ export function FeesWorkspace({
       onNotify(`${title} export requested.`, "info");
     } catch (event) {
       setNotice(event instanceof Error ? event.message : "Unable to export finance report");
+    } finally {
+      setBusyAction("");
     }
   }
 
   async function applyFines() {
+    setBusyAction("fines");
     try {
       const res = (await api("fees/invoices/late-fines/apply", {
         method: "POST",
@@ -203,10 +209,13 @@ export function FeesWorkspace({
       void load();
     } catch (event) {
       setNotice(event instanceof Error ? event.message : "Unable to apply late fines");
+    } finally {
+      setBusyAction("");
     }
   }
 
   async function decide(req: Row, status: "approved" | "rejected") {
+    setBusyAction(`decision:${req.id}:${status}`);
     try {
       await api(`fees/payment-requests/${req.id}/decision`, {
         method: "PUT",
@@ -216,10 +225,13 @@ export function FeesWorkspace({
       void load();
     } catch (event) {
       setNotice(event instanceof Error ? event.message : "Decision failed");
+    } finally {
+      setBusyAction("");
     }
   }
 
   async function saveConfig(form: FormData) {
+    setBusyAction("config");
     try {
       await api("fees/payment-config", {
         method: "PUT",
@@ -229,6 +241,8 @@ export function FeesWorkspace({
       void load();
     } catch (event) {
       setNotice(event instanceof Error ? event.message : "Save failed");
+    } finally {
+      setBusyAction("");
     }
   }
 
@@ -271,11 +285,11 @@ export function FeesWorkspace({
         </div>
 
         <div className="ops-actions">
-          <button className="secondary-button" onClick={() => void load()}>
-            <RefreshCw size={16} /> Refresh ledger
+          <button className="secondary-button" onClick={() => void load()} disabled={loading}>
+            <RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh ledger
           </button>
-          <button className="secondary-button" onClick={() => void applyFines()}>
-            <ReceiptIndianRupee size={16} /> Apply late fines
+          <button className="secondary-button" onClick={() => void applyFines()} disabled={Boolean(busyAction)} aria-busy={busyAction === "fines"}>
+            {busyAction === "fines" ? <LoadingIndicator label="Applying fines…" compact announce={false} /> : <><ReceiptIndianRupee size={16} /> Apply late fines</>}
           </button>
           <button className="primary-button" onClick={() => setDialog("structure")}>
             <Plus size={16} /> New fee structure
@@ -290,6 +304,10 @@ export function FeesWorkspace({
         </div>
       )}
 
+      {loading ? (
+        <PortalModuleSkeleton variant="finance" label="Loading fee operations and accounting" />
+      ) : (
+      <>
       {/* KPI Cards */}
       <div className="finance-summary">
         <article>
@@ -334,13 +352,7 @@ export function FeesWorkspace({
 
       {/* Tab content */}
       <div className="table-card surface ops-table-surface student-directory-table-wrap">
-        {loading ? (
-          <div className="skeleton-container" style={{ padding: "1rem" }}>
-            <div className="skeleton skeleton-row" />
-            <div className="skeleton skeleton-row" />
-            <div className="skeleton skeleton-row" />
-          </div>
-        ) : tab === "structures" ? (
+        {tab === "structures" ? (
           <FinanceTable
             headers={["Class", "Section", "Category", "Amount", "Frequency", "Due Day", "Fine/Day"]}
             rows={state.structures}
@@ -460,8 +472,8 @@ export function FeesWorkspace({
                   <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
                     {stringValue(r.status).toLowerCase() === "pending" ? (
                       <>
-                        <button className="primary-button" onClick={() => void decide(r, "approved")}>Approve</button>
-                        <button className="secondary-button danger" onClick={() => void decide(r, "rejected")}>Reject</button>
+                        <button className="primary-button" disabled={Boolean(busyAction)} aria-busy={busyAction === `decision:${r.id}:approved`} onClick={() => void decide(r, "approved")}>{busyAction === `decision:${r.id}:approved` ? <LoadingIndicator label="Approving…" compact announce={false} /> : "Approve"}</button>
+                        <button className="secondary-button danger" disabled={Boolean(busyAction)} aria-busy={busyAction === `decision:${r.id}:rejected`} onClick={() => void decide(r, "rejected")}>{busyAction === `decision:${r.id}:rejected` ? <LoadingIndicator label="Rejecting…" compact announce={false} /> : "Reject"}</button>
                       </>
                     ) : (
                       <span className={`student-status ${stringValue(r.status).toLowerCase() === "approved" ? "active" : "inactive"}`}>{stringValue(r.status)}</span>
@@ -512,8 +524,8 @@ export function FeesWorkspace({
                 IFSC Code
                 <input name="ifsc_code" defaultValue={stringValue(state.config.ifsc_code)} />
               </label>
-              <button className="primary-button" style={{ marginTop: "0.5rem" }}>
-                Save bank configuration
+              <button className="primary-button" style={{ marginTop: "0.5rem" }} disabled={busyAction === "config"} aria-busy={busyAction === "config"}>
+                {busyAction === "config" ? <LoadingIndicator label="Saving…" compact announce={false} /> : "Save bank configuration"}
               </button>
             </section>
             <section className="finance-report-card surface">
@@ -524,9 +536,11 @@ export function FeesWorkspace({
                 <button
                   className="secondary-button"
                   type="button"
+                  disabled={Boolean(busyAction)}
+                  aria-busy={busyAction === "export:fee_outstanding_report"}
                   onClick={() => void requestFinanceExport("fee_outstanding_report", "Fee outstanding report")}
                 >
-                  <Download size={16} /> Export outstanding report
+                  {busyAction === "export:fee_outstanding_report" ? <LoadingIndicator label="Preparing…" compact announce={false} /> : <><Download size={16} /> Export outstanding report</>}
                 </button>
                 <button
                   className="secondary-button"
@@ -582,6 +596,8 @@ export function FeesWorkspace({
           </form>
         ) : null}
       </div>
+      </>
+      )}
 
       {dialog === "structure" && (
         <FeeStructureDialog

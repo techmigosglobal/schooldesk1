@@ -35,13 +35,27 @@ test("gallery media helpers retain images and supported videos while deduplicati
   expect(uniqueGalleryItems([image, video, { ...video }])).toHaveLength(2);
 });
 
-test("ticker reduced-motion mode is static and never creates a scrollable strip", () => {
+test("ticker keeps moving in normal and reduced-motion configurations", () => {
   const ticker = source("../components/breaking-news-ticker.tsx");
   const styles = source("../app/globals.css");
   expect(ticker).toContain('aria-label={`School announcement: ${message}`}');
-  expect(styles).toContain(".breaking-news-track span + span { display:none; }");
-  expect(styles).toContain(".breaking-news-track { width:100%; min-width:0; animation:none !important;");
+  expect(ticker).toContain('className="breaking-news-group"');
+  expect(ticker).toContain("Array.from({ length: 6");
+  expect(styles).toContain("@media (prefers-reduced-motion:no-preference)");
+  expect(styles).toContain("translate3d(-50%,0,0)");
+  expect(styles).toContain("animation:breaking-news-scroll 100s linear infinite !important");
+  expect(styles).toContain('.breaking-news-group[aria-hidden="true"],.breaking-news-item:not(:first-child) { display:inline-flex; }');
   expect(styles).not.toContain(".breaking-news-track { animation: none; overflow: auto; }");
+});
+
+test("public homepage and gallery render image media only", () => {
+  const homepageGallery = source("../components/preschool-essentials.tsx");
+  const galleryPage = source("../app/gallery/page.tsx");
+
+  expect(homepageGallery).toContain("filter(isPublicGalleryImage)");
+  expect(homepageGallery).not.toContain("<video");
+  expect(galleryPage).toContain("filter(isPublicGalleryImage)");
+  expect(galleryPage).not.toContain("<video");
 });
 
 test("web login and portal client keep only leadership wording and modules", () => {
@@ -80,13 +94,46 @@ test("Arish Ville palette and loading skeletons cover login and portal transitio
   expect(styles).toContain("--brand-uniform-navy: #0b2f5b");
   expect(styles).toContain("--brand-academic-blue: #0e5ea8");
   expect(styles).toContain("--brand-school-gold: #f4c430");
+  expect(styles).toContain("/* Arish Ville authenticated portals: school-uniform blue with warm yellow accents. */");
+  expect(styles).toContain("background:linear-gradient(180deg,#0b2f5b 0%,#0d5b9f 100%)");
+  expect(styles).toContain("background:linear-gradient(135deg,#ffe27a,#ffd24f)");
   expect(styles).toContain("@keyframes skeleton-shimmer");
+  expect(styles).toContain(".activity-spinner");
+  expect(styles).toContain("animation:skeleton-shimmer 1.8s ease-in-out infinite !important");
+  expect(styles).toContain("animation:spin .9s linear infinite !important");
   expect(loginForm).toContain('className="login-auth-progress"');
   expect(loginForm).toContain("Verifying your account and preparing the portal");
   expect(dashboard).toContain("DashboardLoadingState");
   expect(loginLoading).toContain("<LoginSkeleton />");
   expect(roleLoginLoading).toContain("<LoginSkeleton />");
   expect(portalLoading).toContain("<PortalSkeleton />");
+});
+
+test("leadership feature workspaces use layout-shaped loading states", () => {
+  const modules = [
+    "../components/portal/StudentDirectory.tsx",
+    "../components/portal/TeacherDirectory.tsx",
+    "../components/portal/ParentDirectory.tsx",
+    "../components/portal/ClassesWorkspace.tsx",
+    "../components/portal/TimetableWorkspace.tsx",
+    "../components/portal/ResourceModule.tsx",
+    "../components/portal/FeesWorkspace.tsx",
+    "../components/portal/ReportsWorkspace.tsx",
+    "../components/portal/WebsiteManager.tsx",
+    "../components/portal/AdmissionInquiriesWorkspace.tsx",
+  ];
+
+  for (const modulePath of modules) {
+    expect(source(modulePath)).toContain("PortalModuleSkeleton");
+  }
+
+  const portal = source("../components/portal-client.tsx");
+  expect(portal).toContain("branchesLoading");
+  expect(portal).toContain("switchingBranch");
+  expect(portal).toContain('<PortalModuleSkeleton variant="cards"');
+  expect(source("../components/loading-skeletons.tsx")).toContain("LoadingIndicator");
+  expect(source("../components/portal/FormActions.tsx")).toContain('<LoadingIndicator label="Saving…"');
+  expect(source("../components/portal/TickerManager.tsx")).toContain('<LoadingIndicator label="Publishing…"');
 });
 
 test("website-facing school name is Arish Ville", () => {

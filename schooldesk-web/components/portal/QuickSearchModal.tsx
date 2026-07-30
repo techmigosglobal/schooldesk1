@@ -15,6 +15,7 @@ import {
   X,
 } from "@/lib/lucide-react";
 import type { PortalRole } from "@/lib/roles";
+import { LoadingIndicator } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import { api, displayName, nested, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
@@ -326,6 +327,7 @@ export function QuickSearchModal({
         <div style={{ marginTop: "1rem", maxHeight: "380px", overflowY: "auto", paddingRight: "0.2rem" }}>
           {loading ? (
             <div className="skeleton-container" style={{ padding: "0.5rem" }}>
+              <LoadingIndicator label="Searching school records…" />
               <div className="skeleton skeleton-row" />
               <div className="skeleton skeleton-row" />
             </div>

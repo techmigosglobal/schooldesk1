@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BellRing, CircleAlert, RefreshCw } from "@/lib/lucide-react";
+import { LoadingIndicator } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import { api, stringValue } from "./utils";
 
@@ -40,6 +41,7 @@ export function TickerManager({ onNotify, compact = false }: { onNotify: (messag
     {notice && <div className="ops-inline-error"><CircleAlert size={16} />{notice}</div>}
     {loading ? (
       <div className="operation-form-skeleton" role="status" aria-label="Loading announcement settings">
+        <LoadingIndicator label="Loading announcement settings…" announce={false} />
         <div className="skeleton skeleton-text narrow" />
         <div className="skeleton skeleton-input operation-textarea-skeleton" />
         <div className="skeleton skeleton-text wide" />
@@ -51,7 +53,7 @@ export function TickerManager({ onNotify, compact = false }: { onNotify: (messag
         <form key={`${stringValue(ticker.breaking_news_text)}-${ticker.breaking_news_enabled === true}`} action={save} className="ops-detail-form" style={{ maxWidth: "760px" }}>
           <label className="field"><span>Announcement text <small>(240 characters maximum)</small></span><textarea name="breaking_news_text" maxLength={240} rows={3} defaultValue={stringValue(ticker.breaking_news_text)} placeholder="e.g. Admissions open for the 2026–27 academic year." /></label>
           <label className="field checkbox-field"><input name="breaking_news_enabled" type="checkbox" defaultChecked={ticker.breaking_news_enabled === true} /> <span>Show this announcement on the public website</span></label>
-          <button className="primary-button" disabled={saving}>{saving ? "Publishing…" : "Publish announcement"}</button>
+          <button className="primary-button" disabled={saving} aria-busy={saving}>{saving ? <LoadingIndicator label="Publishing…" compact announce={false} /> : "Publish announcement"}</button>
         </form>
       </>
     )}

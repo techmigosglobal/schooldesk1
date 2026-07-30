@@ -12,6 +12,7 @@ import {
   UsersRound,
   X,
 } from "@/lib/lucide-react";
+import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import {
   api,
@@ -249,9 +250,7 @@ export function StudentDirectory({
 
       <div className="table-card surface ops-table-surface student-directory-table-wrap">
         {loading ? (
-          <div className="skeleton-container" style={{ padding: "1rem" }}>
-            {Array.from({ length: 6 }, (_, index) => <div className="skeleton skeleton-row" key={index} />)}
-          </div>
+          <PortalModuleSkeleton variant="table" label="Loading student records" />
         ) : filteredStudents.length ? (
           <>
             <table className="data-table student-directory-table">
@@ -322,7 +321,7 @@ export function StudentDirectory({
           </div>
           <div className="dialog-footer">
             <button className="secondary-button" type="button" disabled={deleting} onClick={() => setDeleteTarget(null)}>Cancel</button>
-            <button className="danger-button" type="button" disabled={deleting} onClick={() => void deleteStudent()}>{deleting ? "Deleting…" : "Delete student"}</button>
+            <button className="danger-button" type="button" disabled={deleting} aria-busy={deleting} onClick={() => void deleteStudent()}>{deleting ? <LoadingIndicator label="Deleting…" compact announce={false} /> : "Delete student"}</button>
           </div>
         </Dialog>
       )}

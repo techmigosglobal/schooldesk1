@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle } from "@/lib/lucide-react";
+import { LoadingIndicator } from "@/components/loading-skeletons";
 
 export function FormActions({
   saving,
@@ -18,9 +18,7 @@ export function FormActions({
       </button>
       <button className="primary-button" disabled={saving}>
         {saving ? (
-          <>
-            <LoaderCircle className="spin" size={16} /> Saving
-          </>
+          <LoadingIndicator label="Saving…" compact announce={false} />
         ) : (
           label
         )}

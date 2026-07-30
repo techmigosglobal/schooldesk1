@@ -17,6 +17,7 @@ import { ReportsWorkspace } from "@/components/portal/ReportsWorkspace";
 import { PortalErrorBoundary } from "@/components/error-boundary";
 import { ChevronLeft, ChevronRight, Search } from "@/lib/lucide-react";
 import { QuickSearchModal } from "@/components/portal/QuickSearchModal";
+import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 
 export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole; initialBranchId?: string }) {
   const [active, setActive] = useState("overview");
@@ -28,6 +29,9 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
   const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
   const [activeBranch, setActiveBranch] = useState(initialBranchId);
   const [branchSelected, setBranchSelected] = useState(role !== "principal" || Boolean(initialBranchId));
+  const [branchesLoading, setBranchesLoading] = useState(role === "principal");
+  const [switchingBranch, setSwitchingBranch] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const nav = visibleModules(role);
   const selected = modules.find((item) => item.id === active);
@@ -51,15 +55,21 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
         const rows = Array.isArray(payload.data) ? payload.data : [];
         setBranches(rows.map((row: { id?: string; name?: string }) => ({ id: row.id ?? "", name: row.name ?? "Branch" })).filter((row: { id: string }) => Boolean(row.id)));
       })
-      .catch(() => setBranches([]));
+      .catch(() => setBranches([]))
+      .finally(() => setBranchesLoading(false));
   }, [role]);
 
   async function changeBranch(branchId: string) {
-    const response = await fetch("/api/branch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchId }) });
-    if (!response.ok) return;
-    setActiveBranch(branchId);
-    setBranchSelected(true);
-    setDashboardRefresh((value) => value + 1);
+    setSwitchingBranch(true);
+    try {
+      const response = await fetch("/api/branch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchId }) });
+      if (!response.ok) return;
+      setActiveBranch(branchId);
+      setBranchSelected(true);
+      setDashboardRefresh((value) => value + 1);
+    } finally {
+      setSwitchingBranch(false);
+    }
   }
 
   const navigate = (target: string) => {
@@ -86,8 +96,14 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
   }, []);
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = "/login";
+    } catch {
+      setLoggingOut(false);
+      notify("Unable to sign out. Please try again.", "error");
+    }
   }
 
   const roleLabel = role === "principal" ? "Principal workspace" : "Coordinator workspace";
@@ -170,7 +186,7 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
             {role === "principal" && branches.length > 0 && (
               <label className="branch-select">
                 <span className="sr-only">Active branch</span>
-                <select value={activeBranch} onChange={(event) => void changeBranch(event.target.value)}>
+                <select value={activeBranch} onChange={(event) => void changeBranch(event.target.value)} disabled={switchingBranch}>
                   <option value="" disabled>Select branch</option>
                   {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
                 </select>
@@ -194,23 +210,25 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
             >
               Refresh data
             </button>
-            <button className="secondary-button" onClick={() => void logout()}>
-              Sign out
+            <button className="secondary-button" onClick={() => void logout()} disabled={loggingOut} aria-busy={loggingOut}>
+              {loggingOut ? <LoadingIndicator label="Signing out…" compact announce={false} /> : "Sign out"}
             </button>
           </div>
         </header>
 
-        <section className="portal-content ops-content">
-          {role === "principal" && !branchSelected ? (
+        <section className="portal-content ops-content" aria-busy={branchesLoading || switchingBranch}>
+          {branchesLoading || switchingBranch ? (
+            <PortalModuleSkeleton variant="cards" label={branchesLoading ? "Loading available school branches" : "Switching school branch"} />
+          ) : role === "principal" && !branchSelected ? (
             <div className="ops-branch-gate">
               <h2>Select a branch to begin</h2>
               <p>School data is deliberately hidden until you choose the branch you want to manage.</p>
-              <select value={activeBranch} onChange={(event) => void changeBranch(event.target.value)}>
+              <select value={activeBranch} onChange={(event) => void changeBranch(event.target.value)} disabled={switchingBranch}>
                 <option value="" disabled>Select branch</option>
                 {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
               </select>
             </div>
-          ) : <PortalErrorBoundary>
+          ) : <PortalErrorBoundary key={`${activeBranch}-${active}`}>
             {active === "overview" ? (
               <DashboardPanel
                 role={role}

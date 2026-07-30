@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Trash2,
 } from "@/lib/lucide-react";
+import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import { api, displayName, nested, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
@@ -227,11 +228,7 @@ export function ClassesWorkspace({
 
           <div className="table-card surface ops-table-surface student-directory-table-wrap">
             {loading ? (
-              <div className="skeleton-container" style={{ padding: "1rem" }}>
-                {Array.from({ length: 5 }, (_, idx) => (
-                  <div className="skeleton skeleton-row" key={idx} />
-                ))}
-              </div>
+              <PortalModuleSkeleton variant="table" rows={5} label="Loading classes and sections" />
             ) : filteredClasses.length ? (
               <>
                 <table className="data-table student-directory-table">
@@ -452,7 +449,7 @@ export function ClassesWorkspace({
               Cancel
             </button>
             <button className="danger-button" type="button" disabled={deleting} onClick={() => void deleteClass()}>
-              {deleting ? "Deleting…" : "Delete class section"}
+              {deleting ? <LoadingIndicator label="Deleting…" compact announce={false} /> : "Delete class section"}
             </button>
           </div>
         </Dialog>

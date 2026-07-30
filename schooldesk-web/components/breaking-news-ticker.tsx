@@ -21,8 +21,20 @@ export function BreakingNewsTicker() {
     <aside className="breaking-news" aria-label={`School announcement: ${message}`}>
       <div className="breaking-news-viewport">
         <div className="breaking-news-track">
-          <span title={message}>{message}<i aria-hidden="true">◆</i>{message}<i aria-hidden="true">◆</i></span>
-          <span aria-hidden="true">{message}<i>◆</i>{message}<i>◆</i></span>
+          {[false, true].map((duplicate) => (
+            <div
+              className="breaking-news-group"
+              aria-hidden={duplicate || undefined}
+              key={String(duplicate)}
+            >
+              {Array.from({ length: 6 }, (_, index) => (
+                <span className="breaking-news-item" title={duplicate ? undefined : message} key={index}>
+                  {message}
+                  <i aria-hidden="true">◆</i>
+                </span>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     </aside>

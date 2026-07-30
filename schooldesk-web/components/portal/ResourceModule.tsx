@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Trash2,
 } from "@/lib/lucide-react";
+import { PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Module, Row } from "./types";
 import { api, rowsFrom, rowText, stringValue } from "./utils";
 import { StudentDialog } from "./StudentDialog";
@@ -229,13 +230,7 @@ function GenericResourceModule({
 
       <div className="table-card surface ops-table-surface">
         {loading ? (
-          <div className="skeleton-container" style={{ padding: "1rem" }}>
-            <div className="skeleton skeleton-row" />
-            <div className="skeleton skeleton-row" />
-            <div className="skeleton skeleton-row" />
-            <div className="skeleton skeleton-row" />
-            <div className="skeleton skeleton-row" />
-          </div>
+          <PortalModuleSkeleton variant="table" rows={5} label={`Loading ${module.label.toLowerCase()}`} />
         ) : filteredRows.length ? (
           <>
             <table className="data-table ops-data-table">

@@ -11,6 +11,7 @@ import {
   Sparkles,
   Trash2,
 } from "@/lib/lucide-react";
+import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import { api, displayName, nested, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
@@ -245,11 +246,7 @@ export function TimetableWorkspace({
       )}
 
       {loading ? (
-        <div className="skeleton-container" style={{ padding: "1rem" }}>
-          {Array.from({ length: 5 }, (_, idx) => (
-            <div className="skeleton skeleton-row" key={idx} />
-          ))}
-        </div>
+        <PortalModuleSkeleton variant="timetable" label="Loading weekly timetable" />
       ) : viewMode === "grid" ? (
         <div className="table-card surface ops-table-surface student-directory-table-wrap" style={{ overflowX: "auto" }}>
           <table className="data-table" style={{ minWidth: "900px" }}>
@@ -530,7 +527,7 @@ export function TimetableWorkspace({
               Cancel
             </button>
             <button className="danger-button" type="button" disabled={deleting} onClick={() => void deleteSlot()}>
-              {deleting ? "Deleting…" : "Delete slot"}
+              {deleting ? <LoadingIndicator label="Deleting…" compact announce={false} /> : "Delete slot"}
             </button>
           </div>
         </Dialog>

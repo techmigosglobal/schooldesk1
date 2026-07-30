@@ -48,7 +48,7 @@ void main() {
     });
 
     test(
-      'approved school-gallery event media is normalized for public web',
+      'approved school-gallery media is normalized and public web stays image-only',
       () {
         final handler = File(
           'supabase/functions/api/handlers/website.ts',
@@ -60,8 +60,9 @@ void main() {
         expect(handler, contains('eventGalleryRows'));
         expect(handler, contains('SCHOOL_GALLERY'));
         expect(handler, contains('media_type'));
-        expect(website, contains('isVideo'));
+        expect(website, contains('filter(isPublicGalleryImage)'));
         expect(website, contains('gallery-media'));
+        expect(website, isNot(contains('<video')));
       },
     );
   });
