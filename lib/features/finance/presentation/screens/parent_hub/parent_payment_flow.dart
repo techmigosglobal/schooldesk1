@@ -201,7 +201,12 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
 
   Future<void> _pickProofFile() async {
     try {
-      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
       if (image != null) {
         setState(() {
           _proofName = image.name;

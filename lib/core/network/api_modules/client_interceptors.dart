@@ -219,8 +219,15 @@ class _ErrorInterceptor extends Interceptor {
         requestPath.contains('/auth/refresh') ||
         requestPath.contains('/auth/logout') ||
         requestPath.contains('/auth/password');
+    // These calls are optional, fire-and-forget background work. A failure
+    // here must never invalidate a freshly authenticated session: both can
+    // safely retry later, whereas clearing the token sends the user to the
+    // public landing page immediately after sign-in.
+    final isBestEffortBackgroundRequest =
+        requestPath.contains('/notifications/register-token') ||
+        requestPath.contains('/monitoring/error-events');
 
-    if (statusCode == 401 && !isAuthRoute) {
+    if (statusCode == 401 && !isAuthRoute && !isBestEffortBackgroundRequest) {
       if (alreadyRetriedAfterRefresh) {
         TokenStorageService.clear().then((_) {
           _client.clearAuthToken();

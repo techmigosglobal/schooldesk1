@@ -50,6 +50,108 @@ function normalizeFeeType(value: unknown, fallback = "") {
   return "other";
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function isDaycareGradeName(value: unknown) {
+  // Schools commonly model this as a Day Care grade with section A, but some
+  // imports name the grade itself "Day Care A". Both are Day Care classes.
+  return text(value).toLowerCase().replaceAll(/[^a-z0-9]+/g, "").startsWith(
+    "daycare",
+  );
+}
+
+function isDaycareStudent(studentValue: unknown) {
+  const student = record(studentValue);
+  const section = record(student.current_section);
+  const grade = record(section.grade);
+  return text(student.status).toLowerCase() === "active" &&
+    isDaycareGradeName(grade.grade_name);
+}
+
+const daycareStudentSelect =
+  "id, first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))";
+
+async function attachInvoicePaymentReceipts(
+  svc: SupabaseClient,
+  school: string,
+  invoices: Record<string, unknown>[],
+) {
+  const paymentIds = invoices.flatMap((invoice) =>
+    Array.isArray(invoice.payments)
+      ? invoice.payments.map((payment) => text(record(payment).id)).filter(
+        Boolean,
+      )
+      : []
+  );
+  if (paymentIds.length === 0) return invoices;
+  const { data, error } = await svc.from("fee_receipts").select(
+    "id, payment_id, receipt_number, amount, payment_method, transaction_ref, issued_at",
+  ).eq("school_id", school).in("payment_id", paymentIds);
+  if (error) throw error;
+  const receipts = new Map<string, Record<string, unknown>>();
+  for (const receipt of data ?? []) {
+    const row = receipt as Record<string, unknown>;
+    receipts.set(text(row.payment_id), row);
+  }
+  const snapshotIds = [...receipts.values()].map((receipt) =>
+    text(receipt.document_snapshot_id)
+  ).filter(Boolean);
+  const snapshots = new Map<string, Record<string, unknown>>();
+  if (snapshotIds.length > 0) {
+    const { data: snapshotRows, error: snapshotError } = await svc.from(
+      "finance_document_snapshots",
+    ).select(
+      "id, receipt_id, document_number, source_totals, source_snapshot, generated_at",
+    ).eq("school_id", school).in("id", snapshotIds);
+    if (snapshotError) throw snapshotError;
+    for (const snapshot of snapshotRows ?? []) {
+      const row = snapshot as Record<string, unknown>;
+      snapshots.set(text(row.id), row);
+    }
+  }
+  return invoices.map((invoice) => ({
+    ...invoice,
+    payments: Array.isArray(invoice.payments)
+      ? invoice.payments.map((payment) => {
+        const row = record(payment);
+        const receipt = receipts.get(text(row.id)) ?? null;
+        const snapshot = receipt
+          ? snapshots.get(text(receipt.document_snapshot_id)) ?? null
+          : null;
+        return {
+          ...row,
+          receipt,
+          receipt_snapshot: snapshot,
+          receipt_number: text(receipt?.receipt_number ?? row.receipt_number),
+        };
+      })
+      : [],
+  }));
+}
+
+function validatedManualPaymentDate(value: unknown) {
+  const raw = text(value);
+  if (!raw) return "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    throw new Error("payment_date must use YYYY-MM-DD");
+  }
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  if (
+    Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== raw
+  ) {
+    throw new Error("payment_date is invalid");
+  }
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+  if (raw > today) throw new Error("payment_date cannot be in the future");
+  return raw;
+}
+
 const defaultFeeCategories = [
   {
     name: "Tuition",
@@ -131,7 +233,9 @@ function decorateInvoice(invoice: Record<string, unknown>) {
     ...invoice,
     fee_type: invoiceFeeType(invoice),
     fee_item_name: text(invoice.fee_item_name, invoiceComponentLabel(invoice)),
-    balance: money(invoice.balance ?? invoice.net_amount ?? invoice.total_amount),
+    balance: money(
+      invoice.balance ?? invoice.net_amount ?? invoice.total_amount,
+    ),
   };
 }
 
@@ -147,7 +251,9 @@ function validateInvoicePaymentAmount(
   if (amount > 0) {
     if (amount > balance) {
       throw new Error(
-        `payment amount cannot exceed the remaining balance of ${balance.toFixed(2)}`,
+        `payment amount cannot exceed the remaining balance of ${
+          balance.toFixed(2)
+        }`,
       );
     }
     return { amount };
@@ -791,9 +897,11 @@ async function queueManualFeeReminders(
   const eventIds: string[] = [];
   for (const invoice of invoices ?? []) {
     const balance = money(invoice.balance);
-    if (balance <= 0 || ["paid", "settled", "void", "cancelled"].includes(
-      text(invoice.status).toLowerCase(),
-    )) {
+    if (
+      balance <= 0 || ["paid", "settled", "void", "cancelled"].includes(
+        text(invoice.status).toLowerCase(),
+      )
+    ) {
       result.skipped_settled++;
       continue;
     }
@@ -807,9 +915,11 @@ async function queueManualFeeReminders(
       studentId,
     );
     if (linkError) throw new Error(linkError.message);
-    const parentIds = [...new Set((links ?? []).map((link) =>
-      text(link.parent_user_id)
-    ).filter(Boolean))];
+    const parentIds = [
+      ...new Set(
+        (links ?? []).map((link) => text(link.parent_user_id)).filter(Boolean),
+      ),
+    ];
     if (parentIds.length === 0) {
       result.unavailable_recipients++;
       continue;
@@ -820,7 +930,9 @@ async function queueManualFeeReminders(
       : "your child";
     const dueDate = text(invoice.due_date).split("T")[0];
     const message = customMessage ||
-      `Fee reminder for ${studentName}: ₹${balance.toFixed(0)} remains due${dueDate ? ` by ${dueDate}` : ""}.`;
+      `Fee reminder for ${studentName}: ₹${balance.toFixed(0)} remains due${
+        dueDate ? ` by ${dueDate}` : ""
+      }.`;
 
     for (const parentId of parentIds) {
       const { data: delivery, error: deliveryError } = await svc.from(
@@ -957,6 +1069,7 @@ export async function handleFees(
     feesPath.startsWith("/invoices") ||
     (feesPath.startsWith("/payments") && !isParentPaymentAction) ||
     feesPath.startsWith("/daycare-plans") ||
+    feesPath === "/daycare-eligible-students" ||
     feesPath.startsWith("/concessions") ||
     feesPath.startsWith("/reminders") ||
     feesPath.startsWith("/payment-configs") ||
@@ -1303,21 +1416,42 @@ export async function handleFees(
         const archived = await deleteFeeStructureWorkflowRows(svc, school, seg);
         return ok({ success: true, ...archived });
       } catch (error) {
-        return fail(error instanceof Error ? error.message : "failed to archive fee structure");
+        return fail(
+          error instanceof Error
+            ? error.message
+            : "failed to archive fee structure",
+        );
       }
     }
   }
 
-  if (feesPath.startsWith("/daycare-plans")) {
+  if (
+    feesPath.startsWith("/daycare-plans") ||
+    feesPath === "/daycare-eligible-students"
+  ) {
     const segments = feesPath.split("/").filter(Boolean);
     const planId = segments[1] ?? "";
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Kolkata",
     });
 
+    if (feesPath === "/daycare-eligible-students" && method === "GET") {
+      const { data, error } = await svc.from("students").select(
+        daycareStudentSelect,
+      ).eq("school_id", school).eq("status", "active").not(
+        "current_section_id",
+        "is",
+        null,
+      ).order("first_name", { ascending: true }).order("last_name", {
+        ascending: true,
+      });
+      if (error) return fail(error.message);
+      return ok((data ?? []).filter(isDaycareStudent));
+    }
+
     if (!planId && method === "GET") {
       let query = svc.from("daycare_fee_plans").select(
-        "*, student:students(first_name, last_name, admission_number), fee_structure:fee_structures(id, fee_type, due_day, academic_year_id)",
+        `*, student:students(${daycareStudentSelect})`,
       ).eq("school_id", school).order("effective_from", { ascending: false });
       if (url.searchParams.get("student_id")) {
         query = query.eq("student_id", url.searchParams.get("student_id")!);
@@ -1331,69 +1465,83 @@ export async function handleFees(
       if (error) return fail(error.message);
       const currentPeriod = `${today.slice(0, 7)}-01`;
       const planIds = (data ?? []).map((plan) => text(plan.id)).filter(Boolean);
-      const { data: currentInvoices, error: invoiceError } = planIds.length === 0
-        ? { data: [], error: null }
-        : await svc.from("fee_invoices").select("id, student_id, fee_structure_id, billing_period, balance, status")
-          .eq("school_id", school).eq("billing_period", currentPeriod)
-          .in("fee_structure_id", [...new Set((data ?? []).map((plan) => text(plan.fee_structure_id))) ]);
+      const { data: currentInvoices, error: invoiceError } =
+        planIds.length === 0
+          ? { data: [], error: null }
+          : await svc.from("fee_invoices").select(
+            "id, student_id, daycare_plan_id, billing_period, balance, status",
+          )
+            .eq("school_id", school).eq("billing_period", currentPeriod)
+            .in("daycare_plan_id", planIds);
       if (invoiceError) return fail(invoiceError.message);
       return ok((data ?? []).map((plan) => ({
         ...plan,
+        is_daycare_eligible: isDaycareStudent(plan.student),
         current_period_invoice: (currentInvoices ?? []).find((invoice) =>
-          text(invoice.student_id) === text(plan.student_id) &&
-          text(invoice.fee_structure_id) === text(plan.fee_structure_id)
+          text(invoice.daycare_plan_id) === text(plan.id)
         ) ?? null,
       })));
     }
 
     if (!planId && method === "POST") {
       const studentId = text(body.student_id);
-      const structureId = text(body.fee_structure_id);
       const academicYearId = text(body.academic_year_id);
-      const hourlyRate = money(body.hourly_rate);
-      const monthlyHours = money(body.contracted_hours_per_month);
+      const monthlyAmount = money(body.monthly_amount);
+      const dueDay = Math.min(
+        Math.max(parseInt(text(body.due_day, "10")), 1),
+        28,
+      );
+      const feeLabel = text(body.fee_label, "Day Care");
       const effectiveFrom = text(body.effective_from, today);
-      if (!studentId || !structureId || !academicYearId) {
-        return fail("student_id, fee_structure_id, and academic_year_id are required");
+      if (!studentId || !academicYearId) {
+        return fail("student_id and academic_year_id are required");
       }
-      if (hourlyRate <= 0 || monthlyHours <= 0) {
-        return fail("hourly_rate and contracted_hours_per_month must be greater than zero");
+      if (monthlyAmount <= 0) {
+        return fail("monthly_amount must be greater than zero");
       }
-      const [{ data: student, error: studentError }, { data: structure, error: structureError }] = await Promise.all([
-        svc.from("students").select("id").eq("id", studentId).eq("school_id", school).maybeSingle(),
-        svc.from("fee_structures").select("id, academic_year_id, fee_type").eq("id", structureId).eq("school_id", school).maybeSingle(),
-      ]);
+      const { data: student, error: studentError } = await svc.from("students")
+        .select(daycareStudentSelect).eq("id", studentId).eq(
+          "school_id",
+          school,
+        ).eq("status", "active").maybeSingle();
       if (studentError) return fail(studentError.message);
-      if (structureError) return fail(structureError.message);
       if (!student) return fail("Student not found", 404);
-      if (!structure || text(structure.academic_year_id) !== academicYearId) {
-        return fail("Daycare fee structure does not belong to this academic year", 400);
-      }
-      if (normalizeFeeType(structure.fee_type) !== "daycare_hourly") {
-        return fail("Select a daycare hourly fee structure", 400);
+      if (!isDaycareStudent(student)) {
+        return fail(
+          "Student must be enrolled in an active Day Care section",
+          400,
+        );
       }
       const { data: existing, error: existingError } = await svc.from(
         "daycare_fee_plans",
-      ).select("id, effective_from, effective_to, is_active").eq("school_id", school)
-        .eq("student_id", studentId).eq("fee_structure_id", structureId).eq("is_active", true);
+      ).select("id, effective_from, effective_to, is_active").eq(
+        "school_id",
+        school,
+      )
+        .eq("student_id", studentId).eq("is_active", true);
       if (existingError) return fail(existingError.message);
       const requestedStart = new Date(`${effectiveFrom}T00:00:00Z`).getTime();
       const overlaps = (existing ?? []).some((plan) => {
-        const start = new Date(`${text(plan.effective_from)}T00:00:00Z`).getTime();
+        const start = new Date(`${text(plan.effective_from)}T00:00:00Z`)
+          .getTime();
         const endRaw = text(plan.effective_to);
         const end = endRaw
           ? new Date(`${endRaw}T23:59:59Z`).getTime()
           : Number.POSITIVE_INFINITY;
         return requestedStart >= start && requestedStart <= end;
       });
-      if (overlaps) return fail("An active daycare plan already covers this period", 409);
-      const { data: plan, error: insertError } = await svc.from("daycare_fee_plans").insert({
+      if (overlaps) {
+        return fail("An active daycare plan already covers this period", 409);
+      }
+      const { data: plan, error: insertError } = await svc.from(
+        "daycare_fee_plans",
+      ).insert({
         school_id: school,
         student_id: studentId,
         academic_year_id: academicYearId,
-        fee_structure_id: structureId,
-        hourly_rate: hourlyRate,
-        contracted_hours_per_month: monthlyHours,
+        monthly_amount: monthlyAmount,
+        due_day: dueDay,
+        fee_label: feeLabel,
         effective_from: effectiveFrom,
         is_active: true,
         created_by: user.id,
@@ -1428,12 +1576,16 @@ export async function handleFees(
       if (effectiveFrom < nextMonth) {
         return fail("Daycare plan changes take effect from next month", 400);
       }
-      const hourlyRate = money(body.hourly_rate ?? previous.hourly_rate);
-      const monthlyHours = money(
-        body.contracted_hours_per_month ?? previous.contracted_hours_per_month,
+      const monthlyAmount = money(
+        body.monthly_amount ?? previous.monthly_amount,
       );
-      if (hourlyRate <= 0 || monthlyHours <= 0) {
-        return fail("hourly_rate and contracted_hours_per_month must be greater than zero");
+      const dueDay = Math.min(
+        Math.max(parseInt(text(body.due_day ?? previous.due_day, "10")), 1),
+        28,
+      );
+      const feeLabel = text(body.fee_label ?? previous.fee_label, "Day Care");
+      if (monthlyAmount <= 0) {
+        return fail("monthly_amount must be greater than zero");
       }
       const previousEnd = new Date(`${effectiveFrom}T00:00:00Z`);
       previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
@@ -1451,9 +1603,9 @@ export async function handleFees(
         school_id: school,
         student_id: previous.student_id,
         academic_year_id: previous.academic_year_id,
-        fee_structure_id: previous.fee_structure_id,
-        hourly_rate: hourlyRate,
-        contracted_hours_per_month: monthlyHours,
+        monthly_amount: monthlyAmount,
+        due_day: dueDay,
+        fee_label: feeLabel,
         effective_from: effectiveFrom,
         is_active: true,
         created_by: user.id,
@@ -1502,9 +1654,23 @@ export async function handleFees(
       }
       const { data, error, count } = await q;
       if (error) return fail(error.message);
+      let invoicesWithReceipts: Record<string, unknown>[];
+      try {
+        invoicesWithReceipts = await attachInvoicePaymentReceipts(
+          svc,
+          school,
+          (data ?? []) as Record<string, unknown>[],
+        );
+      } catch (receiptError) {
+        return fail(
+          receiptError instanceof Error
+            ? receiptError.message
+            : "failed to load payment receipts",
+        );
+      }
       return cors({
         success: true,
-        data: (data ?? []).map((invoice: Record<string, unknown>) =>
+        data: invoicesWithReceipts.map((invoice: Record<string, unknown>) =>
           decorateInvoice(invoice)
         ),
         total: count ?? 0,
@@ -1761,7 +1927,20 @@ export async function handleFees(
       ).eq("id", seg).eq("school_id", school).maybeSingle();
       if (error) return fail(error.message);
       if (!data) return fail("not found", 404);
-      return ok(decorateInvoice(data));
+      try {
+        const [invoice] = await attachInvoicePaymentReceipts(
+          svc,
+          school,
+          [data as Record<string, unknown>],
+        );
+        return ok(decorateInvoice(invoice));
+      } catch (receiptError) {
+        return fail(
+          receiptError instanceof Error
+            ? receiptError.message
+            : "failed to load payment receipts",
+        );
+      }
     }
 
     if (seg && (method === "PATCH" || method === "PUT")) {
@@ -1977,6 +2156,17 @@ export async function handleFees(
           );
         }
       }
+      let submittedPaymentDate = "";
+      try {
+        submittedPaymentDate = validatedManualPaymentDate(
+          form.get("payment_date"),
+        );
+      } catch (error) {
+        return fail(
+          error instanceof Error ? error.message : "invalid payment_date",
+          400,
+        );
+      }
       const payload = {
         school_id: school,
         student_id: invoice.student_id,
@@ -1993,10 +2183,8 @@ export async function handleFees(
         transaction_id: text(
           form.get("transaction_ref") ?? form.get("transaction_id"),
         ),
-        payment_date: text(
-          form.get("payment_date"),
+        payment_date: submittedPaymentDate ||
           new Date().toISOString().split("T")[0],
-        ),
         proof_url: proofUrl,
         proof_file_name: screenshot?.name ?? null,
         proof_content_type: screenshot?.type ?? null,
@@ -2192,6 +2380,15 @@ export async function handleFees(
             : "failed to validate payment amount",
         );
       }
+      let paymentDate = "";
+      try {
+        paymentDate = validatedManualPaymentDate(body.payment_date);
+      } catch (error) {
+        return fail(
+          error instanceof Error ? error.message : "invalid payment_date",
+          400,
+        );
+      }
       const { data: payment, error } = await svc.rpc("record_fee_payment", {
         p_school_id: school,
         p_invoice_id: invoiceId,
@@ -2205,8 +2402,8 @@ export async function handleFees(
           body.reference_number ?? body.transaction_ref ??
             body.transaction_id ?? body.receipt_number,
         ),
-        p_paid_at: text(body.payment_date)
-          ? `${text(body.payment_date)}T00:00:00.000Z`
+        p_paid_at: paymentDate
+          ? `${paymentDate}T00:00:00.000Z`
           : new Date().toISOString(),
         p_notes: text(body.remarks),
         p_created_by: user.id,
@@ -2365,8 +2562,13 @@ export async function handleFees(
         return fail("admin or principal access required", 403);
       }
       const status = text(body.status).toLowerCase();
-      if (!["approved", "rejected", "clarification_required"].includes(status)) {
-        return fail("status must be approved, rejected, or clarification_required", 400);
+      if (
+        !["approved", "rejected", "clarification_required"].includes(status)
+      ) {
+        return fail(
+          "status must be approved, rejected, or clarification_required",
+          400,
+        );
       }
       const { data: existing, error: existingError } = await svc.from(
         "parent_payment_requests",
@@ -2377,8 +2579,13 @@ export async function handleFees(
         .maybeSingle();
       if (existingError) return fail(existingError.message);
       if (!existing) return fail("not found", 404);
-      if (!["pending_verification", "resubmitted"].includes(text(existing.status))) {
-        return fail("Only pending or resubmitted payment requests can be decided", 409);
+      if (
+        !["pending_verification", "resubmitted"].includes(text(existing.status))
+      ) {
+        return fail(
+          "Only pending or resubmitted payment requests can be decided",
+          409,
+        );
       }
       let paymentId: string | null = null;
       let receiptId: string | null = null;
@@ -2943,7 +3150,9 @@ export async function handleFees(
       );
       return ok({
         ...summary,
-        message: `${summary.queued} reminder${summary.queued === 1 ? "" : "s"} queued.`,
+        message: `${summary.queued} reminder${
+          summary.queued === 1 ? "" : "s"
+        } queued.`,
       });
     } catch (error) {
       return fail(

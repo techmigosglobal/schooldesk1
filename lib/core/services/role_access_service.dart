@@ -408,9 +408,7 @@ class RoleAccessService {
 
   static List<String> get parentChildNames {
     _ensureInitialized();
-    return _parentChildren
-        .map((c) => '${c['name'] ?? 'Student'}')
-        .toList();
+    return _parentChildren.map((c) => '${c['name'] ?? 'Student'}').toList();
   }
 
   static List<Map<String, dynamic>> get adminAllClasses {

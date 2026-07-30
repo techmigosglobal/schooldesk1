@@ -234,7 +234,7 @@ class PdfService {
         ? 'FEE ACCOUNT STATEMENT'
         : isInvoice
         ? 'FEE INVOICE'
-        : 'FEE PAYMENT RECEIPT';
+        : 'FEE RECEIPT';
     final documentNumberLabel = isAccountStatement
         ? 'Statement No.'
         : isInvoice
@@ -248,188 +248,252 @@ class PdfService {
         build: (context) {
           return [
             pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // Header
-              _buildReceiptHeader(schoolName, schoolAddress, schoolLogo),
-              pw.SizedBox(height: 16),
-              _buildDivider(),
-              pw.SizedBox(height: 8),
-              pw.Center(
-                child: pw.Text(
-                  documentTitle,
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _primaryColor,
-                  ),
-                ),
-              ),
-              pw.SizedBox(height: 8),
-              _buildDivider(),
-              pw.SizedBox(height: 16),
-              // Receipt info row
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildInfoPair(documentNumberLabel, receiptNo),
-                  _buildInfoPair(
-                    'Date',
-                    DateFormat('dd MMM yyyy').format(paymentDate),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 12),
-              // Student info
-              pw.Container(
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  color: _lightGray,
-                  borderRadius: pw.BorderRadius.circular(8),
-                ),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'STUDENT DETAILS',
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                        color: _mutedText,
-                      ),
-                    ),
-                    pw.SizedBox(height: 8),
-                    pw.Row(
-                      children: [
-                        pw.Expanded(child: _buildInfoPair('Name', studentName)),
-                        pw.Expanded(child: _buildInfoPair('Class', className)),
-                      ],
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Row(
-                      children: [
-                        pw.Expanded(
-                          child: _buildInfoPair(
-                            isAccountStatement
-                                ? 'Student ID / Roll No.'
-                                : 'Roll No.',
-                            rollNo,
-                          ),
-                        ),
-                        if (!isAccountStatement)
-                          pw.Expanded(
-                            child: _buildInfoPair('Parent', parentName),
-                          )
-                        else
-                          pw.Spacer(),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 16),
-              // Fee table
-              pw.Text(
-                'FEE DETAILS',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _mutedText,
-                ),
-              ),
-              pw.SizedBox(height: 8),
-              _buildFeeTable(feeItems),
-              pw.SizedBox(height: 12),
-              // Totals
-              pw.Container(
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  color: _lightGray,
-                  borderRadius: pw.BorderRadius.circular(8),
-                ),
-                child: pw.Column(
-                  children: [
-                    _buildAmountRow(
-                      'Total Amount',
-                      '₹${totalAmount.toStringAsFixed(2)}',
-                    ),
-                    pw.SizedBox(height: 4),
-                    _buildAmountRow(
-                      isInvoice ? 'Paid to Date' : 'Cumulative Paid',
-                      '₹${paidAmount.toStringAsFixed(2)}',
-                      color: _accentColor,
-                    ),
-                    pw.SizedBox(height: 4),
-                    _buildDivider(),
-                    pw.SizedBox(height: 4),
-                    _buildAmountRow(
-                      'Balance Due',
-                      '₹${balance.toStringAsFixed(2)}',
-                      isBold: true,
-                      color: balance > 0 ? PdfColors.red : _accentColor,
-                    ),
-                  ],
-                ),
-              ),
-              if (!isAccountStatement && !isInvoice) ...[
-                pw.SizedBox(height: 12),
-                pw.Row(
-                  children: [
-                    pw.Expanded(child: _buildInfoPair('This Payment', '₹${(thisPaymentAmount ?? paidAmount).toStringAsFixed(2)}')),
-                    pw.Expanded(child: _buildInfoPair('Payment Method', paymentMode)),
-                    if (transactionReference.trim().isNotEmpty)
-                      pw.Expanded(child: _buildInfoPair('Reference', transactionReference.trim())),
-                  ],
-                ),
-              ],
-              pw.SizedBox(height: 24),
-              _buildDivider(),
-              pw.SizedBox(height: 8),
-              if (authorizedSignature == null)
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Header
+                _buildReceiptHeader(schoolName, schoolAddress, schoolLogo),
+                pw.SizedBox(height: 16),
+                _buildDivider(),
+                pw.SizedBox(height: 8),
                 pw.Center(
                   child: pw.Text(
-                    'This is a computer-generated receipt and does not require a physical signature.',
-                    textAlign: pw.TextAlign.center,
-                    style: const pw.TextStyle(fontSize: 9, color: _mutedText),
+                    documentTitle,
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _primaryColor,
+                    ),
                   ),
-                )
-              else
+                ),
+                pw.SizedBox(height: 8),
+                _buildDivider(),
+                pw.SizedBox(height: 16),
+                // Receipt info row
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text(
-                      'This is a computer-generated receipt.',
-                      style: const pw.TextStyle(fontSize: 9, color: _mutedText),
+                    _buildInfoPair(documentNumberLabel, receiptNo),
+                    _buildInfoPair(
+                      'Date',
+                      DateFormat('dd MMM yyyy').format(paymentDate),
                     ),
-                    pw.Column(
-                      children: [
-                        pw.Image(
-                          pw.MemoryImage(authorizedSignature),
-                          width: 104,
-                          height: 42,
-                          fit: pw.BoxFit.contain,
+                  ],
+                ),
+                pw.SizedBox(height: 12),
+                // Student info
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: _lightGray,
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'STUDENT DETAILS',
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          fontWeight: pw.FontWeight.bold,
+                          color: _mutedText,
                         ),
-                        if (authorizedSignatoryName.trim().isNotEmpty) ...[
-                          pw.SizedBox(height: 2),
-                          pw.Text(
-                            authorizedSignatoryName.trim(),
-                            style: const pw.TextStyle(fontSize: 8),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Row(
+                        children: [
+                          pw.Expanded(
+                            child: _buildInfoPair('Name', studentName),
+                          ),
+                          pw.Expanded(
+                            child: _buildInfoPair('Class', className),
                           ),
                         ],
-                        pw.SizedBox(height: 2),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Row(
+                        children: [
+                          pw.Expanded(
+                            child: _buildInfoPair(
+                              isAccountStatement
+                                  ? 'Student ID / Roll No.'
+                                  : 'Roll No.',
+                              rollNo,
+                            ),
+                          ),
+                          if (!isAccountStatement)
+                            pw.Expanded(
+                              child: _buildInfoPair('Parent', parentName),
+                            )
+                          else
+                            pw.Spacer(),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 16),
+                // Fee table
+                pw.Text(
+                  'FEE DETAILS',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _mutedText,
+                  ),
+                ),
+                pw.SizedBox(height: 8),
+                _buildFeeTable(
+                  feeItems,
+                  receiptLayout: !isAccountStatement && !isInvoice,
+                ),
+                pw.SizedBox(height: 12),
+                // Totals
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: _lightGray,
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      _buildAmountRow(
+                        'Total Amount',
+                        '₹${totalAmount.toStringAsFixed(2)}',
+                      ),
+                      pw.SizedBox(height: 4),
+                      _buildAmountRow(
+                        isInvoice ? 'Paid to Date' : 'Cumulative Paid',
+                        '₹${paidAmount.toStringAsFixed(2)}',
+                        color: _accentColor,
+                      ),
+                      pw.SizedBox(height: 4),
+                      _buildDivider(),
+                      pw.SizedBox(height: 4),
+                      _buildAmountRow(
+                        'Balance Due',
+                        '₹${balance.toStringAsFixed(2)}',
+                        isBold: true,
+                        color: balance > 0 ? PdfColors.red : _accentColor,
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isAccountStatement && !isInvoice) ...[
+                  pw.SizedBox(height: 12),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: _primaryColor, width: 0.7),
+                      borderRadius: pw.BorderRadius.circular(8),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
                         pw.Text(
-                          'Authorised Signatory',
+                          'PAYMENT INFORMATION',
                           style: pw.TextStyle(
                             fontSize: 10,
                             fontWeight: pw.FontWeight.bold,
+                            color: _primaryColor,
                           ),
+                        ),
+                        pw.SizedBox(height: 8),
+                        pw.Row(
+                          children: [
+                            pw.Expanded(
+                              child: _buildInfoPair(
+                                'Amount Received',
+                                '₹${(thisPaymentAmount ?? paidAmount).toStringAsFixed(2)}',
+                              ),
+                            ),
+                            pw.Expanded(
+                              child: _buildInfoPair(
+                                'Payment Method',
+                                paymentMode,
+                              ),
+                            ),
+                            if (transactionReference.trim().isNotEmpty)
+                              pw.Expanded(
+                                child: _buildInfoPair(
+                                  'Reference / Cheque No.',
+                                  transactionReference.trim(),
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-            ],
+                  ),
+                  pw.SizedBox(height: 10),
+                  pw.Text(
+                    'Amount in words: ${_amountInWords(thisPaymentAmount ?? paidAmount)} only.',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _darkText,
+                    ),
+                  ),
+                ],
+                pw.SizedBox(height: 24),
+                _buildDivider(),
+                pw.SizedBox(height: 8),
+                if (authorizedSignature == null)
+                  pw.Center(
+                    child: pw.Text(
+                      'This is a computer-generated receipt and does not require a physical signature.',
+                      textAlign: pw.TextAlign.center,
+                      style: const pw.TextStyle(fontSize: 9, color: _mutedText),
+                    ),
+                  )
+                else
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        'This is a computer-generated receipt.',
+                        style: const pw.TextStyle(
+                          fontSize: 9,
+                          color: _mutedText,
+                        ),
+                      ),
+                      pw.Column(
+                        children: [
+                          pw.Image(
+                            pw.MemoryImage(authorizedSignature),
+                            width: 104,
+                            height: 42,
+                            fit: pw.BoxFit.contain,
+                          ),
+                          if (authorizedSignatoryName.trim().isNotEmpty) ...[
+                            pw.SizedBox(height: 2),
+                            pw.Text(
+                              authorizedSignatoryName.trim(),
+                              style: const pw.TextStyle(fontSize: 8),
+                            ),
+                          ],
+                          pw.SizedBox(height: 2),
+                          pw.Text(
+                            'Authorised Signatory',
+                            style: pw.TextStyle(
+                              fontSize: 10,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                if (!isAccountStatement && !isInvoice) ...[
+                  pw.SizedBox(height: 10),
+                  pw.Center(
+                    child: pw.Text(
+                      'Parent Copy • Keep this receipt for your records',
+                      style: const pw.TextStyle(fontSize: 8, color: _mutedText),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ];
         },
@@ -828,34 +892,122 @@ class PdfService {
     );
   }
 
-  pw.Widget _buildFeeTable(List<Map<String, dynamic>> items) {
+  pw.Widget _buildFeeTable(
+    List<Map<String, dynamic>> items, {
+    bool receiptLayout = false,
+  }) {
     return pw.Table(
       border: pw.TableBorder.all(color: _lightGray),
-      columnWidths: {
-        0: const pw.FlexColumnWidth(3),
-        1: const pw.FlexColumnWidth(1),
-        2: const pw.FlexColumnWidth(1),
-      },
+      columnWidths: receiptLayout
+          ? const {
+              0: pw.FlexColumnWidth(0.55),
+              1: pw.FlexColumnWidth(3),
+              2: pw.FlexColumnWidth(1),
+            }
+          : const {
+              0: pw.FlexColumnWidth(3),
+              1: pw.FlexColumnWidth(1),
+              2: pw.FlexColumnWidth(1),
+            },
       children: [
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: _primaryColor),
           children: [
-            _tableCell('Description', isHeader: true),
+            if (receiptLayout) _tableCell('No.', isHeader: true),
+            _tableCell(
+              receiptLayout ? 'Fee Particulars' : 'Description',
+              isHeader: true,
+            ),
             _tableCell('Amount', isHeader: true),
-            _tableCell('Status', isHeader: true),
+            if (!receiptLayout) _tableCell('Status', isHeader: true),
           ],
         ),
-        ...items.map(
-          (item) => pw.TableRow(
+        ...items.asMap().entries.map(
+          (entry) => pw.TableRow(
+            decoration: pw.BoxDecoration(
+              color: entry.key.isOdd ? _lightGray : PdfColors.white,
+            ),
             children: [
-              _tableCell(item['description'] as String? ?? ''),
-              _tableCell('₹${item['amount']}'),
-              _tableCell(item['status'] as String? ?? 'Paid'),
+              if (receiptLayout) _tableCell('${entry.key + 1}'),
+              _tableCell(entry.value['description'] as String? ?? ''),
+              _tableCell('₹${entry.value['amount']}'),
+              if (!receiptLayout)
+                _tableCell(entry.value['status'] as String? ?? 'Paid'),
             ],
           ),
         ),
       ],
     );
+  }
+
+  String _amountInWords(double amount) {
+    final rounded = amount.round();
+    if (rounded == 0) return 'Zero rupees';
+    const ones = [
+      '',
+      'one',
+      'two',
+      'three',
+      'four',
+      'five',
+      'six',
+      'seven',
+      'eight',
+      'nine',
+      'ten',
+      'eleven',
+      'twelve',
+      'thirteen',
+      'fourteen',
+      'fifteen',
+      'sixteen',
+      'seventeen',
+      'eighteen',
+      'nineteen',
+    ];
+    const tens = [
+      '',
+      '',
+      'twenty',
+      'thirty',
+      'forty',
+      'fifty',
+      'sixty',
+      'seventy',
+      'eighty',
+      'ninety',
+    ];
+    String belowThousand(int value) {
+      final parts = <String>[];
+      if (value >= 100) {
+        parts.add('${ones[value ~/ 100]} hundred');
+        value %= 100;
+      }
+      if (value >= 20) {
+        parts.add(tens[value ~/ 10]);
+        value %= 10;
+      }
+      if (value > 0) parts.add(ones[value]);
+      return parts.join(' ');
+    }
+
+    final parts = <String>[];
+    var value = rounded;
+    if (value >= 10000000) {
+      parts.add('${belowThousand(value ~/ 10000000)} crore');
+      value %= 10000000;
+    }
+    if (value >= 100000) {
+      parts.add('${belowThousand(value ~/ 100000)} lakh');
+      value %= 100000;
+    }
+    if (value >= 1000) {
+      parts.add('${belowThousand(value ~/ 1000)} thousand');
+      value %= 1000;
+    }
+    if (value > 0) parts.add(belowThousand(value));
+    final words = parts.where((part) => part.isNotEmpty).join(' ');
+    return '${words[0].toUpperCase()}${words.substring(1)} rupees';
   }
 
   pw.Widget _buildAttendanceTable(List<Map<String, dynamic>> students) {

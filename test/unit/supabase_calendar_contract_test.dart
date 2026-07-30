@@ -28,7 +28,7 @@ void main() {
     expect(index, contains('path.startsWith("/parent-teacher-meetings")'));
     expect(calendar, contains('svc.from("events")'));
     expect(calendar, contains('svc.from("holidays")'));
-    expect(calendar, contains('roleName(user) !== "principal"'));
+    expect(calendar, contains('["principal"].includes(roleName(user))'));
     expect(calendar, contains('return fail("forbidden", 403)'));
     expect(communications, contains('parent_teacher_meetings'));
     expect(communications, contains('/parent-teacher-meetings'));

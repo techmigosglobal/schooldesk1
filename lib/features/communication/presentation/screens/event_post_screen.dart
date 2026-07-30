@@ -96,7 +96,11 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final picked = await picker.pickMultiImage(imageQuality: 80);
+    final picked = await picker.pickMultiImage(
+      imageQuality: 80,
+      maxWidth: 2048,
+      maxHeight: 2048,
+    );
     if (picked.isEmpty) return;
     for (final xfile in picked) {
       await _uploadFile(xfile.path, xfile.name, mimeType: xfile.mimeType);

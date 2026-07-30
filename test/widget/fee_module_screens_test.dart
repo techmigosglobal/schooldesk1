@@ -9,7 +9,6 @@ import 'package:schooldesk1/features/finance/presentation/screens/fee_home_scree
 import 'package:schooldesk1/features/finance/presentation/screens/fee_structures_screen/fee_structures_screen.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_collect_screen/fee_collect_screen.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_ledger_screen/fee_ledger_screen.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/fee_reports_screen/fee_reports_screen.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/principal_dashboard/principal_collect_fee.dart';
 
 import '../support/finance_test_helpers.dart';
@@ -276,22 +275,26 @@ void main() {
       expect(find.text('Confirm Payment'), findsOneWidget);
     });
 
-    testWidgets('uses a direct payment amount instead of tuition month selection', (
-      tester,
-    ) async {
-      _setLargeSurface(tester);
+    testWidgets(
+      'uses a direct payment amount instead of tuition month selection',
+      (tester) async {
+        _setLargeSurface(tester);
 
-      await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.lightTheme, home: const FeeCollectScreen()),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const FeeCollectScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Aarav Sharma'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Aarav Sharma'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Select Tuition Months'), findsNothing);
-      expect(find.textContaining('Amount'), findsWidgets);
-    });
+        expect(find.text('Select Tuition Months'), findsNothing);
+        expect(find.textContaining('Amount'), findsWidgets);
+      },
+    );
 
     testWidgets('payment mode chips are selectable', (tester) async {
       _setLargeSurface(tester);
@@ -459,7 +462,7 @@ void main() {
       await tester.tap(find.text('Aarav Sharma'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Export Invoice PDF'), findsOneWidget);
+      expect(find.text('Print account statement'), findsOneWidget);
     });
 
     testWidgets('search box filters students', (tester) async {
@@ -477,81 +480,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Aarav Sharma'), findsNothing);
-    });
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // FeeReportsScreen
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  group('FeeReportsScreen', () {
-    testWidgets('renders header and live summary card', (tester) async {
-      _setLargeSurface(tester);
-
-      await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Fee Reports'), findsOneWidget);
-      expect(find.text('Live Fee Summary'), findsOneWidget);
-      expect(find.text('Expected'), findsOneWidget);
-      expect(find.text('Collected'), findsWidgets);
-      expect(find.text('Outstanding'), findsWidgets);
-    });
-
-    testWidgets('shows PDF download button', (tester) async {
-      _setLargeSurface(tester);
-
-      await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Download PDF Summary'), findsOneWidget);
-    });
-
-    testWidgets('shows server-side export reports', (tester) async {
-      _setLargeSurface(tester);
-
-      await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Server-side Exports'), findsOneWidget);
-      expect(find.text('Collection Summary'), findsOneWidget);
-      expect(find.text('Class Wise Collection'), findsOneWidget);
-      expect(find.text('Student Wise Report'), findsOneWidget);
-      expect(find.text('Outstanding Report'), findsOneWidget);
-      expect(find.text('Daily Collection Report'), findsOneWidget);
-    });
-
-    testWidgets('shows collection rate percentage', (tester) async {
-      _setLargeSurface(tester);
-
-      await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
-      );
-      await tester.pumpAndSettle();
-
-      // Collection rate should be shown
-      expect(find.text('Rate'), findsOneWidget);
-    });
-
-    testWidgets('stays stable on compact phone width', (tester) async {
-      tester.view.physicalSize = const Size(320, 640);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Fee Reports'), findsOneWidget);
-      expect(tester.takeException(), isNull);
     });
   });
 }

@@ -40,26 +40,6 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
       ],
     },
     {
-      'category': 'Fee Reports',
-      'icon': Icons.account_balance_wallet_rounded,
-      'color': context.appTheme.success,
-      'reports': [
-        {
-          'name': 'Term 3 Collection Report',
-          'desc': 'Total fees collected for Term 3 (Jan–Apr 2026)',
-        },
-        {
-          'name': 'Pending Dues Report',
-          'desc': 'Students with outstanding fee dues',
-        },
-        {'name': 'Concession Report', 'desc': 'All fee concessions granted'},
-        {
-          'name': 'Annual Finance Summary',
-          'desc': 'Full year financial overview 2025–26',
-        },
-      ],
-    },
-    {
       'category': 'Attendance Reports',
       'icon': Icons.how_to_reg_rounded,
       'color': context.appTheme.warning,

@@ -837,9 +837,9 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         ),
         child: Row(
           children: [
-            const Icon(
+            Icon(
               Icons.calendar_month_rounded,
-              color: Colors.white,
+              color: context.appTheme.onPrimary,
               size: 30,
             ),
             const SizedBox(width: 12),
@@ -852,7 +852,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                       'MMMM y',
                     ).format(_monthDateForAcademicYear(_selectedMonth)),
                     style: GoogleFonts.dmSans(
-                      color: Colors.white,
+                      color: context.appTheme.onPrimary,
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                     ),
@@ -861,7 +861,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                   Text(
                     '$upcoming upcoming  •  ${_hideGeneratedHolidays ? 'custom holidays only' : '$holidays holidays'}',
                     style: GoogleFonts.dmSans(
-                      color: Colors.white.withAlpha(220),
+                      color: context.appTheme.onPrimary.withAlpha(220),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -873,7 +873,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               onPressed: _goToToday,
               style: TextButton.styleFrom(
                 foregroundColor: context.appTheme.primary,
-                backgroundColor: Colors.white,
+                backgroundColor: context.appTheme.onPrimary,
               ),
               child: const Text('Today'),
             ),
@@ -972,7 +972,13 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         ),
         const SizedBox(height: 12),
         if (events.isEmpty)
-          const SizedBox.shrink()
+          _buildSelectedDayEmptyState(
+            title: 'No events scheduled',
+            message: _canManageEvents
+                ? 'Add the first event for this day, or choose another date.'
+                : 'Choose another date or check back when the school adds an event.',
+            showCreate: _canManageEvents,
+          )
         else
           ...events.map(
             (event) => Padding(
@@ -995,9 +1001,9 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFE),
+        color: context.appTheme.surfaceVariant,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDDE8F4)),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1010,6 +1016,14 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               fontSize: 13,
             ),
           ),
+          if (showCreate) ...[
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => _openCreateEvent(initialDate: _selectedDate),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Create event'),
+            ),
+          ],
           const SizedBox(height: 4),
           Text(
             message,
@@ -1093,27 +1107,38 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   Widget _buildDisplayModeSelector() {
-    return SegmentedButton<_EventsDisplayMode>(
-      segments: const [
-        ButtonSegment(
-          value: _EventsDisplayMode.month,
-          icon: Icon(Icons.calendar_month_rounded),
-          label: Text('Month'),
-        ),
-        ButtonSegment(
-          value: _EventsDisplayMode.week,
-          icon: Icon(Icons.view_week_rounded),
-          label: Text('Week'),
-        ),
-        ButtonSegment(
-          value: _EventsDisplayMode.agenda,
-          icon: Icon(Icons.view_agenda_rounded),
-          label: Text('Agenda'),
-        ),
-      ],
-      selected: {_displayMode},
-      onSelectionChanged: (value) {
-        setState(() => _displayMode = value.first);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 380;
+        return SegmentedButton<_EventsDisplayMode>(
+          showSelectedIcon: false,
+          style: ButtonStyle(
+            visualDensity: compact
+                ? const VisualDensity(horizontal: -2, vertical: -1)
+                : VisualDensity.standard,
+          ),
+          segments: [
+            const ButtonSegment(
+              value: _EventsDisplayMode.month,
+              icon: Icon(Icons.calendar_month_rounded),
+              label: Text('Month'),
+            ),
+            const ButtonSegment(
+              value: _EventsDisplayMode.week,
+              icon: Icon(Icons.view_week_rounded),
+              label: Text('Week'),
+            ),
+            const ButtonSegment(
+              value: _EventsDisplayMode.agenda,
+              icon: Icon(Icons.view_agenda_rounded),
+              label: Text('Agenda'),
+            ),
+          ],
+          selected: {_displayMode},
+          onSelectionChanged: (value) {
+            setState(() => _displayMode = value.first);
+          },
+        );
       },
     );
   }

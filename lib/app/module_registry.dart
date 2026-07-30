@@ -135,7 +135,6 @@ class SchoolDeskModuleRegistry {
       ownerRoutes: {
         '/fee-monitoring-screen',
         '/principal-fees-screen/fee-structure',
-        '/principal-fees-screen/invoice-generation',
         '/principal-fees-screen/payment-record',
         '/principal-fees-screen/payment-requests',
         '/principal-fees-screen/payment-request-decision',

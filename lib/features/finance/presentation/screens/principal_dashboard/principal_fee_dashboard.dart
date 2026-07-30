@@ -260,7 +260,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
         subtitle: '${_recentPayments.length} receipts',
         icon: Icons.check_circle_outline_rounded,
         gradientColors: [const Color(0xFF16A34A), const Color(0xFF22C55E)],
-        route: '/principal/fee-reports',
+        route: AppRoutes.feeLedger,
       ),
       _buildKpiCard(
         title: 'Fee Structures',
@@ -473,12 +473,6 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
         icon: Icons.qr_code_2_rounded,
         route: AppRoutes.feePaymentConfig,
         color: Color(0xFF0891B2),
-      ),
-      (
-        label: 'Reports',
-        icon: Icons.analytics_outlined,
-        route: '/principal/fee-reports',
-        color: Color(0xFFF97316),
       ),
     ];
 

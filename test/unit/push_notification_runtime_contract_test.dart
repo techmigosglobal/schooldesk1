@@ -43,6 +43,17 @@ void main() {
     },
   );
 
+  test('failed optional background work never clears an active session', () {
+    final interceptors = File(
+      'lib/core/network/api_modules/client_interceptors.dart',
+    ).readAsStringSync();
+
+    expect(interceptors, contains('isBestEffortBackgroundRequest'));
+    expect(interceptors, contains("'/notifications/register-token'"));
+    expect(interceptors, contains("'/monitoring/error-events'"));
+    expect(interceptors, contains('!isBestEffortBackgroundRequest'));
+  });
+
   test('iOS requests only the permissions used by contextual features', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     final app = File('lib/main.dart').readAsStringSync();

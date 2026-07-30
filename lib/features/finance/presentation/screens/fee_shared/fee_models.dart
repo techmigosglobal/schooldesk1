@@ -223,6 +223,15 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     'due_date': row['due_date'],
     'status': _textValue(row['status'], fallback: 'pending'),
     'invoice_number': _textValue(row['invoice_number']),
+    'fee_item_name': _textValue(
+      row['fee_item_name'] ??
+          (_listValue(row['fee_invoice_items']).isNotEmpty
+              ? _mapValue(
+                  _listValue(row['fee_invoice_items']).first,
+                )['category_name']
+              : null),
+      fallback: 'Fee',
+    ),
     'fee_type': _textValue(row['fee_type']),
   };
 }
@@ -233,6 +242,8 @@ List<Map<String, dynamic>> normalizePayments(Map<String, dynamic> invoice) {
   if (payments is! List) return const [];
   return payments.whereType<Map>().map((payment) {
     final row = Map<String, dynamic>.from(payment);
+    final receipt = _mapValue(row['receipt']);
+    final receiptSnapshot = _mapValue(row['receipt_snapshot']);
     return {
       ...row,
       'name': normalized['name'],
@@ -244,7 +255,10 @@ List<Map<String, dynamic>> normalizePayments(Map<String, dynamic> invoice) {
         row['payment_method'] ?? row['payment_mode'] ?? row['mode'],
       ),
       'date': row['payment_date'] ?? row['paid_at'] ?? row['created_at'],
-      'receipt': row['receipt_number'] ?? row['receipt'],
+      'receipt': _textValue(
+        receipt['receipt_number'] ?? row['receipt_number'] ?? row['receipt'],
+      ),
+      'receipt_snapshot': receiptSnapshot,
       'status': _textValue(row['status'], fallback: 'completed'),
       'transaction_id': _textValue(row['transaction_id'], fallback: 'N/A'),
     };
@@ -255,6 +269,8 @@ List<Map<String, dynamic>> normalizePayments(Map<String, dynamic> invoice) {
 
 Map<String, dynamic> _mapValue(Object? value) =>
     value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+
+List<dynamic> _listValue(Object? value) => value is List ? value : const [];
 
 double _numValue(Object? value) {
   if (value is num) return value.toDouble();

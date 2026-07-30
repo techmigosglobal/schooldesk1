@@ -37,6 +37,38 @@ void main() {
     expect(api, contains("'attachment_url': attachmentUrl"));
   });
 
+  test('lesson planner class selectors scope the displayed plans', () {
+    final teacher = File(
+      'lib/features/academics/presentation/screens/lesson_planner_screen.dart',
+    ).readAsStringSync();
+    final principal = File(
+      'lib/features/academics/presentation/screens/principal_lesson_planner_screen.dart',
+    ).readAsStringSync();
+
+    expect(
+      teacher,
+      contains('List<Map<String, dynamic>> get _selectedClassPlanners'),
+    );
+    expect(
+      teacher,
+      contains('final selectedClassPlanners = _selectedClassPlanners'),
+    );
+    expect(
+      teacher,
+      contains('Uploads and displayed plans are limited to this class.'),
+    );
+    expect(principal, contains("String _selectedSectionId = '';"));
+    expect(principal, contains("labelText: 'Class / Section'"));
+    expect(
+      principal,
+      contains('Show lesson planners for the selected class only.'),
+    );
+    expect(
+      principal,
+      contains('List<Map<String, dynamic>> get _classScopedPlanners'),
+    );
+  });
+
   test('backend scopes lesson planners by teacher and parent section', () {
     final handler = File(
       'supabase/functions/api/handlers/communications.ts',

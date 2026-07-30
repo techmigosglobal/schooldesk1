@@ -23,6 +23,8 @@ class _PrincipalLessonPlannerScreenState
   String _query = '';
   String _statusFilter = 'all';
   List<Map<String, dynamic>> _planners = const [];
+  List<Map<String, dynamic>> _classes = const [];
+  String _selectedSectionId = '';
 
   @override
   void initState() {
@@ -36,10 +38,30 @@ class _PrincipalLessonPlannerScreenState
       _error = null;
     });
     try {
-      final rows = await BackendApiClient.instance.getPrincipalLessonPlanners();
+      final plannerFuture = BackendApiClient.instance
+          .getPrincipalLessonPlanners();
+      final sectionFuture = BackendApiClient.instance.getSections();
+      final rows = await plannerFuture;
+      final sections = await sectionFuture;
       if (!mounted) return;
       setState(() {
         _planners = rows;
+        _classes = sections
+            .map(
+              (section) => {
+                'id': section.id,
+                'label': [
+                  section.gradeName,
+                  section.sectionName,
+                ].where((value) => value.trim().isNotEmpty).join(' - '),
+              },
+            )
+            .where((row) => _text(row['id']).isNotEmpty)
+            .toList();
+        if (_selectedSectionId.isNotEmpty &&
+            !_classes.any((row) => row['id'] == _selectedSectionId)) {
+          _selectedSectionId = '';
+        }
         _loading = false;
       });
     } on Object catch (error) {
@@ -54,6 +76,10 @@ class _PrincipalLessonPlannerScreenState
   List<Map<String, dynamic>> get _filteredPlanners {
     final normalizedQuery = _query.trim().toLowerCase();
     return _planners.where((planner) {
+      if (_selectedSectionId.isNotEmpty &&
+          _text(planner['section_id']) != _selectedSectionId) {
+        return false;
+      }
       final status = _text(
         planner['status'],
         fallback: 'uploaded',
@@ -70,8 +96,17 @@ class _PrincipalLessonPlannerScreenState
     }).toList();
   }
 
+  List<Map<String, dynamic>> get _classScopedPlanners => _planners
+      .where(
+        (planner) =>
+            _selectedSectionId.isEmpty ||
+            _text(planner['section_id']) == _selectedSectionId,
+      )
+      .toList();
+
   @override
   Widget build(BuildContext context) {
+    final filteredPlanners = _filteredPlanners;
     return SchoolDeskModuleScaffold(
       title: 'Lesson Planners',
       subtitle: 'Class-wise lesson planner monitoring',
@@ -84,7 +119,7 @@ class _PrincipalLessonPlannerScreenState
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _LessonPlannerSummary(planners: _planners),
+            _LessonPlannerSummary(planners: _classScopedPlanners),
             const SizedBox(height: 16),
             _buildFilters(),
             const SizedBox(height: 16),
@@ -101,14 +136,14 @@ class _PrincipalLessonPlannerScreenState
                 actionLabel: 'Retry',
                 onAction: _loadPlanners,
               )
-            else if (_filteredPlanners.isEmpty)
+            else if (filteredPlanners.isEmpty)
               const _StatePanel(
                 icon: Icons.auto_stories_outlined,
                 title: 'No lesson planners found',
                 message: 'Uploaded or created class teacher plans appear here.',
               )
             else
-              ..._filteredPlanners.map(_LessonPlannerCard.new),
+              ...filteredPlanners.map(_LessonPlannerCard.new),
           ],
         ),
       ),
@@ -119,6 +154,27 @@ class _PrincipalLessonPlannerScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        DropdownButtonFormField<String>(
+          value: _selectedSectionId,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Class / Section',
+            helperText: 'Show lesson planners for the selected class only.',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            const DropdownMenuItem(value: '', child: Text('All classes')),
+            ..._classes.map(
+              (row) => DropdownMenuItem(
+                value: _text(row['id']),
+                child: Text(_text(row['label'], fallback: 'Class')),
+              ),
+            ),
+          ],
+          onChanged: (value) =>
+              setState(() => _selectedSectionId = value ?? ''),
+        ),
+        const SizedBox(height: 10),
         TextField(
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.search_rounded),
@@ -134,7 +190,7 @@ class _PrincipalLessonPlannerScreenState
               setState(() => _statusFilter = values.first),
           segments: const [
             ButtonSegment(value: 'all', label: Text('All')),
-            ButtonSegment(value: 'uploaded', label: Text('Needs review')),
+            ButtonSegment(value: 'uploaded', label: Text('Current plans')),
             ButtonSegment(value: 'completed', label: Text('Completed')),
           ],
         ),
@@ -181,7 +237,7 @@ class _LessonPlannerSummary extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: _SummaryTile(
-              label: 'Needs review',
+              label: 'Current plans',
               value: needsReview.toString(),
               icon: Icons.rate_review_rounded,
             ),

@@ -37,6 +37,12 @@ void main() {
     expect(manifest, contains('android.permission.CAMERA'));
     expect(manifest, contains('android.permission.POST_NOTIFICATIONS'));
     expect(manifest, contains('@style/Ucrop.CropTheme'));
+    expect(manifest, contains('android:resizeableActivity="true"'));
+    expect(manifest, isNot(contains('android:screenOrientation')));
+    expect(
+      File('android/app/src/main/res/values-v35/styles.xml').existsSync(),
+      isFalse,
+    );
     expect(plist, contains('NSCameraUsageDescription'));
     expect(plist, contains('NSPhotoLibraryUsageDescription'));
     expect(plist, contains('remote-notification'));

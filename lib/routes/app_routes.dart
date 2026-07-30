@@ -52,7 +52,6 @@ class AppRoutes {
   static const String feeStructures = '/fee-structures-screen';
   static const String feeCollect = '/fee-collect-screen';
   static const String feeLedger = '/fee-ledger-screen';
-  static const String feeReports = '/fee-reports-screen';
   static const String feePaymentConfig = '/fee-payment-config-screen';
   static const String principalPaymentRequests =
       '/principal-fees-screen/payment-requests';
@@ -60,8 +59,6 @@ class AppRoutes {
       '/principal-fees-screen/payment-request-decision';
   static const String principalFeeStructureForm =
       '/principal-fees-screen/fee-structure';
-  static const String principalInvoiceGenerationForm =
-      '/principal-fees-screen/invoice-generation';
   static const String principalPaymentRecordForm =
       '/principal-fees-screen/payment-record';
   static const String communicationCenter = '/communication-center-screen';
@@ -166,10 +163,7 @@ class AppRoutes {
       '/principal/payment-requests';
   static const String legacyPrincipalFeeStructures =
       '/principal/fee-structures';
-  static const String legacyPrincipalInvoiceGenerate =
-      '/principal/invoice-generate';
   static const String legacyPrincipalCollectFee = '/principal/collect-fee';
-  static const String legacyPrincipalFeeReports = '/principal/fee-reports';
   static const String legacyPrincipalPaymentConfig =
       '/principal/payment-config';
   static const String parentPaymentSelection =
@@ -233,8 +227,6 @@ class AppRoutes {
     feeCollect: (context) => const PrincipalCollectFee(),
     '/principal/collect-fee': (context) => const PrincipalCollectFee(),
     feeLedger: (context) => const FeeLedgerScreen(),
-    feeReports: (context) => const PrincipalReports(),
-    '/principal/fee-reports': (context) => const PrincipalReports(),
     feePaymentConfig: (context) => const PrincipalPaymentConfig(),
     '/principal/payment-config': (context) => const PrincipalPaymentConfig(),
     principalPaymentRequests: (context) => const PrincipalPaymentRequests(),
@@ -247,18 +239,6 @@ class AppRoutes {
     principalFeeStructureForm: (context) => AdminFeeStructureFormScreen(
       args: _principalFeeStructureFormArgs(context),
     ),
-    principalInvoiceGenerationForm: (context) {
-      final args = ModalRoute.of(context)?.settings.arguments;
-      return args is AdminInvoiceGenerationFormArgs
-          ? PrincipalInvoiceGenerate(args: args)
-          : const FeeHomeScreen();
-    },
-    '/principal/invoice-generate': (context) {
-      final args = ModalRoute.of(context)?.settings.arguments;
-      return args is AdminInvoiceGenerationFormArgs
-          ? PrincipalInvoiceGenerate(args: args)
-          : const FeeHomeScreen();
-    },
     principalPaymentRecordForm: (context) => AdminPaymentRecordFormScreen(
       args: _principalPaymentRecordFormArgs(context),
     ),

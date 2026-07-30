@@ -138,6 +138,8 @@ class _TeacherLessonPlannerScreenState
     final image = await picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 85,
+      maxWidth: 2048,
+      maxHeight: 2048,
     );
     if (image == null) return;
     await _uploadFile(
@@ -233,24 +235,6 @@ class _TeacherLessonPlannerScreenState
     }
   }
 
-  Future<void> _markComplete(String id) async {
-    setState(() => _loading = true);
-    try {
-      await BackendApiClient.instance.completeLessonPlanner(id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Marked as completed.')));
-      await _loadPlanners();
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = 'Failed: $error';
-      });
-    }
-  }
-
   Map<String, dynamic> get _selectedClass => _classes.firstWhere(
     (row) => _sectionId(row) == _selectedSectionId,
     orElse: () => _classes.isNotEmpty ? _classes.first : const {},
@@ -258,10 +242,11 @@ class _TeacherLessonPlannerScreenState
 
   @override
   Widget build(BuildContext context) {
-    final uploaded = _planners
+    final selectedClassPlanners = _selectedClassPlanners;
+    final uploaded = selectedClassPlanners
         .where((planner) => _text(planner['status']) != 'completed')
         .toList();
-    final completed = _planners
+    final completed = selectedClassPlanners
         .where((planner) => _text(planner['status']) == 'completed')
         .toList();
     return TeacherFlowScaffold(
@@ -282,7 +267,7 @@ class _TeacherLessonPlannerScreenState
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 14),
-          if (_planners.isEmpty)
+          if (selectedClassPlanners.isEmpty)
             const TeacherFlowCard(
               icon: Icons.auto_stories_outlined,
               title: 'No lesson plans yet',
@@ -329,11 +314,11 @@ class _TeacherLessonPlannerScreenState
           DropdownButtonFormField<String>(
             value: _selectedSectionId,
             decoration: InputDecoration(
-              labelText: 'Assigned Class / Section',
+              labelText: 'Class / Section',
               border: const OutlineInputBorder(),
               helperText: _classes.isEmpty
                   ? 'No assigned classes found. Contact Admin/Principal.'
-                  : null,
+                  : 'Uploads and displayed plans are limited to this class.',
             ),
             items: _classes
                 .map(
@@ -451,6 +436,14 @@ class _TeacherLessonPlannerScreenState
     );
   }
 
+  List<Map<String, dynamic>> get _selectedClassPlanners {
+    final sectionId = _selectedSectionId?.trim() ?? '';
+    if (sectionId.isEmpty) return _planners;
+    return _planners
+        .where((planner) => _text(planner['section_id']) == sectionId)
+        .toList();
+  }
+
   Widget _plannerCard(Map<String, dynamic> planner) {
     final isCompleted = _text(planner['status']) == 'completed';
     final attachments = _lessonPlannerAttachments(planner);
@@ -461,11 +454,7 @@ class _TeacherLessonPlannerScreenState
       subtitle: _plannerClassLabel(planner),
       trailing: isCompleted
           ? const TeacherStatusPill(label: 'Completed', color: Colors.green)
-          : FilledButton.icon(
-              onPressed: () => _markComplete(_text(planner['id'])),
-              icon: const Icon(Icons.check, size: 16),
-              label: const Text('Complete'),
-            ),
+          : const TeacherStatusPill(label: 'Current week', color: Colors.blue),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

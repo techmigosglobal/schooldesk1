@@ -71,42 +71,57 @@ class CustomImageWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return alignment != null
-        ? Align(alignment: alignment!, child: _buildWidget())
-        : _buildWidget();
+        ? Align(alignment: alignment!, child: _buildWidget(context))
+        : _buildWidget(context);
   }
 
-  Widget _buildWidget() {
+  Widget _buildWidget(BuildContext context) {
     return Padding(
       padding: margin ?? EdgeInsets.zero,
-      child: InkWell(onTap: onTap, child: _buildCircleImage()),
+      child: InkWell(onTap: onTap, child: _buildCircleImage(context)),
     );
   }
 
   ///build the image with border radius
-  _buildCircleImage() {
+  Widget _buildCircleImage(BuildContext context) {
     if (radius != null) {
       return ClipRRect(
         borderRadius: radius ?? BorderRadius.zero,
-        child: _buildImageWithBorder(),
+        child: _buildImageWithBorder(context),
       );
     } else {
-      return _buildImageWithBorder();
+      return _buildImageWithBorder(context);
     }
   }
 
   ///build the image with border and border radius style
-  _buildImageWithBorder() {
+  Widget _buildImageWithBorder(BuildContext context) {
     if (border != null) {
       return Container(
         decoration: BoxDecoration(border: border, borderRadius: radius),
-        child: _buildImageView(),
+        child: _buildImageView(context),
       );
     } else {
-      return _buildImageView();
+      return _buildImageView(context);
     }
   }
 
-  Widget _buildImageView() {
+  int? _decodeDimension(BuildContext context, double? logicalDimension) {
+    if (logicalDimension == null ||
+        !logicalDimension.isFinite ||
+        logicalDimension <= 0) {
+      return null;
+    }
+    // Decode only the pixels the rendered image needs. The cap avoids an
+    // unexpectedly large source image consuming excessive memory on tablets.
+    return (logicalDimension * MediaQuery.devicePixelRatioOf(context))
+        .round()
+        .clamp(1, 2048);
+  }
+
+  Widget _buildImageView(BuildContext context) {
+    final decodeWidth = _decodeDimension(context, width);
+    final decodeHeight = _decodeDimension(context, height);
     if (imageUrl != null) {
       switch (imageUrl!.imageType) {
         case ImageType.svg:
@@ -132,6 +147,8 @@ class CustomImageWidget extends StatelessWidget {
             File(imageUrl!),
             height: height,
             width: width,
+            cacheWidth: decodeWidth,
+            cacheHeight: decodeHeight,
             fit: fit ?? BoxFit.cover,
             color: color,
             semanticLabel: semanticLabel,
@@ -143,6 +160,10 @@ class CustomImageWidget extends StatelessWidget {
             fit: fit,
             imageUrl: imageUrl!,
             color: color,
+            memCacheWidth: decodeWidth,
+            memCacheHeight: decodeHeight,
+            maxWidthDiskCache: decodeWidth,
+            maxHeightDiskCache: decodeHeight,
             placeholder: (context, url) => SizedBox(
               height: 30,
               width: 30,

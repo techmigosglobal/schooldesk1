@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -154,34 +155,10 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                 children: [
-                  // Metrics
-                  GridView.count(
-                    crossAxisCount: 3,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 1.22,
-                    children: [
-                      FeeMetricTile(
-                        label: 'Outstanding',
-                        value: money(_totalDue),
-                        icon: Icons.pending_actions_outlined,
-                        color: const Color(0xFFEA580C),
-                      ),
-                      FeeMetricTile(
-                        label: 'Collected',
-                        value: money(_totalCollected),
-                        icon: Icons.check_circle_outline,
-                        color: const Color(0xFF16A34A),
-                      ),
-                      FeeMetricTile(
-                        label: 'Students',
-                        value: '${_accounts.length}',
-                        icon: Icons.groups_outlined,
-                        color: const Color(0xFF2563EB),
-                      ),
-                    ],
+                  _LedgerSummary(
+                    outstanding: _totalDue,
+                    collected: _totalCollected,
+                    students: _accounts.length,
                   ),
                   const SizedBox(height: 14),
 
@@ -209,8 +186,21 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                             child: FilterChip(
                               label: Text(
                                 f.$1[0].toUpperCase() + f.$1.substring(1),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: _filter == f.$1
+                                      ? context.appTheme.onPrimary
+                                      : context.appTheme.onSurface,
+                                ),
                               ),
                               selected: _filter == f.$1,
+                              selectedColor: context.appTheme.primary,
+                              checkmarkColor: context.appTheme.onPrimary,
+                              side: BorderSide(
+                                color: _filter == f.$1
+                                    ? context.appTheme.primary
+                                    : context.appTheme.outlineVariant,
+                              ),
                               onSelected: (_) => setState(() => _filter = f.$1),
                             ),
                           ),
@@ -291,6 +281,11 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                               ),
                             ],
                           ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: context.appTheme.muted,
+                          ),
                         ],
                       ),
                     ),
@@ -349,54 +344,92 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
               ),
             for (final inv in account.invoices)
               FeeCard(
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const FeeIconBadge(
-                      icon: Icons.receipt_outlined,
-                      color: Color(0xFF2563EB),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            textValue(
-                              inv['invoice_number'],
-                              fallback: 'Invoice',
-                            ),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
-                          Text(
-                            displayDate(inv['due_date']),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: context.appTheme.muted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    Row(
                       children: [
-                        Text(
-                          money(numValue(inv['total'])),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
+                        const FeeIconBadge(
+                          icon: Icons.receipt_outlined,
+                          color: Color(0xFF2563EB),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                textValue(
+                                  inv['fee_item_name'],
+                                  fallback: 'Fee invoice',
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Due ${displayDate(inv['due_date'])}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.appTheme.muted,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        if (numValue(inv['balance']) > 0)
-                          Text(
-                            'Due: ${money(numValue(inv['balance']))}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: context.appTheme.error,
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              money(numValue(inv['total'])),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14,
+                              ),
                             ),
+                            if (numValue(inv['balance']) > 0)
+                              Text(
+                                'Due ${money(numValue(inv['balance']))}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: context.appTheme.error,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      textValue(inv['invoice_number'], fallback: 'Invoice'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.appTheme.muted,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => _previewInvoice(account, inv),
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          label: const Text('Invoice PDF'),
+                        ),
+                        if (numValue(inv['balance']) > 0)
+                          FilledButton.icon(
+                            onPressed: () => _recordPayment(account, inv),
+                            icon: const Icon(Icons.payments_outlined),
+                            label: const Text('Record payment'),
                           ),
                       ],
                     ),
@@ -450,21 +483,79 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                         color: Color(0xFF16A34A),
                       ),
                     ),
+                    if (_isFinalizedPayment(p) &&
+                        textValue(p['receipt']).isNotEmpty)
+                      IconButton(
+                        tooltip: 'Receipt PDF',
+                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                        onPressed: () => _previewReceipt(account, p),
+                      ),
                   ],
                 ),
               ),
             const SizedBox(height: 16),
-            // PDF
+            // Print from the single student-ledger workspace.
             if (account.invoices.isNotEmpty)
               FilledButton.icon(
                 onPressed: () => _previewPdf(account),
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                label: const Text('Export Invoice PDF'),
+                icon: const Icon(Icons.print_outlined, size: 18),
+                label: const Text('Print account statement'),
               ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _recordPayment(
+    _StudentAccount account,
+    Map<String, dynamic> invoice,
+  ) async {
+    final draft = await showDialog<_LedgerPaymentDraft>(
+      context: context,
+      builder: (dialogContext) => _LedgerPaymentDialog(
+        invoiceLabel: textValue(invoice['fee_item_name'], fallback: 'Fee'),
+        balance: numValue(invoice['balance']),
+      ),
+    );
+    if (draft == null) return;
+    try {
+      final result = await BackendApiClient.instance
+          .createRaw('/fees/payments', {
+            'invoice_id': invoice['id'],
+            'amount': draft.amount,
+            'payment_method': draft.method,
+            'payment_date': _dateIso(draft.date),
+            if (draft.reference.isNotEmpty) 'reference_number': draft.reference,
+            if (draft.notes.isNotEmpty) 'remarks': draft.notes,
+          });
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      await _loadData();
+      if (!mounted) return;
+      final receiptNumber = textValue(result['receipt_number']);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            receiptNumber.isEmpty
+                ? 'Payment recorded for ${account.name}.'
+                : 'Payment recorded. Receipt $receiptNumber is ready.',
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to record payment: $error'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
+    }
+  }
+
+  String _dateIso(DateTime value) {
+    return '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
   }
 
   Future<void> _previewPdf(_StudentAccount account) async {
@@ -480,6 +571,7 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
           )
           .toList();
       final bytes = await pdfService.generateFeeReceipt(
+        documentKind: FeeDocumentKind.accountStatement,
         receiptNo: 'LEDGER-${DateTime.now().millisecondsSinceEpoch}',
         studentName: account.name,
         className: account.classLabel,
@@ -502,7 +594,410 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
     }
   }
 
+  Future<void> _previewInvoice(
+    _StudentAccount account,
+    Map<String, dynamic> invoice,
+  ) async {
+    try {
+      final pdfService = PdfService.getInstance();
+      final total = numValue(invoice['total']);
+      final paid = numValue(invoice['paid']);
+      final balance = numValue(invoice['balance']);
+      final bytes = await pdfService.generateFeeReceipt(
+        documentKind: FeeDocumentKind.feeInvoice,
+        receiptNo: textValue(invoice['invoice_number'], fallback: 'Invoice'),
+        studentName: account.name,
+        className: account.classLabel,
+        rollNo: account.studentId,
+        parentName: '',
+        feeItems: [
+          {
+            'description': textValue(invoice['fee_item_name'], fallback: 'Fee'),
+            'amount': total,
+            'status': balance > 0 ? 'Due' : 'Paid',
+          },
+        ],
+        totalAmount: total,
+        paidAmount: paid,
+        balance: balance,
+        paymentMode: '',
+        paymentDate: DateTime.now(),
+      );
+      if (!mounted) return;
+      await pdfService.previewDocument(
+        context,
+        bytes,
+        '${textValue(invoice['invoice_number'], fallback: 'Fee')} — Invoice',
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Invoice PDF error: $e')));
+    }
+  }
+
+  Future<void> _previewReceipt(
+    _StudentAccount account,
+    Map<String, dynamic> payment,
+  ) async {
+    try {
+      final pdfService = PdfService.getInstance();
+      final snapshot = payment['receipt_snapshot'] is Map
+          ? Map<String, dynamic>.from(payment['receipt_snapshot'] as Map)
+          : const <String, dynamic>{};
+      final totals = snapshot['source_totals'] is Map
+          ? Map<String, dynamic>.from(snapshot['source_totals'] as Map)
+          : const <String, dynamic>{};
+      final source = snapshot['source_snapshot'] is Map
+          ? Map<String, dynamic>.from(snapshot['source_snapshot'] as Map)
+          : const <String, dynamic>{};
+      final invoice = _invoices.firstWhere(
+        (row) => textValue(row['id']) == textValue(payment['invoice_id']),
+        orElse: () => const <String, dynamic>{},
+      );
+      final paid = numValue(totals['this_payment_amount'] ?? payment['amount']);
+      final receiptNumber = textValue(payment['receipt']);
+      if (receiptNumber.isEmpty) {
+        throw StateError('The finalized payment does not have a receipt yet.');
+      }
+      final rawItems = source['fee_items'] is List
+          ? (source['fee_items'] as List)
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
+          : const <Map<String, dynamic>>[];
+      final school = await BackendApiClient.instance.getCurrentSchool();
+      final assets = await Future.wait([
+        _networkImageBytes(textValue(school['logo_url'])),
+        _networkImageBytes(textValue(school['authorized_signature_url'])),
+      ]);
+      final bytes = await pdfService.generateFeeReceipt(
+        documentKind: FeeDocumentKind.paymentReceipt,
+        receiptNo: receiptNumber,
+        studentName: account.name,
+        className: account.classLabel,
+        rollNo: account.studentId,
+        parentName: '',
+        feeItems: rawItems.isEmpty
+            ? [
+                {
+                  'description': textValue(
+                    source['invoice_number'] ?? invoice['fee_item_name'],
+                    fallback: 'Fee payment',
+                  ),
+                  'amount': paid,
+                  'status': 'Paid',
+                },
+              ]
+            : rawItems,
+        totalAmount: numValue(
+          totals['total_amount'] ?? (invoice.isEmpty ? paid : invoice['total']),
+        ),
+        paidAmount: numValue(totals['paid_amount'] ?? paid),
+        balance: numValue(totals['balance'] ?? invoice['balance']),
+        paymentMode: textValue(
+          source['payment_method'] ?? payment['mode'],
+          fallback: 'Payment',
+        ),
+        paymentDate: _sortDate(source['payment_date'] ?? payment['date']),
+        transactionReference: textValue(
+          source['reference_number'] ?? payment['transaction_id'],
+        ),
+        thisPaymentAmount: paid,
+        schoolName: textValue(school['name'], fallback: 'SchoolDesk'),
+        schoolAddress: _schoolAddress(school),
+        schoolLogo: assets[0],
+        authorizedSignature: assets[1],
+        authorizedSignatoryName: textValue(school['principal_name']),
+      );
+      if (!mounted) return;
+      await pdfService.previewDocument(
+        context,
+        bytes,
+        '${textValue(payment['receipt'], fallback: 'Payment')} — Receipt',
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Receipt PDF error: $e')));
+    }
+  }
+
+  Future<Uint8List?> _networkImageBytes(String url) async {
+    if (url.trim().isEmpty) return null;
+    try {
+      return (await NetworkAssetBundle(
+        Uri.parse(url),
+      ).load(url)).buffer.asUint8List();
+    } on Object {
+      return null;
+    }
+  }
+
+  String _schoolAddress(Map<String, dynamic> school) => [
+    school['address'],
+    school['address_line1'],
+    school['address_line2'],
+    school['city'],
+    school['state'],
+    school['postal_code'],
+  ].map(textValue).where((value) => value.isNotEmpty).toSet().join(', ');
+
+  bool _isFinalizedPayment(Map<String, dynamic> payment) {
+    return const {
+      'completed',
+      'approved',
+      'paid',
+      'success',
+    }.contains(textValue(payment['status']).toLowerCase());
+  }
+
   DateTime _sortDate(Object? v) => DateTime.tryParse('$v') ?? DateTime(2000);
+}
+
+class _LedgerSummary extends StatelessWidget {
+  const _LedgerSummary({
+    required this.outstanding,
+    required this.collected,
+    required this.students,
+  });
+
+  final double outstanding;
+  final double collected;
+  final int students;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = [
+      (
+        label: 'Outstanding',
+        value: money(outstanding),
+        icon: Icons.pending_actions_outlined,
+        color: context.appTheme.error,
+      ),
+      (
+        label: 'Collected',
+        value: money(collected),
+        icon: Icons.check_circle_outline,
+        color: context.appTheme.success,
+      ),
+      (
+        label: 'Students',
+        value: '$students',
+        icon: Icons.groups_outlined,
+        color: context.appTheme.primary,
+      ),
+    ];
+    return Row(
+      children: [
+        for (var index = 0; index < metrics.length; index++) ...[
+          Expanded(
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 112),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.appTheme.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: context.appTheme.outlineVariant),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(metrics[index].icon, color: metrics[index].color),
+                  const SizedBox(height: 8),
+                  Text(
+                    metrics[index].label,
+                    maxLines: 2,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.15,
+                      fontWeight: FontWeight.w800,
+                      color: context.appTheme.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      metrics[index].value,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        color: context.appTheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (index < metrics.length - 1) const SizedBox(width: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _LedgerPaymentDraft {
+  const _LedgerPaymentDraft({
+    required this.amount,
+    required this.date,
+    required this.method,
+    required this.reference,
+    required this.notes,
+  });
+
+  final double amount;
+  final DateTime date;
+  final String method;
+  final String reference;
+  final String notes;
+}
+
+class _LedgerPaymentDialog extends StatefulWidget {
+  const _LedgerPaymentDialog({
+    required this.invoiceLabel,
+    required this.balance,
+  });
+
+  final String invoiceLabel;
+  final double balance;
+
+  @override
+  State<_LedgerPaymentDialog> createState() => _LedgerPaymentDialogState();
+}
+
+class _LedgerPaymentDialogState extends State<_LedgerPaymentDialog> {
+  late final TextEditingController _amount = TextEditingController(
+    text: widget.balance.toStringAsFixed(0),
+  );
+  final _reference = TextEditingController();
+  final _notes = TextEditingController();
+  DateTime _date = DateTime.now();
+  String _method = 'cash';
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _reference.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date.isAfter(now) ? now : _date,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year, now.month, now.day),
+    );
+    if (picked != null && mounted) setState(() => _date = picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Record payment'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.invoiceLabel,
+              style: TextStyle(color: context.appTheme.muted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _amount,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Amount',
+                helperText: 'Remaining balance: ${money(widget.balance)}',
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _method,
+              decoration: const InputDecoration(labelText: 'Payment method'),
+              items: const [
+                DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                DropdownMenuItem(value: 'upi', child: Text('UPI')),
+                DropdownMenuItem(
+                  value: 'bank_transfer',
+                  child: Text('Bank transfer'),
+                ),
+                DropdownMenuItem(value: 'cheque', child: Text('Cheque')),
+                DropdownMenuItem(value: 'other', child: Text('Other')),
+              ],
+              onChanged: (value) => setState(() => _method = value ?? 'cash'),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.calendar_today_outlined),
+              title: const Text('Payment date'),
+              subtitle: Text(
+                '${_date.year.toString().padLeft(4, '0')}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}',
+              ),
+              onTap: _pickDate,
+            ),
+            TextField(
+              controller: _reference,
+              decoration: const InputDecoration(
+                labelText: 'Reference (optional)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notes,
+              maxLines: 2,
+              decoration: const InputDecoration(labelText: 'Notes (optional)'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final amount = double.tryParse(_amount.text.trim()) ?? 0;
+            if (amount <= 0 || amount > widget.balance) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Enter an amount from ₹1 to ${money(widget.balance)}.',
+                  ),
+                ),
+              );
+              return;
+            }
+            Navigator.pop(
+              context,
+              _LedgerPaymentDraft(
+                amount: amount,
+                date: _date,
+                method: _method,
+                reference: _reference.text.trim(),
+                notes: _notes.text.trim(),
+              ),
+            );
+          },
+          child: const Text('Save payment'),
+        ),
+      ],
+    );
+  }
 }
 
 class _StudentAccount {

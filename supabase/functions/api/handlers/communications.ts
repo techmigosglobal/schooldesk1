@@ -1139,6 +1139,32 @@ async function enrichLessonPlannerRows(
   });
 }
 
+async function autoCompleteEndedLessonPlanners(
+  svc: SupabaseClient,
+  school: string,
+  rows: Array<Record<string, unknown>>,
+) {
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+  for (const row of rows) {
+    const payload = lessonPlannerPayload(row);
+    const status = text(payload.status, "uploaded").toLowerCase();
+    const weekEnd = text(payload.week_end_date).slice(0, 10);
+    if (status !== "uploaded" || !weekEnd || weekEnd >= today) continue;
+    const completedAt = new Date().toISOString();
+    const next = { ...payload, status: "completed", completed_at: completedAt };
+    const { error } = await svc.from("frontend_records").update({
+      data: next,
+      updated_at: completedAt,
+    }).eq("id", row.id).eq("school_id", school);
+    if (error) throw new Error(error.message);
+    row.data = next;
+    row.updated_at = completedAt;
+  }
+  return rows;
+}
+
 async function lessonPlannerAssignedSectionIds(
   svc: SupabaseClient,
   school: string,
@@ -2186,7 +2212,12 @@ export async function handleCommunications(
       ascending: false,
     });
     if (error) return fail(error.message);
-    const rows = (await enrichLessonPlannerRows(svc, school, data ?? []))
+    const currentRows = await autoCompleteEndedLessonPlanners(
+      svc,
+      school,
+      data ?? [],
+    );
+    const rows = (await enrichLessonPlannerRows(svc, school, currentRows))
       .filter((row) =>
         `${row.staff_id ?? ""}` === teacherId ||
         sectionIds.has(`${row.section_id ?? ""}`)
@@ -2202,7 +2233,12 @@ export async function handleCommunications(
       ascending: false,
     });
     if (error) return fail(error.message);
-    const rows = await enrichLessonPlannerRows(svc, school, data ?? []);
+    const currentRows = await autoCompleteEndedLessonPlanners(
+      svc,
+      school,
+      data ?? [],
+    );
+    const rows = await enrichLessonPlannerRows(svc, school, currentRows);
     return ok(rows);
   }
 
@@ -2215,7 +2251,12 @@ export async function handleCommunications(
       ascending: false,
     });
     if (error) return fail(error.message);
-    const rows = (await enrichLessonPlannerRows(svc, school, data ?? []))
+    const currentRows = await autoCompleteEndedLessonPlanners(
+      svc,
+      school,
+      data ?? [],
+    );
+    const rows = (await enrichLessonPlannerRows(svc, school, currentRows))
       .filter((row) => {
         const status = `${row.status ?? ""}`.toLowerCase();
         return status !== "draft" &&
@@ -2293,8 +2334,19 @@ export async function handleCommunications(
         lessonPlannerCompleteMatch[1];
     });
     if (!existing) return fail("not found", 404);
+    const existingPayload = (existing.data as Record<string, unknown> | null) ??
+      {};
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "Asia/Kolkata",
+    });
+    if (text(existingPayload.week_end_date).slice(0, 10) >= today) {
+      return fail(
+        "lesson planners complete automatically after their week ends",
+        400,
+      );
+    }
     const payload = {
-      ...((existing.data as Record<string, unknown> | null) ?? {}),
+      ...existingPayload,
       status: "completed",
       completed_at: new Date().toISOString(),
     };

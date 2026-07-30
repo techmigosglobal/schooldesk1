@@ -48,6 +48,49 @@ async function updateOwnUsernameAlias(
   return insertError?.message ?? null;
 }
 
+/**
+ * Repairs a legacy parent import only when its guardian-phone match identifies
+ * exactly one child. Existing parent links are never changed or augmented here:
+ * ambiguous and already-linked accounts remain untouched for a school admin to
+ * review.
+ */
+async function repairUnambiguousParentStudentLink(
+  profile: Record<string, unknown>,
+  authUserId: string,
+  normalizedRole: string,
+) {
+  if (normalizedRole !== "parent") return;
+  const schoolId = profileText(profile.school_id);
+  const phone = profileText(profile.phone);
+  if (!schoolId || !phone) return;
+
+  const { data: existingLinks, error: existingError } = await svc().from(
+    "parent_student_links",
+  ).select("student_id").eq("school_id", schoolId).eq(
+    "parent_user_id",
+    authUserId,
+  ).limit(1);
+  if (existingError || (existingLinks?.length ?? 0) > 0) return;
+
+  const { data: guardians, error: guardianError } = await svc().from(
+    "guardians",
+  ).select("student_id").eq("school_id", schoolId).eq("phone", phone);
+  if (guardianError) return;
+  const studentIds = [
+    ...new Set(
+      (guardians ?? []).map((guardian) => profileText(guardian.student_id))
+        .filter(Boolean),
+    ),
+  ];
+  if (studentIds.length !== 1) return;
+
+  await svc().from("parent_student_links").upsert({
+    school_id: schoolId,
+    parent_user_id: authUserId,
+    student_id: studentIds[0],
+  }, { onConflict: "parent_user_id,student_id" });
+}
+
 function normalizeProfileResponse(
   profile: Record<string, unknown> | null | undefined,
   authUser: {
@@ -69,7 +112,7 @@ function normalizeProfileResponse(
     avatar: profileText(profile?.avatar),
     school_id: profileText(profile?.school_id),
     role_id: profileText(profile?.role_id),
-    role_name: appMetaRole || publicRole,
+    role_name: (appMetaRole || publicRole).toLowerCase(),
     linked_type: profileText(profile?.linked_type),
     linked_id: profileText(profile?.linked_id),
     is_active: profile?.is_active ?? true,
@@ -94,7 +137,10 @@ export async function handleAuth(
 
     let resolvedEmail = email?.trim() || "";
 
-    // Resolve username → email via username_aliases, falling back to the users row.
+    // Resolve username → Auth email.  Alias lookup is the normal path, but older
+    // accounts can predate username_aliases or have a stale public profile email.
+    // In that case, resolve through the user's immutable Auth id instead of
+    // depending on a copy of the Auth email in public.users.
     if (!resolvedEmail && username) {
       const cleanUsername = username.trim();
       const { data: alias } = await svc()
@@ -115,11 +161,35 @@ export async function handleAuth(
       } else {
         const { data: userRow, error: userErr } = await svc()
           .from("users")
-          .select("email")
+          .select("id, email, school_id, username")
           .ilike("username", cleanUsername)
           .maybeSingle();
         if (userErr) return fail("invalid username or password", 401);
-        if (userRow?.email) {
+        if (userRow?.id) {
+          const { data: authUser, error: authErr } = await svc().auth.admin
+            .getUserById(userRow.id);
+          if (authErr || !authUser?.user?.email) {
+            return fail("invalid username or password", 401);
+          }
+          resolvedEmail = authUser.user.email;
+
+          // Best-effort self-healing for a legacy account that has no alias.
+          // A conflicting alias is never overwritten and a repair failure must
+          // not prevent a valid password login.
+          const storedUsername = normalizedUsername(userRow.username);
+          if (
+            storedUsername &&
+            storedUsername === normalizedUsername(cleanUsername)
+          ) {
+            await updateOwnUsernameAlias(
+              profileText(userRow.school_id),
+              authUser.user.id,
+              storedUsername,
+            );
+          }
+        } else if (userRow?.email) {
+          // Kept only as a defensive fallback for an account whose Auth record
+          // was removed; the subsequent password grant will still reject it.
           resolvedEmail = userRow.email;
         }
       }
@@ -174,6 +244,11 @@ export async function handleAuth(
     );
     const resolvedRole = appMetaRole || profileText(profile?.role_name);
     const normalizedRole = resolvedRole.toLowerCase();
+    await repairUnambiguousParentStudentLink(
+      profile,
+      authUser.id,
+      normalizedRole,
+    );
     const now = new Date().toISOString();
     await svc().from("user_sessions").insert({
       user_id: authUser.id,
@@ -213,13 +288,13 @@ export async function handleAuth(
         avatar: profile?.avatar ?? "",
         school_id: profile?.school_id ?? "",
         role_id: profile?.role_id ?? "",
-        role_name: resolvedRole,
+        role_name: normalizedRole,
         linked_type: profile?.linked_type ?? "",
         linked_id: profile?.linked_id ?? "",
         is_active: profile?.is_active ?? true,
         is_verified: profile?.is_verified ?? false,
       },
-      profile: { ...(profile ?? {}), role_name: resolvedRole },
+      profile: { ...(profile ?? {}), role_name: normalizedRole },
       school: profile?.school ?? {},
     });
   }

@@ -67,6 +67,10 @@ class DemoFixtureStore {
     if (clean == '/sections') return _ok(_list('sections'));
     if (clean == '/subjects') return _ok(_list('subjects'));
     if (clean == '/academic-years') return _ok(_list('academic_years'));
+    if (clean.startsWith('/academic-years/')) {
+      final year = _byId('academic_years', clean);
+      return _ok({...year, 'holidays': const <Map<String, dynamic>>[]});
+    }
     if (clean.startsWith('/timetable')) return _ok(_list('timetable'));
     if (clean.startsWith('/principal/timetable'))
       return _ok(_list('timetable'));
@@ -82,6 +86,16 @@ class DemoFixtureStore {
     if (clean.startsWith('/fees/payments')) return _paged(_list('payments'));
     if (clean.startsWith('/fees/payment-requests'))
       return _paged(_list('payment_requests'));
+    if (clean.startsWith('/fees/reminders')) return _ok(const []);
+    if (clean == '/fees/daycare-eligible-students') {
+      return _ok(_list('daycare_students'));
+    }
+    if (clean.startsWith('/fees/daycare-plans')) {
+      return _ok(_list('daycare_plans'));
+    }
+    if (clean.startsWith('/fees/payment-config')) {
+      return _ok({'upi_id': 'demo@upi', 'payee_name': 'ArishVille Demo'});
+    }
     if (clean.startsWith('/fees/')) return _ok(_list('fee_structures'));
     if (clean.startsWith('/parent/students/') && clean.endsWith('/fees'))
       return _ok(_list('invoices'));
@@ -93,6 +107,7 @@ class DemoFixtureStore {
         clean.startsWith('/event-posts'))
       return _ok(_list('event_posts'));
     if (clean == '/events') return _ok(_list('events'));
+    if (clean.startsWith('/holidays')) return _ok(const []);
     if (clean.startsWith('/homework')) return _paged(_list('homework'));
     if (clean.startsWith('/lesson-planners'))
       return _ok(_list('lesson_planners'));
@@ -190,6 +205,7 @@ class DemoFixtureStore {
     if (path.contains('announcement')) return 'announcements';
     if (path.contains('issue') || path.contains('complaint')) return 'issues';
     if (path.contains('payment')) return 'payments';
+    if (path.contains('daycare-plans')) return 'daycare_plans';
     if (path.contains('invoice')) return 'invoices';
     if (path.contains('message') || path.contains('/chat/')) return 'messages';
     if (path.contains('notification')) return 'notifications';
@@ -438,6 +454,22 @@ class DemoFixtureStore {
           },
         },
       ],
+      'daycare_students': [
+        {
+          'id': 'student-daycare-1',
+          'school_id': schoolId,
+          'admission_number': 'LV-2026-DC01',
+          'first_name': 'Maya',
+          'last_name': 'Demo',
+          'status': 'active',
+          'current_section': {
+            'id': 'section-daycare-a',
+            'section_name': 'A',
+            'grade': {'id': 'grade-daycare', 'grade_name': 'Day Care'},
+          },
+        },
+      ],
+      'daycare_plans': <Map<String, dynamic>>[],
       'staff': [
         {
           'id': 'staff-1',
@@ -647,8 +679,10 @@ class DemoFixtureStore {
           'subject_id': 'subject-1',
           'title': 'Colours in nature',
           'objective': 'Notice colours outdoors',
-          'status': 'planned',
-          'scheduled_date': '2026-07-26',
+          'status': 'uploaded',
+          'week_start_date': '2026-07-20',
+          'week_end_date': '2026-07-24',
+          'note': 'Colours, shapes, and outdoor observation activities.',
         },
       ],
       'leave': [

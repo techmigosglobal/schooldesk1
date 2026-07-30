@@ -36,33 +36,36 @@ void main() {
     expect(principalFlow, isNot(contains('_selectedMonths')));
   });
 
-  test('daycare plans create immutable hourly monthly invoice snapshots', () {
-    expect(
-      migration,
-      contains('create table if not exists public.daycare_fee_plans'),
-    );
-    expect(migration, contains('hourly_rate numeric(12,2) not null'));
-    expect(
-      migration,
-      contains('contracted_hours_per_month numeric(10,2) not null'),
-    );
-    expect(migration, contains('billing_period date'));
-    expect(migration, contains('billing_details jsonb'));
-    expect(migration, contains('ensure_daycare_invoice_for_plan'));
-    expect(migration, contains('generate_current_daycare_invoices'));
-    expect(migration, contains("'hourly_rate', v_plan.hourly_rate"));
-    expect(
-      migration,
-      contains(
-        "'contracted_hours_per_month', v_plan.contracted_hours_per_month",
-      ),
-    );
-    expect(feesHandler, contains('feesPath.startsWith("/daycare-plans")'));
-    expect(
-      feesHandler,
-      contains('Daycare plan changes take effect from next month'),
-    );
-  });
+  test(
+    'legacy daycare plans retain immutable hourly monthly invoice snapshots',
+    () {
+      expect(
+        migration,
+        contains('create table if not exists public.daycare_fee_plans'),
+      );
+      expect(migration, contains('hourly_rate numeric(12,2) not null'));
+      expect(
+        migration,
+        contains('contracted_hours_per_month numeric(10,2) not null'),
+      );
+      expect(migration, contains('billing_period date'));
+      expect(migration, contains('billing_details jsonb'));
+      expect(migration, contains('ensure_daycare_invoice_for_plan'));
+      expect(migration, contains('generate_current_daycare_invoices'));
+      expect(migration, contains("'hourly_rate', v_plan.hourly_rate"));
+      expect(
+        migration,
+        contains(
+          "'contracted_hours_per_month', v_plan.contracted_hours_per_month",
+        ),
+      );
+      expect(feesHandler, contains('feesPath.startsWith("/daycare-plans")'));
+      expect(
+        feesHandler,
+        contains('Daycare plan changes take effect from next month'),
+      );
+    },
+  );
 
   test('fee reminders are deduplicated, auditable, and push-routable', () {
     final processor = File(
@@ -97,7 +100,8 @@ void main() {
       processor,
       contains('balance: String(eventData.balance || eventData.amount || "")'),
     );
-    expect(home, contains('Review fee reminders'));
-    expect(home, contains('Reminder delivery'));
+    expect(home, contains('Reminder center'));
+    expect(home, contains('Optional personal message'));
+    expect(home, contains('Queue '));
   });
 }

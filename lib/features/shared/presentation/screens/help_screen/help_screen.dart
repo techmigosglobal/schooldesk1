@@ -324,12 +324,24 @@ class _HelpScreenState extends State<HelpScreen>
                                               bottom: 10,
                                             ),
                                             child: Chip(
-                                              avatar: const Icon(
+                                              backgroundColor:
+                                                  tokens.primaryContainer,
+                                              side: BorderSide(
+                                                color: tokens.primary.withAlpha(
+                                                  72,
+                                                ),
+                                              ),
+                                              avatar: Icon(
                                                 Icons.auto_stories_rounded,
                                                 size: 17,
+                                                color: tokens.primary,
                                               ),
                                               label: Text(
                                                 '${item['category']}',
+                                                style: GoogleFonts.dmSans(
+                                                  color: tokens.onSurface,
+                                                  fontWeight: FontWeight.w800,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -359,8 +371,16 @@ class _HelpScreenState extends State<HelpScreen>
                                                 children: [
                                                   CircleAvatar(
                                                     radius: 12,
+                                                    backgroundColor:
+                                                        tokens.primary,
+                                                    foregroundColor:
+                                                        tokens.onPrimary,
                                                     child: Text(
                                                       '${entry.$1 + 1}',
+                                                      style: GoogleFonts.dmSans(
+                                                        fontWeight:
+                                                            FontWeight.w900,
+                                                      ),
                                                     ),
                                                   ),
                                                   const SizedBox(width: 10),
@@ -391,6 +411,9 @@ class _HelpScreenState extends State<HelpScreen>
                                             ),
                                             label: Text(
                                               'Open ${routeMetadata?.title ?? 'this workflow'}',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              textAlign: TextAlign.center,
                                             ),
                                           ),
                                         ],

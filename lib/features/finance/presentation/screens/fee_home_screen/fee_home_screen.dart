@@ -10,7 +10,6 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_widgets.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
 
 class FeeHomeScreen extends StatefulWidget {
   const FeeHomeScreen({super.key});
@@ -278,7 +277,6 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
   }
 
   Widget _buildContent() {
-    final activeBundle = _bundles.isNotEmpty ? _bundles.first : null;
     return FeePage(
       header: _header(),
       children: [
@@ -581,28 +579,10 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           onTap: () => Navigator.pushNamed(context, AppRoutes.feeCollect),
         ),
         FeeActionRow(
-          icon: Icons.receipt_long_outlined,
-          iconColor: const Color(0xFF7C3AED),
-          title: 'Generate Invoice',
-          subtitle: 'Create an invoice for a selected class or student',
-          onTap: () => Navigator.pushNamed(
-            context,
-            AppRoutes.principalInvoiceGenerationForm,
-            arguments: AdminInvoiceGenerationFormArgs(
-              academicYears: _academicYears,
-              grades: _grades,
-              sections: _sections,
-              students: const [],
-              feeStructures: _feeStructures,
-              ownerRole: 'principal',
-            ),
-          ),
-        ),
-        FeeActionRow(
           icon: Icons.schedule_rounded,
           iconColor: const Color(0xFF0F766E),
           title: 'Daycare Plans',
-          subtitle: 'Set each child’s hourly rate and contracted monthly hours',
+          subtitle: 'Set each child’s monthly amount and due day',
           onTap: _showDaycarePlans,
         ),
         FeeActionRow(
@@ -613,58 +593,6 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
               '${_studentAccounts.where((a) => a.balance > 0).length} students with outstanding balance',
           onTap: () => Navigator.pushNamed(context, AppRoutes.feeLedger),
         ),
-        FeeActionRow(
-          icon: Icons.bar_chart_outlined,
-          iconColor: const Color(0xFF4F46E5),
-          title: 'Reports & Exports',
-          subtitle: 'Review summaries only when you need them',
-          onTap: () => Navigator.pushNamed(context, AppRoutes.feeReports),
-        ),
-
-        // ── Active structure summary ─────────────────────────
-        if (activeBundle != null) ...[
-          const SizedBox(height: 16),
-          const FeeSectionTitle('Active Structure'),
-          const SizedBox(height: 10),
-          FeeCard(
-            child: Row(
-              children: [
-                const FeeIconBadge(
-                  icon: Icons.verified_outlined,
-                  color: Color(0xFF16A34A),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        activeBundle.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                        ),
-                      ),
-                      Text(
-                        '${activeBundle.classLabel} - ${activeBundle.sectionLabel}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: context.appTheme.muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                FeeStatusPill(
-                  label: money(activeBundle.total),
-                  color: const Color(0xFF2563EB),
-                ),
-              ],
-            ),
-          ),
-        ],
 
         const SizedBox(height: 48),
       ],
@@ -793,76 +721,146 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         .map((invoice) => textValue(invoice['id']))
         .where((id) => id.isNotEmpty)
         .toSet();
+    final messageController = TextEditingController();
+    String query = '';
     final approved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Review fee reminders'),
-          content: SizedBox(
-            width: 480,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (context, setDialogState) {
+          final visibleInvoices = _outstandingInvoices.where((invoice) {
+            final text =
+                '${textValue(invoice['name'])} '
+                        '${textValue(invoice['component'])} '
+                        '${textValue(invoice['due_date'])}'
+                    .toLowerCase();
+            return text.contains(query.trim().toLowerCase());
+          }).toList();
+          return AlertDialog(
+            title: const Row(
               children: [
-                const Text(
-                  'Selected families receive one reminder per invoice today. Settled invoices and recipients in the cooldown are skipped.',
-                ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _outstandingInvoices.length,
-                    itemBuilder: (context, index) {
-                      final invoice = _outstandingInvoices[index];
-                      final id = textValue(invoice['id']);
-                      return CheckboxListTile(
-                        value: selected.contains(id),
-                        onChanged: id.isEmpty
-                            ? null
-                            : (value) => setDialogState(() {
-                                if (value == true) {
-                                  selected.add(id);
-                                } else {
-                                  selected.remove(id);
-                                }
-                              }),
-                        title: Text(
-                          textValue(invoice['name'], fallback: 'Student'),
-                        ),
-                        subtitle: Text(
-                          '${textValue(invoice['component'], fallback: 'Fee')} · ${money(numValue(invoice['balance']))}',
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      );
-                    },
+                CircleAvatar(
+                  backgroundColor: Color(0xFFEDE9FE),
+                  child: Icon(
+                    Icons.notifications_active_rounded,
+                    color: Color(0xFF5B21B6),
                   ),
                 ),
+                SizedBox(width: 10),
+                Expanded(child: Text('Reminder center')),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: selected.isEmpty
-                  ? null
-                  : () => Navigator.pop(dialogContext, true),
-              child: Text(
-                'Queue ${selected.length} invoice${selected.length == 1 ? '' : 's'}',
+            content: SizedBox(
+              width: 560,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F3FF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.groups_rounded,
+                          color: Color(0xFF5B21B6),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '${selected.length} families selected · ${money(_outstandingInvoices.fold<double>(0, (sum, invoice) => sum + numValue(invoice['balance'])))} outstanding',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search_rounded),
+                      hintText: 'Search student or fee',
+                      isDense: true,
+                    ),
+                    onChanged: (value) => setDialogState(() => query = value),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: messageController,
+                    maxLength: 180,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.edit_note_rounded),
+                      labelText: 'Optional personal message',
+                      hintText: 'Leave blank to use the school reminder',
+                      isDense: true,
+                    ),
+                  ),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: visibleInvoices.length,
+                      itemBuilder: (context, index) {
+                        final invoice = visibleInvoices[index];
+                        final id = textValue(invoice['id']);
+                        return Card(
+                          elevation: 0,
+                          color: selected.contains(id)
+                              ? const Color(0xFFF5F3FF)
+                              : null,
+                          child: CheckboxListTile(
+                            value: selected.contains(id),
+                            onChanged: id.isEmpty
+                                ? null
+                                : (value) => setDialogState(() {
+                                    if (value == true) {
+                                      selected.add(id);
+                                    } else {
+                                      selected.remove(id);
+                                    }
+                                  }),
+                            title: Text(
+                              textValue(invoice['name'], fallback: 'Student'),
+                            ),
+                            subtitle: Text(
+                              '${textValue(invoice['component'], fallback: 'Fee')} · ${money(numValue(invoice['balance']))} · due ${displayDate(invoice['due_date'])}',
+                            ),
+                            controlAffinity: ListTileControlAffinity.leading,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: selected.isEmpty
+                    ? null
+                    : () => Navigator.pop(dialogContext, true),
+                child: Text(
+                  'Queue ${selected.length} invoice${selected.length == 1 ? '' : 's'}',
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
+    final customMessage = messageController.text.trim();
+    messageController.dispose();
     if (approved != true || selected.isEmpty || !mounted) return;
     try {
-      final summary = await BackendApiClient.instance.createRaw(
-        '/fees/reminders',
-        {'invoice_ids': selected.toList()},
-      );
+      final summary = await BackendApiClient.instance
+          .createRaw('/fees/reminders', {
+            'invoice_ids': selected.toList(),
+            if (customMessage.isNotEmpty) 'message': customMessage,
+          });
       if (!mounted) return;
       final queued = numValue(summary['queued']).round();
       final skipped = numValue(summary['skipped_cooldown']).round();
@@ -925,7 +923,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Each monthly invoice is a snapshot of the child’s contracted hours and hourly rate.',
+                  'Only children currently enrolled in Day Care sections can have a plan. Each child has an individual monthly amount; class fee structures are not used.',
                 ),
                 const SizedBox(height: 12),
                 Flexible(
@@ -956,6 +954,8 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                             final name =
                                 '${textValue(student['first_name'])} ${textValue(student['last_name'])}'
                                     .trim();
+                            final eligible =
+                                plan['is_daycare_eligible'] == true;
                             return ListTile(
                               leading: const CircleAvatar(
                                 backgroundColor: Color(0xFFDDF5EC),
@@ -966,8 +966,17 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                               ),
                               title: Text(name.isEmpty ? 'Student' : name),
                               subtitle: Text(
-                                '₹${numValue(plan['hourly_rate']).toStringAsFixed(0)}/hour × ${numValue(plan['contracted_hours_per_month']).toStringAsFixed(0)} hours · ${invoice.isEmpty ? 'Current invoice pending' : money(numValue(invoice['balance']))}',
+                                '${money(numValue(plan['monthly_amount']))}/month · due on ${numValue(plan['due_day']).round()} · ${invoice.isEmpty ? 'Current invoice pending' : money(numValue(invoice['balance']))}',
                               ),
+                              trailing: eligible
+                                  ? null
+                                  : const Chip(
+                                      avatar: Icon(
+                                        Icons.warning_amber_rounded,
+                                        size: 16,
+                                      ),
+                                      label: Text('Needs attention'),
+                                    ),
                             );
                           },
                         ),
@@ -986,34 +995,17 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
   }
 
   Future<void> _createDaycarePlan() async {
-    final daycareStructures = _feeStructures.where((structure) {
-      return textValue(
-            structure['fee_type'],
-          ).toLowerCase().contains('daycare') &&
-          (_selectedAcademicYearId.isEmpty ||
-              textValue(structure['academic_year_id']) ==
-                  _selectedAcademicYearId);
-    }).toList();
-    if (daycareStructures.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Create a Daycare fee structure before adding a child plan.',
-          ),
-        ),
-      );
-      return;
-    }
     try {
-      final students = (await BackendApiClient.instance.getStudents(
-        status: 'active',
-        pageSize: 1000,
-      )).data;
+      final students = await BackendApiClient.instance.getRawList(
+        '/fees/daycare-eligible-students',
+      );
       if (!mounted) return;
+      if (students.isEmpty) {
+        throw StateError('No active Day Care students are available.');
+      }
       String? studentId;
-      String? structureId = textValue(daycareStructures.first['id']);
-      final rateController = TextEditingController();
-      final hoursController = TextEditingController();
+      final amountController = TextEditingController();
+      final dueDayController = TextEditingController(text: '10');
       final created = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
@@ -1029,8 +1021,11 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                     items: students
                         .map(
                           (student) => DropdownMenuItem(
-                            value: student.id,
-                            child: Text(student.fullName),
+                            value: textValue(student['id']),
+                            child: Text(
+                              '${textValue(student['first_name'])} ${textValue(student['last_name'])}'
+                                  .trim(),
+                            ),
                           ),
                         )
                         .toList(),
@@ -1038,45 +1033,21 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                         setDialogState(() => studentId = value),
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: structureId,
-                    decoration: const InputDecoration(
-                      labelText: 'Daycare fee structure',
-                    ),
-                    items: daycareStructures
-                        .map(
-                          (structure) => DropdownMenuItem(
-                            value: textValue(structure['id']),
-                            child: Text(
-                              textValue(
-                                structure['category'],
-                                fallback: 'Daycare',
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => structureId = value),
-                  ),
-                  const SizedBox(height: 12),
                   TextField(
-                    controller: rateController,
+                    controller: amountController,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
                     decoration: const InputDecoration(
-                      labelText: 'Hourly rate (₹)',
+                      labelText: 'Monthly amount (₹)',
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: hoursController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
+                    controller: dueDayController,
+                    keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'Contracted hours per month',
+                      labelText: 'Due day (1–28)',
                     ),
                   ),
                 ],
@@ -1095,22 +1066,20 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           ),
         ),
       );
-      final rate = double.tryParse(rateController.text) ?? 0;
-      final hours = double.tryParse(hoursController.text) ?? 0;
-      rateController.dispose();
-      hoursController.dispose();
-      if (created != true || studentId == null || structureId == null) return;
-      if (rate <= 0 || hours <= 0) {
-        throw StateError(
-          'Hourly rate and contracted hours must be greater than zero.',
-        );
+      final amount = double.tryParse(amountController.text) ?? 0;
+      final dueDay = int.tryParse(dueDayController.text) ?? 0;
+      amountController.dispose();
+      dueDayController.dispose();
+      if (created != true || studentId == null) return;
+      if (amount <= 0 || dueDay < 1 || dueDay > 28) {
+        throw StateError('Enter a monthly amount and a due day from 1 to 28.');
       }
       await BackendApiClient.instance.createRaw('/fees/daycare-plans', {
         'student_id': studentId,
-        'fee_structure_id': structureId,
         'academic_year_id': _selectedAcademicYearId,
-        'hourly_rate': rate,
-        'contracted_hours_per_month': hours,
+        'monthly_amount': amount,
+        'due_day': dueDay,
+        'fee_label': 'Day Care',
         'effective_from': _todayIso(),
       });
       if (!mounted) return;
