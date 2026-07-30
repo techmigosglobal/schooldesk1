@@ -7,8 +7,10 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   UsersRound,
+  X,
 } from "@/lib/lucide-react";
 import type { Row } from "./types";
 import {
@@ -214,12 +216,21 @@ export function StudentDirectory({
       </div>
 
       <div className="student-directory-toolbar">
-        <input
-          className="search-input"
-          placeholder="Search name, student ID, admission number, parent, or phone…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+        <div className="directory-search" role="search">
+          <Search size={17} />
+          <input
+            type="search"
+            placeholder="Search name, student ID, admission number, parent, or phone…"
+            aria-label="Search students"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          {search && (
+            <button type="button" className="directory-search-clear" aria-label="Clear student search" onClick={() => setSearch("")}>
+              <X size={15} />
+            </button>
+          )}
+        </div>
         <select value={classFilter} onChange={(event) => setClassFilter(event.target.value)} aria-label="Filter by class">
           <option value="all">All classes</option>
           {classOptions.map((option) => <option key={option} value={option}>{option}</option>)}

@@ -649,7 +649,47 @@ a { color:inherit; text-decoration:none; } button,input,textarea,select { font:i
   gap: .65rem;
   margin-bottom: 1rem;
 }
-.student-directory-toolbar .search-input { flex: 1 1 330px; min-width: 220px; }
+.student-directory-toolbar .directory-search {
+  display: flex;
+  align-items: center;
+  flex: 1 1 330px;
+  min-width: 220px;
+  min-height: 38px;
+  gap: .5rem;
+  padding: 0 .7rem;
+  color: #6a8190;
+  border: 1px solid #c9d9df;
+  border-radius: 9px;
+  background: #fff;
+}
+.directory-search:focus-within { border-color: #2d70ae; box-shadow: 0 0 0 3px rgba(45, 112, 174, .14); }
+.directory-search input {
+  width: 100%;
+  min-width: 0;
+  padding: .55rem 0;
+  color: #254961;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: .8rem;
+}
+.directory-search input::-webkit-search-cancel-button { display: none; }
+.directory-search-clear {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  color: #557384;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.directory-search-clear:hover { color: #234b67; background: #eaf2f6; }
+.directory-search-clear:focus-visible { outline: 2px solid #2d70ae; outline-offset: 1px; }
 .student-directory-toolbar select {
   min-height: 38px;
   max-width: 180px;
@@ -745,7 +785,7 @@ a { color:inherit; text-decoration:none; } button,input,textarea,select { font:i
 .danger-button:disabled { cursor: wait; opacity: .65; }
 @media (max-width: 850px) {
   .student-directory-toolbar { align-items: stretch; }
-  .student-directory-toolbar .search-input,
+  .student-directory-toolbar .directory-search,
   .student-directory-toolbar select { max-width: none; width: 100%; }
   .student-directory-toolbar .ops-count { margin-left: 0; }
   .student-profile-editor { align-items: flex-start; }
