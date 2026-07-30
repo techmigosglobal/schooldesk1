@@ -5,14 +5,14 @@ export default function LeadershipLoginSelectionPage() {
   return (
     <main className="login-page">
       <section className="login-card login-role-card">
-        <Link className="login-brand" href="/" aria-label="Back to ArishVille Preschool website">
+        <Link className="login-brand" href="/" aria-label="Back to Arish Ville Preschool website">
           <Image
             src="/branding/arishville-logo.png"
-            alt="ArishVille Preschool"
+            alt="Arish Ville Preschool"
             width={66}
             height={66}
           />
-          <span>ArishVille Preschool</span>
+          <span>Arish Ville Preschool</span>
         </Link>
 
         <p className="login-kicker">SchoolDesk leadership access</p>

@@ -159,7 +159,7 @@ export function TimetableWorkspace({
     <section className="ops-module timetable-workspace">
       <div className="ops-module-heading">
         <div>
-          <div className="ops-module-icon teal" style={{ background: "#e0f2f1", color: "#00695c" }}>
+          <div className="ops-module-icon teal" style={{ background: "#e7f1fa", color: "#0e5ea8" }}>
             <CalendarClock size={20} />
           </div>
           <div>

@@ -149,7 +149,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final shortName = _teacherName.split(' ').take(2).join(' ');
 
     return TeacherFlowScaffold(
-      title: 'ArishVille Pre school',
+      title: 'Arish Ville Preschool',
       subtitle: DemoLocalApiService.instance.isActive
           ? 'Offline Demo · $shortName · classroom flow'
           : '$shortName · classroom flow',

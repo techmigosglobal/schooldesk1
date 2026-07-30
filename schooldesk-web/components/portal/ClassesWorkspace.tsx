@@ -260,7 +260,7 @@ export function ClassesWorkspace({
                         <tr key={id}>
                           <td>
                             <div className="student-cell">
-                              <span className="student-avatar" style={{ background: "#f1ebff", color: "#6e3ec7" }}>
+                              <span className="student-avatar" style={{ background: "#fff4d7", color: "#9a6b00" }}>
                                 {gradeName.slice(0, 1).toUpperCase()}{sectionName.slice(0, 1).toUpperCase()}
                               </span>
                               <div>

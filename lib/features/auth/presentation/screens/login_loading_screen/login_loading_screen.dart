@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 
 /// Transient loading screen shown after login while [RoleAccessService]
@@ -75,7 +76,6 @@ class _LoginLoadingScreenState extends State<LoginLoadingScreen>
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.appTheme.background,
@@ -93,7 +93,7 @@ class _LoginLoadingScreenState extends State<LoginLoadingScreen>
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: const [
                     BoxShadow(
-                      color: Color(0x180F172A),
+                      color: Color(0x240B2F5B),
                       blurRadius: 24,
                       offset: Offset(0, 12),
                     ),
@@ -104,10 +104,10 @@ class _LoginLoadingScreenState extends State<LoginLoadingScreen>
                   'assets/branding/ArishVilleLogo.png',
                   fit: BoxFit.contain,
                   filterQuality: FilterQuality.high,
-                  errorBuilder: (_, __, ___) => const Icon(
+                  errorBuilder: (_, __, ___) => Icon(
                     Icons.account_balance_rounded,
                     size: 48,
-                    color: Color(0xFF587043),
+                    color: context.appTheme.primary,
                   ),
                 ),
               ),
@@ -127,14 +127,37 @@ class _LoginLoadingScreenState extends State<LoginLoadingScreen>
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
-              // Spinner
-              SizedBox(
-                width: 26,
-                height: 26,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: context.appTheme.primary,
+              const SizedBox(height: 22),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: const Column(
+                  children: [
+                    LoadingSkeletonWidget(height: 12, borderRadius: 6),
+                    SizedBox(height: 10),
+                    LoadingSkeletonWidget(
+                      width: 230,
+                      height: 12,
+                      borderRadius: 6,
+                    ),
+                    SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: LoadingSkeletonWidget(
+                            height: 44,
+                            borderRadius: 10,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: LoadingSkeletonWidget(
+                            height: 44,
+                            borderRadius: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],

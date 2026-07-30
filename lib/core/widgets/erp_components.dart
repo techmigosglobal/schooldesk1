@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
@@ -2126,6 +2127,58 @@ class SchoolDeskStatusPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
+    if (kind == SchoolDeskStatusKind.loading) {
+      return Semantics(
+        label: message,
+        liveRegion: true,
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(tokens.spacing.lg),
+          decoration: BoxDecoration(
+            color: tokens.panel,
+            borderRadius: BorderRadius.circular(tokens.radius.card),
+            border: Border.all(color: tokens.panelBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  LoadingSkeletonWidget(
+                    width: tokens.sizing.iconContainer,
+                    height: tokens.sizing.iconContainer,
+                    borderRadius: tokens.radius.control,
+                  ),
+                  SizedBox(width: tokens.spacing.compact),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LoadingSkeletonWidget(height: 16, borderRadius: 8),
+                        SizedBox(height: 8),
+                        LoadingSkeletonWidget(
+                          width: 180,
+                          height: 12,
+                          borderRadius: 6,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: tokens.spacing.md),
+              const LoadingSkeletonWidget(height: 12, borderRadius: 6),
+              SizedBox(height: tokens.spacing.sm),
+              const LoadingSkeletonWidget(
+                width: 220,
+                height: 12,
+                borderRadius: 6,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final icon = switch (kind) {
       SchoolDeskStatusKind.loading => Icons.autorenew_rounded,
       SchoolDeskStatusKind.empty => Icons.inbox_rounded,
@@ -2152,13 +2205,7 @@ class SchoolDeskStatusPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (kind == SchoolDeskStatusKind.loading)
-            SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: tone),
-            )
-          else if (illustrationAsset != null)
+          if (illustrationAsset != null)
             SchoolDeskIllustration(
               asset: illustrationAsset!,
               size: 84,

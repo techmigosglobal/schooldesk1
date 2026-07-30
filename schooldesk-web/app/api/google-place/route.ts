@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const fallbackGoogleUrl = "https://www.google.com/search?q=Little+Ville+Miyapur";
+const fallbackGoogleUrl = "https://www.google.com/search?q=Arish+Ville+Miyapur";
 
 type GoogleReview = {
   author: string;
@@ -44,7 +44,7 @@ export async function GET() {
     })).filter((review) => Boolean(review.text));
     return NextResponse.json({
       configured: true,
-      name: place.displayName?.text || "Little Ville Miyapur",
+      name: place.displayName?.text || "Arish Ville Miyapur",
       address: place.formattedAddress || "",
       rating: place.rating,
       userRatingCount: place.userRatingCount,

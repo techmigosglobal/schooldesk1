@@ -32,5 +32,20 @@ void main() {
       // Should render Container widgets for skeleton items
       expect(find.byType(Container), findsWidgets);
     });
+
+    testWidgets(
+      'page skeleton presents a complete responsive loading surface',
+      (tester) async {
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(body: SchoolDeskPageSkeleton(cardCount: 5)),
+          ),
+        );
+
+        expect(find.byType(SchoolDeskPageSkeleton), findsOneWidget);
+        expect(find.byType(SkeletonCardWidget), findsNWidgets(5));
+        expect(find.bySemanticsLabel('Loading page content'), findsOneWidget);
+      },
+    );
   });
 }

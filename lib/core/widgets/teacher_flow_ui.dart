@@ -11,14 +11,15 @@ import 'package:schooldesk1/core/config/env_config.dart';
 
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
-const Color teacherFlowBackground = Color(0xFFF4FAFB);
-const Color teacherFlowAccent = Color(0xFF0F9F8E);
-const Color teacherFlowInk = Color(0xFF183037);
-const Color teacherFlowMuted = Color(0xFF61727B);
-const Color teacherFlowWarm = Color(0xFFF59E0B);
+const Color teacherFlowBackground = Color(0xFFF8FBFE);
+const Color teacherFlowAccent = Color(0xFF0E5EA8);
+const Color teacherFlowInk = Color(0xFF102A43);
+const Color teacherFlowMuted = Color(0xFF627D98);
+const Color teacherFlowWarm = Color(0xFFF4C430);
 
 class TeacherFlowScaffold extends StatelessWidget {
   final String title;
@@ -153,10 +154,7 @@ class TeacherCurrentClassCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            teacherFlowInk.withOpacity(0.95),
-            const Color(0xFF0F5A51),
-          ],
+          colors: [teacherFlowInk.withOpacity(0.95), const Color(0xFF0F5A51)],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.5),
@@ -227,7 +225,10 @@ class TeacherCurrentClassCard extends StatelessWidget {
               const SizedBox(width: 8),
               // Glowing active badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -604,10 +605,7 @@ class TeacherFlowActionWrap extends StatelessWidget {
                   icon: Icon(filledActions[i].icon, size: 18),
                   label: FittedBox(
                     fit: BoxFit.scaleDown,
-                    child: Text(
-                      filledActions[i].label,
-                      maxLines: 1,
-                    ),
+                    child: Text(filledActions[i].label, maxLines: 1),
                   ),
                 ),
               ),
@@ -648,10 +646,7 @@ class TeacherFlowActionWrap extends StatelessWidget {
                         icon: Icon(outlinedActions[i].icon, size: 16),
                         label: FittedBox(
                           fit: BoxFit.scaleDown,
-                          child: Text(
-                            outlinedActions[i].label,
-                            maxLines: 1,
-                          ),
+                          child: Text(outlinedActions[i].label, maxLines: 1),
                         ),
                       ),
                     ),
@@ -749,7 +744,7 @@ class TeacherFlowLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: CircularProgressIndicator());
+    return const SchoolDeskPageSkeleton(cardCount: 4);
   }
 }
 
@@ -869,10 +864,12 @@ class TeacherFlowBackgroundDecorator extends StatefulWidget {
   const TeacherFlowBackgroundDecorator({super.key, required this.child});
 
   @override
-  State<TeacherFlowBackgroundDecorator> createState() => _TeacherFlowBackgroundDecoratorState();
+  State<TeacherFlowBackgroundDecorator> createState() =>
+      _TeacherFlowBackgroundDecoratorState();
 }
 
-class _TeacherFlowBackgroundDecoratorState extends State<TeacherFlowBackgroundDecorator>
+class _TeacherFlowBackgroundDecoratorState
+    extends State<TeacherFlowBackgroundDecorator>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   Offset _mouseOffset = Offset.zero;
@@ -907,7 +904,8 @@ class _TeacherFlowBackgroundDecoratorState extends State<TeacherFlowBackgroundDe
 
   @override
   Widget build(BuildContext context) {
-    _smoothMouseOffset = Offset.lerp(_smoothMouseOffset, _mouseOffset, 0.05) ?? Offset.zero;
+    _smoothMouseOffset =
+        Offset.lerp(_smoothMouseOffset, _mouseOffset, 0.05) ?? Offset.zero;
 
     return MouseRegion(
       onHover: _onHover,
@@ -920,10 +918,7 @@ class _TeacherFlowBackgroundDecoratorState extends State<TeacherFlowBackgroundDe
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFFEFFBFA),
-                    Color(0xFFF4FAFB),
-                  ],
+                  colors: [Color(0xFFEFFBFA), Color(0xFFF4FAFB)],
                 ),
               ),
             ),
@@ -935,15 +930,36 @@ class _TeacherFlowBackgroundDecoratorState extends State<TeacherFlowBackgroundDe
               builder: (context, _) {
                 final progress = _controller.value * 2 * pi;
                 final size = MediaQuery.sizeOf(context);
-                
-                final blob1X = -50.0 + sin(progress) * 40.0 + (_smoothMouseOffset.dx * 24.0);
-                final blob1Y = -50.0 + cos(progress) * 40.0 + (_smoothMouseOffset.dy * 24.0);
 
-                final blob2X = size.width - 230.0 + cos(progress + pi) * 45.0 + (_smoothMouseOffset.dx * 20.0);
-                final blob2Y = size.height - 230.0 + sin(progress + pi) * 45.0 + (_smoothMouseOffset.dy * 20.0);
+                final blob1X =
+                    -50.0 +
+                    sin(progress) * 40.0 +
+                    (_smoothMouseOffset.dx * 24.0);
+                final blob1Y =
+                    -50.0 +
+                    cos(progress) * 40.0 +
+                    (_smoothMouseOffset.dy * 24.0);
 
-                final blob3X = -80.0 + sin(progress * 1.5) * 35.0 + (_smoothMouseOffset.dx * 18.0);
-                final blob3Y = size.height / 2 - 130.0 + cos(progress * 1.5) * 35.0 + (_smoothMouseOffset.dy * 18.0);
+                final blob2X =
+                    size.width -
+                    230.0 +
+                    cos(progress + pi) * 45.0 +
+                    (_smoothMouseOffset.dx * 20.0);
+                final blob2Y =
+                    size.height -
+                    230.0 +
+                    sin(progress + pi) * 45.0 +
+                    (_smoothMouseOffset.dy * 20.0);
+
+                final blob3X =
+                    -80.0 +
+                    sin(progress * 1.5) * 35.0 +
+                    (_smoothMouseOffset.dx * 18.0);
+                final blob3Y =
+                    size.height / 2 -
+                    130.0 +
+                    cos(progress * 1.5) * 35.0 +
+                    (_smoothMouseOffset.dy * 18.0);
 
                 return Stack(
                   children: [
@@ -1004,9 +1020,7 @@ class _TeacherFlowBackgroundDecoratorState extends State<TeacherFlowBackgroundDe
             ),
           ),
           // 5. Child content
-          Positioned.fill(
-            child: widget.child,
-          ),
+          Positioned.fill(child: widget.child),
         ],
       ),
     );

@@ -4,18 +4,18 @@ import 'package:schooldesk1/core/widgets/custom_page_transition_builder.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class AppTheme {
-  // Arish Ville trust palette: calm blue leadership, warm teal support,
-  // and soft slate surfaces for long operational sessions.
-  static const Color primary = Color(0xFF1D4ED8);
-  static const Color primaryLight = Color(0xFF60A5FA);
-  static const Color primaryContainer = Color(0xFFDBEAFE);
+  // Arish Ville uniform palette: structured navy, clear academic blue,
+  // optimistic school gold, and cool blue surfaces for long sessions.
+  static const Color primary = Color(0xFF0E5EA8);
+  static const Color primaryLight = Color(0xFF54A9E8);
+  static const Color primaryContainer = Color(0xFFDCEFFF);
   static const Color onPrimary = Color(0xFFFFFFFF);
 
-  static const Color secondary = Color(0xFF0F766E);
-  static const Color secondaryContainer = Color(0xFFCCFBF1);
+  static const Color secondary = Color(0xFF0B2F5B);
+  static const Color secondaryContainer = Color(0xFFE7F1FA);
   static const Color onSecondary = Color(0xFFFFFFFF);
 
-  static const Color accent = Color(0xFFD97706);
+  static const Color accent = Color(0xFFF4C430);
 
   // Semantic colors
   static const Color success = Color(0xFF16A34A);
@@ -29,15 +29,15 @@ class AppTheme {
 
   // Surface system
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFF1F5F9);
-  static const Color background = Color(0xFFF8FAFC);
-  static const Color outline = Color(0xFFCBD5E1);
-  static const Color outlineVariant = Color(0xFFE2E8F0);
+  static const Color surfaceVariant = Color(0xFFEEF7FF);
+  static const Color background = Color(0xFFF8FBFE);
+  static const Color outline = Color(0xFFC7DCEA);
+  static const Color outlineVariant = Color(0xFFDCEAF4);
 
   // Text colors
-  static const Color onSurface = Color(0xFF0F172A);
-  static const Color onSurfaceVariant = Color(0xFF334155);
-  static const Color muted = Color(0xFF64748B);
+  static const Color onSurface = Color(0xFF102A43);
+  static const Color onSurfaceVariant = Color(0xFF334E68);
+  static const Color muted = Color(0xFF627D98);
 
   static const SchoolDeskTheme _lightTokens = SchoolDeskTheme(
     isDark: false,
@@ -48,11 +48,11 @@ class AppTheme {
     elevation: SchoolDeskElevation.light,
     motion: SchoolDeskMotion.standard,
     roleColors: {
-      SchoolDeskRole.principal: Color(0xFF1D4ED8),
-      SchoolDeskRole.coordinator: Color(0xFF1D4ED8),
-      SchoolDeskRole.teacher: Color(0xFF7C3AED),
-      SchoolDeskRole.parent: Color(0xFF0F766E),
-      SchoolDeskRole.student: Color(0xFFEA580C),
+      SchoolDeskRole.principal: Color(0xFF0E5EA8),
+      SchoolDeskRole.coordinator: Color(0xFF0B2F5B),
+      SchoolDeskRole.teacher: Color(0xFF2E7FC1),
+      SchoolDeskRole.parent: Color(0xFF4A90C9),
+      SchoolDeskRole.student: Color(0xFFC88700),
     },
     pageBackground: background,
     panel: surface,
@@ -95,24 +95,24 @@ class AppTheme {
     elevation: SchoolDeskElevation.dark,
     motion: SchoolDeskMotion.standard,
     roleColors: {
-      SchoolDeskRole.principal: Color(0xFF93C5FD),
-      SchoolDeskRole.coordinator: Color(0xFF93C5FD),
-      SchoolDeskRole.teacher: Color(0xFFC4B5FD),
-      SchoolDeskRole.parent: Color(0xFF5EEAD4),
-      SchoolDeskRole.student: Color(0xFFFDBA74),
+      SchoolDeskRole.principal: Color(0xFF86C9F4),
+      SchoolDeskRole.coordinator: Color(0xFFB8DCF5),
+      SchoolDeskRole.teacher: Color(0xFF71B7E6),
+      SchoolDeskRole.parent: Color(0xFFA2D4F5),
+      SchoolDeskRole.student: Color(0xFFFFE27A),
     },
-    pageBackground: Color(0xFF0F172A),
-    panel: Color(0xFF111827),
-    panelMuted: Color(0xFF1E293B),
-    panelBorder: Color(0xFF334155),
-    textMuted: Color(0xFF94A3B8),
+    pageBackground: Color(0xFF081F3C),
+    panel: Color(0xFF0B294B),
+    panelMuted: Color(0xFF12395F),
+    panelBorder: Color(0xFF334E68),
+    textMuted: Color(0xFFA8C2D8),
     focusRing: primaryLight,
     primary: primaryLight,
-    primaryLight: Color(0xFF93C5FD),
-    primaryContainer: Color(0xFF1E3A8A),
+    primaryLight: Color(0xFF86C9F4),
+    primaryContainer: Color(0xFF123E70),
     onPrimary: onPrimary,
-    secondary: Color(0xFF5EEAD4),
-    secondaryContainer: Color(0xFF134E4A),
+    secondary: Color(0xFF86C9F4),
+    secondaryContainer: Color(0xFF153A5E),
     onSecondary: onPrimary,
     accent: Color(0xFFFBBF24),
     success: Color(0xFF22C55E),
@@ -123,14 +123,14 @@ class AppTheme {
     errorContainer: Color(0xFF7F1D1D),
     info: Color(0xFF38BDF8),
     infoContainer: Color(0xFF0C4A6E),
-    surface: Color(0xFF111827),
-    surfaceVariant: Color(0xFF1E293B),
-    background: Color(0xFF0F172A),
-    outline: Color(0xFF475569),
-    outlineVariant: Color(0xFF334155),
-    onSurface: Color(0xFFF8FAFC),
-    onSurfaceVariant: Color(0xFFCBD5E1),
-    muted: Color(0xFF94A3B8),
+    surface: Color(0xFF0B294B),
+    surfaceVariant: Color(0xFF12395F),
+    background: Color(0xFF081F3C),
+    outline: Color(0xFF5B7792),
+    outlineVariant: Color(0xFF334E68),
+    onSurface: Color(0xFFF8FBFE),
+    onSurfaceVariant: Color(0xFFC7DCEA),
+    muted: Color(0xFFA8C2D8),
   );
 
   static ThemeData get lightTheme => ThemeData(
@@ -238,7 +238,7 @@ class AppTheme {
       elevation: 0,
       toolbarHeight: 64,
       scrolledUnderElevation: 1,
-      shadowColor: const Color(0x140F172A),
+      shadowColor: const Color(0x14081F3C),
       centerTitle: false,
       titleTextStyle: GoogleFonts.ibmPlexSans(
         fontSize: 18,
@@ -305,7 +305,7 @@ class AppTheme {
         disabledBackgroundColor: outlineVariant,
         disabledForegroundColor: muted,
         elevation: 0,
-        shadowColor: const Color(0x1F1D4ED8),
+        shadowColor: const Color(0x1F0E5EA8),
         overlayColor: primaryLight.withAlpha(56),
         minimumSize: const Size(64, 48),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -412,7 +412,7 @@ class AppTheme {
           return primaryContainer;
         }
         if (states.contains(WidgetState.hovered)) {
-          return const Color(0xFFF8FAFC);
+          return const Color(0xFFF8FBFE);
         }
         return surface;
       }),
@@ -569,102 +569,102 @@ class AppTheme {
     extensions: const <ThemeExtension<dynamic>>[_darkTokens],
     colorScheme: const ColorScheme.dark(
       primary: primaryLight,
-      primaryContainer: Color(0xFF1E3A8A),
+      primaryContainer: Color(0xFF123E70),
       onPrimary: onPrimary,
-      secondary: Color(0xFF5EEAD4),
-      secondaryContainer: Color(0xFF134E4A),
+      secondary: Color(0xFF86C9F4),
+      secondaryContainer: Color(0xFF153A5E),
       onSecondary: onPrimary,
-      surface: Color(0xFF111827),
-      surfaceContainerHighest: Color(0xFF1E293B),
+      surface: Color(0xFF0B294B),
+      surfaceContainerHighest: Color(0xFF12395F),
       error: Color(0xFFF87171),
       errorContainer: Color(0xFF7F1D1D),
-      onSurface: Color(0xFFF8FAFC),
-      onSurfaceVariant: Color(0xFFCBD5E1),
-      outline: Color(0xFF475569),
-      outlineVariant: Color(0xFF334155),
+      onSurface: Color(0xFFF8FBFE),
+      onSurfaceVariant: Color(0xFFC7DCEA),
+      outline: Color(0xFF5B7792),
+      outlineVariant: Color(0xFF334E68),
     ),
-    scaffoldBackgroundColor: const Color(0xFF0F172A),
+    scaffoldBackgroundColor: const Color(0xFF081F3C),
     textTheme: GoogleFonts.ibmPlexSansTextTheme(
       const TextTheme(
         displayLarge: TextStyle(
           fontSize: 32,
           fontWeight: FontWeight.w700,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         displayMedium: TextStyle(
           fontSize: 26,
           fontWeight: FontWeight.w700,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         displaySmall: TextStyle(
           fontSize: 26,
           fontWeight: FontWeight.w700,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         headlineLarge: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.w600,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         headlineMedium: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         headlineSmall: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         titleLarge: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         titleMedium: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w500,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         titleSmall: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w500,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         bodyLarge: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w400,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         bodyMedium: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w400,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         bodySmall: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w400,
-          color: Color(0xFF94A3B8),
+          color: Color(0xFFA8C2D8),
         ),
         labelLarge: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w600,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         labelMedium: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w500,
-          color: Color(0xFFF8FAFC),
+          color: Color(0xFFF8FBFE),
         ),
         labelSmall: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w500,
-          color: Color(0xFF94A3B8),
+          color: Color(0xFFA8C2D8),
         ),
       ),
     ),
     appBarTheme: AppBarThemeData(
-      backgroundColor: const Color(0xFF111827),
+      backgroundColor: const Color(0xFF0B294B),
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       toolbarHeight: 64,
@@ -674,23 +674,23 @@ class AppTheme {
       titleTextStyle: GoogleFonts.ibmPlexSans(
         fontSize: 18,
         fontWeight: FontWeight.w600,
-        color: const Color(0xFFF8FAFC),
+        color: const Color(0xFFF8FBFE),
       ),
-      iconTheme: const IconThemeData(color: Color(0xFFF8FAFC)),
+      iconTheme: const IconThemeData(color: Color(0xFFF8FBFE)),
     ),
     cardTheme: CardThemeData(
       elevation: 0,
       surfaceTintColor: Colors.transparent,
-      color: const Color(0xFF111827),
+      color: const Color(0xFF0B294B),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFF334155)),
+        side: const BorderSide(color: Color(0xFF334E68)),
       ),
       margin: EdgeInsets.zero,
     ),
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,
-      fillColor: const Color(0xFF1E293B),
+      fillColor: const Color(0xFF12395F),
       constraints: const BoxConstraints(minHeight: 48),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       border: OutlineInputBorder(
@@ -699,7 +699,7 @@ class AppTheme {
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF334155), width: 1),
+        borderSide: const BorderSide(color: Color(0xFF334E68), width: 1),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
@@ -708,22 +708,22 @@ class AppTheme {
       labelStyle: GoogleFonts.ibmPlexSans(
         fontSize: 13,
         fontWeight: FontWeight.w500,
-        color: const Color(0xFF94A3B8),
+        color: const Color(0xFFA8C2D8),
       ),
       hintStyle: GoogleFonts.ibmPlexSans(
         fontSize: 15,
         fontWeight: FontWeight.w400,
-        color: const Color(0xFF94A3B8),
+        color: const Color(0xFFA8C2D8),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: primaryLight,
         foregroundColor: const Color(0xFF082F49),
-        disabledBackgroundColor: const Color(0xFF334155),
-        disabledForegroundColor: const Color(0xFF94A3B8),
+        disabledBackgroundColor: const Color(0xFF334E68),
+        disabledForegroundColor: const Color(0xFFA8C2D8),
         elevation: 0,
-        overlayColor: const Color(0xFFDBEAFE).withAlpha(40),
+        overlayColor: const Color(0xFFDCEFFF).withAlpha(40),
         minimumSize: const Size(64, 48),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -737,9 +737,9 @@ class AppTheme {
       style: FilledButton.styleFrom(
         backgroundColor: primaryLight,
         foregroundColor: const Color(0xFF082F49),
-        disabledBackgroundColor: const Color(0xFF334155),
-        disabledForegroundColor: const Color(0xFF94A3B8),
-        overlayColor: const Color(0xFFDBEAFE).withAlpha(40),
+        disabledBackgroundColor: const Color(0xFF334E68),
+        disabledForegroundColor: const Color(0xFFA8C2D8),
+        overlayColor: const Color(0xFFDCEFFF).withAlpha(40),
         minimumSize: const Size(64, 48),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -752,10 +752,10 @@ class AppTheme {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: primaryLight,
-        backgroundColor: const Color(0xFF111827),
-        disabledForegroundColor: const Color(0xFF64748B),
+        backgroundColor: const Color(0xFF0B294B),
+        disabledForegroundColor: const Color(0xFF627D98),
         side: const BorderSide(color: primaryLight, width: 1.5),
-        overlayColor: const Color(0xFF1E3A8A),
+        overlayColor: const Color(0xFF123E70),
         minimumSize: const Size(64, 48),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -766,9 +766,9 @@ class AppTheme {
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: const Color(0xFF1E293B),
-      selectedColor: const Color(0xFF1E3A8A),
-      side: const BorderSide(color: Color(0xFF334155)),
+      backgroundColor: const Color(0xFF12395F),
+      selectedColor: const Color(0xFF123E70),
+      side: const BorderSide(color: Color(0xFF334E68)),
       labelStyle: GoogleFonts.ibmPlexSans(
         fontSize: 13,
         fontWeight: FontWeight.w500,
@@ -777,7 +777,7 @@ class AppTheme {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
     dividerTheme: const DividerThemeData(
-      color: Color(0xFF334155),
+      color: Color(0xFF334E68),
       thickness: 1,
       space: 0,
     ),
@@ -785,23 +785,23 @@ class AppTheme {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       minVerticalPadding: 8,
       iconColor: const Color(0xFFB0BEC5),
-      textColor: const Color(0xFFF8FAFC),
+      textColor: const Color(0xFFF8FBFE),
       selectedColor: primaryLight,
-      selectedTileColor: const Color(0xFF1E3A8A),
+      selectedTileColor: const Color(0xFF123E70),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       titleTextStyle: GoogleFonts.ibmPlexSans(
         fontSize: 15,
         fontWeight: FontWeight.w600,
-        color: const Color(0xFFF8FAFC),
+        color: const Color(0xFFF8FBFE),
       ),
       subtitleTextStyle: GoogleFonts.ibmPlexSans(
         fontSize: 13,
         fontWeight: FontWeight.w400,
-        color: const Color(0xFFCBD5E1),
+        color: const Color(0xFFC7DCEA),
       ),
     ),
     drawerTheme: const DrawerThemeData(
-      backgroundColor: Color(0xFF111827),
+      backgroundColor: Color(0xFF0B294B),
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       shadowColor: Color(0x99000000),
@@ -811,7 +811,7 @@ class AppTheme {
       ),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: const Color(0xFF111827),
+      color: const Color(0xFF0B294B),
       surfaceTintColor: Colors.transparent,
       elevation: 8,
       shadowColor: const Color(0x99000000),
@@ -819,19 +819,19 @@ class AppTheme {
       textStyle: GoogleFonts.ibmPlexSans(
         fontSize: 13,
         fontWeight: FontWeight.w500,
-        color: const Color(0xFFF8FAFC),
+        color: const Color(0xFFF8FBFE),
       ),
     ),
     dataTableTheme: DataTableThemeData(
-      headingRowColor: WidgetStateProperty.all(const Color(0xFF1E293B)),
+      headingRowColor: WidgetStateProperty.all(const Color(0xFF12395F)),
       dataRowColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return const Color(0xFF1E3A8A);
+          return const Color(0xFF123E70);
         }
         if (states.contains(WidgetState.hovered)) {
           return const Color(0xFF172033);
         }
-        return const Color(0xFF111827);
+        return const Color(0xFF0B294B);
       }),
       dividerThickness: 1,
       columnSpacing: 28,
@@ -839,16 +839,16 @@ class AppTheme {
       headingTextStyle: GoogleFonts.ibmPlexSans(
         fontSize: 13,
         fontWeight: FontWeight.w700,
-        color: const Color(0xFFF8FAFC),
+        color: const Color(0xFFF8FBFE),
       ),
       dataTextStyle: GoogleFonts.ibmPlexSans(
         fontSize: 13,
         fontWeight: FontWeight.w500,
-        color: const Color(0xFFCBD5E1),
+        color: const Color(0xFFC7DCEA),
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF111827),
-        border: Border.all(color: const Color(0xFF334155)),
+        color: const Color(0xFF0B294B),
+        border: Border.all(color: const Color(0xFF334E68)),
         borderRadius: BorderRadius.circular(8),
       ),
     ),
@@ -858,27 +858,27 @@ class AppTheme {
         if (states.contains(WidgetState.hovered)) {
           return const Color(0xFFB0BEC5);
         }
-        return const Color(0xFF475569);
+        return const Color(0xFF5B7792);
       }),
-      trackColor: WidgetStateProperty.all(const Color(0xFF1E293B)),
+      trackColor: WidgetStateProperty.all(const Color(0xFF12395F)),
       thickness: WidgetStateProperty.all(8),
       radius: const Radius.circular(999),
     ),
     navigationDrawerTheme: NavigationDrawerThemeData(
-      backgroundColor: const Color(0xFF111827),
-      indicatorColor: const Color(0xFF1E3A8A),
+      backgroundColor: const Color(0xFF0B294B),
+      indicatorColor: const Color(0xFF123E70),
       labelTextStyle: WidgetStateProperty.all(
         GoogleFonts.ibmPlexSans(
           fontSize: 13,
           fontWeight: FontWeight.w500,
-          color: const Color(0xFFF8FAFC),
+          color: const Color(0xFFF8FBFE),
         ),
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: const Color(0xFF111827),
+      backgroundColor: const Color(0xFF0B294B),
       elevation: 0,
-      indicatorColor: const Color(0xFF1E3A8A),
+      indicatorColor: const Color(0xFF123E70),
       indicatorShape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -887,14 +887,14 @@ class AppTheme {
         return GoogleFonts.ibmPlexSans(
           fontSize: 13,
           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          color: selected ? primaryLight : const Color(0xFF94A3B8),
+          color: selected ? primaryLight : const Color(0xFFA8C2D8),
         );
       }),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         return IconThemeData(
           color: states.contains(WidgetState.selected)
               ? primaryLight
-              : const Color(0xFF94A3B8),
+              : const Color(0xFFA8C2D8),
           size: 24,
         );
       }),
@@ -909,7 +909,7 @@ class AppTheme {
         fontWeight: FontWeight.w400,
       ),
       labelColor: primaryLight,
-      unselectedLabelColor: const Color(0xFF94A3B8),
+      unselectedLabelColor: const Color(0xFFA8C2D8),
       indicatorColor: primaryLight,
       indicatorSize: TabBarIndicatorSize.tab,
     ),
@@ -918,20 +918,20 @@ class AppTheme {
         minimumSize: WidgetStateProperty.all(const Size.square(44)),
         foregroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.disabled)) {
-            return const Color(0xFF475569);
+            return const Color(0xFF5B7792);
           }
-          return const Color(0xFFCBD5E1);
+          return const Color(0xFFC7DCEA);
         }),
         backgroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.pressed)) {
-            return const Color(0xFF1E3A8A);
+            return const Color(0xFF123E70);
           }
           if (states.contains(WidgetState.hovered)) {
-            return const Color(0xFF1E293B);
+            return const Color(0xFF12395F);
           }
           return Colors.transparent;
         }),
-        overlayColor: WidgetStateProperty.all(const Color(0xFF1E3A8A)),
+        overlayColor: WidgetStateProperty.all(const Color(0xFF123E70)),
         shape: WidgetStateProperty.all(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
@@ -948,11 +948,11 @@ class AppTheme {
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
       color: primaryLight,
-      linearTrackColor: Color(0xFF334155),
-      refreshBackgroundColor: Color(0xFF111827),
+      linearTrackColor: Color(0xFF334E68),
+      refreshBackgroundColor: Color(0xFF0B294B),
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: const Color(0xFF12395F),
       contentTextStyle: GoogleFonts.ibmPlexSans(
         fontSize: 13,
         color: Colors.white,
@@ -961,20 +961,20 @@ class AppTheme {
       behavior: SnackBarBehavior.floating,
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: const Color(0xFF111827),
+      backgroundColor: const Color(0xFF0B294B),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       titleTextStyle: GoogleFonts.ibmPlexSans(
         fontSize: 18,
         fontWeight: FontWeight.w600,
-        color: const Color(0xFFF8FAFC),
+        color: const Color(0xFFF8FBFE),
       ),
       contentTextStyle: GoogleFonts.ibmPlexSans(
         fontSize: 15,
-        color: const Color(0xFFCBD5E1),
+        color: const Color(0xFFC7DCEA),
       ),
     ),
     bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: Color(0xFF111827),
+      backgroundColor: Color(0xFF0B294B),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),

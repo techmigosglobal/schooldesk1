@@ -97,16 +97,16 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
       {/* Sidebar */}
       <aside className={`sidebar ops-sidebar ${collapsed ? "collapsed" : ""}`}>
         <div className="ops-brand-row">
-          <a href="/" className="portal-brand" title="ArishVille Preschool">
+          <a href="/" className="portal-brand" title="Arish Ville Preschool">
             <Image
               src="/branding/arishville-logo.png"
-              alt="ArishVille Preschool"
+              alt="Arish Ville Preschool"
               width={32}
               height={32}
             />
             {!collapsed && (
               <span>
-                ArishVille
+                Arish Ville
                 <small>Preschool</small>
               </span>
             )}

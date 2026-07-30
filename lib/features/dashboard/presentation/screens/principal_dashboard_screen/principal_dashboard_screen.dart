@@ -16,6 +16,7 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/branch_switcher.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
@@ -296,7 +297,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           return Scaffold(
             backgroundColor: Colors.transparent,
             body: AppBackground(
-              accent: const Color(0xFF1478F2),
+              accent: const Color(0xFF0E5EA8),
               child: SafeArea(bottom: false, child: _buildDesktopBody(context)),
             ),
           );
@@ -319,7 +320,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     onDestinationSelected: (_) {},
                   ),
             body: AppBackground(
-              accent: const Color(0xFF1478F2),
+              accent: const Color(0xFF0E5EA8),
               child: SafeArea(
                 bottom: false,
                 child: Align(
@@ -360,7 +361,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   Widget _buildDesktopBody(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SchoolDeskPageSkeleton(cardCount: 6);
     }
 
     if (_error != null) {
@@ -396,8 +397,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             route: AppRoutes.academicManagement,
             illustration: SchoolDeskUiIllustrations.calendar,
             fallbackIcon: Icons.edit_calendar_rounded,
-            accent: Color(0xFF5B35F5),
-            cardColor: Color(0xFFF0EDFF),
+            accent: Color(0xFF0B2F5B),
+            cardColor: Color(0xFFEEF7FF),
           ),
           const _AcademicModuleItem(
             label: 'Students',
@@ -412,8 +413,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             route: AppRoutes.staffManagement,
             illustration: SchoolDeskUiIllustrations.principalStaffManagement,
             fallbackIcon: Icons.co_present_rounded,
-            accent: Color(0xFF7C3AED),
-            cardColor: Color(0xFFF3ECFF),
+            accent: Color(0xFF0E5EA8),
+            cardColor: Color(0xFFDCEFFF),
           ),
           const _AcademicModuleItem(
             label: 'Parents',
@@ -421,7 +422,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             illustration: SchoolDeskUiIllustrations.principalGuardians,
             fallbackIcon: Icons.family_restroom_rounded,
             accent: Color(0xFF2563EB),
-            cardColor: Color(0xFFF4EEFF),
+            cardColor: Color(0xFFEEF7FF),
           ),
           const _AcademicModuleItem(
             label: 'Class Hub',
@@ -436,32 +437,32 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             route: AppRoutes.principalAttendance,
             illustration: SchoolDeskUiIllustrations.attendance,
             fallbackIcon: Icons.fact_check_rounded,
-            accent: Color(0xFF0E9384),
-            cardColor: Color(0xFFE7FAF6),
+            accent: Color(0xFF54A9E8),
+            cardColor: Color(0xFFEEF7FF),
           ),
           const _AcademicModuleItem(
             label: 'Subjects',
             route: AppRoutes.principalSubjects,
             illustration: SchoolDeskUiIllustrations.principalSubjects,
             fallbackIcon: Icons.menu_book_rounded,
-            accent: Color(0xFF06B6D4),
-            cardColor: Color(0xFFE8FAFC),
+            accent: Color(0xFF54A9E8),
+            cardColor: Color(0xFFEEF7FF),
           ),
           const _AcademicModuleItem(
             label: 'Timetable',
             route: AppRoutes.principalTimetable,
             illustration: SchoolDeskUiIllustrations.principalTimetable,
             fallbackIcon: Icons.calendar_view_week_rounded,
-            accent: Color(0xFF0EA5E9),
-            cardColor: Color(0xFFE8F7FF),
+            accent: Color(0xFF54A9E8),
+            cardColor: Color(0xFFEEF7FF),
           ),
           const _AcademicModuleItem(
             label: 'Lesson Planners',
             route: AppRoutes.principalLessonPlanner,
             illustration: SchoolDeskUiIllustrations.lessonPlanner,
             fallbackIcon: Icons.auto_stories_rounded,
-            accent: Color(0xFFDB2777),
-            cardColor: Color(0xFFFCE7F3),
+            accent: Color(0xFFC88700),
+            cardColor: Color(0xFFFFF7D6),
           ),
           if (!_isCoordinator)
             const _AcademicModuleItem(
@@ -485,8 +486,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             route: AppRoutes.principalEventApprovals,
             illustration: SchoolDeskUiIllustrations.schoolPostsApproval,
             fallbackIcon: Icons.fact_check_rounded,
-            accent: const Color(0xFFEA580C),
-            cardColor: const Color(0xFFFFF1E8),
+            accent: const Color(0xFFC88700),
+            cardColor: const Color(0xFFFFF7D6),
             badge: _data.pendingApprovals,
           ),
           const _AcademicModuleItem(
@@ -494,24 +495,24 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             route: AppRoutes.principalEventPosts,
             illustration: SchoolDeskUiIllustrations.notices,
             fallbackIcon: Icons.campaign_rounded,
-            accent: Color(0xFF0F766E),
-            cardColor: Color(0xFFE6FFFA),
+            accent: Color(0xFF54A9E8),
+            cardColor: Color(0xFFEEF7FF),
           ),
           const _AcademicModuleItem(
             label: 'Gallery',
             route: AppRoutes.schoolGallery,
             illustration: SchoolDeskUiIllustrations.resources,
             fallbackIcon: Icons.photo_library_rounded,
-            accent: Color(0xFF9333EA),
-            cardColor: Color(0xFFF5ECFF),
+            accent: Color(0xFF0E5EA8),
+            cardColor: Color(0xFFDCEFFF),
           ),
           const _AcademicModuleItem(
             label: 'Messages & Chats',
             route: AppRoutes.principalChatCommunications,
             illustration: SchoolDeskUiIllustrations.chat,
             fallbackIcon: Icons.forum_rounded,
-            accent: Color(0xFF7C3AED),
-            cardColor: Color(0xFFF3ECFF),
+            accent: Color(0xFF0E5EA8),
+            cardColor: Color(0xFFDCEFFF),
           ),
         ],
         onTap: (item) => _open(item.route),
@@ -583,7 +584,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   Widget _buildBody(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SchoolDeskPageSkeleton(cardCount: 6);
     }
 
     if (_error != null) {
@@ -629,8 +630,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     route: AppRoutes.academicManagement,
                     illustration: SchoolDeskUiIllustrations.calendar,
                     fallbackIcon: Icons.edit_calendar_rounded,
-                    accent: Color(0xFF5B35F5),
-                    cardColor: Color(0xFFF0EDFF),
+                    accent: Color(0xFF0B2F5B),
+                    cardColor: Color(0xFFEEF7FF),
                   ),
                   const _AcademicModuleItem(
                     label: 'Students',
@@ -646,8 +647,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     illustration:
                         SchoolDeskUiIllustrations.principalStaffManagement,
                     fallbackIcon: Icons.co_present_rounded,
-                    accent: Color(0xFF7C3AED),
-                    cardColor: Color(0xFFF3ECFF),
+                    accent: Color(0xFF0E5EA8),
+                    cardColor: Color(0xFFDCEFFF),
                   ),
                   const _AcademicModuleItem(
                     label: 'Parents',
@@ -655,7 +656,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     illustration: SchoolDeskUiIllustrations.principalGuardians,
                     fallbackIcon: Icons.family_restroom_rounded,
                     accent: Color(0xFF2563EB),
-                    cardColor: Color(0xFFF4EEFF),
+                    cardColor: Color(0xFFEEF7FF),
                   ),
                   const _AcademicModuleItem(
                     label: 'Class Hub',
@@ -670,32 +671,32 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     route: AppRoutes.principalAttendance,
                     illustration: SchoolDeskUiIllustrations.attendance,
                     fallbackIcon: Icons.fact_check_rounded,
-                    accent: Color(0xFF0E9384),
-                    cardColor: Color(0xFFE7FAF6),
+                    accent: Color(0xFF54A9E8),
+                    cardColor: Color(0xFFEEF7FF),
                   ),
                   const _AcademicModuleItem(
                     label: 'Subjects',
                     route: AppRoutes.principalSubjects,
                     illustration: SchoolDeskUiIllustrations.principalSubjects,
                     fallbackIcon: Icons.menu_book_rounded,
-                    accent: Color(0xFF06B6D4),
-                    cardColor: Color(0xFFE8FAFC),
+                    accent: Color(0xFF54A9E8),
+                    cardColor: Color(0xFFEEF7FF),
                   ),
                   const _AcademicModuleItem(
                     label: 'Timetable',
                     route: AppRoutes.principalTimetable,
                     illustration: SchoolDeskUiIllustrations.principalTimetable,
                     fallbackIcon: Icons.calendar_view_week_rounded,
-                    accent: Color(0xFF0EA5E9),
-                    cardColor: Color(0xFFE8F7FF),
+                    accent: Color(0xFF54A9E8),
+                    cardColor: Color(0xFFEEF7FF),
                   ),
                   const _AcademicModuleItem(
                     label: 'Lesson Planners',
                     route: AppRoutes.principalLessonPlanner,
                     illustration: SchoolDeskUiIllustrations.lessonPlanner,
                     fallbackIcon: Icons.auto_stories_rounded,
-                    accent: Color(0xFFDB2777),
-                    cardColor: Color(0xFFFCE7F3),
+                    accent: Color(0xFFC88700),
+                    cardColor: Color(0xFFFFF7D6),
                   ),
                   if (!_isCoordinator)
                     const _AcademicModuleItem(
@@ -719,8 +720,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     route: AppRoutes.principalEventApprovals,
                     illustration: SchoolDeskUiIllustrations.schoolPostsApproval,
                     fallbackIcon: Icons.fact_check_rounded,
-                    accent: const Color(0xFFEA580C),
-                    cardColor: const Color(0xFFFFF1E8),
+                    accent: const Color(0xFFC88700),
+                    cardColor: const Color(0xFFFFF7D6),
                     badge: _data.pendingApprovals,
                   ),
                   const _AcademicModuleItem(
@@ -728,24 +729,24 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     route: AppRoutes.principalEventPosts,
                     illustration: SchoolDeskUiIllustrations.notices,
                     fallbackIcon: Icons.campaign_rounded,
-                    accent: Color(0xFF0F766E),
-                    cardColor: Color(0xFFE6FFFA),
+                    accent: Color(0xFF54A9E8),
+                    cardColor: Color(0xFFEEF7FF),
                   ),
                   const _AcademicModuleItem(
                     label: 'Gallery',
                     route: AppRoutes.schoolGallery,
                     illustration: SchoolDeskUiIllustrations.resources,
                     fallbackIcon: Icons.photo_library_rounded,
-                    accent: Color(0xFF9333EA),
-                    cardColor: Color(0xFFF5ECFF),
+                    accent: Color(0xFF0E5EA8),
+                    cardColor: Color(0xFFDCEFFF),
                   ),
                   const _AcademicModuleItem(
                     label: 'Messages & Chats',
                     route: AppRoutes.principalChatCommunications,
                     illustration: SchoolDeskUiIllustrations.chat,
                     fallbackIcon: Icons.forum_rounded,
-                    accent: Color(0xFF7C3AED),
-                    cardColor: Color(0xFFF3ECFF),
+                    accent: Color(0xFF0E5EA8),
+                    cardColor: Color(0xFFDCEFFF),
                   ),
                 ],
                 onTap: (item) => _open(item.route),
@@ -853,7 +854,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const Icon(Icons.badge_rounded, color: Color(0xFF0E9384)),
+                  const Icon(Icons.badge_rounded, color: Color(0xFF54A9E8)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -885,7 +886,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     children: [
                       const Icon(
                         Icons.history_rounded,
-                        color: Color(0xFF5B35F5),
+                        color: Color(0xFF0B2F5B),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -934,7 +935,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         detail:
             '${_data.attendancePresent}/${_data.attendanceMarked} marked today',
         icon: Icons.fact_check_rounded,
-        color: const Color(0xFF0E9384),
+        color: const Color(0xFF54A9E8),
         route: AppRoutes.principalAttendance,
         routeArguments: 'attendance_review',
         badge: _data.attendanceMarked > 0 ? _data.attendanceMarked : 0,
@@ -944,7 +945,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         detail:
             '${_data.pendingApprovals} approval${_data.pendingApprovals == 1 ? '' : 's'} waiting',
         icon: Icons.approval_rounded,
-        color: const Color(0xFFEA580C),
+        color: const Color(0xFFC88700),
         route: AppRoutes.principalEventApprovals,
         routeArguments: 'event_approvals',
         badge: _data.pendingApprovals,
@@ -1882,7 +1883,7 @@ class _SectionTitle extends StatelessWidget {
           height: 18,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
+              colors: [Color(0xFF1D4ED8), Color(0xFF54A9E8)],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
@@ -2499,7 +2500,7 @@ class _PrincipalStatsRow extends StatelessWidget {
             icon: Icons.co_present_rounded,
             label: 'Staff',
             value: '${data.totalStaff}',
-            gradientColors: const [Color(0xFFA78BFA), Color(0xFF7C3AED)],
+            gradientColors: const [Color(0xFF54A9E8), Color(0xFF0E5EA8)],
             route: AppRoutes.staffManagement,
           ),
         ),

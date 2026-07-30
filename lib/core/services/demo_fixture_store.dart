@@ -94,7 +94,7 @@ class DemoFixtureStore {
       return _ok(_list('daycare_plans'));
     }
     if (clean.startsWith('/fees/payment-config')) {
-      return _ok({'upi_id': 'demo@upi', 'payee_name': 'ArishVille Demo'});
+      return _ok({'upi_id': 'demo@upi', 'payee_name': 'Arish Ville Demo'});
     }
     if (clean.startsWith('/fees/')) return _ok(_list('fee_structures'));
     if (clean.startsWith('/parent/students/') && clean.endsWith('/fees'))

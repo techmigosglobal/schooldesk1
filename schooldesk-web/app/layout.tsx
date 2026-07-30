@@ -7,10 +7,10 @@ export const metadata: Metadata = {
   applicationName: siteName,
   title: { default: siteName, template: `%s | ${siteName}` },
   description: siteDescription,
-  keywords: ["ArishVille Preschool", "preschool in Miyapur", "early learning in Hyderabad", "play-led learning", "kindergarten", "school for young children"],
+  keywords: ["Arish Ville Preschool", "preschool in Miyapur", "early learning in Hyderabad", "play-led learning", "kindergarten", "school for young children"],
   alternates: { canonical: "/" },
   icons: { icon: "/branding/arishville-logo.png", apple: "/branding/arishville-logo.png" },
-  openGraph: { type: "website", locale: "en_IN", url: "/", siteName, title: siteName, description: siteDescription, images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "ArishVille Preschool" }] },
+  openGraph: { type: "website", locale: "en_IN", url: "/", siteName, title: siteName, description: siteDescription, images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Arish Ville Preschool" }] },
   twitter: { card: "summary_large_image", title: siteName, description: siteDescription, images: ["/opengraph-image"] },
   robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 } },
 };

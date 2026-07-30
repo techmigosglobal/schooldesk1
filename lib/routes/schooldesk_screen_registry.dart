@@ -52,6 +52,13 @@ class SchoolDeskScreenRegistry {
       isPublic: true,
     ),
     SchoolDeskScreenMetadata(
+      route: '/demo-role-selector-screen',
+      title: 'Choose Demo Role',
+      module: 'Authentication',
+      portal: 'public',
+      isPublic: true,
+    ),
+    SchoolDeskScreenMetadata(
       route: '/principal-login-screen',
       title: 'Principal Sign In',
       module: 'Authentication',
@@ -225,6 +232,12 @@ class SchoolDeskScreenRegistry {
       route: '/student-oversight-screen',
       title: SchoolDeskGlossary.studentOversight,
       module: 'Students',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/admission-inquiries-screen',
+      title: 'Admission Inquiries',
+      module: 'Admissions',
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(

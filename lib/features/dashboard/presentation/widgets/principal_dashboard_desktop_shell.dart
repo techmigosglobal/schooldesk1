@@ -33,7 +33,7 @@ class PrincipalDashboardDesktopShell extends StatelessWidget {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: AppBackground(
-          accent: const Color(0xFF1478F2),
+          accent: const Color(0xFF0E5EA8),
           child: SafeArea(
             bottom: false,
             child: Row(
@@ -119,7 +119,7 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
                       const _SectionLabel(
                         label: 'Academics',
                         icon: Icons.school_rounded,
-                        color: Color(0xFF1478F2),
+                        color: Color(0xFF0E5EA8),
                       ),
                       SizedBox(height: tokens.spacing.sm),
                       academicsSection,
@@ -127,7 +127,7 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
                       const _SectionLabel(
                         label: 'School Setup',
                         icon: Icons.tune_rounded,
-                        color: Color(0xFF7C3AED),
+                        color: Color(0xFFF4C430),
                       ),
                       SizedBox(height: tokens.spacing.sm),
                       setupSection,
@@ -138,7 +138,7 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
                   const _SectionLabel(
                     label: "Today's Highlights",
                     icon: Icons.today_rounded,
-                    color: Color(0xFF0E9384),
+                    color: Color(0xFF54A9E8),
                   ),
                   SizedBox(height: tokens.spacing.sm),
                   highlights,
@@ -157,7 +157,7 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
                           const _SectionLabel(
                             label: 'Academics',
                             icon: Icons.school_rounded,
-                            color: Color(0xFF1478F2),
+                            color: Color(0xFF0E5EA8),
                           ),
                           SizedBox(height: tokens.spacing.sm),
                           academicsSection,
@@ -166,7 +166,7 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
                           const _SectionLabel(
                             label: 'School Setup',
                             icon: Icons.tune_rounded,
-                            color: Color(0xFF7C3AED),
+                            color: Color(0xFFF4C430),
                           ),
                           SizedBox(height: tokens.spacing.sm),
                           setupSection,
@@ -184,7 +184,7 @@ class PrincipalDashboardDesktopBody extends StatelessWidget {
                           const _SectionLabel(
                             label: "Today's Highlights",
                             icon: Icons.today_rounded,
-                            color: Color(0xFF0E9384),
+                            color: Color(0xFF54A9E8),
                           ),
                           SizedBox(height: tokens.spacing.sm),
                           highlights,

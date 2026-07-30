@@ -129,3 +129,78 @@ class SkeletonCardWidget extends StatelessWidget {
     );
   }
 }
+
+class SchoolDeskPageSkeleton extends StatelessWidget {
+  final int cardCount;
+  final EdgeInsetsGeometry padding;
+
+  const SchoolDeskPageSkeleton({
+    super.key,
+    this.cardCount = 4,
+    this.padding = const EdgeInsets.fromLTRB(22, 18, 22, 28),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).schoolDesk;
+    return Semantics(
+      label: 'Loading page content',
+      liveRegion: true,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: padding,
+        children: [
+          Row(
+            children: [
+              const LoadingSkeletonWidget(
+                width: 52,
+                height: 52,
+                borderRadius: 16,
+              ),
+              SizedBox(width: tokens.spacing.compact),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LoadingSkeletonWidget(height: 18, borderRadius: 9),
+                    SizedBox(height: 8),
+                    LoadingSkeletonWidget(
+                      width: 180,
+                      height: 12,
+                      borderRadius: 6,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.lg),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 900 ? 4 : 2;
+              final gap = tokens.spacing.compact;
+              final width =
+                  (constraints.maxWidth - (gap * (columns - 1))) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: List.generate(
+                  cardCount,
+                  (_) => SizedBox(
+                    width: width,
+                    height: 132,
+                    child: const SkeletonCardWidget(),
+                  ),
+                ),
+              );
+            },
+          ),
+          SizedBox(height: tokens.spacing.md),
+          const LoadingSkeletonWidget(height: 220, borderRadius: 12),
+          SizedBox(height: tokens.spacing.md),
+          const LoadingSkeletonWidget(height: 148, borderRadius: 12),
+        ],
+      ),
+    );
+  }
+}

@@ -282,7 +282,7 @@ export function TeacherDirectory({
                     <tr key={teacherId}>
                       <td>
                         <div className="student-cell">
-                          <span className="student-avatar" style={{ background: "#e8f7e9", color: "#1c6b32" }}>
+                          <span className="student-avatar" style={{ background: "#e7f1fa", color: "#0e5ea8" }}>
                             {teacherInitials(teacher)}
                           </span>
                           <div>
@@ -296,11 +296,11 @@ export function TeacherDirectory({
                           className="status-pill"
                           style={{
                             background: designation.toLowerCase().includes("coordinator")
-                              ? "#f3ebff"
-                              : "#eef7ee",
+                              ? "#fff4d7"
+                              : "#e7f1fa",
                             color: designation.toLowerCase().includes("coordinator")
-                              ? "#622fb3"
-                              : "#1d632f",
+                              ? "#8a6100"
+                              : "#0b477e",
                           }}
                         >
                           {designation}

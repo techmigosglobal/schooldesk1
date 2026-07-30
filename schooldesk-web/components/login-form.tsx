@@ -68,20 +68,20 @@ export function LoginForm({ role }: { role: PortalRole }) {
   return (
     <main className="login-page">
       <section className="login-card">
-        <Link className="login-brand" href="/" aria-label="Back to ArishVille Preschool website">
+        <Link className="login-brand" href="/" aria-label="Back to Arish Ville Preschool website">
           <Image
             src="/branding/arishville-logo.png"
-            alt="ArishVille Preschool"
+            alt="Arish Ville Preschool"
             width={66}
             height={66}
           />
-          <span>ArishVille Preschool</span>
+          <span>Arish Ville Preschool</span>
         </Link>
 
         <h1>{role === "principal" ? "Principal Portal" : "Coordinator Portal"}</h1>
         <p>Use your SchoolDesk username or email and password.</p>
 
-        <form action={submit} noValidate>
+        <form action={submit} noValidate aria-busy={loading}>
           <div className="field">
             <label htmlFor="login-identity">Username or email</label>
             <input
@@ -91,6 +91,7 @@ export function LoginForm({ role }: { role: PortalRole }) {
               aria-describedby={fieldErrors.identity ? "identity-error" : undefined}
               aria-invalid={!!fieldErrors.identity}
               placeholder=" "
+              disabled={loading}
             />
             {fieldErrors.identity && (
               <p id="identity-error" className="form-error" role="alert">
@@ -109,6 +110,7 @@ export function LoginForm({ role }: { role: PortalRole }) {
               aria-describedby={fieldErrors.password ? "password-error" : undefined}
               aria-invalid={!!fieldErrors.password}
               placeholder=" "
+              disabled={loading}
             />
             {fieldErrors.password && (
               <p id="password-error" className="form-error" role="alert">
@@ -121,6 +123,14 @@ export function LoginForm({ role }: { role: PortalRole }) {
             <p className="form-error" role="alert">
               {apiError}
             </p>
+          )}
+
+          {loading && (
+            <div className="login-auth-progress" role="status" aria-live="polite">
+              <span>Verifying your account and preparing the portal&hellip;</span>
+              <div className="skeleton skeleton-text wide" />
+              <div className="skeleton skeleton-text narrow" />
+            </div>
           )}
 
           <button

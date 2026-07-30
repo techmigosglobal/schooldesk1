@@ -34,6 +34,25 @@ function formattedCount(value: number | string) {
   return typeof value === "number" ? new Intl.NumberFormat("en-IN").format(value) : value;
 }
 
+function DashboardLoadingState({ role }: { role: PortalRole }) {
+  return (
+    <div className="leadership-dashboard-skeleton" role="status" aria-label="Loading the leadership overview">
+      <div className="leadership-metrics">
+        {Array.from({ length: 5 }, (_, index) => (
+          <div className="skeleton skeleton-card" key={index} />
+        ))}
+      </div>
+      <div className={`leadership-grid ${role === "principal" ? "has-media" : ""}`}>
+        <div className="skeleton skeleton-panel" />
+        <div className="skeleton skeleton-panel" />
+        {role === "principal" && <div className="skeleton skeleton-panel" />}
+      </div>
+      <div className="skeleton skeleton-panel leadership-actions-skeleton" />
+      <span className="sr-only">Loading current students, staff, classes, admissions, and fee information.</span>
+    </div>
+  );
+}
+
 export function DashboardPanel({
   role,
   onNavigate,
@@ -217,7 +236,7 @@ export function DashboardPanel({
       <header className="leadership-hero">
         <div>
           <p className="leadership-greeting">Good morning, {role === "principal" ? "Principal" : "Coordinator"}</p>
-          <h2 id="leadership-overview-title">Here&apos;s what&apos;s happening at ArishVille Preschool.</h2>
+          <h2 id="leadership-overview-title">Here&apos;s what&apos;s happening at Arish Ville Preschool.</h2>
           <p>Follow people, learning spaces, admissions, and the school day from one focused workspace.</p>
         </div>
         <div className="leadership-sync" aria-live="polite">
@@ -231,6 +250,7 @@ export function DashboardPanel({
 
       {error && <div className="ops-inline-error"><CircleAlert size={16} />{error}</div>}
 
+      {loading ? <DashboardLoadingState role={role} /> : <>
       <div className="leadership-metrics" aria-busy={loading}>
         {metrics.map((metric, index) => {
           const Icon = metric.icon;
@@ -304,6 +324,7 @@ export function DashboardPanel({
           })}
         </div>
       </section>
+      </>}
     </section>
   );
 }

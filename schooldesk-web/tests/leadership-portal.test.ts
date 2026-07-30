@@ -52,3 +52,54 @@ test("web login and portal client keep only leadership wording and modules", () 
   expect(portal).not.toContain("AttendanceWorkspace");
   expect(portal).not.toContain("CommunicationsWorkspace");
 });
+
+test("student and teacher directories retain accessible live search", () => {
+  const students = source("../components/portal/StudentDirectory.tsx");
+  const teachers = source("../components/portal/TeacherDirectory.tsx");
+
+  expect(students).toContain('type="search"');
+  expect(students).toContain('aria-label="Search students"');
+  expect(students).toContain("displayName(student)");
+  expect(students).toContain("parentDetails(student).phone");
+  expect(students).toContain("useEffect(() => setPage(1), [search, classFilter, statusFilter])");
+
+  expect(teachers).toContain('type="search"');
+  expect(teachers).toContain('aria-label="Search teachers"');
+  expect(teachers).toContain("[name, staffCode, username, email, phone, designation]");
+  expect(teachers).toContain("useEffect(() => setPage(1), [search, designationFilter, statusFilter])");
+});
+
+test("Arish Ville palette and loading skeletons cover login and portal transitions", () => {
+  const styles = source("../app/globals.css");
+  const loginForm = source("../components/login-form.tsx");
+  const dashboard = source("../components/portal/DashboardPanel.tsx");
+  const loginLoading = source("../app/login/loading.tsx");
+  const roleLoginLoading = source("../app/login/[role]/loading.tsx");
+  const portalLoading = source("../app/portal/[role]/loading.tsx");
+
+  expect(styles).toContain("--brand-uniform-navy: #0b2f5b");
+  expect(styles).toContain("--brand-academic-blue: #0e5ea8");
+  expect(styles).toContain("--brand-school-gold: #f4c430");
+  expect(styles).toContain("@keyframes skeleton-shimmer");
+  expect(loginForm).toContain('className="login-auth-progress"');
+  expect(loginForm).toContain("Verifying your account and preparing the portal");
+  expect(dashboard).toContain("DashboardLoadingState");
+  expect(loginLoading).toContain("<LoginSkeleton />");
+  expect(roleLoginLoading).toContain("<LoginSkeleton />");
+  expect(portalLoading).toContain("<PortalSkeleton />");
+});
+
+test("website-facing school name is Arish Ville", () => {
+  const sources = [
+    source("../app/layout.tsx"),
+    source("../app/page.tsx"),
+    source("../app/about-us/page.tsx"),
+    source("../app/login/page.tsx"),
+    source("../components/public-site.tsx"),
+    source("../components/home-experience.tsx"),
+  ].join("\n");
+
+  expect(sources).toContain("Arish Ville");
+  expect(sources).not.toContain("Little Ville");
+  expect(sources).not.toContain("ArishVille");
+});

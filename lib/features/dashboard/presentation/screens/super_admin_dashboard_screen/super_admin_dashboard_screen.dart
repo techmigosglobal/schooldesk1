@@ -11,6 +11,7 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/widgets/branch_switcher.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 
@@ -256,7 +257,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           onDestinationSelected: (index) {},
         ),
         body: AppBackground(
-          accent: const Color(0xFF5B35F5),
+          accent: const Color(0xFF0B2F5B),
           child: SafeArea(
             bottom: false,
             child: Align(
@@ -264,7 +265,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 460),
                 child: _loading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const SchoolDeskPageSkeleton(cardCount: 4)
                     : RefreshIndicator(
                         onRefresh: _loadData,
                         child: ListView(
@@ -297,15 +298,15 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     label: 'Audit Logs',
                                     route: AppRoutes.superAdminAuditLogs,
                                     icon: Icons.history_rounded,
-                                    accent: Color(0xFF5B35F5),
-                                    cardColor: Color(0xFFF0EDFF),
+                                    accent: Color(0xFF0B2F5B),
+                                    cardColor: Color(0xFFEEF7FF),
                                   ),
                                   _ModuleCard(
                                     label: 'System Monitor',
                                     route: AppRoutes.superAdminSystemMonitor,
                                     icon: Icons.monitor_heart_rounded,
-                                    accent: const Color(0xFF0EA5E9),
-                                    cardColor: const Color(0xFFE8F7FF),
+                                    accent: const Color(0xFF54A9E8),
+                                    cardColor: const Color(0xFFEEF7FF),
                                     badge: _errorEventsCount > 0
                                         ? _errorEventsCount
                                         : null,
@@ -314,8 +315,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     label: 'Issue Management',
                                     route: AppRoutes.superAdminIssues,
                                     icon: Icons.support_agent_rounded,
-                                    accent: Color(0xFFEA580C),
-                                    cardColor: Color(0xFFFFEDD5),
+                                    accent: Color(0xFFC88700),
+                                    cardColor: Color(0xFFFFF7D6),
                                   ),
                                   _ModuleCard(
                                     label: 'Backup Database',
@@ -328,7 +329,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     label: 'Mobile Demo',
                                     onTap: _manageDemo,
                                     icon: Icons.play_circle_outline_rounded,
-                                    accent: const Color(0xFFB7791F),
+                                    accent: const Color(0xFFC88700),
                                     cardColor: const Color(0xFFFFF7E5),
                                   ),
                                 ]),
@@ -340,14 +341,14 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     label: 'School Profile',
                                     route: AppRoutes.principalSchoolProfile,
                                     icon: Icons.apartment_rounded,
-                                    accent: Color(0xFF7C3AED),
-                                    cardColor: Color(0xFFF3ECFF),
+                                    accent: Color(0xFF0E5EA8),
+                                    cardColor: Color(0xFFDCEFFF),
                                   ),
                                   const _ModuleCard(
                                     label: 'Access & Permissions',
                                     route: AppRoutes.superAdminAccess,
                                     icon: Icons.manage_accounts_rounded,
-                                    accent: Color(0xFFF59E0B),
+                                    accent: Color(0xFFF4C430),
                                     cardColor: Color(0xFFFEF3C7),
                                   ),
                                   const _ModuleCard(
@@ -361,8 +362,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     label: 'Students list',
                                     route: AppRoutes.studentOversight,
                                     icon: Icons.school_rounded,
-                                    accent: Color(0xFF0E9384),
-                                    cardColor: Color(0xFFE7FAF6),
+                                    accent: Color(0xFF54A9E8),
+                                    cardColor: Color(0xFFEEF7FF),
                                   ),
                                 ]),
                                 const SizedBox(height: 22),
@@ -373,15 +374,15 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     label: 'Help & Docs',
                                     route: AppRoutes.help,
                                     icon: Icons.help_outline_rounded,
-                                    accent: Color(0xFF6366F1),
-                                    cardColor: Color(0xFFEEF2FF),
+                                    accent: Color(0xFF0E5EA8),
+                                    cardColor: Color(0xFFEEF7FF),
                                   ),
                                   const _ModuleCard(
                                     label: 'ID Cards',
                                     route: AppRoutes.idCardGeneration,
                                     icon: Icons.badge_rounded,
-                                    accent: Color(0xFF0891B2),
-                                    cardColor: Color(0xFFECFEFF),
+                                    accent: Color(0xFF54A9E8),
+                                    cardColor: Color(0xFFEEF7FF),
                                   ),
                                 ]),
                               ],
@@ -612,7 +613,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
             icon: Icons.co_present_rounded,
             label: 'Staff',
             value: '$_totalStaff',
-            color: const Color(0xFF7C3AED),
+            color: const Color(0xFF0E5EA8),
           ),
         ),
         const SizedBox(width: 10),

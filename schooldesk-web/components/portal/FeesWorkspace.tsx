@@ -258,7 +258,7 @@ export function FeesWorkspace({
     <section className="ops-module fees-workspace">
       <div className="ops-module-heading">
         <div>
-          <div className="ops-module-icon violet" style={{ background: "#f3ebff", color: "#6e3ec7" }}>
+          <div className="ops-module-icon gold" style={{ background: "#fff4d7", color: "#9a6b00" }}>
             <WalletCards size={20} />
           </div>
           <div>

@@ -94,10 +94,10 @@ export function ReportsWorkspace({ role, onNotify }: {
     {error && <div className="ops-inline-error">{error}</div>}
 
     <div className="leadership-report-summary" aria-busy={loading}>
-      <article><small>Students</small><b>{loading ? "—" : stringValue(dashboard.total_students ?? students.length)}</b></article>
-      <article><small>Staff</small><b>{loading ? "—" : stringValue(dashboard.total_staff ?? staff.length)}</b></article>
-      <article><small>Admission inquiries</small><b>{loading ? "—" : inquiries.length}</b></article>
-      {role === "principal" && <article><small>Fee collection</small><b>{loading ? "—" : money((dashboard.fees as Row | undefined)?.total_paid ?? 0)}</b></article>}
+      <article><small>Students</small><b>{loading ? <span className="skeleton skeleton-text" /> : stringValue(dashboard.total_students ?? students.length)}</b></article>
+      <article><small>Staff</small><b>{loading ? <span className="skeleton skeleton-text" /> : stringValue(dashboard.total_staff ?? staff.length)}</b></article>
+      <article><small>Admission inquiries</small><b>{loading ? <span className="skeleton skeleton-text" /> : inquiries.length}</b></article>
+      {role === "principal" && <article><small>Fee collection</small><b>{loading ? <span className="skeleton skeleton-text" /> : money((dashboard.fees as Row | undefined)?.total_paid ?? 0)}</b></article>}
     </div>
 
     <section className="leadership-report-scope surface">

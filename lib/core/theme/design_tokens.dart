@@ -226,11 +226,11 @@ class SchoolDeskElevation {
 
   static const light = SchoolDeskElevation(
     card: [
-      BoxShadow(color: Color(0x140F172A), blurRadius: 18, offset: Offset(0, 8)),
+      BoxShadow(color: Color(0x14081F3C), blurRadius: 18, offset: Offset(0, 8)),
     ],
     floating: [
       BoxShadow(
-        color: Color(0x1F0F172A),
+        color: Color(0x1F081F3C),
         blurRadius: 28,
         offset: Offset(0, 14),
       ),
@@ -371,32 +371,32 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       elevation: isDark ? SchoolDeskElevation.dark : SchoolDeskElevation.light,
       motion: SchoolDeskMotion.standard,
       roleColors: const {
-        SchoolDeskRole.principal: Color(0xFF1D4ED8),
-        SchoolDeskRole.coordinator: Color(0xFF1D4ED8),
-        SchoolDeskRole.teacher: Color(0xFF7C3AED),
-        SchoolDeskRole.parent: Color(0xFF0F766E),
-        SchoolDeskRole.student: Color(0xFFEA580C),
+        SchoolDeskRole.principal: Color(0xFF0E5EA8),
+        SchoolDeskRole.coordinator: Color(0xFF0B2F5B),
+        SchoolDeskRole.teacher: Color(0xFF2E7FC1),
+        SchoolDeskRole.parent: Color(0xFF4A90C9),
+        SchoolDeskRole.student: Color(0xFFC88700),
       },
       pageBackground: isDark
-          ? const Color(0xFF0F172A)
-          : const Color(0xFFF8FAFC),
-      panel: isDark ? const Color(0xFF111827) : Colors.white,
-      panelMuted: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-      panelBorder: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-      textMuted: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-      focusRing: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8),
-      primary: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8),
-      primaryLight: const Color(0xFF60A5FA),
+          ? const Color(0xFF081F3C)
+          : const Color(0xFFF8FBFE),
+      panel: isDark ? const Color(0xFF0B294B) : Colors.white,
+      panelMuted: isDark ? const Color(0xFF12395F) : const Color(0xFFEEF7FF),
+      panelBorder: isDark ? const Color(0xFF334E68) : const Color(0xFFDCEAF4),
+      textMuted: isDark ? const Color(0xFFA8C2D8) : const Color(0xFF627D98),
+      focusRing: isDark ? const Color(0xFF54A9E8) : const Color(0xFF0E5EA8),
+      primary: isDark ? const Color(0xFF54A9E8) : const Color(0xFF0E5EA8),
+      primaryLight: const Color(0xFF54A9E8),
       primaryContainer: isDark
-          ? const Color(0xFF1E3A8A)
-          : const Color(0xFFDBEAFE),
+          ? const Color(0xFF123E70)
+          : const Color(0xFFDCEFFF),
       onPrimary: const Color(0xFFFFFFFF),
-      secondary: isDark ? const Color(0xFF5EEAD4) : const Color(0xFF0F766E),
+      secondary: isDark ? const Color(0xFF86C9F4) : const Color(0xFF0B2F5B),
       secondaryContainer: isDark
-          ? const Color(0xFF134E4A)
-          : const Color(0xFFCCFBF1),
+          ? const Color(0xFF153A5E)
+          : const Color(0xFFE7F1FA),
       onSecondary: const Color(0xFFFFFFFF),
-      accent: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
+      accent: isDark ? const Color(0xFFFFE27A) : const Color(0xFFF4C430),
       success: isDark ? const Color(0xFF22C55E) : const Color(0xFF16A34A),
       successContainer: isDark
           ? const Color(0xFF14532D)
@@ -411,20 +411,20 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
           : const Color(0xFFFEE4E2),
       info: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
       infoContainer: isDark ? const Color(0xFF0C4A6E) : const Color(0xFFE0EAFF),
-      surface: isDark ? const Color(0xFF111827) : const Color(0xFFFFFFFF),
+      surface: isDark ? const Color(0xFF0B294B) : const Color(0xFFFFFFFF),
       surfaceVariant: isDark
-          ? const Color(0xFF1E293B)
-          : const Color(0xFFF1F5F9),
-      background: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-      outline: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+          ? const Color(0xFF12395F)
+          : const Color(0xFFEEF7FF),
+      background: isDark ? const Color(0xFF081F3C) : const Color(0xFFF8FBFE),
+      outline: isDark ? const Color(0xFF5B7792) : const Color(0xFFC7DCEA),
       outlineVariant: isDark
-          ? const Color(0xFF334155)
-          : const Color(0xFFE2E8F0),
-      onSurface: isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A),
+          ? const Color(0xFF334E68)
+          : const Color(0xFFDCEAF4),
+      onSurface: isDark ? const Color(0xFFF8FBFE) : const Color(0xFF102A43),
       onSurfaceVariant: isDark
-          ? const Color(0xFFCBD5E1)
-          : const Color(0xFF334155),
-      muted: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+          ? const Color(0xFFC7DCEA)
+          : const Color(0xFF334E68),
+      muted: isDark ? const Color(0xFFA8C2D8) : const Color(0xFF627D98),
     );
   }
 

@@ -3,12 +3,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
-const Color principalDirectoryBackground = Color(0xFFF0F4F8);
-const Color principalDirectoryAccent = Color(0xFF1D4ED8);
-const Color principalDirectoryText = Color(0xFF0F172A);
-const Color principalDirectoryMuted = Color(0xFF64748B);
+const Color principalDirectoryBackground = Color(0xFFF8FBFE);
+const Color principalDirectoryAccent = Color(0xFF0E5EA8);
+const Color principalDirectoryText = Color(0xFF102A43);
+const Color principalDirectoryMuted = Color(0xFF627D98);
 
 class PrincipalDirectoryScaffold extends StatelessWidget {
   final String title;
@@ -83,7 +84,8 @@ class PrincipalDirectoryScaffold extends StatelessWidget {
               SliverToBoxAdapter(child: filters),
               if (loading)
                 const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
+                  hasScrollBody: false,
+                  child: SchoolDeskPageSkeleton(cardCount: 5),
                 )
               else if (error != null)
                 SliverFillRemaining(
@@ -140,7 +142,7 @@ class PrincipalDirectoryHeader extends StatelessWidget {
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF103869), Color(0xFF1D4ED8), Color(0xFF0F766E)],
+          colors: [Color(0xFF0B2F5B), Color(0xFF0E5EA8), Color(0xFF54A9E8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -328,7 +330,7 @@ class PrincipalDirectoryChip extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: selected
               ? const LinearGradient(
-                  colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
+                  colors: [Color(0xFF0E5EA8), Color(0xFF54A9E8)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 )
@@ -343,7 +345,7 @@ class PrincipalDirectoryChip extends StatelessWidget {
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF1D4ED8).withAlpha(50),
+                    color: const Color(0xFF0E5EA8).withAlpha(50),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -567,7 +569,7 @@ class PrincipalDirectoryCard extends StatelessWidget {
             border: Border.all(color: borderColor, width: selected ? 2 : 1),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF7FA6BD).withAlpha(selected ? 70 : 30),
+                color: const Color(0xFF8FB8D8).withAlpha(selected ? 70 : 30),
                 blurRadius: selected ? 20 : 12,
                 offset: const Offset(0, 5),
               ),
@@ -761,9 +763,9 @@ class PrincipalInfoPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F8FC),
+        color: const Color(0xFFF8FBFE),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFDCE8F5)),
+        border: Border.all(color: const Color(0xFFC7DCEA)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -808,13 +810,13 @@ class PrincipalDetailPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: principalDirectoryBackground,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1D4ED8),
+        backgroundColor: const Color(0xFF0E5EA8),
         foregroundColor: Colors.white,
         elevation: 0,
         flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF103869), Color(0xFF1D4ED8), Color(0xFF0F766E)],
+              colors: [Color(0xFF0B2F5B), Color(0xFF0E5EA8), Color(0xFF54A9E8)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -868,10 +870,10 @@ class PrincipalDetailCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: const Color(0xFFDCEAF4)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7FA6BD).withAlpha(30),
+            color: const Color(0xFF8FB8D8).withAlpha(30),
             blurRadius: 16,
             offset: const Offset(0, 5),
           ),
@@ -885,7 +887,7 @@ class PrincipalDetailCard extends StatelessWidget {
             height: 4,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
+                colors: [Color(0xFF0E5EA8), Color(0xFF54A9E8)],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
               ),
@@ -1081,13 +1083,13 @@ class PrincipalInputPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: principalDirectoryBackground,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1D4ED8),
+        backgroundColor: const Color(0xFF0E5EA8),
         foregroundColor: Colors.white,
         elevation: 0,
         flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF103869), Color(0xFF1D4ED8), Color(0xFF0F766E)],
+              colors: [Color(0xFF0B2F5B), Color(0xFF0E5EA8), Color(0xFF54A9E8)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),

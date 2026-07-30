@@ -134,7 +134,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         _dashboard = dashboard;
         _children = children;
         _eventPosts = feedItems;
-        _schoolName = 'ArishVille Pre school';
+        _schoolName = 'Arish Ville Preschool';
         _activeChildIndex = selectedChildIndex;
         _loading = false;
       });

@@ -5,7 +5,7 @@ import { getPublicWebsite } from "@/lib/public-website";
 
 export const metadata: Metadata = {
   title: "Play-led Preschool for Little Learners",
-  description: "Discover ArishVille Preschool: a joyful, caring place for children to explore, create, make friends, and grow with confidence.",
+  description: "Discover Arish Ville Preschool: a joyful, caring place for children to explore, create, make friends, and grow with confidence.",
   alternates: { canonical: "/" },
 };
 
