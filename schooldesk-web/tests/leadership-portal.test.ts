@@ -83,6 +83,17 @@ test("student and teacher directories retain accessible live search", () => {
   expect(teachers).toContain("useEffect(() => setPage(1), [search, designationFilter, statusFilter])");
 });
 
+test("student status controls use the backend canonical values", () => {
+  const students = source("../components/portal/StudentDirectory.tsx");
+  const dialog = source("../components/portal/StudentDialog.tsx");
+  expect(students).toContain('value="transfer">Transferred');
+  expect(students).toContain('value="pending">Pending');
+  expect(students).not.toContain('value="transferred"');
+  expect(dialog).toContain('value="transfer">Transferred');
+  expect(dialog).toContain('value="pending">Pending');
+  expect(dialog).not.toContain('value="withdrawn"');
+});
+
 test("Arish Ville palette and loading skeletons cover login and portal transitions", () => {
   const styles = source("../app/globals.css");
   const loginForm = source("../components/login-form.tsx");

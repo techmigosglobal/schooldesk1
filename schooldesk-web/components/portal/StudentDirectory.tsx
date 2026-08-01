@@ -39,6 +39,19 @@ function studentId(row: Row) {
   return stringValue(row.student_id_number ?? row.student_code);
 }
 
+function normalizedStatus(value: unknown) {
+  const status = stringValue(value || "active").toLowerCase();
+  if (status === "transferred") return "transfer";
+  if (status === "withdrawn") return "inactive";
+  return status;
+}
+
+function statusLabel(value: unknown) {
+  const status = normalizedStatus(value);
+  if (status === "transfer") return "Transferred";
+  return status ? status[0].toUpperCase() + status.slice(1) : "Active";
+}
+
 function studentInitials(row: Row) {
   return displayName(row)
     .split(/\s+/)
@@ -147,7 +160,7 @@ export function StudentDirectory({
         parentDetails(student).phone,
       ].some((value) => value.toLowerCase().includes(query));
       const matchesClass = classFilter === "all" || classLabel(student) === classFilter;
-      const status = stringValue(student.status || "active").toLowerCase();
+      const status = normalizedStatus(student.status);
       const matchesStatus = statusFilter === "all" || status === statusFilter;
       return matchesSearch && matchesClass && matchesStatus;
     });
@@ -240,8 +253,8 @@ export function StudentDirectory({
           <option value="all">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
-          <option value="withdrawn">Withdrawn</option>
-          <option value="transferred">Transferred</option>
+          <option value="transfer">Transferred</option>
+          <option value="pending">Pending</option>
         </select>
         <span className="ops-count"><b>{filteredStudents.length}</b> student{filteredStudents.length === 1 ? "" : "s"}</span>
       </div>
@@ -269,7 +282,7 @@ export function StudentDirectory({
               <tbody>
                 {visibleStudents.map((student) => {
                   const parent = parentDetails(student);
-                  const status = stringValue(student.status || "active");
+                  const status = normalizedStatus(student.status);
                   return (
                     <tr key={stringValue(student.id)}>
                       <td>
@@ -292,7 +305,7 @@ export function StudentDirectory({
                         <span>{stringValue(student.gender) || "—"}</span>
                         <small>DOB: {formatDate(student.date_of_birth)}</small>
                       </td>
-                      <td><span className={`student-status ${status.toLowerCase()}`}>{status}</span></td>
+                      <td><span className={`student-status ${status}`}>{statusLabel(status)}</span></td>
                       <td className="actions-cell">
                         <button className="icon-button" title="View student profile" onClick={() => void openStudent(student, true)} disabled={loadingStudent}><Eye size={15} /></button>
                         <button className="icon-button" title="Edit student" onClick={() => void openStudent(student, false)} disabled={loadingStudent}><Pencil size={15} /></button>

@@ -42,27 +42,17 @@ function parentInitials(row: Row) {
     .toUpperCase() || "P";
 }
 
-function linkedStudentsForParent(parentId: string, parentName: string, students: Row[]) {
+function linkedStudentsForParent(parentId: string, students: Row[]) {
   if (!parentId) return [];
-  const normName = parentName.trim().toLowerCase();
   return students.filter((st) => {
-    // Formal link via parent_student_links table
     if (stringValue(st.parent_user_id) === parentId) return true;
     const links = Array.isArray(st.parent_student_links)
       ? (st.parent_student_links as Row[])
       : [];
-    if (links.some((lnk) => {
+    return links.some((lnk) => {
       const pId = stringValue(lnk?.parent_user_id ?? nested(lnk ?? {}, "parent").id);
       return pId === parentId;
-    })) return true;
-    // Soft match: guardian full_name matches parent account name (catches legacy records)
-    if (normName) {
-      const guardians = Array.isArray(st.guardians) ? (st.guardians as Row[]) : [];
-      return guardians.some((g) =>
-        stringValue(g.full_name ?? g.name).trim().toLowerCase() === normName
-      );
-    }
-    return false;
+    });
   });
 }
 
@@ -139,7 +129,7 @@ export function ParentDirectory({
       const username = stringValue(parent.username);
       const email = stringValue(parent.email);
       const phone = stringValue(parent.phone);
-      const children = linkedStudentsForParent(parentId, stringValue(parent.name || parent.username), students);
+      const children = linkedStudentsForParent(parentId, students);
       const childrenNames = children.map(displayName).join(" ");
 
       const matchesSearch =
@@ -298,7 +288,7 @@ export function ParentDirectory({
               <tbody>
                 {visibleParents.map((parent) => {
                   const parentId = stringValue(parent.id);
-                  const children = linkedStudentsForParent(parentId, stringValue(parent.name || parent.username), students);
+                  const children = linkedStudentsForParent(parentId, students);
                   const isActive = parent.is_active !== false;
                   return (
                     <tr key={parentId}>
@@ -468,7 +458,7 @@ export function ParentDirectory({
       {linkTarget && (() => {
         const parentId = stringValue(linkTarget.id);
         const parentName = stringValue(linkTarget.name || linkTarget.username);
-        const currentLinked = linkedStudentsForParent(parentId, parentName, students);
+        const currentLinked = linkedStudentsForParent(parentId, students);
         const unlinkedStudents = students.filter((st) => {
           const stId = stringValue(st.id);
           return !currentLinked.some((c) => stringValue(c.id) === stId);

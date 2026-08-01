@@ -10,6 +10,7 @@ import {
   Plus,
   ReceiptIndianRupee,
   RefreshCw,
+  Trash2,
   WalletCards,
 } from "@/lib/lucide-react";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
@@ -24,6 +25,7 @@ import {
   rowText,
   stringValue,
 } from "./utils";
+import { Dialog } from "./Dialog";
 import { FeeStructureDialog } from "./FeeStructureDialog";
 import { PaymentDialog } from "./PaymentDialog";
 import { ConcessionDialog } from "./ConcessionDialog";
@@ -45,6 +47,11 @@ function studentInitials(name: string) {
       .join("")
       .toUpperCase() || "S"
   );
+}
+
+function isOperationalInvoice(invoice: Row) {
+  const status = stringValue(invoice.status).toLowerCase();
+  return status !== "void" && status !== "voided" && status !== "cancelled" && status !== "canceled";
 }
 
 function FinanceTable({
@@ -269,6 +276,8 @@ export function FeesWorkspace({
 
   // Dialog state — payment/concession opened from step 3; structure from secondary tab
   const [dialog, setDialog] = useState<"structure" | "payment" | "concession" | false>(false);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
+  const [confirmDeletePaymentId, setConfirmDeletePaymentId] = useState<string | null>(null);
 
   const [state, setState] = useState<FeeState>({
     structures: [],
@@ -339,10 +348,17 @@ export function FeesWorkspace({
 
   // ── Computed maps ──────────────────────────────────────────────────────────
 
+  // Cancelled/void invoices remain in the backend for audit history, but must
+  // not contribute to active fee totals or payment selection.
+  const operationalInvoices = useMemo(
+    () => state.invoices.filter(isOperationalInvoice),
+    [state.invoices],
+  );
+
   // Per-invoice fee breakdown derived from fee_invoice_items (returned by the invoices API)
   const invoiceBreakdownMap = useMemo(() => {
     const result = new Map<string, { tuition: number; bookskit: number; other: number; total: number }>();
-    for (const inv of state.invoices) {
+    for (const inv of operationalInvoices) {
       const id = stringValue(inv.id);
       const breakdown = { tuition: 0, bookskit: 0, other: 0, total: 0 };
       const items = Array.isArray(inv.fee_invoice_items) ? inv.fee_invoice_items as Row[] : [];
@@ -359,12 +375,12 @@ export function FeesWorkspace({
       result.set(id, breakdown);
     }
     return result;
-  }, [state.invoices]);
+  }, [operationalInvoices]);
 
   // Per-student aggregated breakdown (sum all invoices for a student)
   const studentBreakdownMap = useMemo(() => {
     const result = new Map<string, { tuition: number; bookskit: number; other: number; total: number }>();
-    for (const inv of state.invoices) {
+    for (const inv of operationalInvoices) {
       const stId = stringValue(inv.student_id ?? (nested(inv, "student") as { id?: unknown }).id);
       if (!stId) continue;
       const bd = invoiceBreakdownMap.get(stringValue(inv.id)) ?? { tuition: 0, bookskit: 0, other: 0, total: 0 };
@@ -377,7 +393,7 @@ export function FeesWorkspace({
       });
     }
     return result;
-  }, [state.invoices, invoiceBreakdownMap]);
+  }, [operationalInvoices, invoiceBreakdownMap]);
 
   // student_id → current_section_id, built from the full students list
   const studentSectionMap = useMemo(() => {
@@ -396,7 +412,7 @@ export function FeesWorkspace({
   // Count unique students per section for class card badges
   const sectionStudentCount = useMemo(() => {
     const map = new Map<string, Set<string>>();
-    for (const inv of state.invoices) {
+    for (const inv of operationalInvoices) {
       const stId = stringValue(inv.student_id ?? (nested(inv, "student") as { id?: unknown }).id);
       const sid = studentSectionMap.get(stId) ?? "";
       if (!sid || !stId) continue;
@@ -406,7 +422,7 @@ export function FeesWorkspace({
     const counts = new Map<string, number>();
     for (const [sid, set] of map) counts.set(sid, set.size);
     return counts;
-  }, [state.invoices, studentSectionMap]);
+  }, [operationalInvoices, studentSectionMap]);
 
   // Deduplicated student list for step 2 — one entry per student_id in the selected section
   const classStudents = useMemo(() => {
@@ -414,7 +430,7 @@ export function FeesWorkspace({
     const query = search.trim().toLowerCase();
     const seen = new Set<string>();
     const result: Array<{ studentId: string; name: string }> = [];
-    for (const inv of state.invoices) {
+    for (const inv of operationalInvoices) {
       const stId = stringValue(inv.student_id ?? (nested(inv, "student") as { id?: unknown }).id);
       const sid = studentSectionMap.get(stId) ?? "";
       if (sid !== selectedSectionId || !stId || seen.has(stId)) continue;
@@ -425,18 +441,18 @@ export function FeesWorkspace({
       }
     }
     return result.sort((a, b) => a.name.localeCompare(b.name));
-  }, [state.invoices, selectedSectionId, search, studentSectionMap]);
+  }, [operationalInvoices, selectedSectionId, search, studentSectionMap]);
 
   // ── KPI totals ──────────────────────────────────────────────────────────────
 
-  const totalBilled = state.invoices.reduce((s, r) => s + Number(r.net_amount || r.total_amount || 0), 0);
+  const totalBilled = operationalInvoices.reduce((s, r) => s + Number(r.net_amount || r.total_amount || 0), 0);
   const totalPaid = state.payments.reduce((s, r) => s + Number(r.amount_paid ?? r.amount ?? 0), 0);
-  const totalOutstanding = state.invoices.reduce((s, r) => s + Number(r.balance || 0), 0);
+  const totalOutstanding = operationalInvoices.reduce((s, r) => s + Number(r.balance || 0), 0);
   const collectionRate = totalBilled > 0 ? Math.min(100, Math.round((totalPaid / totalBilled) * 100)) : 0;
   const pendingRequestsCount = state.requests.filter(
     (r) => stringValue(r.status).toLowerCase() === "pending"
   ).length;
-  const overdueInvoices = state.invoices.filter(
+  const overdueInvoices = operationalInvoices.filter(
     (r) => Number(r.balance || 0) > 0 && stringValue(r.status).toLowerCase() !== "paid"
   );
 
@@ -524,6 +540,22 @@ export function FeesWorkspace({
     }
   }
 
+  async function deletePayment(paymentId: string) {
+    setConfirmDeletePaymentId(null);
+    setDeletingPaymentId(paymentId);
+    try {
+      await api(`fees/payments/${paymentId}`, { method: "DELETE" });
+      // Silent refresh — re-fetch only invoices so navigation state is preserved
+      const fresh = await api("fees/invoices?page=1&page_size=100").catch(() => null);
+      if (fresh) setState((prev) => ({ ...prev, invoices: rowsFrom(fresh) }));
+      onNotify("Payment deleted. Invoice totals updated.");
+    } catch (event) {
+      onNotify(event instanceof Error ? event.message : "Unable to delete payment");
+    } finally {
+      setDeletingPaymentId(null);
+    }
+  }
+
   // Navigate back to class grid and reset step state
   function goToClasses() {
     setSelectedSectionId(null);
@@ -546,10 +578,10 @@ export function FeesWorkspace({
   // All invoices for the selected student
   const studentInvoices = useMemo(() => {
     if (!selectedStudentId) return [] as Row[];
-    return state.invoices.filter(
+    return operationalInvoices.filter(
       (inv) => stringValue(inv.student_id ?? (nested(inv, "student") as { id?: unknown }).id) === selectedStudentId
     );
-  }, [state.invoices, selectedStudentId]);
+  }, [operationalInvoices, selectedStudentId]);
 
   // Active invoice in step 3 — auto-select first if only one, otherwise use selectedInvoiceId
   const activeInvoice = useMemo(() => {
@@ -871,6 +903,50 @@ export function FeesWorkspace({
                             })}
                           </div>
                         )}
+
+                        {/* Payment history — list each recorded payment with delete */}
+                        {(() => {
+                          const allPayments = studentInvoices.flatMap((inv) =>
+                            Array.isArray(inv.payments) ? (inv.payments as Row[]) : []
+                          );
+                          if (allPayments.length === 0) return null;
+                          return (
+                            <div style={{ marginTop: "1rem", borderTop: "1px solid #e3ecf2", paddingTop: ".75rem" }}>
+                              <p style={{ fontSize: ".78rem", color: "#627988", marginBottom: ".5rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                                Payment history
+                              </p>
+                              {allPayments.map((pmt) => {
+                                const pmtId = stringValue(pmt.id);
+                                const receipt = nested(pmt, "fee_receipts") as Row | null;
+                                const receiptNo = stringValue((Array.isArray(pmt.fee_receipts) ? (pmt.fee_receipts as Row[])[0]?.receipt_number : receipt?.receipt_number) ?? pmt.receipt_number ?? "");
+                                const pmtDate = stringValue(pmt.paid_at ?? pmt.payment_date ?? pmt.created_at).slice(0, 10);
+                                const pmtMethod = stringValue(pmt.payment_method ?? "—");
+                                const isDeleting = deletingPaymentId === pmtId;
+                                return (
+                                  <div
+                                    key={pmtId}
+                                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: ".35rem .5rem", borderRadius: 7, marginBottom: ".25rem", background: "#f7fafb", border: "1px solid #e3ecf2" }}
+                                  >
+                                    <div style={{ fontSize: ".78rem" }}>
+                                      <span style={{ fontWeight: 700, color: "#1e8e3e" }}>{money(pmt.amount)}</span>
+                                      <span style={{ color: "#627988", marginLeft: ".4rem" }}>{pmtMethod}</span>
+                                      {pmtDate && <span style={{ color: "#95a5b2", marginLeft: ".4rem" }}>{pmtDate}</span>}
+                                      {receiptNo && <span style={{ color: "#adb8c0", marginLeft: ".4rem", fontSize: ".72rem" }}>{receiptNo}</span>}
+                                    </div>
+                                    <button
+                                      title="Delete this payment"
+                                      disabled={isDeleting}
+                                      onClick={() => setConfirmDeletePaymentId(pmtId)}
+                                      style={{ background: "none", border: "none", cursor: isDeleting ? "wait" : "pointer", color: isDeleting ? "#bbb" : "#c0340f", padding: ".2rem .3rem", borderRadius: 5, display: "flex", alignItems: "center" }}
+                                    >
+                                      {isDeleting ? <LoadingIndicator compact announce={false} label="" /> : <Trash2 size={14} />}
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Actions panel */}
@@ -893,31 +969,85 @@ export function FeesWorkspace({
                               <small>Apply discount or waiver on fees</small>
                             </span>
                           </button>
-                          {isPaid && (
-                            <button
-                              className="fees-action-btn fees-action-secondary"
-                              onClick={() =>
-                                downloadCsv(
-                                  `invoice_${activeStudentName.replace(/\s+/g, "_")}.csv`,
-                                  studentInvoices.map((inv) => ({
-                                    invoice_number: inv.invoice_number,
-                                    student: activeStudentName,
-                                    class: classLabel,
-                                    net_amount: inv.net_amount,
-                                    paid_amount: inv.paid_amount ?? inv.total_paid,
-                                    balance: inv.balance,
-                                    status: inv.status,
-                                  }))
-                                )
-                              }
-                            >
-                              <Download size={18} />
-                              <span>
-                                <b>Export Invoice</b>
-                                <small>Download fee summary as CSV</small>
-                              </span>
-                            </button>
-                          )}
+                          <button
+                            className="fees-action-btn fees-action-secondary"
+                            onClick={() => {
+                              const allPmts = studentInvoices.flatMap((inv) =>
+                                Array.isArray(inv.payments) ? (inv.payments as Row[]) : []
+                              );
+                              const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+                              const fmtMoney = (v: unknown) => `₹${Number(v || 0).toLocaleString("en-IN")}`;
+                              const invoiceRows = studentInvoices.map((inv) => `
+                                <tr>
+                                  <td>${stringValue(inv.invoice_number) || stringValue(inv.id).slice(0, 16)}</td>
+                                  <td style="text-align:right">${fmtMoney(inv.net_amount ?? inv.total_amount)}</td>
+                                  <td style="text-align:right;color:#1e8e3e">${fmtMoney(inv.paid_amount ?? inv.total_paid ?? 0)}</td>
+                                  <td style="text-align:right;color:${Number(inv.balance ?? 0) > 0 ? "#c0340f" : "#1e8e3e"}">${fmtMoney(inv.balance ?? 0)}</td>
+                                  <td style="text-align:center"><span style="padding:2px 8px;border-radius:99px;background:${inv.status === "paid" ? "#eef8f1" : inv.status === "partial" ? "#fff8e1" : "#fef3f2"};color:${inv.status === "paid" ? "#1e8e3e" : inv.status === "partial" ? "#8a5c00" : "#c0340f"};font-size:11px;font-weight:600">${stringValue(inv.status).toUpperCase()}</span></td>
+                                </tr>`).join("");
+                              const paymentRows = allPmts.length ? allPmts.map((p) => {
+                                const receiptArr = Array.isArray(p.fee_receipts) ? (p.fee_receipts as Row[]) : [];
+                                const rcpt = stringValue(receiptArr[0]?.receipt_number ?? p.receipt_number ?? "");
+                                return `<tr>
+                                  <td>${rcpt || "—"}</td>
+                                  <td>${stringValue(p.paid_at ?? p.payment_date ?? "").slice(0, 10)}</td>
+                                  <td>${stringValue(p.payment_method ?? "—").toUpperCase()}</td>
+                                  <td style="text-align:right;font-weight:700;color:#1e8e3e">${fmtMoney(p.amount)}</td>
+                                </tr>`;
+                              }).join("") : `<tr><td colspan="4" style="color:#95a5b2;text-align:center">No payments recorded</td></tr>`;
+                              const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fee Invoice — ${activeStudentName}</title>
+                              <style>
+                                *{box-sizing:border-box;margin:0;padding:0}
+                                body{font-family:system-ui,sans-serif;font-size:13px;color:#1a2533;padding:32px;max-width:760px;margin:0 auto}
+                                h1{font-size:22px;font-weight:800;color:#0d5598;margin-bottom:2px}
+                                .meta{color:#637887;font-size:12px;margin-bottom:24px}
+                                .section{margin-bottom:24px}
+                                .section-title{font-size:11px;font-weight:700;color:#637887;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #e3ecf2}
+                                table{width:100%;border-collapse:collapse}
+                                th{text-align:left;font-size:11px;font-weight:700;color:#637887;text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;background:#f7fafb;border-bottom:1px solid #e3ecf2}
+                                td{padding:7px 8px;border-bottom:1px solid #f0f4f8;font-size:13px}
+                                .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+                                .kpi{background:#f7fafb;border:1px solid #e3ecf2;border-radius:8px;padding:12px 16px}
+                                .kpi small{font-size:11px;color:#637887;display:block;margin-bottom:4px}
+                                .kpi b{font-size:18px;color:#1a2533}
+                                .student-card{background:#eef5fc;border-radius:10px;padding:14px 18px;margin-bottom:24px}
+                                .student-card b{font-size:16px;color:#0d5598;display:block}
+                                .student-card span{font-size:12px;color:#637887}
+                                @media print{body{padding:16px}button{display:none}}
+                              </style></head><body>
+                              <h1>Fee Invoice</h1>
+                              <p class="meta">Generated on ${today} &nbsp;·&nbsp; SchoolDesk</p>
+                              <div class="student-card">
+                                <b>${activeStudentName}</b>
+                                <span>${classLabel || "—"}</span>
+                              </div>
+                              <div class="summary">
+                                <div class="kpi"><small>Total Fees</small><b>${fmtMoney(totalNetDue)}</b></div>
+                                <div class="kpi"><small>Amount Paid</small><b style="color:#1e8e3e">${fmtMoney(totalAmountPaid)}</b></div>
+                                <div class="kpi"><small>Balance</small><b style="color:${totalBalance > 0 ? "#c0340f" : "#1e8e3e"}">${fmtMoney(totalBalance)}</b></div>
+                              </div>
+                              <div class="section">
+                                <p class="section-title">Invoices</p>
+                                <table><thead><tr><th>Invoice No.</th><th style="text-align:right">Net Due</th><th style="text-align:right">Paid</th><th style="text-align:right">Balance</th><th style="text-align:center">Status</th></tr></thead>
+                                <tbody>${invoiceRows}</tbody></table>
+                              </div>
+                              <div class="section">
+                                <p class="section-title">Payment History</p>
+                                <table><thead><tr><th>Receipt No.</th><th>Date</th><th>Method</th><th style="text-align:right">Amount</th></tr></thead>
+                                <tbody>${paymentRows}</tbody></table>
+                              </div>
+                              <script>window.onload=()=>{window.print()}</script>
+                              </body></html>`;
+                              const w = window.open("", "_blank");
+                              if (w) { w.document.write(html); w.document.close(); }
+                            }}
+                          >
+                            <Download size={18} />
+                            <span>
+                              <b>Download Invoice</b>
+                              <small>Print or save as PDF</small>
+                            </span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1048,7 +1178,7 @@ export function FeesWorkspace({
                   rows={state.concessions}
                   emptyText="No fee concessions granted."
                   renderRow={(r) => {
-                    const concInvoice = state.invoices.find(
+                    const concInvoice = operationalInvoices.find(
                       (i) => stringValue(i.id) === stringValue(r.invoice_id)
                     );
                     return (
@@ -1165,7 +1295,7 @@ export function FeesWorkspace({
 
       {dialog === "payment" && (
         <PaymentDialog
-          invoices={state.invoices}
+          invoices={operationalInvoices}
           preselectedInvoiceId={activeInvoice ? stringValue(activeInvoice.id) : undefined}
           onClose={() => setDialog(false)}
           onSaved={() => {
@@ -1177,7 +1307,7 @@ export function FeesWorkspace({
 
       {dialog === "concession" && (
         <ConcessionDialog
-          invoices={state.invoices}
+          invoices={operationalInvoices}
           preselectedInvoiceId={activeInvoice ? stringValue(activeInvoice.id) : undefined}
           onClose={() => setDialog(false)}
           onSaved={() => {
@@ -1185,6 +1315,25 @@ export function FeesWorkspace({
             void load();
           }}
         />
+      )}
+
+      {confirmDeletePaymentId && (
+        <Dialog kicker="Permanent action" title="Delete this payment?" onClose={() => !deletingPaymentId && setConfirmDeletePaymentId(null)}>
+          <div className="student-delete-dialog">
+            <CircleAlert size={22} />
+            <p>
+              This will permanently remove the payment record and reverse the invoice totals. This cannot be undone.
+            </p>
+          </div>
+          <div className="dialog-footer">
+            <button className="secondary-button" type="button" disabled={!!deletingPaymentId} onClick={() => setConfirmDeletePaymentId(null)}>
+              Cancel
+            </button>
+            <button className="danger-button" type="button" disabled={!!deletingPaymentId} onClick={() => void deletePayment(confirmDeletePaymentId)}>
+              {deletingPaymentId ? <LoadingIndicator label="Deleting…" compact announce={false} /> : "Delete payment"}
+            </button>
+          </div>
+        </Dialog>
       )}
     </section>
   );

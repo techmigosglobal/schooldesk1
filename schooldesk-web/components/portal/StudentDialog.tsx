@@ -24,6 +24,13 @@ function getStudentSectionId(row?: Row) {
   return stringValue(row.current_section_id ?? row.section_id ?? nested(row, "section").id);
 }
 
+function normalizedStatus(value: unknown) {
+  const status = stringValue(value || "active").toLowerCase();
+  if (status === "transferred") return "transfer";
+  if (status === "withdrawn") return "inactive";
+  return status;
+}
+
 export function StudentDialog({
   row,
   readOnly,
@@ -310,12 +317,12 @@ export function StudentDialog({
               <select
                 name="status"
                 disabled={readOnly}
-                defaultValue={stringValue(row?.status) || "active"}
+                defaultValue={normalizedStatus(row?.status)}
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
-                <option value="withdrawn">Withdrawn</option>
-                <option value="transferred">Transferred</option>
+                <option value="transfer">Transferred</option>
+                <option value="pending">Pending</option>
               </select>
             </label>
             <label className="field">
