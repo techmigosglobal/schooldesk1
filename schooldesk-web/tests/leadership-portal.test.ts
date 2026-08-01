@@ -120,6 +120,18 @@ test("Arish Ville palette and loading skeletons cover login and portal transitio
   expect(portalLoading).toContain("<PortalSkeleton />");
 });
 
+test("login shows immediate progress and guards the submit while authenticating", () => {
+  const loginForm = source("../components/login-form.tsx");
+
+  expect(loginForm).toContain("event.preventDefault()");
+  expect(loginForm).toContain("if (loading) return");
+  expect(loginForm).toContain('onSubmit={(event) => void handleSubmit(event)}');
+  expect(loginForm).toContain('type="submit"');
+  expect(loginForm).toContain('<LoadingIndicator label="Signing in securely…" compact announce={false} />');
+  expect(loginForm).toContain('disabled={loading}');
+  expect(loginForm).toContain('aria-busy={loading}');
+});
+
 test("leadership feature workspaces use layout-shaped loading states", () => {
   const modules = [
     "../components/portal/StudentDirectory.tsx",

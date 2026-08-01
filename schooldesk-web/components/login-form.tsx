@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LoaderCircle } from "@/lib/lucide-react";
+import { LoadingIndicator } from "@/components/loading-skeletons";
 import type { PortalRole } from "@/lib/roles";
 import { loginSchema } from "@/lib/schemas";
 
@@ -15,8 +15,13 @@ export function LoginForm({ role }: { role: PortalRole }) {
   const [apiError, setApiError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function submit(formData: FormData) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (loading) return;
+
     setApiError("");
+
+    const formData = new FormData(event.currentTarget);
 
     // Client-side Zod validation
     const result = loginSchema.safeParse({
@@ -82,14 +87,14 @@ export function LoginForm({ role }: { role: PortalRole }) {
         <p>Use your SchoolDesk username or email and password.</p>
 
         <form
-          action={submit}
+          onSubmit={(event) => void handleSubmit(event)}
           noValidate
           aria-busy={loading}
           style={loading ? { opacity: 0.65, pointerEvents: "none" } : undefined}
         >
           {loading && (
             <div className="login-auth-progress" role="status" aria-live="polite">
-              <span>Verifying your account and preparing the portal&hellip;</span>
+              <LoadingIndicator label="Verifying your account and preparing the portal…" announce={false} />
               <div className="skeleton skeleton-text wide" />
               <div className="skeleton skeleton-text narrow" />
             </div>
@@ -139,15 +144,14 @@ export function LoginForm({ role }: { role: PortalRole }) {
           )}
 
           <button
+            type="submit"
             className="primary-button full"
             disabled={loading}
             aria-busy={loading}
             style={{ marginTop: "0.5rem" }}
           >
             {loading ? (
-              <>
-                <LoaderCircle className="spin" size={17} /> Signing in&hellip;
-              </>
+              <LoadingIndicator label="Signing in securely…" compact announce={false} />
             ) : (
               "Sign in securely"
             )}
