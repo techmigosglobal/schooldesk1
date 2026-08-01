@@ -59,6 +59,9 @@ export function ClassesWorkspace({
 
   const [classDialog, setClassDialog] = useState<ClassDialogState>({ open: false });
   const [subjectDialogOpen, setSubjectDialogOpen] = useState(false);
+  const [subjectEditTarget, setSubjectEditTarget] = useState<Row | null>(null);
+  const [subjectDeleteTarget, setSubjectDeleteTarget] = useState<Row | null>(null);
+  const [subjectDeleting, setSubjectDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -153,6 +156,21 @@ export function ClassesWorkspace({
       setError(event instanceof Error ? event.message : "Unable to delete class section");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function deleteSubject() {
+    if (!subjectDeleteTarget) return;
+    setSubjectDeleting(true);
+    try {
+      await api(`subjects/${stringValue(subjectDeleteTarget.id)}`, { method: "DELETE" });
+      onNotify(`"${stringValue(subjectDeleteTarget.subject_name)}" removed from curriculum.`);
+      setSubjectDeleteTarget(null);
+      await load(true);
+    } catch (event) {
+      setError(event instanceof Error ? event.message : "Unable to delete subject");
+    } finally {
+      setSubjectDeleting(false);
     }
   }
 
@@ -262,35 +280,41 @@ export function ClassesWorkspace({
                               </span>
                               <div>
                                 <b>{gradeName} - {sectionName}</b>
-                                <small>Grade {stringValue(cls.grade_number || "—")}</small>
+                                <small>Capacity: {cap} students</small>
                               </div>
                             </div>
                           </td>
                           <td>
                             <div style={{ minWidth: "140px" }}>
-                              <b style={{ fontSize: "0.86rem", color: "#193852" }}>
-                                {count} / {cap} learners ({pct}%)
+                              <b style={{ fontSize: "0.86rem", color: count === 0 ? "#95a5b2" : "#193852" }}>
+                                {count} / {cap} students ({pct}%)
                               </b>
-                              <div
-                                style={{
-                                  width: "100%",
-                                  height: "6px",
-                                  background: "#e8eff3",
-                                  borderRadius: "99px",
-                                  marginTop: "0.3rem",
-                                  overflow: "hidden",
-                                }}
-                              >
+                              {count === 0 ? (
+                                <p style={{ margin: "0.2rem 0 0", fontSize: "0.7rem", color: "#b07800", background: "#fff8e1", border: "1px solid #ffe082", borderRadius: "6px", padding: "0.15rem 0.4rem", display: "inline-block" }}>
+                                  No active students assigned
+                                </p>
+                              ) : (
                                 <div
                                   style={{
-                                    width: `${pct}%`,
-                                    height: "100%",
-                                    background: pct >= 100 ? "#d94326" : pct >= 80 ? "#e0901b" : "#248548",
+                                    width: "100%",
+                                    height: "6px",
+                                    background: "#e8eff3",
                                     borderRadius: "99px",
-                                    transition: "width 0.3s ease",
+                                    marginTop: "0.3rem",
+                                    overflow: "hidden",
                                   }}
-                                />
-                              </div>
+                                >
+                                  <div
+                                    style={{
+                                      width: `${pct}%`,
+                                      height: "100%",
+                                      background: pct >= 100 ? "#d94326" : pct >= 80 ? "#e0901b" : "#248548",
+                                      borderRadius: "99px",
+                                      transition: "width 0.3s ease",
+                                    }}
+                                  />
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td>
@@ -373,42 +397,115 @@ export function ClassesWorkspace({
             </span>
           </div>
 
-          <div className="table-card surface ops-table-surface student-directory-table-wrap">
-            {filteredSubjects.length ? (
-              <table className="data-table student-directory-table">
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Subject Code</th>
-                    <th>Department</th>
-                    <th>Type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSubjects.map((sub) => (
-                    <tr key={stringValue(sub.id)}>
-                      <td>
-                        <b>{stringValue(sub.subject_name)}</b>
-                      </td>
-                      <td>
-                        <span className="status-pill" style={{ background: "#eef5fc", color: "#0c5496" }}>
-                          {stringValue(sub.subject_code || "—")}
+          {(() => {
+            const typeConfig: Record<string, { label: string; bg: string; color: string; dot: string }> = {
+              core:     { label: "Core",              bg: "#eef5fc", color: "#0c5496", dot: "#0c5496" },
+              elective: { label: "Elective",          bg: "#fef3e2", color: "#8a4f00", dot: "#d4780a" },
+              activity: { label: "Activity / Co-Curricular", bg: "#f0f9f1", color: "#1d632f", dot: "#2e8b47" },
+            };
+            const grouped = new Map<string, Row[]>();
+            for (const sub of filteredSubjects) {
+              const t = stringValue(sub.subject_type || "core");
+              if (!grouped.has(t)) grouped.set(t, []);
+              grouped.get(t)!.push(sub);
+            }
+            const order = ["core", "elective", "activity"];
+            const entries = order
+              .filter((t) => grouped.has(t))
+              .map((t) => [t, grouped.get(t)!] as [string, Row[]])
+              .concat([...grouped.entries()].filter(([t]) => !order.includes(t)));
+
+            if (!filteredSubjects.length) {
+              return (
+                <div className="table-card surface ops-table-surface student-directory-table-wrap">
+                  <p className="ops-empty">No subjects created yet. Click &quot;Add subject&quot; to define curriculum subjects.</p>
+                </div>
+              );
+            }
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+                {entries.map(([type, subs]) => {
+                  const cfg = typeConfig[type] ?? { label: type, bg: "#f4f7f9", color: "#3d5a6c", dot: "#3d5a6c" };
+                  return (
+                    <div key={type}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.6rem" }}>
+                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: cfg.dot, display: "inline-block", flexShrink: 0 }} />
+                        <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#637887" }}>
+                          {cfg.label}
                         </span>
-                      </td>
-                      <td>{stringValue(sub.department_name || "Academics")}</td>
-                      <td>
-                        <span className="status-pill" style={{ background: "#eef7ee", color: "#1d632f" }}>
-                          {stringValue(sub.subject_type || "core")}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="ops-empty">No subjects created yet. Click &quot;Add subject&quot; to define curriculum subjects.</p>
-            )}
-          </div>
+                        <span style={{ fontSize: "0.72rem", color: "#95a5b2", fontWeight: 500 }}>— {subs.length} subject{subs.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "0.65rem" }}>
+                        {subs.map((sub) => {
+                          const code = stringValue(sub.subject_code);
+                          const dept = stringValue(sub.department_name || "Academics");
+                          const name = stringValue(sub.subject_name);
+                          return (
+                            <div
+                              key={stringValue(sub.id)}
+                              style={{
+                                background: "#fff",
+                                border: "1.5px solid #dde8ef",
+                                borderRadius: "12px",
+                                padding: "0.85rem 1rem",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "0.4rem",
+                                position: "relative",
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem" }}>
+                                <span style={{
+                                  flexShrink: 0, width: 36, height: 36, borderRadius: 9,
+                                  background: cfg.bg, color: cfg.color,
+                                  display: "grid", placeItems: "center",
+                                  fontWeight: 800, fontSize: "0.78rem", letterSpacing: "0.04em",
+                                }}>
+                                  {code || name.slice(0, 2).toUpperCase()}
+                                </span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <b style={{ fontSize: "0.9rem", color: "#193852", display: "block", lineHeight: 1.3 }}>{name}</b>
+                                  <span style={{ fontSize: "0.73rem", color: "#7a94a2" }}>{dept}</span>
+                                </div>
+                              </div>
+                              {code && (
+                                <span style={{
+                                  alignSelf: "flex-start", fontSize: "0.7rem", fontWeight: 700,
+                                  padding: "0.15rem 0.5rem", borderRadius: "6px",
+                                  background: cfg.bg, color: cfg.color, letterSpacing: "0.05em",
+                                }}>
+                                  {code}
+                                </span>
+                              )}
+                              <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.15rem", justifyContent: "flex-end" }}>
+                                <button
+                                  className="icon-button"
+                                  title="Edit subject"
+                                  onClick={() => setSubjectEditTarget(sub)}
+                                  style={{ padding: "0.25rem" }}
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  className="icon-button danger"
+                                  title="Delete subject"
+                                  onClick={() => setSubjectDeleteTarget(sub)}
+                                  style={{ padding: "0.25rem" }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </>
       )}
 
@@ -425,15 +522,35 @@ export function ClassesWorkspace({
         />
       )}
 
-      {subjectDialogOpen && (
+      {(subjectDialogOpen || subjectEditTarget) && (
         <SubjectDialog
-          onClose={() => setSubjectDialogOpen(false)}
+          row={subjectEditTarget ?? undefined}
+          onClose={() => { setSubjectDialogOpen(false); setSubjectEditTarget(null); }}
           onSaved={() => {
             onSaved();
-            onNotify("New subject added to curriculum.");
+            onNotify(subjectEditTarget ? "Subject updated." : "New subject added to curriculum.");
             void load(true);
           }}
         />
+      )}
+
+      {subjectDeleteTarget && (
+        <Dialog kicker="Curriculum" title="Remove subject?" onClose={() => !subjectDeleting && setSubjectDeleteTarget(null)}>
+          <div className="student-delete-dialog">
+            <CircleAlert size={22} />
+            <p>
+              <b>{stringValue(subjectDeleteTarget.subject_name)}</b> will be removed from the curriculum. Class sections that use it will lose this subject assignment.
+            </p>
+          </div>
+          <div className="dialog-footer">
+            <button className="secondary-button" type="button" disabled={subjectDeleting} onClick={() => setSubjectDeleteTarget(null)}>
+              Cancel
+            </button>
+            <button className="danger-button" type="button" disabled={subjectDeleting} onClick={() => void deleteSubject()}>
+              {subjectDeleting ? <LoadingIndicator label="Removing…" compact announce={false} /> : "Remove subject"}
+            </button>
+          </div>
+        </Dialog>
       )}
 
       {deleteTarget && (

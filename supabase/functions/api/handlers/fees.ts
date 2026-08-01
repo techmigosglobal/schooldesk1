@@ -441,7 +441,7 @@ async function attachStructureAssignmentStats(
     svc.from("students").select("id, current_section_id").eq(
       "school_id",
       school,
-    ).eq("status", "active"),
+    ).ilike("status", "active"),
     svc.from("fee_invoices").select("fee_structure_id, student_id").eq(
       "school_id",
       school,
@@ -632,7 +632,7 @@ async function invoiceIdsForFeeStructure(
     let studentQuery = svc.from("students")
       .select("id")
       .eq("school_id", school)
-      .eq("status", "active");
+      .ilike("status", "active");
     if (structure.section_id) {
       studentQuery = studentQuery.eq(
         "current_section_id",
@@ -1438,7 +1438,7 @@ export async function handleFees(
     if (feesPath === "/daycare-eligible-students" && method === "GET") {
       const { data, error } = await svc.from("students").select(
         daycareStudentSelect,
-      ).eq("school_id", school).eq("status", "active").not(
+      ).eq("school_id", school).ilike("status", "active").not(
         "current_section_id",
         "is",
         null,
@@ -1503,7 +1503,7 @@ export async function handleFees(
         .select(daycareStudentSelect).eq("id", studentId).eq(
           "school_id",
           school,
-        ).eq("status", "active").maybeSingle();
+        ).ilike("status", "active").maybeSingle();
       if (studentError) return fail(studentError.message);
       if (!student) return fail("Student not found", 404);
       if (!isDaycareStudent(student)) {
@@ -1758,7 +1758,7 @@ export async function handleFees(
 
       let studentsQuery = svc.from("students").select("*")
         .eq("school_id", school)
-        .eq("status", "active");
+        .ilike("status", "active");
       if (studentId) studentsQuery = studentsQuery.eq("id", studentId);
       else if (sectionIds.length > 0) {
         studentsQuery = studentsQuery.in("current_section_id", sectionIds);

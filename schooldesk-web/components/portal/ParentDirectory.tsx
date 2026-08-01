@@ -11,6 +11,7 @@ import {
   RotateCcw,
   ShieldCheck,
   Trash2,
+  UserCog,
 } from "@/lib/lucide-react";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
@@ -41,17 +42,27 @@ function parentInitials(row: Row) {
     .toUpperCase() || "P";
 }
 
-function linkedStudentsForParent(parentId: string, students: Row[]) {
+function linkedStudentsForParent(parentId: string, parentName: string, students: Row[]) {
   if (!parentId) return [];
+  const normName = parentName.trim().toLowerCase();
   return students.filter((st) => {
+    // Formal link via parent_student_links table
     if (stringValue(st.parent_user_id) === parentId) return true;
     const links = Array.isArray(st.parent_student_links)
       ? (st.parent_student_links as Row[])
       : [];
-    return links.some((lnk) => {
+    if (links.some((lnk) => {
       const pId = stringValue(lnk?.parent_user_id ?? nested(lnk ?? {}, "parent").id);
       return pId === parentId;
-    });
+    })) return true;
+    // Soft match: guardian full_name matches parent account name (catches legacy records)
+    if (normName) {
+      const guardians = Array.isArray(st.guardians) ? (st.guardians as Row[]) : [];
+      return guardians.some((g) =>
+        stringValue(g.full_name ?? g.name).trim().toLowerCase() === normName
+      );
+    }
+    return false;
   });
 }
 
@@ -88,6 +99,10 @@ export function ParentDirectory({
   const [resetResult, setResetResult] = useState<{ username: string; temporary_password: string } | null>(null);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState("");
+  const [linkTarget, setLinkTarget] = useState<Row | null>(null);
+  const [linkStudentId, setLinkStudentId] = useState("");
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState("");
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -124,7 +139,7 @@ export function ParentDirectory({
       const username = stringValue(parent.username);
       const email = stringValue(parent.email);
       const phone = stringValue(parent.phone);
-      const children = linkedStudentsForParent(parentId, students);
+      const children = linkedStudentsForParent(parentId, stringValue(parent.name || parent.username), students);
       const childrenNames = children.map(displayName).join(" ");
 
       const matchesSearch =
@@ -172,6 +187,26 @@ export function ParentDirectory({
       setResetError(event instanceof Error ? event.message : "Unable to reset credentials");
     } finally {
       setResetting(false);
+    }
+  }
+
+  async function linkStudent() {
+    if (!linkTarget || !linkStudentId) return;
+    setLinking(true);
+    setLinkError("");
+    try {
+      await api(`students/${linkStudentId}/parent`, {
+        method: "PUT",
+        body: JSON.stringify({ parent_user_id: stringValue(linkTarget.id) }),
+      });
+      onNotify(`Student linked to ${stringValue(linkTarget.name || linkTarget.username)}.`);
+      setLinkTarget(null);
+      setLinkStudentId("");
+      await load(true);
+    } catch (event) {
+      setLinkError(event instanceof Error ? event.message : "Unable to link student");
+    } finally {
+      setLinking(false);
     }
   }
 
@@ -263,7 +298,7 @@ export function ParentDirectory({
               <tbody>
                 {visibleParents.map((parent) => {
                   const parentId = stringValue(parent.id);
-                  const children = linkedStudentsForParent(parentId, students);
+                  const children = linkedStudentsForParent(parentId, stringValue(parent.name || parent.username), students);
                   const isActive = parent.is_active !== false;
                   return (
                     <tr key={parentId}>
@@ -332,6 +367,13 @@ export function ParentDirectory({
                         </span>
                       </td>
                       <td className="actions-cell" style={{ textAlign: "right" }}>
+                        <button
+                          className="icon-button"
+                          title="Link / unlink students"
+                          onClick={() => { setLinkTarget(parent); setLinkStudentId(""); setLinkError(""); }}
+                        >
+                          <UserCog size={15} />
+                        </button>
                         <button
                           className="icon-button"
                           title="Reset login credentials"
@@ -422,6 +464,83 @@ export function ParentDirectory({
           </div>
         </Dialog>
       )}
+
+      {linkTarget && (() => {
+        const parentId = stringValue(linkTarget.id);
+        const parentName = stringValue(linkTarget.name || linkTarget.username);
+        const currentLinked = linkedStudentsForParent(parentId, parentName, students);
+        const unlinkedStudents = students.filter((st) => {
+          const stId = stringValue(st.id);
+          return !currentLinked.some((c) => stringValue(c.id) === stId);
+        });
+        return (
+          <Dialog kicker="Student linking" title={`Linked students — ${parentName}`} onClose={() => !linking && setLinkTarget(null)}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem", padding: "0.25rem 0" }}>
+              {currentLinked.length > 0 ? (
+                <div>
+                  <p style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", fontWeight: 600, color: "#637887", textTransform: "uppercase", letterSpacing: "0.05em" }}>Currently linked</p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                    {currentLinked.map((child) => (
+                      <span
+                        key={stringValue(child.id)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.25rem 0.6rem", background: "#eef8f1", border: "1px solid #c5eacc", borderRadius: "14px", fontSize: "0.78rem", color: "#1b542a", fontWeight: 600 }}
+                      >
+                        {displayName(child)}
+                        {studentClassLabel(child) ? ` · ${studentClassLabel(child)}` : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p style={{ margin: 0, color: "#95a5b2", fontSize: "0.85rem" }}>No students linked yet.</p>
+              )}
+              <div>
+                <p style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", fontWeight: 600, color: "#637887", textTransform: "uppercase", letterSpacing: "0.05em" }}>Link a student</p>
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <select
+                    value={linkStudentId}
+                    onChange={(e) => setLinkStudentId(e.target.value)}
+                    style={{ flex: 1 }}
+                    disabled={linking}
+                  >
+                    <option value="">Select a student…</option>
+                    {unlinkedStudents.map((st) => {
+                      const cls = studentClassLabel(st);
+                      return (
+                        <option key={stringValue(st.id)} value={stringValue(st.id)}>
+                          {displayName(st)}{cls ? ` — ${cls}` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={!linkStudentId || linking}
+                    onClick={() => void linkStudent()}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {linking ? "Linking…" : "Link student"}
+                  </button>
+                </div>
+                {linkError && (
+                  <p style={{ margin: "0.4rem 0 0", color: "#c0392b", fontSize: "0.82rem", display: "flex", gap: "0.35rem", alignItems: "center" }}>
+                    <CircleAlert size={13} /> {linkError}
+                  </p>
+                )}
+                <p style={{ margin: "0.6rem 0 0", fontSize: "0.75rem", color: "#95a5b2" }}>
+                  Linking creates a permanent connection so the parent can view this student in the app.
+                </p>
+              </div>
+            </div>
+            <div className="dialog-footer">
+              <button className="secondary-button" type="button" onClick={() => setLinkTarget(null)}>
+                Done
+              </button>
+            </div>
+          </Dialog>
+        );
+      })()}
 
       {resetTarget && (
         <Dialog kicker="Credentials" title="Reset login credentials?" onClose={() => !resetting && setResetTarget(null)}>

@@ -695,9 +695,11 @@ async function studentCountsBySection(
   svc: SupabaseClient,
   school: string,
 ) {
+  // Mobile app stores status as 'Active' (capital A), web stores 'active'.
+  // Use ilike for case-insensitive match so both are counted.
   const { data, error } = await svc.from("students").select(
     "current_section_id",
-  ).eq("school_id", school).eq("status", "active");
+  ).eq("school_id", school).ilike("status", "active");
   if (error) throw new Error(error.message);
   const counts = new Map<string, number>();
   for (const row of data ?? []) {

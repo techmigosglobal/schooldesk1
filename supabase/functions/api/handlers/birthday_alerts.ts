@@ -145,7 +145,7 @@ export async function handleBirthdayAlerts(
       "id, first_name, last_name, date_of_birth, current_section_id, photo_url",
     )
     .eq("school_id", school)
-    .eq("status", "active")
+    .ilike("status", "active")
     .not("date_of_birth", "is", null);
   if (error) return fail(error.message);
 

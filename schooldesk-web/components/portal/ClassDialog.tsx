@@ -187,6 +187,8 @@ export function ClassDialog({
       </div>
 
       <form action={submit} className="ops-detail-form">
+        {/* preserve sort order so edits don't reset all sections to grade_number=1 */}
+        <input type="hidden" name="grade_number" value={Number(row?.grade_number ?? 1)} />
         {tab === "general" ? (
           <div className="form-grid">
             <label className="field">

@@ -285,14 +285,16 @@ export async function handleDashboard(
       ? Math.round((todayPresent / todayMarked) * 100)
       : 0;
 
+    const isActiveStudent = (student: Record<string, unknown>) =>
+      `${student.status ?? ""}`.trim().toLowerCase() === "active";
     const activeAssignedStudents = (students.data ?? []).filter(
       (student: Record<string, unknown>) =>
-        student.status === "active" &&
+        isActiveStudent(student) &&
         `${student.current_section_id ?? ""}`.trim().length > 0,
     ).length;
     const activeUnassignedStudents = (students.data ?? []).filter(
       (student: Record<string, unknown>) =>
-        student.status === "active" &&
+        isActiveStudent(student) &&
         `${student.current_section_id ?? ""}`.trim().length === 0,
     ).length;
 
