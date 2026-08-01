@@ -1385,3 +1385,86 @@ button .activity-spinner {
 .ops-portal .media-copy-panel h3 { color:#163b5c; }
 .ops-portal .media-library-copy button { border-color:#d2e3ee; background:#fff; color:#175d8b; }
 .ops-portal .media-library-copy button:hover { background:#edf7ff; }
+/* ── Fees: main workflow ──────────────────────────────────────────────────── */
+.fees-main-view { display:grid; gap:1rem; }
+.fees-step-label { margin:0 0 .6rem; font-size:.75rem; font-weight:850; letter-spacing:.1em; text-transform:uppercase; color:#8aa8bc; }
+.fees-step-context { font-weight:700; color:#1a3d52; letter-spacing:0; text-transform:none; margin-left:.5rem; }
+.fees-step-header { display:flex; align-items:center; gap:.75rem; margin-bottom:.75rem; }
+.fees-back-btn { display:inline-flex; align-items:center; gap:.3rem; padding:.38rem .7rem; border:1.5px solid #c9d9e0; border-radius:8px; background:#fff; color:#2e6a8f; font-size:.78rem; font-weight:750; cursor:pointer; transition:background .15s,border-color .15s; flex-shrink:0; }
+.fees-back-btn:hover { background:#edf7ff; border-color:#7ab6d4; }
+/* Class grid */
+.fee-class-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(155px,1fr)); gap:.85rem; padding:.25rem; }
+.fee-class-card { display:flex; flex-direction:column; align-items:center; gap:.35rem; padding:1.3rem 1rem 1.1rem; border-radius:14px; border:1.5px solid #dde8f0; background:#fff; cursor:pointer; text-align:center; transition:border-color .15s,box-shadow .15s,transform .12s; font-family:inherit; }
+.fee-class-card:hover { border-color:#0d5598; box-shadow:0 6px 18px rgba(13,85,152,.12); transform:translateY(-2px); }
+.fee-class-badge { width:46px; height:46px; border-radius:12px; background:#e8f4fc; color:#0d5598; display:grid; place-items:center; font-weight:900; font-size:1.05rem; margin-bottom:.15rem; }
+.fee-class-name { color:#1a3d52; font-size:.9rem; line-height:1.25; }
+.fee-class-section { color:#5b7382; font-size:.79rem; }
+.fee-class-count { color:#9bb0bc; font-size:.74rem; }
+/* Student list (step 2) */
+.fee-student-list { display:grid; gap:.4rem; }
+.fee-student-row { display:flex; align-items:center; gap:.9rem; padding:.7rem 1rem; border-radius:10px; border:1px solid #e4eef4; background:#fff; cursor:pointer; text-align:left; font-family:inherit; transition:background .12s,border-color .12s; }
+.fee-student-row:hover { background:#f0f8ff; border-color:#9ecae8; }
+.fee-student-row-name { display:grid; flex:1; min-width:0; gap:.1rem; }
+.fee-student-row-name b { color:#1a3d52; font-size:.87rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fee-student-row-name span { color:#8aa8bc; font-size:.74rem; }
+.fee-student-row-amounts { display:grid; gap:.05rem; text-align:right; min-width:72px; }
+.fee-student-row-amounts b { font-size:.83rem; color:#1a3d52; }
+/* Step 3 detail view */
+.fees-detail-view { display:grid; gap:1rem; }
+.fees-detail-layout { display:grid; grid-template-columns:200px 1fr 220px; gap:1rem; align-items:start; }
+.fees-student-identity { padding:1.3rem 1rem; border-radius:14px; text-align:center; display:grid; gap:.25rem; }
+.fees-student-fullname { color:#1a3d52; font-size:1rem; line-height:1.3; }
+.fees-student-meta { margin:0; color:#6a8899; font-size:.78rem; }
+.fees-breakdown-card { padding:1.25rem; border-radius:14px; }
+.fees-breakdown-heading { margin:0 0 .9rem; font-size:.72rem; font-weight:850; letter-spacing:.12em; text-transform:uppercase; color:#8aa8bc; }
+/* Breakdown table */
+.fee-breakdown-table { width:100%; border-collapse:collapse; }
+.fee-breakdown-table tr { border-bottom:1px solid #eef2f5; }
+.fee-breakdown-table tr:last-child { border:0; }
+.fee-breakdown-table td { padding:.52rem .35rem; font-size:.86rem; color:#3d5a6e; }
+.fee-breakdown-table td:last-child { text-align:right; font-weight:700; color:#1a3d52; }
+.fee-breakdown-table .fee-row-total td { color:#0d5598; font-size:.93rem; font-weight:800; padding-top:.65rem; }
+.fee-breakdown-table .fee-row-sub td { color:#7a9aad; font-size:.82rem; padding-left:.5rem; }
+.fee-breakdown-table .fee-row-concession td:last-child { color:#1e8e3e; }
+.fee-breakdown-table .fee-row-divider { border-top:2px solid #dde8f0; }
+.fee-breakdown-table .fee-row-divider td { padding-top:.7rem; font-weight:700; color:#1a3d52; }
+.fee-breakdown-table .fee-row-balance-due td:last-child { color:#c0340f; font-size:.95rem; }
+.fee-breakdown-table .fee-row-balance-clear td:last-child { color:#1e8e3e; font-size:.95rem; }
+.fee-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:.4rem; vertical-align:middle; }
+.fee-dot-tuition { background:#0d5598; }
+.fee-dot-bookskit { background:#9a6b00; }
+.fee-dot-other { background:#5b7382; }
+/* Actions panel */
+.fees-actions-panel { padding:1.25rem; border-radius:14px; }
+.fees-action-list { display:grid; gap:.55rem; }
+.fees-action-btn { display:flex; align-items:center; gap:.75rem; padding:.75rem .9rem; border-radius:10px; border:1.5px solid #dde8f0; background:#fff; cursor:pointer; text-align:left; font-family:inherit; transition:background .12s,border-color .12s; width:100%; }
+.fees-action-btn:hover { background:#f0f8ff; border-color:#9ecae8; }
+.fees-action-primary { border-color:#0d5598; background:#f0f8ff; }
+.fees-action-primary:hover { background:#deeefa; }
+.fees-action-btn svg { color:#2e6a8f; flex-shrink:0; }
+.fees-action-primary svg { color:#0d5598; }
+.fees-action-btn span { display:grid; gap:.12rem; }
+.fees-action-btn b { color:#1a3d52; font-size:.84rem; }
+.fees-action-btn small { color:#8aa8bc; font-size:.74rem; font-weight:400; }
+@media (max-width:860px) { .fees-detail-layout { grid-template-columns:1fr; } .fee-student-row-amounts { min-width:56px; } }
+
+/* ── Fee Structures Accordion ─────────────────────────────────────────── */
+.fee-struct-accordion { display:flex; flex-direction:column; gap:.5rem; }
+.fee-struct-group { border:1.5px solid #dde8ef; border-radius:12px; overflow:hidden; background:#fff; }
+.fee-struct-group.open { border-color:#b5d0e8; }
+.fee-struct-parent { display:grid; grid-template-columns:24px 1fr auto auto auto; align-items:center; gap:.75rem; width:100%; padding:.85rem 1rem; background:none; border:none; cursor:pointer; text-align:left; transition:background .12s; }
+.fee-struct-parent:hover { background:#f5f9fc; }
+.fee-struct-group.open .fee-struct-parent { background:#f0f7ff; }
+.fee-struct-chevron { display:grid; place-items:center; color:#5f8ea8; }
+.fee-struct-class { display:flex; flex-direction:column; gap:.1rem; }
+.fee-struct-class b { font-size:.93rem; color:#1a3d52; }
+.fee-struct-class span { font-size:.76rem; color:#8fa5b3; }
+.fee-struct-meta { font-size:.76rem; color:#8fa5b3; white-space:nowrap; }
+.fee-struct-amount { font-size:.95rem; color:#1a3d52; white-space:nowrap; }
+.fee-struct-children { border-top:1px solid #e4eef5; padding:.5rem .75rem .6rem 2.75rem; display:flex; flex-direction:column; gap:.35rem; background:#fafcfe; }
+.fee-struct-child { display:grid; grid-template-columns:12px auto 1fr auto auto; align-items:center; gap:.65rem; padding:.35rem 0; }
+.fee-struct-child-dot { width:7px; height:7px; border-radius:50%; background:#b5cfe0; flex-shrink:0; }
+.fee-struct-child-cat { white-space:nowrap; }
+.fee-struct-child-amount { font-size:.86rem; font-weight:700; color:#1a3d52; text-align:right; }
+.fee-struct-child-freq { white-space:nowrap; }
+.fee-struct-child-meta { white-space:nowrap; text-align:right; }

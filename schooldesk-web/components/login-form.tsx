@@ -81,7 +81,20 @@ export function LoginForm({ role }: { role: PortalRole }) {
         <h1>{role === "principal" ? "Principal Portal" : "Coordinator Portal"}</h1>
         <p>Use your SchoolDesk username or email and password.</p>
 
-        <form action={submit} noValidate aria-busy={loading}>
+        <form
+          action={submit}
+          noValidate
+          aria-busy={loading}
+          style={loading ? { opacity: 0.65, pointerEvents: "none" } : undefined}
+        >
+          {loading && (
+            <div className="login-auth-progress" role="status" aria-live="polite">
+              <span>Verifying your account and preparing the portal&hellip;</span>
+              <div className="skeleton skeleton-text wide" />
+              <div className="skeleton skeleton-text narrow" />
+            </div>
+          )}
+
           <div className="field">
             <label htmlFor="login-identity">Username or email</label>
             <input
@@ -123,14 +136,6 @@ export function LoginForm({ role }: { role: PortalRole }) {
             <p className="form-error" role="alert">
               {apiError}
             </p>
-          )}
-
-          {loading && (
-            <div className="login-auth-progress" role="status" aria-live="polite">
-              <span>Verifying your account and preparing the portal&hellip;</span>
-              <div className="skeleton skeleton-text wide" />
-              <div className="skeleton skeleton-text narrow" />
-            </div>
           )}
 
           <button

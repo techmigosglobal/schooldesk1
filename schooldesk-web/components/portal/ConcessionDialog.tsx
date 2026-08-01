@@ -11,10 +11,12 @@ export function ConcessionDialog({
   invoices,
   onClose,
   onSaved,
+  preselectedInvoiceId,
 }: {
   invoices: Row[];
   onClose: () => void;
   onSaved: () => void;
+  preselectedInvoiceId?: string;
 }) {
   const [kind, setKind] = useState<"amount" | "percentage">("amount");
   const [saving, setSaving] = useState(false);
@@ -63,23 +65,38 @@ export function ConcessionDialog({
     <Dialog kicker="Concession" title="Grant fee concession" onClose={onClose}>
       <form action={submit} className="ops-detail-form">
         <div className="form-grid">
-          <label className="field">
-            Select student invoice
-            <select name="invoice_id" required defaultValue="">
-              <option value="" disabled>
-                Choose invoice
-              </option>
-              {pendingInvoices.map((item) => {
-                const student = nested(item, "student");
-                const bal = item.balance ?? item.net_amount;
-                return (
-                  <option key={stringValue(item.id)} value={stringValue(item.id)}>
-                    {displayName(student)} · {stringValue(item.invoice_number)} · Due: {money(bal)}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
+          {preselectedInvoiceId ? (() => {
+            const pre = invoices.find((i) => stringValue(i.id) === preselectedInvoiceId);
+            return (
+              <>
+                <input type="hidden" name="invoice_id" value={preselectedInvoiceId} />
+                <div className="field">
+                  <span style={{ fontWeight: 650 }}>Student</span>
+                  <span className="ops-chip">
+                    {displayName(nested(pre ?? {}, "student"))} · {stringValue(pre?.invoice_number)} · Due: {money(pre?.balance ?? pre?.net_amount)}
+                  </span>
+                </div>
+              </>
+            );
+          })() : (
+            <label className="field">
+              Select student invoice
+              <select name="invoice_id" required defaultValue="">
+                <option value="" disabled>
+                  Choose invoice
+                </option>
+                {pendingInvoices.map((item) => {
+                  const student = nested(item, "student");
+                  const bal = item.balance ?? item.net_amount;
+                  return (
+                    <option key={stringValue(item.id)} value={stringValue(item.id)}>
+                      {displayName(student)} · {stringValue(item.invoice_number)} · Due: {money(bal)}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          )}
           <label className="field">
             Concession type
             <select

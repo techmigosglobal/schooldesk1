@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   Download,
   FileText,
@@ -26,14 +28,23 @@ import { FeeStructureDialog } from "./FeeStructureDialog";
 import { PaymentDialog } from "./PaymentDialog";
 import { ConcessionDialog } from "./ConcessionDialog";
 
+function feeLabel(catName: string): "tuition" | "bookskit" | "other" {
+  const n = catName.toLowerCase();
+  if (n.includes("tuition")) return "tuition";
+  if (n.includes("book") || n.includes("kit")) return "bookskit";
+  return "other";
+}
+
 function studentInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase() || "S";
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0])
+      .join("")
+      .toUpperCase() || "S"
+  );
 }
 
 function FinanceTable({
@@ -62,22 +73,137 @@ function FinanceTable({
   );
 }
 
+function StructuresAccordion({ structures, onNew }: { structures: Row[]; onNew: () => void }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Group by gradeId + sectionId key → parent row
+  const groups = useMemo(() => {
+    const map = new Map<string, { label: string; section: string; total: number; items: Row[] }>();
+    for (const r of structures) {
+      const gradeId = stringValue(r.grade_id);
+      const sectionId = stringValue(r.section_id ?? "");
+      const key = `${gradeId}::${sectionId}`;
+      const gradeName = rowText(r, "grade_name");
+      const sectionName = stringValue(
+        nested(r, "section").section_name ??
+        nested(r, "section").name ??
+        r.section_name
+      );
+      // Use "Grade Section" as display label so Nursery A ≠ Nursery B
+      const label = sectionName ? `${gradeName} ${sectionName}`.trim() : gradeName || "—";
+      const existing = map.get(key);
+      if (existing) {
+        existing.total += Number(r.amount || 0);
+        existing.items.push(r);
+      } else {
+        map.set(key, { label, section: sectionName, total: Number(r.amount || 0), items: [r] });
+      }
+    }
+    return [...map.entries()].sort(([, a], [, b]) => a.label.localeCompare(b.label));
+  }, [structures]);
+
+  if (!structures.length) {
+    return (
+      <div style={{ padding: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: ".75rem" }}>
+          <button className="primary-button" onClick={onNew}><Plus size={16} /> New fee structure</button>
+        </div>
+        <p className="ops-empty">No fee structures configured yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "1rem" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: ".75rem" }}>
+        <button className="primary-button" onClick={onNew}><Plus size={16} /> New fee structure</button>
+      </div>
+      <div className="fee-struct-accordion">
+        {groups.map(([key, group]) => {
+          const isOpen = expanded.has(key);
+          return (
+            <div key={key} className={`fee-struct-group${isOpen ? " open" : ""}`}>
+              {/* Parent row — summary */}
+              <button
+                className="fee-struct-parent"
+                onClick={() => setExpanded((prev) => {
+                  const next = new Set(prev);
+                  isOpen ? next.delete(key) : next.add(key);
+                  return next;
+                })}
+              >
+                <span className="fee-struct-chevron">
+                  {isOpen ? <ChevronRight size={15} style={{ transform: "rotate(90deg)" }} /> : <ChevronRight size={15} />}
+                </span>
+                <span className="fee-struct-class">
+                  <b>{group.label}</b>
+                  <span style={{ color: "#9ab3c4" }}>{group.section ? "Section specific" : "All sections"}</span>
+                </span>
+                <span className="fee-struct-meta">Total Fees</span>
+                <span className="fee-struct-amount"><b>{money(group.total)}</b></span>
+                <span className="fee-struct-meta">{group.items.length} component{group.items.length !== 1 ? "s" : ""}</span>
+              </button>
+
+              {/* Child rows — one per category */}
+              {isOpen && (
+                <div className="fee-struct-children">
+                  {group.items.map((r) => {
+                    const catName = stringValue((nested(r, "category") as { name?: unknown }).name ?? r.fee_category_name ?? r.category_name);
+                    const freq = stringValue(r.frequency);
+                    return (
+                      <div key={stringValue(r.id)} className="fee-struct-child">
+                        <span className="fee-struct-child-dot" />
+                        <span className="fee-struct-child-cat">
+                          <span className="status-pill" style={{ background: "#f0f6fc", color: "#0c5496", fontSize: ".75rem" }}>
+                            {catName || "—"}
+                          </span>
+                        </span>
+                        <span className="fee-struct-child-amount">{money(r.amount)}</span>
+                        <span className="fee-struct-child-freq">
+                          <span className="ops-chip" style={{ fontSize: ".73rem" }}>{freq}</span>
+                        </span>
+                        <span className="fee-struct-child-meta" style={{ color: "#8fa5b3", fontSize: ".76rem" }}>
+                          Due day {stringValue(r.due_day)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+type SecondaryTab = "structures" | "collections" | "requests" | "concessions" | "reports";
+
 export function FeesWorkspace({
   onNotify,
 }: {
   onNotify: (message: string, type?: "success" | "error" | "info") => void;
 }) {
-  const [tab, setTab] = useState<
-    "structures" | "invoices" | "collections" | "requests" | "concessions" | "reports"
-  >("structures");
+  // "main" = 3-step fee workflow; secondary tabs are utility views
+  const [view, setView] = useState<"main" | SecondaryTab>("main");
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState("");
   const [notice, setNotice] = useState("");
+
+  // 3-step navigation state
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+
+  // Search (used in step 2)
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [dialog, setDialog] = useState<"structure" | "payment" | "concession" | false>(
-    false
-  );
+
+  // selected invoice inside step 3 (derived from selectedStudentId — user picks which invoice if many)
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+
+  // Dialog state — payment/concession opened from step 3; structure from secondary tab
+  const [dialog, setDialog] = useState<"structure" | "payment" | "concession" | false>(false);
+
   const [state, setState] = useState<FeeState>({
     structures: [],
     invoices: [],
@@ -90,6 +216,8 @@ export function FeesWorkspace({
     sections: [],
     config: {},
   });
+  // Full student list — used to join invoice.student_id → current_section_id
+  const [students, setStudents] = useState<Row[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,6 +233,7 @@ export function FeesWorkspace({
         grades,
         sections,
         config,
+        allStudents,
       ] = await Promise.all([
         api("fees/structures").catch(() => []),
         api("fees/invoices?page=1&page_size=100").catch(() => []),
@@ -116,6 +245,7 @@ export function FeesWorkspace({
         api("grades").catch(() => []),
         api("sections?page=1&page_size=100").catch(() => []),
         api("fees/payment-config").catch(() => ({})),
+        api("students?page=1&page_size=500").catch(() => []),
       ]);
 
       setState({
@@ -130,37 +260,121 @@ export function FeesWorkspace({
         sections: rowsFrom(sections),
         config: (config as Row) || {},
       });
+      setStudents(rowsFrom(allStudents));
       setNotice("");
     } catch (event) {
-      setNotice(
-        event instanceof Error ? event.message : "Unable to load finance data"
-      );
+      setNotice(event instanceof Error ? event.message : "Unable to load finance data");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const filteredInvoices = useMemo(() => {
+  // ── Computed maps ──────────────────────────────────────────────────────────
+
+  // Per-invoice fee breakdown derived from fee_invoice_items (returned by the invoices API)
+  const invoiceBreakdownMap = useMemo(() => {
+    const result = new Map<string, { tuition: number; bookskit: number; other: number; total: number }>();
+    for (const inv of state.invoices) {
+      const id = stringValue(inv.id);
+      const breakdown = { tuition: 0, bookskit: 0, other: 0, total: 0 };
+      const items = Array.isArray(inv.fee_invoice_items) ? inv.fee_invoice_items as Row[] : [];
+      for (const item of items) {
+        const catName = stringValue(item.category_name ?? item.fee_item_name ?? "");
+        const amt = Number(item.amount || 0);
+        breakdown[feeLabel(catName)] += amt;
+        breakdown.total += amt;
+      }
+      // fall back to invoice-level amounts if items are missing
+      if (breakdown.total === 0) {
+        breakdown.total = Number(inv.total_amount || inv.net_amount || 0);
+      }
+      result.set(id, breakdown);
+    }
+    return result;
+  }, [state.invoices]);
+
+  // Per-student aggregated breakdown (sum all invoices for a student)
+  const studentBreakdownMap = useMemo(() => {
+    const result = new Map<string, { tuition: number; bookskit: number; other: number; total: number }>();
+    for (const inv of state.invoices) {
+      const stId = stringValue(inv.student_id ?? (nested(inv, "student") as { id?: unknown }).id);
+      if (!stId) continue;
+      const bd = invoiceBreakdownMap.get(stringValue(inv.id)) ?? { tuition: 0, bookskit: 0, other: 0, total: 0 };
+      const cur = result.get(stId) ?? { tuition: 0, bookskit: 0, other: 0, total: 0 };
+      result.set(stId, {
+        tuition: cur.tuition + bd.tuition,
+        bookskit: cur.bookskit + bd.bookskit,
+        other: cur.other + bd.other,
+        total: cur.total + bd.total,
+      });
+    }
+    return result;
+  }, [state.invoices, invoiceBreakdownMap]);
+
+  // student_id → current_section_id, built from the full students list
+  const studentSectionMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const st of students) {
+      const stId = stringValue(st.id);
+      // current_section_id is a flat scalar on the student record
+      const secId = stringValue(
+        (st as { current_section_id?: unknown }).current_section_id
+      );
+      if (stId && secId) map.set(stId, secId);
+    }
+    return map;
+  }, [students]);
+
+  // Count unique students per section for class card badges
+  const sectionStudentCount = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const inv of state.invoices) {
+      const stId = stringValue(inv.student_id ?? (nested(inv, "student") as { id?: unknown }).id);
+      const sid = studentSectionMap.get(stId) ?? "";
+      if (!sid || !stId) continue;
+      if (!map.has(sid)) map.set(sid, new Set());
+      map.get(sid)!.add(stId);
+    }
+    const counts = new Map<string, number>();
+    for (const [sid, set] of map) counts.set(sid, set.size);
+    return counts;
+  }, [state.invoices, studentSectionMap]);
+
+  // Deduplicated student list for step 2 — one entry per student_id in the selected section
+  const classStudents = useMemo(() => {
+    if (!selectedSectionId) return [] as Array<{ studentId: string; name: string }>;
     const query = search.trim().toLowerCase();
-    return state.invoices.filter((inv) => {
-      const invNum = stringValue(inv.invoice_number);
+    const seen = new Set<string>();
+    const result: Array<{ studentId: string; name: string }> = [];
+    for (const inv of state.invoices) {
+      const stId = stringValue(inv.student_id ?? (nested(inv, "student") as { id?: unknown }).id);
+      const sid = studentSectionMap.get(stId) ?? "";
+      if (sid !== selectedSectionId || !stId || seen.has(stId)) continue;
+      seen.add(stId);
       const stName = displayName(nested(inv, "student"));
-      const status = stringValue(inv.status).toLowerCase();
+      if (!query || stName.toLowerCase().includes(query)) {
+        result.push({ studentId: stId, name: stName });
+      }
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [state.invoices, selectedSectionId, search, studentSectionMap]);
 
-      const matchesSearch = !query || [invNum, stName].some((v) => v.toLowerCase().includes(query));
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "paid" && status === "paid") ||
-        (statusFilter === "unpaid" && status === "unpaid") ||
-        (statusFilter === "partial" && status === "partial");
+  // ── KPI totals ──────────────────────────────────────────────────────────────
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [state.invoices, search, statusFilter]);
+  const totalBilled = state.invoices.reduce((s, r) => s + Number(r.net_amount || r.total_amount || 0), 0);
+  const totalPaid = state.payments.reduce((s, r) => s + Number(r.amount_paid ?? r.amount ?? 0), 0);
+  const totalOutstanding = state.invoices.reduce((s, r) => s + Number(r.balance || 0), 0);
+  const collectionRate = totalBilled > 0 ? Math.min(100, Math.round((totalPaid / totalBilled) * 100)) : 0;
+  const pendingRequestsCount = state.requests.filter(
+    (r) => stringValue(r.status).toLowerCase() === "pending"
+  ).length;
+  const overdueInvoices = state.invoices.filter(
+    (r) => Number(r.balance || 0) > 0 && stringValue(r.status).toLowerCase() !== "paid"
+  );
+
+  // ── Actions ────────────────────────────────────────────────────────────────
 
   async function requestFinanceExport(reportType: string, title: string) {
     setBusyAction(`export:${reportType}`);
@@ -202,9 +416,7 @@ export function FeesWorkspace({
   async function applyFines() {
     setBusyAction("fines");
     try {
-      const res = (await api("fees/invoices/late-fines/apply", {
-        method: "POST",
-      })) as Row;
+      const res = (await api("fees/invoices/late-fines/apply", { method: "POST" })) as Row;
       onNotify(`Late fines applied. Updated ${stringValue(res.updated || 0)} invoices.`);
       void load();
     } catch (event) {
@@ -246,30 +458,49 @@ export function FeesWorkspace({
     }
   }
 
-  const totalBilled = state.invoices.reduce(
-    (sum, r) => sum + Number(r.net_amount || r.total_amount || 0),
-    0
-  );
-  const totalPaid = state.payments.reduce(
-    (sum, r) => sum + Number(r.amount_paid || 0),
-    0
-  );
-  const totalOutstanding = state.invoices.reduce(
-    (sum, r) => sum + Number(r.balance || r.net_amount || 0),
-    0
-  );
-  const collectionRate = totalBilled > 0 ? Math.min(100, Math.round((totalPaid / totalBilled) * 100)) : 0;
-  const pendingRequestsCount = state.requests.filter(
-    (r) => stringValue(r.status).toLowerCase() === "pending"
-  ).length;
-  const overdueInvoices = state.invoices.filter(
-    (row) =>
-      Number(row.balance || 0) > 0 &&
-      stringValue(row.status).toLowerCase() !== "paid"
-  );
+  // Navigate back to class grid and reset step state
+  function goToClasses() {
+    setSelectedSectionId(null);
+    setSelectedStudentId(null);
+    setSelectedInvoiceId(null);
+    setSearch("");
+  }
+
+  function goToStudentList() {
+    setSelectedStudentId(null);
+    setSelectedInvoiceId(null);
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const activeSection = selectedSectionId
+    ? state.sections.find((s) => stringValue(s.id) === selectedSectionId) ?? null
+    : null;
+
+  // All invoices for the selected student
+  const studentInvoices = useMemo(() => {
+    if (!selectedStudentId) return [] as Row[];
+    return state.invoices.filter(
+      (inv) => stringValue(inv.student_id ?? (nested(inv, "student") as { id?: unknown }).id) === selectedStudentId
+    );
+  }, [state.invoices, selectedStudentId]);
+
+  // Active invoice in step 3 — auto-select first if only one, otherwise use selectedInvoiceId
+  const activeInvoice = useMemo(() => {
+    if (!selectedStudentId) return null;
+    if (selectedInvoiceId) return studentInvoices.find((i) => stringValue(i.id) === selectedInvoiceId) ?? null;
+    return studentInvoices[0] ?? null;
+  }, [studentInvoices, selectedStudentId, selectedInvoiceId]);
+
+  // Student name for step 3 header (from any of their invoices)
+  const activeStudentName = useMemo(() => {
+    const inv = studentInvoices[0];
+    return inv ? displayName(nested(inv, "student")) : "";
+  }, [studentInvoices]);
 
   return (
     <section className="ops-module fees-workspace">
+      {/* ── Module heading ── */}
       <div className="ops-module-heading">
         <div>
           <div className="ops-module-icon gold" style={{ background: "#fff4d7", color: "#9a6b00" }}>
@@ -278,18 +509,22 @@ export function FeesWorkspace({
           <div>
             <p className="ops-kicker">Principal ledger</p>
             <h2>Fee Operations &amp; Accounting</h2>
-            <p>
-              Automate monthly billing, track UPI receipts, apply late fines, and approve concessions.
-            </p>
+            <p>Select a class to view and manage student fees, record payments, and apply concessions.</p>
           </div>
         </div>
-
         <div className="ops-actions">
           <button className="secondary-button" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh ledger
+            <RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh
           </button>
-          <button className="secondary-button" onClick={() => void applyFines()} disabled={Boolean(busyAction)} aria-busy={busyAction === "fines"}>
-            {busyAction === "fines" ? <LoadingIndicator label="Applying fines…" compact announce={false} /> : <><ReceiptIndianRupee size={16} /> Apply late fines</>}
+          <button
+            className="secondary-button"
+            onClick={() => void applyFines()}
+            disabled={Boolean(busyAction)}
+            aria-busy={busyAction === "fines"}
+          >
+            {busyAction === "fines"
+              ? <LoadingIndicator label="Applying fines…" compact announce={false} />
+              : <><ReceiptIndianRupee size={16} /> Apply late fines</>}
           </button>
           <button className="primary-button" onClick={() => setDialog("structure")}>
             <Plus size={16} /> New fee structure
@@ -307,298 +542,540 @@ export function FeesWorkspace({
       {loading ? (
         <PortalModuleSkeleton variant="finance" label="Loading fee operations and accounting" />
       ) : (
-      <>
-      {/* KPI Cards */}
-      <div className="finance-summary">
-        <article>
-          <small>Total Billed</small>
-          <b>{money(totalBilled)}</b>
-        </article>
-        <article>
-          <small>Total Collections</small>
-          <b style={{ color: "#188038" }}>{money(totalPaid)} ({collectionRate}% efficiency)</b>
-        </article>
-        <article>
-          <small>Outstanding Balance</small>
-          <b style={{ color: "#d93025" }}>{money(totalOutstanding)}</b>
-        </article>
-        <article>
-          <small>Verification Queue</small>
-          <b>{pendingRequestsCount} requests</b>
-        </article>
-      </div>
+        <>
+          {/* ── KPI summary ── */}
+          <div className="finance-summary">
+            <article>
+              <small>Total Billed</small>
+              <b>{money(totalBilled)}</b>
+            </article>
+            <article>
+              <small>Total Collections</small>
+              <b style={{ color: "#188038" }}>{money(totalPaid)} <span style={{ fontSize: ".8rem", fontWeight: 600 }}>({collectionRate}%)</span></b>
+            </article>
+            <article>
+              <small>Outstanding Balance</small>
+              <b style={{ color: "#d93025" }}>{money(totalOutstanding)}</b>
+            </article>
+            <article>
+              <small>Pending Verifications</small>
+              <b>{pendingRequestsCount} requests</b>
+            </article>
+          </div>
 
-      {/* Sub-navigation tabs */}
-      <nav className="finance-tabs" aria-label="Fee workspace sections" style={{ marginBottom: "1rem" }}>
-        {(
-          [
-            ["structures", "Fee structures"],
-            ["invoices", `Student Invoices (${state.invoices.length})`],
-            ["collections", `Payments (${state.payments.length})`],
-            ["requests", `Verification Queue (${pendingRequestsCount})`],
-            ["concessions", "Concessions"],
-            ["reports", "Gateway Config"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            className={tab === key ? "active" : ""}
-            onClick={() => setTab(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+          {/* ── Tab bar ── */}
+          <nav className="finance-tabs" aria-label="Fee workspace sections" style={{ marginBottom: "1.25rem" }}>
+            {(
+              [
+                ["main", "Student Fees"],
+                ["structures", "Fee Structures"],
+                ["collections", `Payments (${state.payments.length})`],
+                ["requests", `Verification Queue${pendingRequestsCount > 0 ? ` (${pendingRequestsCount})` : ""}`],
+                ["concessions", "Concessions"],
+                ["reports", "Gateway Config"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                className={view === key ? "active" : ""}
+                onClick={() => {
+                  setView(key);
+                  if (key === "main") goToClasses();
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
 
-      {/* Tab content */}
-      <div className="table-card surface ops-table-surface student-directory-table-wrap">
-        {tab === "structures" ? (
-          <FinanceTable
-            headers={["Class", "Section", "Category", "Amount", "Frequency", "Due Day", "Fine/Day"]}
-            rows={state.structures}
-            emptyText="No fee structures configured yet. Click 'New fee structure' to set up pricing."
-            renderRow={(r) => (
-              <tr key={stringValue(r.id)}>
-                <td><b>{rowText(r, "grade_name")}</b></td>
-                <td>{stringValue(r.section_name) || "All sections"}</td>
-                <td>
-                  <span className="status-pill" style={{ background: "#f0f6fc", color: "#0c5496" }}>
-                    {stringValue(nested(r, "category").name || r.fee_category_name)}
-                  </span>
-                </td>
-                <td><b>{money(r.amount)}</b></td>
-                <td><span className="ops-chip">{stringValue(r.frequency)}</span></td>
-                <td>Day {stringValue(r.due_day)}</td>
-                <td>{money(r.late_fine_per_day)}</td>
-              </tr>
-            )}
-          />
-        ) : tab === "invoices" ? (
-          <>
-            <div className="student-directory-toolbar">
-              <input
-                className="search-input"
-                placeholder="Search student name or invoice number…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter status">
-                <option value="all">All statuses</option>
-                <option value="paid">Paid</option>
-                <option value="unpaid">Unpaid</option>
-                <option value="partial">Partial</option>
-              </select>
-              <div className="finance-actions" style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-                <button className="primary-button" onClick={() => setDialog("payment")}>
-                  <Plus size={16} /> Record payment
-                </button>
-                <button className="secondary-button" onClick={() => setDialog("concession")}>
-                  Grant concession
-                </button>
-              </div>
-            </div>
+          {/* ═══════════════════════════════════════════════════════════════
+              MAIN VIEW — 3-step student fee workflow
+          ════════════════════════════════════════════════════════════════ */}
+          {view === "main" && (
+            <div className="fees-main-view">
 
-            <FinanceTable
-              headers={["Invoice #", "Learner", "Gross", "Concession", "Net Due", "Paid", "Balance", "Status"]}
-              rows={filteredInvoices}
-              emptyText="No invoices match your search."
-              renderRow={(r) => {
-                const stName = displayName(nested(r, "student"));
-                const status = stringValue(r.status).toLowerCase();
+              {/* Step 1 — Class selection grid */}
+              {!selectedSectionId && !selectedStudentId && (
+                <>
+                  <p className="fees-step-label">Step 1 — Select a class</p>
+                  {state.sections.length === 0 ? (
+                    <p className="ops-empty">No classes found. Set up classes first under Classes &amp; Subjects.</p>
+                  ) : (
+                    <div className="fee-class-grid">
+                      {state.sections.map((sec) => {
+                        const sid = stringValue(sec.id);
+                        const gradeName = rowText(sec, "grade_name");
+                        const sectionName = stringValue(sec.section_name ?? sec.name);
+                        const initials = `${gradeName.slice(0, 1)}${sectionName.slice(0, 1)}`.toUpperCase() || "C";
+                        const count = sectionStudentCount.get(sid) ?? 0;
+                        return (
+                          <button
+                            key={sid}
+                            className="fee-class-card"
+                            onClick={() => { setSelectedSectionId(sid); setSearch(""); }}
+                          >
+                            <span className="fee-class-badge">{initials}</span>
+                            <b className="fee-class-name">{gradeName}</b>
+                            <span className="fee-class-section">{sectionName}</span>
+                            <span className="fee-class-count">{count} student{count !== 1 ? "s" : ""}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Step 2 — Student list for selected class */}
+              {selectedSectionId && !selectedStudentId && (
+                <>
+                  <div className="fees-step-header">
+                    <button className="fees-back-btn" onClick={goToClasses}>
+                      <ChevronLeft size={15} /> All Classes
+                    </button>
+                    <p className="fees-step-label" style={{ margin: 0 }}>
+                      Step 2 — Select a student
+                      {activeSection && (
+                        <span className="fees-step-context">
+                          {rowText(activeSection, "grade_name")} {stringValue(activeSection.section_name ?? activeSection.name)}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="student-directory-toolbar" style={{ marginBottom: ".75rem" }}>
+                    <input
+                      className="search-input"
+                      placeholder="Search by student name…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </div>
+
+                  {classStudents.length === 0 ? (
+                    <p className="ops-empty">No students found in this class{search ? " matching your search" : ""}.</p>
+                  ) : (
+                    <div className="fee-student-list">
+                      {classStudents.map(({ studentId, name }) => (
+                        <button
+                          key={studentId}
+                          className="fee-student-row"
+                          onClick={() => { setSelectedStudentId(studentId); setSelectedInvoiceId(null); }}
+                        >
+                          <span
+                            className="student-avatar"
+                            style={{ background: "#e8f4fc", color: "#0d5598", borderRadius: 10, width: 38, height: 38, display: "grid", placeItems: "center", fontWeight: 800, fontSize: ".85rem", flexShrink: 0 }}
+                          >
+                            {studentInitials(name)}
+                          </span>
+                          <span className="fee-student-row-name">
+                            <b>{name}</b>
+                            {activeSection && (
+                              <span style={{ color: "#8fa5b3", fontSize: ".78rem" }}>
+                                {rowText(activeSection, "grade_name")} {stringValue(activeSection.section_name ?? activeSection.name)}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Step 3 — Student fee overview + actions */}
+              {selectedStudentId && (() => {
+                if (!activeInvoice) return (
+                  <div>
+                    <button className="fees-back-btn" onClick={goToStudentList}>
+                      <ChevronLeft size={15} /> Back
+                    </button>
+                    <p className="ops-empty">No invoices found for this student.</p>
+                  </div>
+                );
+
+                const bd = studentBreakdownMap.get(selectedStudentId) ?? { tuition: 0, bookskit: 0, other: 0, total: 0 };
+                const classLabel = activeSection
+                  ? `${rowText(activeSection, "grade_name")} ${stringValue(activeSection.section_name ?? activeSection.name)}`.trim()
+                  : "";
+
+                // Aggregate across all invoices for this student
+                const totalNetDue = studentInvoices.reduce((s, i) => s + Number(i.net_amount || i.total_amount || 0), 0);
+                const totalAmountPaid = studentInvoices.reduce((s, i) => s + Number(i.paid_amount || i.total_paid || 0), 0);
+                const totalBalance = studentInvoices.reduce((s, i) => s + Number(i.balance || 0), 0);
+                const totalConcession = studentInvoices.reduce((s, i) => s + Number(i.concession_amount || i.discount_amount || 0), 0);
+                const overallStatus = totalBalance <= 0 ? "paid" : totalAmountPaid > 0 ? "partial" : "pending";
+                const isPaid = overallStatus === "paid";
 
                 return (
-                  <tr key={stringValue(r.id)}>
-                    <td><b>{stringValue(r.invoice_number)}</b></td>
-                    <td>
-                      <div className="student-cell">
-                        <span className="student-avatar" style={{ background: "#e8f4fc", color: "#0d5598" }}>
-                          {studentInitials(stName)}
-                        </span>
-                        <b>{stName}</b>
-                      </div>
-                    </td>
-                    <td>{money(r.gross_amount)}</td>
-                    <td>{money(r.concession_amount)}</td>
-                    <td><b>{money(r.net_amount)}</b></td>
-                    <td>{money(r.total_paid)}</td>
-                    <td><b style={{ color: Number(r.balance) > 0 ? "#c0340f" : "#1e8e3e" }}>{money(r.balance)}</b></td>
-                    <td>
-                      <span className={`student-status ${status === "paid" ? "active" : "inactive"}`}>
-                        {stringValue(r.status)}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              }}
-            />
-          </>
-        ) : tab === "collections" ? (
-          <FinanceTable
-            headers={["Receipt #", "Learner", "Amount Paid", "Date", "Mode", "Transaction Ref"]}
-            rows={state.payments}
-            emptyText="No payments recorded."
-            renderRow={(r) => {
-              const stName = displayName(nested(nested(r, "invoice"), "student"));
-              return (
-                <tr key={stringValue(r.id)}>
-                  <td><b>{stringValue(r.receipt_number)}</b></td>
-                  <td>
-                    <div className="student-cell">
-                      <span className="student-avatar" style={{ background: "#eef8f1", color: "#1c6b32" }}>
-                        {studentInitials(stName)}
-                      </span>
-                      <b>{stName}</b>
+                  <div className="fees-detail-view">
+                    <div className="fees-step-header">
+                      <button className="fees-back-btn" onClick={goToStudentList}>
+                        <ChevronLeft size={15} /> {classLabel || "Class"}
+                      </button>
+                      <p className="fees-step-label" style={{ margin: 0 }}>
+                        Step 3 — Fee overview
+                        <span className="fees-step-context">{activeStudentName}</span>
+                      </p>
                     </div>
-                  </td>
-                  <td><b style={{ color: "#1e8e3e" }}>{money(r.amount_paid)}</b></td>
-                  <td>{stringValue(r.payment_date).slice(0, 10)}</td>
-                  <td><span className="status-pill" style={{ background: "#f0f4fb", color: "#0d5291" }}>{stringValue(r.payment_mode)}</span></td>
-                  <td>{stringValue(r.transaction_id) || "—"}</td>
-                </tr>
-              );
-            }}
-          />
-        ) : tab === "requests" ? (
-          <div className="request-list" style={{ padding: "1rem" }}>
-            {state.requests.length ? (
-              state.requests.map((r) => (
-                <article key={stringValue(r.id)} style={{ padding: "0.85rem 1rem", background: "#f9fcfd", border: "1px solid #dce8ee", borderRadius: "10px", marginBottom: "0.75rem" }}>
-                  <div>
-                    <b>{displayName(nested(r, "student"))} · {money(r.amount)}</b>
-                    <span style={{ display: "block", color: "#597080", fontSize: "0.78rem", marginTop: "0.2rem" }}>
-                      Mode: {stringValue(r.payment_mode)} · Ref: {stringValue(r.transaction_id || "None")} · Submitted: {stringValue(r.created_at).slice(0, 10)}
-                    </span>
+
+                    <div className="fees-detail-layout">
+                      {/* Student identity card */}
+                      <div className="fees-student-identity surface">
+                        <span
+                          className="student-avatar"
+                          style={{ background: "#e8f4fc", color: "#0d5598", borderRadius: 14, width: 56, height: 56, display: "grid", placeItems: "center", fontWeight: 900, fontSize: "1.3rem", margin: "0 auto .75rem" }}
+                        >
+                          {studentInitials(activeStudentName)}
+                        </span>
+                        <b className="fees-student-fullname">{activeStudentName}</b>
+                        {classLabel && <p className="fees-student-meta">{classLabel}</p>}
+                        <span className={`student-status ${isPaid ? "active" : "inactive"}`} style={{ margin: ".5rem auto 0", display: "table" }}>
+                          {overallStatus}
+                        </span>
+                      </div>
+
+                      {/* Fee breakdown */}
+                      <div className="fees-breakdown-card surface">
+                        <p className="fees-breakdown-heading">Fee Breakdown</p>
+                        <table className="fee-breakdown-table">
+                          <tbody>
+                            <tr className="fee-row-total">
+                              <td>Total Fees</td>
+                              <td>{money(bd.total || totalNetDue)}</td>
+                            </tr>
+                            {bd.tuition > 0 && (
+                              <tr className="fee-row-sub">
+                                <td><span className="fee-dot fee-dot-tuition" />Tuition Fee</td>
+                                <td>{money(bd.tuition)}</td>
+                              </tr>
+                            )}
+                            {bd.bookskit > 0 && (
+                              <tr className="fee-row-sub">
+                                <td><span className="fee-dot fee-dot-bookskit" />Books &amp; Kit Fee</td>
+                                <td>{money(bd.bookskit)}</td>
+                              </tr>
+                            )}
+                            {bd.other > 0 && (
+                              <tr className="fee-row-sub">
+                                <td><span className="fee-dot fee-dot-other" />Other Fees</td>
+                                <td>{money(bd.other)}</td>
+                              </tr>
+                            )}
+                            {totalConcession > 0 && (
+                              <tr className="fee-row-concession">
+                                <td>Concession Applied</td>
+                                <td style={{ color: "#1e8e3e" }}>− {money(totalConcession)}</td>
+                              </tr>
+                            )}
+                            <tr className="fee-row-divider">
+                              <td>Net Due</td>
+                              <td><b>{money(totalNetDue)}</b></td>
+                            </tr>
+                            <tr>
+                              <td>Amount Paid</td>
+                              <td style={{ color: "#1e8e3e" }}>{money(totalAmountPaid)}</td>
+                            </tr>
+                            <tr className={totalBalance > 0 ? "fee-row-balance-due" : "fee-row-balance-clear"}>
+                              <td><b>Balance Remaining</b></td>
+                              <td><b>{money(totalBalance)}</b></td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        {/* Invoice selector if student has multiple invoices */}
+                        {studentInvoices.length > 1 && (
+                          <div style={{ marginTop: "1rem", borderTop: "1px solid #e3ecf2", paddingTop: ".75rem" }}>
+                            <p style={{ fontSize: ".78rem", color: "#627988", marginBottom: ".4rem", fontWeight: 600 }}>
+                              {studentInvoices.length} invoices — select for actions:
+                            </p>
+                            {studentInvoices.map((inv) => {
+                              const invId = stringValue(inv.id);
+                              const isActive = (selectedInvoiceId ?? stringValue(studentInvoices[0].id)) === invId;
+                              return (
+                                <button
+                                  key={invId}
+                                  onClick={() => setSelectedInvoiceId(invId)}
+                                  style={{ display: "flex", justifyContent: "space-between", width: "100%", padding: ".4rem .6rem", borderRadius: 7, marginBottom: ".3rem", border: isActive ? "1.5px solid #0d5598" : "1.5px solid #dde8ef", background: isActive ? "#f0f7ff" : "transparent", cursor: "pointer", fontSize: ".82rem" }}
+                                >
+                                  <span>{stringValue(inv.invoice_number) || invId.slice(0, 12)}</span>
+                                  <span style={{ color: Number(inv.balance) > 0 ? "#c0340f" : "#1e8e3e" }}>{money(inv.balance)}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions panel */}
+                      <div className="fees-actions-panel surface">
+                        <p className="fees-breakdown-heading">Actions</p>
+                        <div className="fees-action-list">
+                          {totalBalance > 0 && (
+                            <button className="fees-action-btn fees-action-primary" onClick={() => setDialog("payment")}>
+                              <ReceiptIndianRupee size={18} />
+                              <span>
+                                <b>Record Payment</b>
+                                <small>Mark fee collected from student</small>
+                              </span>
+                            </button>
+                          )}
+                          <button className="fees-action-btn fees-action-secondary" onClick={() => setDialog("concession")}>
+                            <FileText size={18} />
+                            <span>
+                              <b>Grant Concession</b>
+                              <small>Apply discount or waiver on fees</small>
+                            </span>
+                          </button>
+                          {isPaid && (
+                            <button
+                              className="fees-action-btn fees-action-secondary"
+                              onClick={() =>
+                                downloadCsv(
+                                  `invoice_${activeStudentName.replace(/\s+/g, "_")}.csv`,
+                                  studentInvoices.map((inv) => ({
+                                    invoice_number: inv.invoice_number,
+                                    student: activeStudentName,
+                                    class: classLabel,
+                                    net_amount: inv.net_amount,
+                                    paid_amount: inv.paid_amount ?? inv.total_paid,
+                                    balance: inv.balance,
+                                    status: inv.status,
+                                  }))
+                                )
+                              }
+                            >
+                              <Download size={18} />
+                              <span>
+                                <b>Export Invoice</b>
+                                <small>Download fee summary as CSV</small>
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                    {stringValue(r.status).toLowerCase() === "pending" ? (
-                      <>
-                        <button className="primary-button" disabled={Boolean(busyAction)} aria-busy={busyAction === `decision:${r.id}:approved`} onClick={() => void decide(r, "approved")}>{busyAction === `decision:${r.id}:approved` ? <LoadingIndicator label="Approving…" compact announce={false} /> : "Approve"}</button>
-                        <button className="secondary-button danger" disabled={Boolean(busyAction)} aria-busy={busyAction === `decision:${r.id}:rejected`} onClick={() => void decide(r, "rejected")}>{busyAction === `decision:${r.id}:rejected` ? <LoadingIndicator label="Rejecting…" compact announce={false} /> : "Reject"}</button>
-                      </>
-                    ) : (
-                      <span className={`student-status ${stringValue(r.status).toLowerCase() === "approved" ? "active" : "inactive"}`}>{stringValue(r.status)}</span>
-                    )}
-                  </div>
-                </article>
-              ))
-            ) : (
-              <p className="ops-empty">No pending parent payment verification requests.</p>
-            )}
-          </div>
-        ) : tab === "concessions" ? (
-          <FinanceTable
-            headers={["Learner", "Reason", "Amount/Discount", "Granted Date"]}
-            rows={state.concessions}
-            emptyText="No fee concessions granted."
-            renderRow={(r) => (
-              <tr key={stringValue(r.id)}>
-                <td><b>{displayName(nested(nested(r, "invoice"), "student"))}</b></td>
-                <td>{stringValue(r.reason)}</td>
-                <td><b>{r.amount ? money(r.amount) : `${stringValue(r.percentage)}%`}</b></td>
-                <td>{stringValue(r.created_at).slice(0, 10)}</td>
-              </tr>
-            )}
-          />
-        ) : tab === "reports" ? (
-          <form action={saveConfig} className="finance-report-grid" style={{ padding: "1.2rem" }}>
-            <section className="surface ops-form-surface">
-              <h3>UPI &amp; Bank Account Settings</h3>
-              <p>Parents see these payment details when making online transfers.</p>
-              <label className="field">
-                UPI VPA / Handle
-                <input name="upi_id" defaultValue={stringValue(state.config.upi_id)} placeholder="e.g. arishville@icici" />
-              </label>
-              <label className="field">
-                Account Holder Name
-                <input name="account_name" defaultValue={stringValue(state.config.account_name)} />
-              </label>
-              <label className="field">
-                Bank Name
-                <input name="bank_name" defaultValue={stringValue(state.config.bank_name)} />
-              </label>
-              <label className="field">
-                Account Number
-                <input name="account_number" defaultValue={stringValue(state.config.account_number)} />
-              </label>
-              <label className="field">
-                IFSC Code
-                <input name="ifsc_code" defaultValue={stringValue(state.config.ifsc_code)} />
-              </label>
-              <button className="primary-button" style={{ marginTop: "0.5rem" }} disabled={busyAction === "config"} aria-busy={busyAction === "config"}>
-                {busyAction === "config" ? <LoadingIndicator label="Saving…" compact announce={false} /> : "Save bank configuration"}
-              </button>
-            </section>
-            <section className="finance-report-card surface">
-              <FileText size={24} />
-              <h3>Ledger Export</h3>
-              <p>Download full transaction history, audit trails, and student fee statements in CSV format.</p>
-              <div className="ops-stack">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={Boolean(busyAction)}
-                  aria-busy={busyAction === "export:fee_outstanding_report"}
-                  onClick={() => void requestFinanceExport("fee_outstanding_report", "Fee outstanding report")}
-                >
-                  {busyAction === "export:fee_outstanding_report" ? <LoadingIndicator label="Preparing…" compact announce={false} /> : <><Download size={16} /> Export outstanding report</>}
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() =>
-                    downloadCsv(
-                      `fee_receipt_register_${new Date().toISOString().slice(0, 10)}.csv`,
-                      state.payments.map((payment) => ({
-                        receipt_number: payment.receipt_number,
-                        invoice_id: payment.invoice_id,
-                        amount_paid: payment.amount_paid,
-                        payment_mode: payment.payment_mode,
-                        payment_date: payment.payment_date,
-                        transaction_id: payment.transaction_id,
-                      }))
-                    )
-                  }
-                >
-                  <FileText size={16} /> Receipt register CSV
-                </button>
-              </div>
-            </section>
-            <section className="finance-report-card surface">
-              <ReceiptIndianRupee size={24} />
-              <h3>Overdue follow-up</h3>
-              <p>{overdueInvoices.length} invoices currently have an outstanding balance and need fee collection follow-up.</p>
-              <div className="ops-chip-cloud">
-                {overdueInvoices.slice(0, 6).map((invoice) => (
-                  <span key={stringValue(invoice.id)} className="ops-chip">
-                    {stringValue(invoice.invoice_number)} · {money(invoice.balance)}
-                  </span>
-                ))}
-                {!overdueInvoices.length && <span className="ops-chip success">No overdue invoices</span>}
-              </div>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() =>
-                  downloadCsv(
-                    `overdue_follow_up_${new Date().toISOString().slice(0, 10)}.csv`,
-                    overdueInvoices.map((invoice) => ({
-                      invoice_number: invoice.invoice_number,
-                      student: displayName(nested(invoice, "student")),
-                      balance: invoice.balance,
-                      status: invoice.status,
-                    }))
-                  )
-                }
-              >
-                Export overdue follow-up list
-              </button>
-            </section>
-          </form>
-        ) : null}
-      </div>
-      </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════════════
+              SECONDARY TABS
+          ════════════════════════════════════════════════════════════════ */}
+          {view !== "main" && (
+            <div className="table-card surface ops-table-surface student-directory-table-wrap">
+              {view === "structures" && (
+                <StructuresAccordion
+                  structures={state.structures}
+                  onNew={() => setDialog("structure")}
+                />
+              )}
+
+              {view === "collections" && (
+                <FinanceTable
+                  headers={["Receipt #", "Student", "Amount Paid", "Date", "Mode", "Transaction Ref"]}
+                  rows={state.payments}
+                  emptyText="No payments recorded."
+                  renderRow={(r) => {
+                    // payments API returns: student (nested), fee_receipts[] (array),
+                    // amount, payment_method, paid_at, reference_number on the row itself
+                    const stName = displayName(nested(r, "student"));
+                    const receipts = Array.isArray(r.fee_receipts) ? r.fee_receipts as Row[] : [];
+                    const receipt = receipts[0] ?? {};
+                    const receiptNum = stringValue(receipt.receipt_number ?? r.receipt_number);
+                    const amountPaid = Number(r.amount ?? 0);
+                    const payDate = stringValue(r.paid_at ?? r.created_at).slice(0, 10);
+                    const payMode = stringValue(r.payment_method);
+                    const txnRef = stringValue(r.reference_number ?? receipt.transaction_ref ?? "");
+                    return (
+                      <tr key={stringValue(r.id)}>
+                        <td><b>{receiptNum || "—"}</b></td>
+                        <td>
+                          <div className="student-cell">
+                            <span className="student-avatar" style={{ background: "#eef8f1", color: "#1c6b32" }}>
+                              {studentInitials(stName)}
+                            </span>
+                            <b>{stName}</b>
+                          </div>
+                        </td>
+                        <td><b style={{ color: "#1e8e3e" }}>{money(amountPaid)}</b></td>
+                        <td>{payDate || "—"}</td>
+                        <td>
+                          <span className="status-pill" style={{ background: "#f0f4fb", color: "#0d5291" }}>
+                            {payMode || "—"}
+                          </span>
+                        </td>
+                        <td>{txnRef || "—"}</td>
+                      </tr>
+                    );
+                  }}
+                />
+              )}
+
+              {view === "requests" && (
+                <div className="request-list" style={{ padding: "1rem" }}>
+                  {state.requests.length ? (
+                    state.requests.map((r) => (
+                      <article
+                        key={stringValue(r.id)}
+                        style={{ padding: "0.85rem 1rem", background: "#f9fcfd", border: "1px solid #dce8ee", borderRadius: "10px", marginBottom: "0.75rem" }}
+                      >
+                        <div>
+                          <b>{displayName(nested(r, "student"))} · {money(r.amount)}</b>
+                          <span style={{ display: "block", color: "#597080", fontSize: "0.78rem", marginTop: "0.2rem" }}>
+                            Mode: {stringValue(r.payment_mode)} · Ref: {stringValue(r.transaction_id || "None")} · Submitted: {stringValue(r.created_at).slice(0, 10)}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                          {stringValue(r.status).toLowerCase() === "pending" ? (
+                            <>
+                              <button
+                                className="primary-button"
+                                disabled={Boolean(busyAction)}
+                                aria-busy={busyAction === `decision:${r.id}:approved`}
+                                onClick={() => void decide(r, "approved")}
+                              >
+                                {busyAction === `decision:${r.id}:approved`
+                                  ? <LoadingIndicator label="Approving…" compact announce={false} />
+                                  : "Approve"}
+                              </button>
+                              <button
+                                className="secondary-button danger"
+                                disabled={Boolean(busyAction)}
+                                aria-busy={busyAction === `decision:${r.id}:rejected`}
+                                onClick={() => void decide(r, "rejected")}
+                              >
+                                {busyAction === `decision:${r.id}:rejected`
+                                  ? <LoadingIndicator label="Rejecting…" compact announce={false} />
+                                  : "Reject"}
+                              </button>
+                            </>
+                          ) : (
+                            <span className={`student-status ${stringValue(r.status).toLowerCase() === "approved" ? "active" : "inactive"}`}>
+                              {stringValue(r.status)}
+                            </span>
+                          )}
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="ops-empty">No pending parent payment verification requests.</p>
+                  )}
+                </div>
+              )}
+
+              {view === "concessions" && (
+                <FinanceTable
+                  headers={["Student", "Reason", "Amount / Discount", "Granted Date"]}
+                  rows={state.concessions}
+                  emptyText="No fee concessions granted."
+                  renderRow={(r) => {
+                    const concInvoice = state.invoices.find(
+                      (i) => stringValue(i.id) === stringValue(r.invoice_id)
+                    );
+                    return (
+                      <tr key={stringValue(r.id)}>
+                        <td><b>{displayName(nested(concInvoice ?? {}, "student"))}</b></td>
+                        <td>{stringValue(r.reason)}</td>
+                        <td><b>{r.amount ? money(r.amount) : `${stringValue(r.percentage)}%`}</b></td>
+                        <td>{stringValue(r.created_at).slice(0, 10)}</td>
+                      </tr>
+                    );
+                  }}
+                />
+              )}
+
+              {view === "reports" && (
+                <form action={saveConfig} className="finance-report-grid" style={{ padding: "1.2rem" }}>
+                  <section className="surface ops-form-surface">
+                    <h3>UPI &amp; Bank Account Settings</h3>
+                    <p>Parents see these payment details when making online transfers.</p>
+                    <label className="field">UPI VPA / Handle<input name="upi_id" defaultValue={stringValue(state.config.upi_id)} placeholder="e.g. arishville@icici" /></label>
+                    <label className="field">Account Holder Name<input name="account_name" defaultValue={stringValue(state.config.account_name)} /></label>
+                    <label className="field">Bank Name<input name="bank_name" defaultValue={stringValue(state.config.bank_name)} /></label>
+                    <label className="field">Account Number<input name="account_number" defaultValue={stringValue(state.config.account_number)} /></label>
+                    <label className="field">IFSC Code<input name="ifsc_code" defaultValue={stringValue(state.config.ifsc_code)} /></label>
+                    <button className="primary-button" style={{ marginTop: "0.5rem" }} disabled={busyAction === "config"} aria-busy={busyAction === "config"}>
+                      {busyAction === "config" ? <LoadingIndicator label="Saving…" compact announce={false} /> : "Save bank configuration"}
+                    </button>
+                  </section>
+                  <section className="finance-report-card surface">
+                    <FileText size={24} />
+                    <h3>Ledger Export</h3>
+                    <p>Download full transaction history, audit trails, and student fee statements.</p>
+                    <div className="ops-stack">
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={Boolean(busyAction)}
+                        aria-busy={busyAction === "export:fee_outstanding_report"}
+                        onClick={() => void requestFinanceExport("fee_outstanding_report", "Fee outstanding report")}
+                      >
+                        {busyAction === "export:fee_outstanding_report"
+                          ? <LoadingIndicator label="Preparing…" compact announce={false} />
+                          : <><Download size={16} /> Export outstanding report</>}
+                      </button>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() =>
+                          downloadCsv(
+                            `fee_receipt_register_${new Date().toISOString().slice(0, 10)}.csv`,
+                            state.payments.map((p) => ({
+                              receipt_number: p.receipt_number,
+                              invoice_id: p.invoice_id,
+                              amount_paid: p.amount_paid,
+                              payment_mode: p.payment_mode,
+                              payment_date: p.payment_date,
+                              transaction_id: p.transaction_id,
+                            }))
+                          )
+                        }
+                      >
+                        <FileText size={16} /> Receipt register CSV
+                      </button>
+                    </div>
+                  </section>
+                  <section className="finance-report-card surface">
+                    <ReceiptIndianRupee size={24} />
+                    <h3>Overdue follow-up</h3>
+                    <p>{overdueInvoices.length} invoices currently have an outstanding balance.</p>
+                    <div className="ops-chip-cloud">
+                      {overdueInvoices.slice(0, 6).map((inv) => (
+                        <span key={stringValue(inv.id)} className="ops-chip">
+                          {stringValue(inv.invoice_number)} · {money(inv.balance)}
+                        </span>
+                      ))}
+                      {!overdueInvoices.length && <span className="ops-chip success">No overdue invoices</span>}
+                    </div>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() =>
+                        downloadCsv(
+                          `overdue_follow_up_${new Date().toISOString().slice(0, 10)}.csv`,
+                          overdueInvoices.map((inv) => ({
+                            invoice_number: inv.invoice_number,
+                            student: displayName(nested(inv, "student")),
+                            balance: inv.balance,
+                            status: inv.status,
+                          }))
+                        )
+                      }
+                    >
+                      Export overdue follow-up list
+                    </button>
+                  </section>
+                </form>
+              )}
+            </div>
+          )}
+        </>
       )}
 
+      {/* ── Dialogs ── */}
       {dialog === "structure" && (
         <FeeStructureDialog
           refs={state}
@@ -613,6 +1090,7 @@ export function FeesWorkspace({
       {dialog === "payment" && (
         <PaymentDialog
           invoices={state.invoices}
+          preselectedInvoiceId={activeInvoice ? stringValue(activeInvoice.id) : undefined}
           onClose={() => setDialog(false)}
           onSaved={() => {
             onNotify("Payment recorded.");
@@ -624,6 +1102,7 @@ export function FeesWorkspace({
       {dialog === "concession" && (
         <ConcessionDialog
           invoices={state.invoices}
+          preselectedInvoiceId={activeInvoice ? stringValue(activeInvoice.id) : undefined}
           onClose={() => setDialog(false)}
           onSaved={() => {
             onNotify("Concession granted.");
