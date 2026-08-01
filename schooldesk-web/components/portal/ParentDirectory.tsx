@@ -8,6 +8,8 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
+  ShieldCheck,
   Trash2,
 } from "@/lib/lucide-react";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
@@ -82,6 +84,10 @@ export function ParentDirectory({
   const [dialog, setDialog] = useState<ParentDialogState>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [resetTarget, setResetTarget] = useState<Row | null>(null);
+  const [resetResult, setResetResult] = useState<{ username: string; temporary_password: string } | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState("");
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -153,6 +159,21 @@ export function ParentDirectory({
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
+
+  async function resetCredentials() {
+    if (!resetTarget) return;
+    setResetting(true);
+    setResetError("");
+    try {
+      const result = await api(`users/${stringValue(resetTarget.id)}/reset-credentials`, { method: "POST" }) as { username: string; temporary_password: string };
+      setResetResult(result);
+      setResetTarget(null);
+    } catch (event) {
+      setResetError(event instanceof Error ? event.message : "Unable to reset credentials");
+    } finally {
+      setResetting(false);
+    }
+  }
 
   async function deleteParent() {
     if (!deleteTarget) return;
@@ -232,9 +253,9 @@ export function ParentDirectory({
               <thead>
                 <tr>
                   <th>Parent</th>
-                  <th>Username</th>
+                  <th>Login Credentials</th>
                   <th>Contact Details</th>
-                  <th>Linked Learners</th>
+                  <th>Linked Students</th>
                   <th>Status</th>
                   <th aria-label="Parent actions" style={{ textAlign: "right" }}>Actions</th>
                 </tr>
@@ -258,9 +279,16 @@ export function ParentDirectory({
                         </div>
                       </td>
                       <td>
-                        <span className="status-pill" style={{ background: "#eef5fc", color: "#0c5496" }}>
-                          @{stringValue(parent.username || "—")}
-                        </span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                          <span className="status-pill" style={{ background: "#eef5fc", color: "#0c5496", width: "fit-content" }}>
+                            @{stringValue(parent.username || "—")}
+                          </span>
+                          <span style={{ fontSize: "0.72rem", color: "#95a5b2" }}>
+                            {parent.password_reset_at
+                              ? `Last reset: ${stringValue(parent.password_reset_at).slice(0, 10)}`
+                              : "Password not yet reset"}
+                          </span>
+                        </div>
                       </td>
                       <td>
                         <div>
@@ -304,6 +332,13 @@ export function ParentDirectory({
                         </span>
                       </td>
                       <td className="actions-cell" style={{ textAlign: "right" }}>
+                        <button
+                          className="icon-button"
+                          title="Reset login credentials"
+                          onClick={() => { setResetTarget(parent); setResetError(""); }}
+                        >
+                          <RotateCcw size={15} />
+                        </button>
                         <button
                           className="icon-button"
                           title="View parent details"
@@ -383,6 +418,79 @@ export function ParentDirectory({
             </button>
             <button className="danger-button" type="button" disabled={deleting} onClick={() => void deleteParent()}>
               {deleting ? <LoadingIndicator label="Deleting…" compact announce={false} /> : "Delete parent"}
+            </button>
+          </div>
+        </Dialog>
+      )}
+
+      {resetTarget && (
+        <Dialog kicker="Credentials" title="Reset login credentials?" onClose={() => !resetting && setResetTarget(null)}>
+          <div className="student-delete-dialog">
+            <ShieldCheck size={22} style={{ color: "#0c5496" }} />
+            <p>
+              A new temporary password will be generated for{" "}
+              <b>{stringValue(resetTarget.name || resetTarget.username)}</b>. Share it with the parent so they can log in and change it.
+            </p>
+          </div>
+          {resetError && (
+            <div className="ops-inline-error" style={{ margin: "0 0 .75rem" }}>
+              <CircleAlert size={14} /> {resetError}
+            </div>
+          )}
+          <div className="dialog-footer">
+            <button className="secondary-button" type="button" disabled={resetting} onClick={() => setResetTarget(null)}>
+              Cancel
+            </button>
+            <button className="primary-button" type="button" disabled={resetting} onClick={() => void resetCredentials()}>
+              {resetting ? <LoadingIndicator label="Resetting…" compact announce={false} /> : <><RotateCcw size={14} /> Reset password</>}
+            </button>
+          </div>
+        </Dialog>
+      )}
+
+      {resetResult && (
+        <Dialog kicker="Credentials reset" title="New login credentials" onClose={() => setResetResult(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem", padding: "0.5rem 0" }}>
+            <p style={{ color: "#2d4a5e", margin: 0, fontSize: "0.9rem" }}>
+              Share these credentials with the parent. The password is temporary — they will be prompted to change it on first login.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+              <div style={{ background: "#eef5fc", borderRadius: "10px", padding: "0.85rem 1rem" }}>
+                <p style={{ margin: "0 0 0.25rem", fontSize: "0.72rem", color: "#637887", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Username</p>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: "1rem", color: "#0c5496", wordBreak: "break-all" }}>{resetResult.username}</p>
+              </div>
+              <div style={{ background: "#f3f8ec", borderRadius: "10px", padding: "0.85rem 1rem" }}>
+                <p style={{ margin: "0 0 0.25rem", fontSize: "0.72rem", color: "#637887", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Temporary Password</p>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: "1rem", color: "#1b542a", wordBreak: "break-all" }}>{resetResult.temporary_password}</p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void navigator.clipboard.writeText(resetResult.username)}
+              >
+                Copy username
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void navigator.clipboard.writeText(resetResult.temporary_password)}
+              >
+                Copy password
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void navigator.clipboard.writeText(`Username: ${resetResult.username}\nPassword: ${resetResult.temporary_password}`)}
+              >
+                Copy both
+              </button>
+            </div>
+          </div>
+          <div className="dialog-footer">
+            <button className="primary-button" type="button" onClick={() => setResetResult(null)}>
+              Done
             </button>
           </div>
         </Dialog>
