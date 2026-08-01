@@ -24,6 +24,14 @@ function nullableText(value: unknown): string | null {
   const clean = text(value);
   return clean.length > 0 ? clean : null;
 }
+// Normalise status: only accepted values are active/inactive/transfer/pending.
+// Any near-miss typo (e.g. "acive") falls back to "active".
+const VALID_STATUSES = new Set(["active", "inactive", "transfer", "pending"]);
+function normaliseStatus(raw: unknown): string {
+  const s = text(raw).toLowerCase();
+  return VALID_STATUSES.has(s) ? s : "active";
+}
+
 function studentPayload(body: Record<string, unknown>, school: string) {
   const payload: Record<string, unknown> = {
     ...body,
@@ -37,6 +45,9 @@ function studentPayload(body: Record<string, unknown>, school: string) {
   }
   if ("admission_date" in payload) {
     payload.admission_date = nullableText(payload.admission_date);
+  }
+  if ("status" in payload) {
+    payload.status = normaliseStatus(payload.status);
   }
   return payload;
 }
@@ -54,6 +65,9 @@ function studentPatch(body: Record<string, unknown>) {
   }
   if ("admission_date" in payload) {
     payload.admission_date = nullableText(payload.admission_date);
+  }
+  if ("status" in payload) {
+    payload.status = normaliseStatus(payload.status);
   }
   return payload;
 }
