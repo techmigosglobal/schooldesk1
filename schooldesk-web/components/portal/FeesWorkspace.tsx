@@ -178,6 +178,72 @@ function StructuresAccordion({ structures, onNew }: { structures: Row[]; onNew: 
   );
 }
 
+function printReceipt(r: Row, stName: string) {
+  const receipts = Array.isArray(r.fee_receipts) ? r.fee_receipts as Row[] : [];
+  const receipt = receipts[0] ?? {};
+  const receiptNum = stringValue(receipt.receipt_number ?? r.receipt_number);
+  const amount = Number(r.amount ?? 0);
+  const payDate = stringValue(r.paid_at ?? r.created_at).slice(0, 10);
+  const payMode = stringValue(r.payment_method ?? "—");
+  const txnRef = stringValue(r.reference_number ?? receipt.transaction_ref ?? "");
+  const invoiceNum = stringValue((r.invoice as Row | null)?.invoice_number ?? r.invoice_id);
+  const issuedAt = stringValue(receipt.issued_at ?? r.paid_at ?? r.created_at).slice(0, 10);
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Receipt ${receiptNum}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #1a2e3b; padding: 32px; max-width: 480px; margin: 0 auto; }
+  .logo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; border-bottom: 2px solid #0d5598; padding-bottom: 16px; }
+  .school-name { font-size: 17px; font-weight: 800; color: #0d5598; line-height: 1.2; }
+  .school-sub { font-size: 11px; color: #5f8ea8; margin-top: 2px; }
+  .receipt-title { text-align: center; margin: 16px 0 20px; }
+  .receipt-title h2 { font-size: 18px; font-weight: 700; color: #1a2e3b; letter-spacing: 1px; text-transform: uppercase; }
+  .receipt-title .badge { display: inline-block; background: #e8f4fc; color: #0d5598; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-top: 4px; }
+  .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #edf2f6; }
+  .row:last-child { border-bottom: none; }
+  .label { color: #627988; font-size: 12px; }
+  .value { font-weight: 600; font-size: 12px; }
+  .amount-row { background: #f0f7ff; border-radius: 8px; padding: 12px 16px; margin: 16px 0; display: flex; justify-content: space-between; align-items: center; }
+  .amount-row .label { font-size: 13px; font-weight: 600; color: #1a3d52; }
+  .amount-row .value { font-size: 22px; font-weight: 800; color: #0d5598; }
+  .footer { margin-top: 24px; text-align: center; font-size: 11px; color: #9bb0bc; border-top: 1px dashed #dde8ef; padding-top: 12px; }
+  .seal { text-align: right; margin-top: 32px; font-size: 11px; color: #9bb0bc; }
+  @media print { body { padding: 16px; } }
+</style>
+</head><body>
+<div class="logo-row">
+  <div>
+    <div class="school-name">Arish Ville Preschool</div>
+    <div class="school-sub">Fee Payment Receipt</div>
+  </div>
+</div>
+<div class="receipt-title">
+  <h2>Payment Receipt</h2>
+  <span class="badge">${receiptNum || "RECEIPT"}</span>
+</div>
+<div class="row"><span class="label">Student Name</span><span class="value">${stName}</span></div>
+${invoiceNum ? `<div class="row"><span class="label">Invoice No.</span><span class="value">${invoiceNum}</span></div>` : ""}
+<div class="row"><span class="label">Payment Date</span><span class="value">${payDate || "—"}</span></div>
+<div class="row"><span class="label">Payment Mode</span><span class="value">${payMode}</span></div>
+${txnRef ? `<div class="row"><span class="label">Transaction Ref</span><span class="value">${txnRef}</span></div>` : ""}
+${issuedAt && issuedAt !== payDate ? `<div class="row"><span class="label">Receipt Issued</span><span class="value">${issuedAt}</span></div>` : ""}
+<div class="amount-row">
+  <span class="label">Amount Paid</span>
+  <span class="value">₹${amount.toLocaleString("en-IN")}</span>
+</div>
+<div class="footer">This is a computer-generated receipt and does not require a signature.<br>Arish Ville Preschool · SchoolDesk</div>
+<div class="seal">Authorised Signatory _______________</div>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=520,height=700");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 400);
+}
+
 type SecondaryTab = "structures" | "collections" | "requests" | "concessions" | "reports";
 
 export function FeesWorkspace({
@@ -875,7 +941,7 @@ export function FeesWorkspace({
 
               {view === "collections" && (
                 <FinanceTable
-                  headers={["Receipt #", "Student", "Amount Paid", "Date", "Mode", "Transaction Ref"]}
+                  headers={["Receipt #", "Student", "Amount Paid", "Date", "Mode", "Transaction Ref", ""]}
                   rows={state.payments}
                   emptyText="No payments recorded."
                   renderRow={(r) => {
@@ -907,7 +973,17 @@ export function FeesWorkspace({
                             {payMode || "—"}
                           </span>
                         </td>
-                        <td>{txnRef || "—"}</td>
+                        <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{txnRef || "—"}</td>
+                        <td>
+                          <button
+                            className="secondary-button"
+                            style={{ padding: "4px 10px", fontSize: ".78rem", gap: 5 }}
+                            onClick={() => printReceipt(r, stName)}
+                            title="Download / Print receipt"
+                          >
+                            <Download size={13} /> Receipt
+                          </button>
+                        </td>
                       </tr>
                     );
                   }}
