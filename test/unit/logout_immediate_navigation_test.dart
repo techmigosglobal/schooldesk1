@@ -10,8 +10,14 @@ void main() {
 
     // The refresh token must be saved BEFORE clearing auth state.
     final refreshTokenIndex = source.indexOf('getRefreshToken()');
-    final clearAuthTokenIndex = source.indexOf('clearAuthToken()');
-    final tokenClearIndex = source.indexOf('TokenStorageService.clear()');
+    final clearAuthTokenIndex = source.indexOf(
+      'clearAuthToken()',
+      refreshTokenIndex,
+    );
+    final tokenClearIndex = source.indexOf(
+      'TokenStorageService.clear()',
+      refreshTokenIndex,
+    );
     expect(
       refreshTokenIndex,
       greaterThan(0),
@@ -29,7 +35,10 @@ void main() {
     );
 
     // Navigation must happen AFTER clearing state but BEFORE background cleanup.
-    final navigateIndex = source.indexOf('pushNamedAndRemoveUntil');
+    final navigateIndex = source.indexOf(
+      'pushNamedAndRemoveUntil',
+      clearAuthTokenIndex,
+    );
     final backgroundCleanupIndex = source.indexOf('_backgroundCleanup');
     expect(
       navigateIndex,
@@ -127,8 +136,9 @@ void main() {
     );
     expect(
       source,
-      contains('cleanupTopicsForRole'),
-      reason: 'Topic cleanup is in background.',
+      isNot(contains('cleanupTopicsForRole')),
+      reason:
+          'The app uses individual device tokens; no dead topic cleanup remains.',
     );
 
     // Background cleanup is fire-and-forget — called without await.

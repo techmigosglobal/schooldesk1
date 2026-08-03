@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:dio/dio.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -13,6 +15,7 @@ class ErrorReportingService {
   static final ErrorReportingService instance = ErrorReportingService._();
 
   bool _initialized = false;
+  bool _crashlyticsReady = false;
   // Queue-based delivery: errors are never dropped while a send is in-flight.
   // Each payload is enqueued and a single flush loop drains the queue serially.
   final Queue<Map<String, dynamic>> _pendingReports = Queue();
@@ -25,12 +28,33 @@ class ErrorReportingService {
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+          !kDebugMode,
+        );
+        _crashlyticsReady = true;
+      }
+    } on Object catch (_) {
+      // The backend queue remains the fallback when Firebase is unavailable.
+    }
     BackendApiClient.apiErrorReporter = (error) {
       unawaited(recordApiError(error));
     };
   }
 
   Future<void> recordFlutterError(FlutterErrorDetails details) {
+    unawaited(
+      _recordCrashlytics(
+        error: details.exception,
+        stack: details.stack,
+        fatal: true,
+        reason: details.context?.toDescription(),
+        information: [
+          if (details.library != null) 'library=${details.library}',
+        ],
+      ),
+    );
     return _submit({
       'source': 'flutter',
       'severity': 'fatal',
@@ -45,6 +69,7 @@ class ErrorReportingService {
   }
 
   Future<void> recordPlatformError(Object error, StackTrace stack) {
+    unawaited(_recordCrashlytics(error: error, stack: stack, fatal: true));
     return _submit({
       'source': 'flutter',
       'severity': 'fatal',
@@ -59,6 +84,17 @@ class ErrorReportingService {
     if (path.contains('/monitoring/error-events')) {
       return Future.value();
     }
+    unawaited(
+      _recordCrashlytics(
+        error: error,
+        stack: error.stackTrace,
+        reason: 'API ${error.requestOptions.method} $path',
+        information: [
+          'status=${error.response?.statusCode ?? 0}',
+          'role=${BackendApiClient.instance.currentRoleName}',
+        ],
+      ),
+    );
     return _submit({
       'source': 'api',
       'severity': error.response?.statusCode == null ? 'warning' : 'error',
@@ -73,6 +109,27 @@ class ErrorReportingService {
         'query_keys': error.requestOptions.queryParameters.keys.toList(),
       },
     });
+  }
+
+  Future<void> _recordCrashlytics({
+    required Object error,
+    StackTrace? stack,
+    bool fatal = false,
+    Object? reason,
+    Iterable<Object> information = const [],
+  }) async {
+    if (!_crashlyticsReady) return;
+    try {
+      await FirebaseCrashlytics.instance.recordError(
+        error,
+        stack,
+        fatal: fatal,
+        reason: reason,
+        information: information,
+      );
+    } on Object catch (_) {
+      // Error reporting must never affect the application flow.
+    }
   }
 
   Future<void> _submit(Map<String, dynamic> payload) async {

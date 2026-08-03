@@ -211,14 +211,31 @@ export async function handleWebsite(
   }
 
   if (path === "/website/gallery" && method === "GET") {
-    const { data, error } = await svc.from("school_website_gallery_items")
-      .select("*").eq("school_id", school).order("sort_order").order(
-        "created_at",
-        { ascending: false },
-      );
-    return error
-      ? fail(error.message)
-      : ok((data ?? []).map((row) => galleryRow(svc, row)));
+    const [galleryResult, eventResult] = await Promise.all([
+      svc.from("school_website_gallery_items").select("*").eq(
+        "school_id",
+        school,
+      ).order("sort_order").order("created_at", { ascending: false }),
+      svc.from("event_posts").select(
+        "id, title, body, media_urls, status, destinations, created_at",
+      ).eq("school_id", school).in("status", ["approved", "published"])
+        .contains("destinations", JSON.stringify(["SCHOOL_GALLERY"]))
+        .order("created_at", { ascending: false }),
+    ]);
+    if (galleryResult.error) return fail(galleryResult.error.message);
+    if (eventResult.error) return fail(eventResult.error.message);
+    const managedMedia = (galleryResult.data ?? []).map((row) =>
+      galleryRow(svc, row)
+    );
+    const selectedEventMedia = (eventResult.data ?? []).flatMap((row) =>
+      eventGalleryRows(row as Record<string, unknown>).map((media) => ({
+        ...media,
+        is_published: true,
+        status: text(row.status),
+        destinations: ["SCHOOL_GALLERY"],
+      }))
+    );
+    return ok([...selectedEventMedia, ...managedMedia]);
   }
   if (path === "/website/gallery/upload" && method === "POST") {
     const form = await req.formData().catch(() => null);

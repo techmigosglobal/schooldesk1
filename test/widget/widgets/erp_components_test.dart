@@ -246,7 +246,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Loading attendance'), findsOneWidget);
+    expect(find.bySemanticsLabel('Loading attendance'), findsOneWidget);
     expect(find.text('No records'), findsOneWidget);
     expect(find.text('Server error'), findsOneWidget);
   });

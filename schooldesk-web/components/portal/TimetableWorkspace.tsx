@@ -71,11 +71,17 @@ export function TimetableWorkspace({
       const res = await api("principal/classes");
       const list = rowsFrom(res);
       setClasses(list);
-      if (list.length > 0 && !selectedSectionId) {
-        setSelectedSectionId(stringValue(list[0].section_id || list[0].id));
-      }
+      const nextSectionId = list.length > 0
+        ? stringValue(
+            list.find((row) => stringValue(row.section_id || row.id) === selectedSectionId)
+              ?.section_id || list[0].section_id || list[0].id,
+          )
+        : "";
+      setSelectedSectionId(nextSectionId);
+      if (list.length === 0) setLoading(false);
     } catch (event) {
       setError(event instanceof Error ? event.message : "Unable to load class sections");
+      setLoading(false);
     }
   }, [selectedSectionId]);
 
@@ -85,7 +91,13 @@ export function TimetableWorkspace({
     else setLoading(true);
     setError("");
     try {
-      const res = await api(`timetable/slots?section_id=${sectionId}`);
+      const classRow = classes.find(
+        (row) => stringValue(row.section_id || row.id) === sectionId,
+      );
+      const academicYearId = stringValue(classRow?.academic_year_id);
+      const query = new URLSearchParams({ section_id: sectionId });
+      if (academicYearId) query.set("academic_year_id", academicYearId);
+      const res = await api(`timetable/slots?${query.toString()}`);
       setSlots(rowsFrom(res));
     } catch (event) {
       setError(event instanceof Error ? event.message : "Unable to load timetable slots");
@@ -93,7 +105,7 @@ export function TimetableWorkspace({
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [classes]);
 
   useEffect(() => {
     void loadClasses();
@@ -106,7 +118,7 @@ export function TimetableWorkspace({
   }, [selectedSectionId, loadSlots]);
 
   useEffect(() => {
-    if (createToken > 0) {
+    if (createToken > 0 && selectedSectionId) {
       setSlotDialog({ open: true, readOnly: false });
     }
   }, [createToken]);
@@ -170,13 +182,13 @@ export function TimetableWorkspace({
           </div>
         </div>
         <div className="ops-actions">
-          <button className="secondary-button" onClick={() => void loadSlots(selectedSectionId, true)} disabled={refreshing}>
+          <button type="button" className="secondary-button" onClick={() => void loadSlots(selectedSectionId, true)} disabled={refreshing || !selectedSectionId}>
             <RefreshCw size={16} className={refreshing ? "spin" : ""} /> Refresh
           </button>
-          <button className="secondary-button" onClick={() => setGeneratorOpen(true)}>
+          <button type="button" className="secondary-button" onClick={() => setGeneratorOpen(true)} disabled={!selectedSectionId}>
             <Sparkles size={16} /> Smart Auto-Generate
           </button>
-          <button className="primary-button" onClick={() => setSlotDialog({ open: true, readOnly: false })}>
+          <button type="button" className="primary-button" onClick={() => setSlotDialog({ open: true, readOnly: false })} disabled={!selectedSectionId}>
             <Plus size={16} /> Add period slot
           </button>
         </div>
@@ -188,6 +200,8 @@ export function TimetableWorkspace({
           <select
             value={selectedSectionId}
             onChange={(e) => setSelectedSectionId(e.target.value)}
+            disabled={classes.length === 0}
+            aria-label="Select timetable class section"
             style={{ padding: "0.5rem 0.8rem", borderRadius: "8px", border: "1px solid #c8d8e4", background: "#fff", fontWeight: 600 }}
           >
             {classes.map((cls) => {
@@ -205,6 +219,7 @@ export function TimetableWorkspace({
           <button
             type="button"
             className={viewMode === "grid" ? "active" : ""}
+            aria-pressed={viewMode === "grid"}
             onClick={() => setViewMode("grid")}
           >
             Weekly Grid Matrix
@@ -212,6 +227,7 @@ export function TimetableWorkspace({
           <button
             type="button"
             className={viewMode === "day" ? "active" : ""}
+            aria-pressed={viewMode === "day"}
             onClick={() => setViewMode("day")}
           >
             Day-by-Day View
@@ -223,7 +239,7 @@ export function TimetableWorkspace({
         </span>
 
         {slots.length > 0 && (
-          <button className="secondary-button danger" style={{ fontSize: "0.78rem" }} onClick={() => void clearClassSchedule()}>
+          <button type="button" className="secondary-button danger" style={{ fontSize: "0.78rem" }} onClick={() => void clearClassSchedule()}>
             Clear Class Schedule
           </button>
         )}
@@ -247,14 +263,18 @@ export function TimetableWorkspace({
 
       {loading ? (
         <PortalModuleSkeleton variant="timetable" label="Loading weekly timetable" />
+      ) : classes.length === 0 ? (
+        <div className="ops-empty" role="status">
+          No class sections are available yet. Create and assign a class before managing its timetable.
+        </div>
       ) : viewMode === "grid" ? (
         <div className="table-card surface ops-table-surface student-directory-table-wrap" style={{ overflowX: "auto" }}>
           <table className="data-table" style={{ minWidth: "900px" }}>
             <thead>
               <tr>
-                <th style={{ width: "90px" }}>Period</th>
+                <th scope="col" style={{ width: "90px" }}>Period</th>
                 {DAYS.map((day) => (
-                  <th key={day.value} style={{ textAlign: "center" }}>
+                  <th key={day.value} scope="col" style={{ textAlign: "center" }}>
                     {day.label}
                   </th>
                 ))}
@@ -277,7 +297,7 @@ export function TimetableWorkspace({
                           style={{
                             textAlign: "center",
                             background: "#fafcfd",
-                            border: "1px stroke #eef3f6",
+                            border: "1px solid #eef3f6",
                             padding: "0.6rem",
                           }}
                         >
@@ -385,17 +405,21 @@ export function TimetableWorkspace({
                           </small>
                           <div style={{ display: "flex", gap: "0.2rem" }}>
                             <button
+                              type="button"
                               className="icon-button"
                               title="Edit slot"
-                              style={{ width: "20px", height: "20px", padding: 0 }}
+                              aria-label={`Edit ${subjectName} on ${day.label}, period ${periodNum}`}
+                              style={{ width: "36px", height: "36px", padding: 0 }}
                               onClick={() => setSlotDialog({ open: true, row: slot, readOnly: false })}
                             >
                               <Pencil size={12} />
                             </button>
                             <button
+                              type="button"
                               className="icon-button danger"
                               title="Delete slot"
-                              style={{ width: "20px", height: "20px", padding: 0 }}
+                              aria-label={`Delete ${subjectName} on ${day.label}, period ${periodNum}`}
+                              style={{ width: "36px", height: "36px", padding: 0 }}
                               onClick={() => setDeleteTarget(slot)}
                             >
                               <Trash2 size={12} />
@@ -418,6 +442,7 @@ export function TimetableWorkspace({
                 key={day.value}
                 type="button"
                 className={selectedDay === day.value ? "active" : ""}
+                aria-pressed={selectedDay === day.value}
                 onClick={() => setSelectedDay(day.value)}
               >
                 {day.label}
@@ -430,12 +455,12 @@ export function TimetableWorkspace({
               <table className="data-table student-directory-table">
                 <thead>
                   <tr>
-                    <th>Period</th>
-                    <th>Time</th>
-                    <th>Subject</th>
-                    <th>Educator</th>
-                    <th>Room</th>
-                    <th style={{ textAlign: "right" }}>Actions</th>
+                    <th scope="col">Period</th>
+                    <th scope="col">Time</th>
+                    <th scope="col">Subject</th>
+                    <th scope="col">Educator</th>
+                    <th scope="col">Room</th>
+                    <th scope="col" style={{ textAlign: "right" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -461,15 +486,19 @@ export function TimetableWorkspace({
                           <td>{stringValue(slot.room_number || (slot.room as Row)?.room_number || "—")}</td>
                           <td className="actions-cell" style={{ textAlign: "right" }}>
                             <button
+                              type="button"
                               className="icon-button"
                               title="Edit slot"
+                              aria-label={`Edit ${subjectName}, period ${stringValue(slot.period_number)}`}
                               onClick={() => setSlotDialog({ open: true, row: slot, readOnly: false })}
                             >
                               <Pencil size={15} />
                             </button>
                             <button
+                              type="button"
                               className="icon-button danger"
                               title="Delete slot"
+                              aria-label={`Delete ${subjectName}, period ${stringValue(slot.period_number)}`}
                               onClick={() => setDeleteTarget(slot)}
                             >
                               <Trash2 size={15} />
@@ -487,7 +516,7 @@ export function TimetableWorkspace({
         </div>
       )}
 
-      {slotDialog.open && (
+      {slotDialog.open && selectedSectionId && (
         <TimetableSlotDialog
           row={slotDialog.row}
           defaultSectionId={selectedSectionId}
@@ -501,7 +530,7 @@ export function TimetableWorkspace({
         />
       )}
 
-      {generatorOpen && (
+      {generatorOpen && selectedSectionId && (
         <TimetableGeneratorDialog
           defaultSectionId={selectedSectionId}
           onClose={() => setGeneratorOpen(false)}

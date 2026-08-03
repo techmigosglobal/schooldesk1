@@ -8,7 +8,8 @@ void main() {
       'supabase/functions/api/handlers/monitoring.ts',
     ).readAsStringSync();
     expect(source, contains('forbidden: super_admin required'));
-    expect(source, contains('.contains("context", { status })'));
+    expect(source, contains('.eq("status", status)'));
+    expect(source, contains('.contains("context", { source })'));
     expect(source, contains('.range((page - 1) * size, page * size - 1)'));
     expect(source, contains('created_at'));
   });

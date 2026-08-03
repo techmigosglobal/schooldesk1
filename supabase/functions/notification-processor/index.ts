@@ -7,6 +7,8 @@ const supabase = createClient(
 );
 
 const FCM_PROJECT_ID = Deno.env.get("FIREBASE_PROJECT_ID") || "";
+const MAX_EVENT_RETRIES = 5;
+const EVENT_BATCH_CONCURRENCY = 10;
 
 // ─── OAuth2 Token Management ──────────────────────────────────────────────────
 // We mint short-lived OAuth2 access tokens from the Firebase service account
@@ -265,6 +267,8 @@ interface NotificationEvent {
   event_type: string;
   event_data: Record<string, unknown>;
   created_at: string;
+  retry_count?: number;
+  next_retry_at?: string | null;
 }
 
 interface NotificationTemplate {
@@ -500,9 +504,9 @@ function getNotificationTemplate(
 
     case "homework_submitted":
       return {
-        title: String(eventData.title || "Homework Submitted"),
+        title: String(eventData.title || "Dairy Submitted"),
         body: String(
-          eventData.message || "A homework submission was received.",
+          eventData.message || "A dairy submission was received.",
         ),
         data: {
           event_type: "homework_submitted",
@@ -521,9 +525,9 @@ function getNotificationTemplate(
 
     case "homework_feedback":
       return {
-        title: "Homework Feedback",
+        title: String(eventData.title || "Dairy Feedback"),
         body: String(
-          eventData.message || "Teacher provided feedback on homework.",
+          eventData.message || "Teacher provided feedback on dairy.",
         ),
         data: {
           event_type: "homework_feedback",
@@ -533,6 +537,8 @@ function getNotificationTemplate(
             eventData.reference_id || eventData.homework_id || "",
           ),
           action: String(eventData.action || "feedback"),
+          route: String(eventData.route || "/parent-homework-screen/submit"),
+          student_id: String(eventData.student_id || ""),
         },
       };
 
@@ -618,9 +624,9 @@ function getNotificationTemplate(
 
     case "homework_assigned":
       return {
-        title: String(eventData.title || "New Homework Assigned"),
+        title: String(eventData.title || "New Dairy Assigned"),
         body: String(
-          eventData.message || "Your child has been assigned new homework.",
+          eventData.message || "Your child has been assigned new dairy.",
         ),
         data: {
           event_type: "homework_assigned",
@@ -761,6 +767,7 @@ function getNotificationTemplate(
 async function sendFcmNotification(
   token: string,
   template: NotificationTemplate,
+  badgeCount: number,
 ): Promise<FcmSendResult> {
   if (!FCM_PROJECT_ID) {
     console.error(
@@ -799,7 +806,7 @@ async function sendFcmNotification(
           payload: {
             aps: {
               alert: { title: template.title, body: template.body },
-              badge: 1,
+              badge: Math.max(0, badgeCount),
               sound: "default",
               ...(template.image ? { "mutable-content": 1 } : {}),
             },
@@ -874,12 +881,61 @@ function isInvalidFcmTokenError(raw: string): boolean {
     raw.includes("registration token is not a valid FCM registration token");
 }
 
+function preferenceKeysForEvent(eventType: string): string[] {
+  const type = eventType.trim().toLowerCase();
+  if (type.includes("fee")) return ["fee_reminders", "fees"];
+  if (
+    type.includes("attendance") ||
+    type.includes("absent")
+  ) return ["attendance"];
+  if (
+    type.includes("homework") ||
+    type.includes("academic") ||
+    type.includes("exam") ||
+    type.includes("lesson_planner")
+  ) return ["academics"];
+  if (
+    type.includes("event") ||
+    type.includes("calendar") ||
+    type.includes("ptm")
+  ) return ["events"];
+  if (
+    type.includes("message") ||
+    type.includes("chat")
+  ) return ["messages"];
+  if (
+    type.includes("leave") ||
+    type.includes("approval") ||
+    type.includes("document") ||
+    type.includes("complaint") ||
+    type.includes("health") ||
+    type.includes("payment")
+  ) return ["pending_approvals"];
+  return ["general_alerts", "announcements"];
+}
+
+async function unreadNotificationCount(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("notification_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("is_read", false)
+    .is("deleted_at", null);
+  if (error) {
+    console.error(`Failed to calculate unread badge count for ${userId}:`, error);
+    return 0;
+  }
+  return Math.max(0, count ?? 0);
+}
+
 async function markEventProcessed(eventId: string): Promise<void> {
   await supabase
     .from("notification_events")
     .update({
       processed: true,
       sent_at: new Date().toISOString(),
+      next_retry_at: null,
+      last_error: null,
     })
     .eq("id", eventId);
 }
@@ -890,18 +946,53 @@ async function claimEvent(eventId: string): Promise<boolean> {
     .update({ processed: true })
     .eq("id", eventId)
     .eq("processed", false)
+    .lt("retry_count", MAX_EVENT_RETRIES)
     .select("id")
     .maybeSingle();
   if (error) throw error;
   return data?.id === eventId;
 }
 
-async function releaseEvent(eventId: string): Promise<void> {
-  const { error } = await supabase
+async function releaseEvent(eventId: string, lastError: string): Promise<boolean> {
+  const { data: event, error: readError } = await supabase
     .from("notification_events")
-    .update({ processed: false, sent_at: null })
-    .eq("id", eventId);
+    .select("retry_count, event_data")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (readError) throw readError;
+
+  const retryCount = (Number(event?.retry_count ?? 0) || 0) + 1;
+  const boundedError = lastError.slice(0, 1000);
+  if (retryCount >= MAX_EVENT_RETRIES) {
+    const eventData = event?.event_data && typeof event.event_data === "object"
+      ? event.event_data as Record<string, unknown>
+      : {};
+    const { error } = await supabase.from("notification_events").update({
+      processed: true,
+      sent_at: null,
+      retry_count: retryCount,
+      last_error: boundedError,
+      next_retry_at: null,
+      event_data: { ...eventData, _push_dead_letter: true },
+    }).eq("id", eventId);
+    if (error) throw error;
+    console.error(`Dead-lettered notification event ${eventId} after ${retryCount} attempts`);
+    return true;
+  }
+
+  // Exponential backoff keeps a broken FCM configuration from being retried
+  // on every cron tick while still allowing recovery without manual repair.
+  const delayMinutes = Math.min(60, 2 ** retryCount);
+  const nextRetryAt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
+  const { error } = await supabase.from("notification_events").update({
+    processed: false,
+    sent_at: null,
+    retry_count: retryCount,
+    last_error: boundedError,
+    next_retry_at: nextRetryAt,
+  }).eq("id", eventId);
   if (error) throw error;
+  return false;
 }
 
 async function activeDeviceTokensForUser(
@@ -1013,7 +1104,9 @@ async function processNotificationEvent(
     // Check user notification preferences (opt-out check)
     const { data: preferences } = await supabase
       .from("notification_preferences")
-      .select("enable_push")
+      .select(
+        "enable_push, announcements, attendance, fees, academics, events, messages, emergency_alerts, pending_approvals, fee_reminders, general_alerts",
+      )
       .eq("user_id", event.user_id)
       .single();
 
@@ -1029,7 +1122,31 @@ async function processNotificationEvent(
       };
     }
 
+    const preferenceValues = preferences as unknown as Record<
+      string,
+      boolean | null | undefined
+    >;
+    if (
+      preferences &&
+      preferenceKeysForEvent(event.event_type).some((key) =>
+        preferenceValues[key] === false
+      )
+    ) {
+      console.log(
+        `Category push notifications disabled for user ${event.user_id} (${event.event_type})`,
+      );
+      await markEventProcessed(event.id);
+      return {
+        processed: true,
+        sentCount: 0,
+        invalidTokenCount: 0,
+        transientFailureCount: 0,
+        reason: "category_push_disabled",
+      };
+    }
+
     // Send to all active devices
+    const badgeCount = await unreadNotificationCount(event.user_id);
     let sentCount = 0;
     const invalidTokens: ActiveDeviceToken[] = [];
     let transientFailureCount = 0;
@@ -1037,7 +1154,11 @@ async function processNotificationEvent(
     const tokenResults: any[] = [];
 
     for (const device of devices) {
-      const result = await sendFcmNotification(device.token, template);
+      const result = await sendFcmNotification(
+        device.token,
+        template,
+        badgeCount,
+      );
       tokenResults.push({
         token_preview: device.token.slice(0, 10) + "..." +
           device.token.slice(-10),
@@ -1092,32 +1213,48 @@ async function processNotificationEvent(
     console.log(
       `Event ${event.id} not processed; ${transientFailureCount} transient FCM failure(s)`,
     );
-    await releaseEvent(event.id);
+    const deadLettered = await releaseEvent(event.id, lastError);
     return {
-      processed: false,
+      processed: deadLettered,
       sentCount,
       invalidTokenCount: invalidTokens.length,
       transientFailureCount,
-      reason: lastError.slice(0, 240),
+      reason: deadLettered
+        ? `dead_lettered: ${lastError.slice(0, 220)}`
+        : lastError.slice(0, 240),
       debug_info: tokenResults,
     };
   } catch (error) {
     console.error(`Error processing notification event ${event.id}: ${error}`);
+    let deadLettered = false;
     try {
-      await releaseEvent(event.id);
+      deadLettered = await releaseEvent(event.id, String(error));
     } catch (releaseError) {
       console.error(
         `Failed to release notification event ${event.id}: ${releaseError}`,
       );
     }
     return {
-      processed: false,
+      processed: deadLettered,
       sentCount: 0,
       invalidTokenCount: 0,
       transientFailureCount: 1,
-      reason: String(error).slice(0, 240),
+      reason: deadLettered
+        ? `dead_lettered: ${String(error).slice(0, 220)}`
+        : String(error).slice(0, 240),
     };
   }
+}
+
+async function processEventsWithConcurrency(
+  events: NotificationEvent[],
+): Promise<EventProcessResult[]> {
+  const results: EventProcessResult[] = [];
+  for (let offset = 0; offset < events.length; offset += EVENT_BATCH_CONCURRENCY) {
+    const batch = events.slice(offset, offset + EVENT_BATCH_CONCURRENCY);
+    results.push(...await Promise.all(batch.map(processNotificationEvent)));
+  }
+  return results;
 }
 
 // ─── Main Handler ────────────────────────────────────────────────────────────
@@ -1153,6 +1290,8 @@ Deno.serve(async (req: Request) => {
       .from("notification_events")
       .select("*")
       .eq("processed", false)
+      .lt("retry_count", MAX_EVENT_RETRIES)
+      .or(`next_retry_at.is.null,next_retry_at.lte.${new Date().toISOString()}`)
       .order("created_at", { ascending: true });
     query = eventIds.length > 0 ? query.in("id", eventIds) : query.limit(100);
 
@@ -1178,8 +1317,11 @@ Deno.serve(async (req: Request) => {
     let invalidTokenCount = 0;
     let transientFailureCount = 0;
     const failures: Array<{ event_id: string; reason: string }> = [];
-    for (const event of events as NotificationEvent[]) {
-      const result = await processNotificationEvent(event);
+    const notificationEvents = events as NotificationEvent[];
+    const results = await processEventsWithConcurrency(notificationEvents);
+    for (let index = 0; index < notificationEvents.length; index++) {
+      const event = notificationEvents[index];
+      const result = results[index];
       if (result.processed) processedCount++;
       sentCount += result.sentCount;
       invalidTokenCount += result.invalidTokenCount;

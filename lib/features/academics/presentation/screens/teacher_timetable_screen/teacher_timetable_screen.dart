@@ -140,7 +140,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
                   'Your assignment will appear after Principal assigns you.',
             )
           else ...[
-            // ── Card 1: Today's Full-Day Assigned Class ──────────────────
+            // ── Card 1: Assigned Class Overview ───────────────────────────
             _FullDayClassCard(
               classLabel: classLabel,
               subjects: subjects,
@@ -259,7 +259,7 @@ class _FullDayClassCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Today\'s Assigned Class',
+                      'Assigned Class Overview',
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: teacherFlowAccent,
                         fontWeight: FontWeight.w600,

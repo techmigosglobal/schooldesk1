@@ -400,6 +400,8 @@ void main() {
 
       expect(find.text('Student Ledger & Dues'), findsOneWidget);
       expect(find.text('Aarav Sharma'), findsOneWidget);
+      expect(find.text('Paid ₹50000'), findsOneWidget);
+      expect(find.text('Balance ₹70000'), findsOneWidget);
     });
 
     testWidgets('shows outstanding and collected metrics', (tester) async {

@@ -88,12 +88,24 @@ class RoleAccessService {
           );
     // If no staff-scoped timetable found, try section-scoped timetable as a
     // fallback (some backends store timetables by section rather than staff).
-    if (!isParent &&
-        (timetable == null || timetable.isEmpty) &&
-        teacherSectionId.isNotEmpty) {
-      timetable = await _try(
-        () => api.getTimetableSlots(sectionId: teacherSectionId),
-      );
+    if (!isParent && (timetable == null || timetable.isEmpty)) {
+      final assignedSectionIds = _teacherAssignedClasses
+          .map(_sectionId)
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList();
+      if (assignedSectionIds.isNotEmpty) {
+        final sectionResults = await Future.wait(
+          assignedSectionIds.map(
+            (sectionId) =>
+                _try(() => api.getTimetableSlots(sectionId: sectionId)),
+          ),
+        );
+        timetable = sectionResults
+            .whereType<List<Map<String, dynamic>>>()
+            .expand((rows) => rows)
+            .toList();
+      }
     }
     final invoices = (profileRole == 'teacher' || isParent)
         ? <Map<String, dynamic>>[]

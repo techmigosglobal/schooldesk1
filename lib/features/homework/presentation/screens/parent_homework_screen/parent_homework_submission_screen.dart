@@ -124,7 +124,7 @@ class _ParentHomeworkSubmissionScreenState
       );
       final rawHw = childRows.firstWhere(
         (row) => _hwText(row['id'] ?? row['homework_id']) == _homeworkId,
-        orElse: () => throw Exception('Homework item not found'),
+        orElse: () => throw Exception('Dairy item not found'),
       );
 
       // 2. Fetch submission state
@@ -218,8 +218,8 @@ class _ParentHomeworkSubmissionScreenState
     final ready =
         _homeworkId.isNotEmpty && widget.args.studentId.trim().isNotEmpty;
     return SchoolDeskModuleScaffold(
-      title: 'Submit Homework',
-      subtitle: _hwText(_homeworkDetails['title'], fallback: 'Homework'),
+      title: 'Submit Dairy',
+      subtitle: _hwText(_homeworkDetails['title'], fallback: 'Dairy'),
       drawer: ParentDrawer(
         selectedIndex: ParentNav.homework,
         onDestinationSelected: (_) {},
@@ -355,8 +355,8 @@ class _ParentHomeworkSubmissionScreenState
                                 _saving
                                     ? 'Submitting...'
                                     : _needsRevision
-                                    ? 'Resubmit Homework'
-                                    : 'Submit Homework',
+                                    ? 'Resubmit Dairy'
+                                    : 'Submit Dairy',
                                 style: GoogleFonts.dmSans(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 15,
@@ -376,7 +376,7 @@ class _ParentHomeworkSubmissionScreenState
                                 size: 18,
                               ),
                               label: Text(
-                                'Back to Homework',
+                                'Back to Dairy',
                                 style: GoogleFonts.dmSans(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -421,7 +421,7 @@ class _ParentHomeworkSubmissionScreenState
                                 size: 18,
                               ),
                               label: Text(
-                                'Back to Homework',
+                                'Back to Dairy',
                                 style: GoogleFonts.dmSans(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -434,9 +434,9 @@ class _ParentHomeworkSubmissionScreenState
                   )
                 else
                   const SchoolDeskStatusPanel.empty(
-                    title: 'Homework selection required',
+                    title: 'Dairy selection required',
                     message:
-                        'Open this screen from a linked child homework item before submitting.',
+                        'Open this screen from a linked child dairy item before submitting.',
                   ),
                 const SizedBox(height: 84),
               ],
@@ -476,7 +476,7 @@ class _ParentHomeworkSubmissionScreenState
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  _hwText(_homeworkDetails['title'], fallback: 'Homework'),
+                  _hwText(_homeworkDetails['title'], fallback: 'Dairy'),
                   style: GoogleFonts.dmSans(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -885,8 +885,8 @@ class _ParentHomeworkSubmissionScreenState
         context,
         ParentHomeworkSubmissionResult(
           _needsRevision
-              ? "Homework resubmitted successfully"
-              : "Homework submitted successfully",
+              ? "Dairy resubmitted successfully"
+              : "Dairy submitted successfully",
         ),
       );
     } on Object catch (error) {

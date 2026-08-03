@@ -20,11 +20,17 @@ void main() {
     expect(fees, contains('applyFeeInvoiceSyncPlan'));
     expect(fees, contains('synced_invoice_count: synced'));
     expect(fees, contains('skipped_partial_count'));
-    expect(fees, contains('monthly_amount: row.billingMode === "monthly"'));
+    expect(
+      fees,
+      contains(
+        'const billingMode = feeType === "tuition" ? "monthly" : "one_time"',
+      ),
+    );
+    expect(fees, contains('billing_mode: row.billingMode'));
     expect(form, contains("return 'monthly';"));
-    expect(payment, contains('Installments must be paid continuously'));
-    expect(payment, contains('final canAdd ='));
-    expect(payment, contains('final canRemove ='));
+    expect(payment, contains('double get _remainingBalance'));
+    expect(payment, contains('Future<void> _proceedToPay()'));
+    expect(payment, contains('amount > _remainingBalance'));
   });
 
   test(
@@ -148,7 +154,10 @@ void main() {
     expect(uploads, contains('teacherAssignedSectionIds'));
     expect(uploads, contains('fee receipts cannot be deleted by parents'));
     expect(uploads, contains('student_document_uploaded'));
-    expect(issues, contains('new Set(["principal", "teacher", "parent"])'));
+    expect(
+      issues,
+      contains('new Set(["principal", "coordinator", "teacher", "parent"])'),
+    );
     expect(issues, contains('/issues/with-attachments'));
     expect(issues, contains('uploadedPaths'));
     expect(issues, contains('remove(uploadedPaths)'));

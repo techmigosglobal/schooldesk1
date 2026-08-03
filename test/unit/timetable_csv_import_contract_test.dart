@@ -92,7 +92,12 @@ void main() {
     expect(timetableHandler, contains('room_id'));
     expect(timetableHandler, contains('buildClassSubjectAssignments'));
     expect(timetableHandler, contains('staff_id: null'));
-    expect(timetableHandler, isNot(contains('staff_subjects')));
+    expect(timetableHandler, contains('staff_subjects'));
+    expect(timetableHandler, contains('preferredStaffId'));
+    expect(timetableHandler, contains('isSchoolLeader'));
+    expect(timetableHandler, contains('readerScope'));
+    expect(timetableHandler, contains('dayOfWeek'));
+    expect(timetableHandler, contains('academic_year_id required'));
     expect(timetableHandler, contains('body.end_time'));
     expect(timetableApi, contains("'breaks': breaks"));
     expect(timetableApi, contains("'end_time': endTime.trim()"));

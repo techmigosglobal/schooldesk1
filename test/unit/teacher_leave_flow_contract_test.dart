@@ -68,17 +68,20 @@ void main() {
       expect(source, contains('leave_rejected'));
     });
 
-    test('recall handler creates notification_events for principal', () {
-      expect(source, contains('leave_recalled'));
-      expect(source, contains('resolvePrincipalUserId'));
-      expect(source, contains('target_role: "principal"'));
-      // Verify notification_events insert exists within the recall block
-      final recallIdx = source.indexOf('recallMatch && method === "POST"');
-      final recallEnd = source.indexOf('return ok(data);', recallIdx);
-      final recallBlock = source.substring(recallIdx, recallEnd);
-      expect(recallBlock, contains('notification_events'));
-      expect(recallBlock, contains('notification_logs'));
-    });
+    test(
+      'recall handler creates notification_events for school leadership',
+      () {
+        expect(source, contains('leave_recalled'));
+        expect(source, contains('resolveLeadershipUserIds'));
+        expect(source, contains('target_role: "all"'));
+        // Verify notification_events insert exists within the recall block
+        final recallIdx = source.indexOf('recallMatch && method === "POST"');
+        final recallEnd = source.indexOf('return ok(data);', recallIdx);
+        final recallBlock = source.substring(recallIdx, recallEnd);
+        expect(recallBlock, contains('notification_events'));
+        expect(recallBlock, contains('notification_logs'));
+      },
+    );
 
     test('recall notification includes teacher name and date range', () {
       expect(source, contains('staffName'));
@@ -110,7 +113,7 @@ void main() {
         source.indexOf('recallMatch && method === "POST"'),
       );
       expect(recallSection, contains('notification_logs'));
-      expect(recallSection, contains('target_role: "principal"'));
+      expect(recallSection, contains('target_role: "all"'));
     });
 
     test('approve handler triggers push processing', () {

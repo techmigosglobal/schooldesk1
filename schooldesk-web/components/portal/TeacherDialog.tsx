@@ -1,19 +1,79 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { teacherSchema } from "@/lib/schemas";
 import type { Row } from "./types";
-import { api, stringValue, splitName, displayName } from "./utils";
+import { api, stringValue, splitName, displayName, nested } from "./utils";
 import { Dialog } from "./Dialog";
 import { FormActions } from "./FormActions";
 
+type AssignmentRole = "" | "class_teacher" | "co_teacher";
+
+function sectionId(row: Row) {
+  return stringValue(row.section_id ?? row.id);
+}
+
+function sectionLabel(row: Row) {
+  const grade = nested(row, "grade");
+  const gradeName = stringValue(row.grade_name ?? grade.grade_name ?? grade.name);
+  const name = stringValue(row.section_name ?? row.name);
+  return [gradeName, name].filter(Boolean).join(" - ") || "Class section";
+}
+
+function assignedStaffId(row: Row, key: "class_teacher" | "co_teacher") {
+  const directKey = `${key}_id`;
+  return stringValue(row[directKey] ?? nested(row, key).id ?? nested(row, key).staff_code);
+}
+
+function matchesStaff(value: string, row?: Row, savedId = "") {
+  return [savedId, stringValue(row?.id), stringValue(row?.staff_code)]
+    .filter(Boolean)
+    .includes(value);
+}
+
+function initialRole(row: Row, teacher?: Row): AssignmentRole {
+  const teacherId = stringValue(teacher?.id);
+  const staffCode = stringValue(teacher?.staff_code);
+  const classTeacher = assignedStaffId(row, "class_teacher");
+  const coTeacher = assignedStaffId(row, "co_teacher");
+  if (classTeacher && [teacherId, staffCode].filter(Boolean).includes(classTeacher)) {
+    return "class_teacher";
+  }
+  if (coTeacher && [teacherId, staffCode].filter(Boolean).includes(coTeacher)) {
+    return "co_teacher";
+  }
+  return "";
+}
+
+function classUpdatePayload(
+  row: Row,
+  classTeacherId: string | null,
+  coTeacherId: string | null,
+) {
+  const grade = nested(row, "grade");
+  const academicYear = nested(row, "academic_year");
+  const room = nested(row, "room");
+  return {
+    academic_year_id: stringValue(row.academic_year_id ?? academicYear.id) || undefined,
+    grade_name: stringValue(row.grade_name ?? grade.grade_name ?? grade.name),
+    grade_number: Number(row.grade_number ?? grade.grade_number ?? 1),
+    section_name: stringValue(row.section_name ?? row.name),
+    capacity: Number(row.capacity || 30),
+    room_number: stringValue(row.room_number ?? room.room_number) || null,
+    class_teacher_id: classTeacherId,
+    co_teacher_id: coTeacherId,
+  };
+}
+
 export function TeacherDialog({
   row,
+  classes = [],
   readOnly,
   onClose,
   onSaved,
 }: {
   row?: Row;
+  classes?: Row[];
   readOnly?: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -23,9 +83,24 @@ export function TeacherDialog({
   const [designation, setDesignation] = useState(
     stringValue(row?.designation) || "Teacher"
   );
+  const initialAssignments = useMemo(
+    () => Object.fromEntries(
+      classes
+        .map((item) => [sectionId(item), initialRole(item, row)] as const)
+        .filter(([id]) => Boolean(id)),
+    ) as Record<string, AssignmentRole>,
+    [classes, row],
+  );
+  const [classAssignments, setClassAssignments] = useState<Record<string, AssignmentRole>>(
+    initialAssignments,
+  );
+
+  useEffect(() => {
+    setClassAssignments(initialAssignments);
+  }, [initialAssignments]);
 
   async function submit(form: FormData) {
-    if (readOnly) return;
+    if (readOnly || saving) return;
     setSaving(true);
     setError("");
     try {
@@ -62,10 +137,57 @@ export function TeacherDialog({
 
       if (parsed.data.password) payload.password = parsed.data.password;
 
-      await api(row ? `staff/${row.id}` : "staff", {
+      const saved = (await api(row ? `staff/${row.id}` : "staff", {
         method: row ? "PUT" : "POST",
         body: JSON.stringify(payload),
-      });
+      })) as Row;
+
+      const savedId = stringValue(saved.id ?? row?.id);
+      if (savedId) {
+        await Promise.all(
+          classes.flatMap((item) => {
+            const id = sectionId(item);
+            if (!id) return [];
+
+            const currentClassTeacherId = assignedStaffId(item, "class_teacher");
+            const currentCoTeacherId = assignedStaffId(item, "co_teacher");
+            const currentClassIsThis = matchesStaff(currentClassTeacherId, row, savedId);
+            const currentCoIsThis = matchesStaff(currentCoTeacherId, row, savedId);
+            const selectedRole = classAssignments[id] || "";
+            let nextClassTeacherId = currentClassTeacherId;
+            let nextCoTeacherId = currentCoTeacherId;
+
+            if (selectedRole === "class_teacher") {
+              nextClassTeacherId = savedId;
+              if (currentCoIsThis) nextCoTeacherId = "";
+            } else if (selectedRole === "co_teacher") {
+              nextCoTeacherId = savedId;
+              if (currentClassIsThis) nextClassTeacherId = "";
+            } else {
+              if (currentClassIsThis) nextClassTeacherId = "";
+              if (currentCoIsThis) nextCoTeacherId = "";
+            }
+
+            if (
+              nextClassTeacherId === currentClassTeacherId &&
+              nextCoTeacherId === currentCoTeacherId
+            ) {
+              return [];
+            }
+
+            return [api(`principal/classes/${id}`, {
+              method: "PUT",
+              body: JSON.stringify(
+                classUpdatePayload(
+                  item,
+                  nextClassTeacherId || null,
+                  nextCoTeacherId || null,
+                ),
+              ),
+            })];
+          }),
+        );
+      }
 
       onSaved();
       onClose();
@@ -88,7 +210,15 @@ export function TeacherDialog({
       }
       onClose={onClose}
     >
-      <form action={submit} className="ops-detail-form">
+      <form
+        className="ops-detail-form"
+        aria-busy={saving}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (saving) return;
+          void submit(new FormData(event.currentTarget));
+        }}
+      >
         <div className="form-grid">
           <label className="field">
             Full name
@@ -178,6 +308,37 @@ export function TeacherDialog({
             </label>
           )}
         </div>
+
+        <fieldset className="staff-class-assignment" disabled={readOnly}>
+          <legend>Class assignment</legend>
+          <p>Assign this educator as a class teacher or co-teacher for one or more sections.</p>
+          {classes.length ? (
+            <div className="staff-class-assignment-list">
+              {classes.map((item) => {
+                const id = sectionId(item);
+                return (
+                  <label className="staff-class-assignment-row" key={id}>
+                    <span>{sectionLabel(item)}</span>
+                    <select
+                      aria-label={`Assignment for ${sectionLabel(item)}`}
+                      value={classAssignments[id] || ""}
+                      onChange={(event) => {
+                        const value = event.target.value as AssignmentRole;
+                        setClassAssignments((current) => ({ ...current, [id]: value }));
+                      }}
+                    >
+                      <option value="">No assignment</option>
+                      <option value="class_teacher">Class teacher</option>
+                      <option value="co_teacher">Co-teacher</option>
+                    </select>
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <span className="staff-class-assignment-empty">Create a class section first to assign this educator.</span>
+          )}
+        </fieldset>
 
         {error && <p className="form-error">{error}</p>}
 

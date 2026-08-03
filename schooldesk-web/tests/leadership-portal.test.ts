@@ -159,6 +159,52 @@ test("leadership feature workspaces use layout-shaped loading states", () => {
   expect(source("../components/portal/TickerManager.tsx")).toContain('<LoadingIndicator label="Publishing…"');
 });
 
+test("timetable management keeps class scope, academic year, and accessible actions", () => {
+  const workspace = source("../components/portal/TimetableWorkspace.tsx");
+  const slotDialog = source("../components/portal/TimetableSlotDialog.tsx");
+  const generator = source("../components/portal/TimetableGeneratorDialog.tsx");
+  const timetableHandler = source("../../supabase/functions/api/handlers/timetable.ts");
+
+  expect(workspace).toContain("No class sections are available yet.");
+  expect(workspace).toContain('aria-pressed={viewMode === "grid"}');
+  expect(workspace).toContain('scope="col"');
+  expect(workspace).toContain("1px solid #eef3f6");
+  expect(workspace).toContain("aria-label={`Edit ${subjectName}");
+  expect(slotDialog).toContain("gradeSubjects");
+  expect(slotDialog).toContain("staffSubjects");
+  expect(slotDialog).toContain('name="academic_year_id"');
+  expect(slotDialog).toContain("Select a mapped subject for a regular teaching period.");
+  expect(generator).toContain("Please select an academic year.");
+  expect(generator).toContain('value={academicYearId}');
+  expect(timetableHandler).toContain("if (!isSchoolLeader(user) && !isReaderSlotsRequest)");
+  expect(timetableHandler).toContain("scope.sectionIds.has");
+  expect(timetableHandler).toContain('q.eq("day_of_week", dayOfWeek)');
+});
+
+test("staff records can manage class assignments from the staff dialog", () => {
+  const teacherDialog = source("../components/portal/TeacherDialog.tsx");
+  const teacherDirectory = source("../components/portal/TeacherDirectory.tsx");
+
+  expect(teacherDialog).toContain("Class assignment");
+  expect(teacherDialog).toContain('value="class_teacher">Class teacher');
+  expect(teacherDialog).toContain('value="co_teacher">Co-teacher');
+  expect(teacherDialog).toContain('api(`principal/classes/${id}`');
+  expect(teacherDirectory).toContain("classes={classes}");
+});
+
+test("record forms expose immediate save progress and duplicate-submit guards", () => {
+  const actions = source("../components/portal/FormActions.tsx");
+  const teacherDialog = source("../components/portal/TeacherDialog.tsx");
+  const studentDialog = source("../components/portal/StudentDialog.tsx");
+
+  expect(actions).toContain('type="submit"');
+  expect(actions).toContain("aria-busy={saving}");
+  expect(actions).toContain("dialog-save-progress");
+  expect(teacherDialog).toContain("if (readOnly || saving) return");
+  expect(studentDialog).toContain("if (readOnly || saving) return");
+  expect(studentDialog).toContain("Loading classes and parent accounts");
+});
+
 test("website-facing school name is Arish Ville", () => {
   const sources = [
     source("../app/layout.tsx"),

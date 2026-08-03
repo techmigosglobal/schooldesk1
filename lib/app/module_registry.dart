@@ -158,7 +158,7 @@ class SchoolDeskModuleRegistry {
       },
     ),
     SchoolDeskModuleDefinition(
-      name: 'Homework',
+      name: 'Dairy',
       path: 'lib/features/homework',
       layers: {
         SchoolDeskModuleLayer.data,

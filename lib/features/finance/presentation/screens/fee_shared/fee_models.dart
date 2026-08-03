@@ -204,6 +204,15 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     _textValue(section['section_name'] ?? row['section_name']),
   ].where((p) => p.isNotEmpty).join(' - ');
 
+  final reportedPaid = _numValue(row['paid_amount']);
+  final paymentTotal = _listValue(row['payments'])
+      .whereType<Map>()
+      .map((payment) => Map<String, dynamic>.from(payment))
+      .where(_isFinalizedPayment)
+      .fold<double>(0, (sum, payment) {
+        return sum + _numValue(payment['amount_paid'] ?? payment['amount']);
+      });
+
   return {
     ...row,
     'id': _textValue(row['id']),
@@ -218,7 +227,10 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     ),
     'total': _numValue(row['net_amount'] ?? row['total_amount']),
     'discount': _numValue(row['discount_amount']),
-    'paid': _numValue(row['paid_amount']),
+    // Some invoice responses lag behind their finalized payment rows. The
+    // payment rows are the source of truth for what was actually collected;
+    // retain the server value when it is ahead for backwards compatibility.
+    'paid': reportedPaid > paymentTotal ? reportedPaid : paymentTotal,
     'balance': _numValue(row['balance']),
     'due_date': row['due_date'],
     'status': _textValue(row['status'], fallback: 'pending'),
@@ -234,6 +246,21 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     ),
     'fee_type': _textValue(row['fee_type']),
   };
+}
+
+bool _isFinalizedPayment(Map payment) {
+  final status = _textValue(payment['status']).toLowerCase();
+  return status.isEmpty ||
+      !const {
+        'pending',
+        'rejected',
+        'failed',
+        'cancelled',
+        'canceled',
+        'void',
+        'voided',
+        'refunded',
+      }.contains(status);
 }
 
 List<Map<String, dynamic>> normalizePayments(Map<String, dynamic> invoice) {

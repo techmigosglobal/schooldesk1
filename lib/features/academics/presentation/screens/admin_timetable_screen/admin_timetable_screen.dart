@@ -2098,12 +2098,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     if (subjectId.trim().isEmpty) return '';
     final section = _selectedSection;
     if (section == null) return '';
-    if (section.classTeacherId.trim().isNotEmpty) {
-      return section.classTeacherId.trim();
-    }
-    if (section.coTeacherId.trim().isNotEmpty) {
-      return section.coTeacherId.trim();
-    }
+    Map<String, dynamic>? bestRow;
+    var bestScore = -1;
+    final currentYearId = _currentAcademicYear?.id ?? '';
     for (final row in _staffSubjects) {
       if (_text(row['subject_id'] ?? _map(row['subject'])['id']) != subjectId) {
         continue;
@@ -2113,8 +2110,36 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       final matchesSection = sectionId.isNotEmpty && sectionId == section.id;
       final matchesGrade = sectionId.isEmpty && gradeId == section.gradeId;
       if (!matchesSection && !matchesGrade) continue;
+      final rowYearId = _text(row['academic_year_id']);
+      if (rowYearId.isNotEmpty &&
+          currentYearId.isNotEmpty &&
+          rowYearId != currentYearId) {
+        continue;
+      }
       final staffId = _text(row['staff_id'] ?? _map(row['staff'])['id']);
-      if (staffId.isNotEmpty) return staffId;
+      if (staffId.isEmpty) continue;
+      final isPrimary =
+          row['is_primary'] == true ||
+          _text(row['is_primary']).toLowerCase() == 'true';
+      final score =
+          (matchesSection ? 8 : 0) +
+          (gradeId == section.gradeId ? 4 : 0) +
+          (rowYearId == currentYearId ? 2 : 0) +
+          (isPrimary ? 1 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        bestRow = row;
+      }
+    }
+    final mappedStaffId = _text(
+      bestRow?['staff_id'] ?? _map(bestRow?['staff'])['id'],
+    );
+    if (mappedStaffId.isNotEmpty) return mappedStaffId;
+    if (section.classTeacherId.trim().isNotEmpty) {
+      return section.classTeacherId.trim();
+    }
+    if (section.coTeacherId.trim().isNotEmpty) {
+      return section.coTeacherId.trim();
     }
     return '';
   }
@@ -2203,6 +2228,12 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   }
 
   AcademicYearModel? get _currentAcademicYear {
+    final selectedYearId = _selectedSection?.academicYearId.trim() ?? '';
+    if (selectedYearId.isNotEmpty) {
+      for (final year in _academicYears) {
+        if (year.id == selectedYearId) return year;
+      }
+    }
     for (final year in _academicYears) {
       if (year.isCurrent) return year;
     }

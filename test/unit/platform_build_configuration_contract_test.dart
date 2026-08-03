@@ -38,6 +38,8 @@ void main() {
     expect(manifest, contains('android.permission.POST_NOTIFICATIONS'));
     expect(manifest, contains('@style/Ucrop.CropTheme'));
     expect(manifest, contains('android:resizeableActivity="true"'));
+    expect(manifest, contains('android:allowBackup="false"'));
+    expect(manifest, contains('android:fullBackupContent="false"'));
     expect(manifest, isNot(contains('android:screenOrientation')));
     expect(
       File('android/app/src/main/res/values-v35/styles.xml').existsSync(),

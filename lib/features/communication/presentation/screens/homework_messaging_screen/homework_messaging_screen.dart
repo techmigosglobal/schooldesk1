@@ -145,7 +145,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
               child: Text(
                 _activeConvId != null && !isWide
                     ? _getActiveConvTitle()
-                    : 'Homework Feedback',
+                    : 'Dairy Feedback',
                 style: GoogleFonts.dmSans(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -1067,7 +1067,7 @@ class _NewFeedbackThreadInputPageState
           children: [
             _field(
               _homeworkCtrl,
-              'Homework Title',
+              'Dairy Title',
               Icons.assignment_outlined,
               required: true,
             ),

@@ -1445,7 +1445,7 @@ class _ParentSummaryGrid extends StatelessWidget {
       ),
       _StatCard(
         icon: Icons.assignment_turned_in_rounded,
-        label: 'Homework Due',
+        label: 'Dairy Due',
         value: _metricNumber(child['homework_due']),
         gradientColors: const [Color(0xFF7C3AED), Color(0xFFA78BFA)],
         route: AppRoutes.parentHomework,
@@ -1599,7 +1599,7 @@ class _ParentQuickAccessRow extends StatelessWidget {
       color: Color(0xFF0F766E),
     ),
     _QuickAction(
-      label: 'Homework',
+      label: 'Dairy',
       icon: Icons.assignment_rounded,
       asset: SchoolDeskUiIllustrations.homework,
       route: AppRoutes.parentHomework,

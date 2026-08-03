@@ -74,8 +74,12 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
           'receipt_no': receiptNo,
           'school_name': invoice['school_name'] ?? 'School',
           'amount': (pr['amount'] as num?)?.toDouble() ?? 0.0,
-          'invoice_total': ((invoice['net_amount'] ?? invoice['total_amount']) as num?)?.toDouble() ?? 0.0,
-          'cumulative_paid': (invoice['paid_amount'] as num?)?.toDouble() ?? 0.0,
+          'invoice_total':
+              ((invoice['net_amount'] ?? invoice['total_amount']) as num?)
+                  ?.toDouble() ??
+              0.0,
+          'cumulative_paid':
+              (invoice['paid_amount'] as num?)?.toDouble() ?? 0.0,
           'balance': (invoice['balance'] as num?)?.toDouble() ?? 0.0,
           'payment_mode':
               receipt['payment_method'] ??
@@ -92,6 +96,23 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
           'student_name':
               '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
                   .trim(),
+          'admission_no':
+              student['admission_number'] ?? student['student_id_number'] ?? '',
+          'academic_year':
+              invoice['academic_year_label'] ??
+              invoice['academic_year_name'] ??
+              invoice['academic_year'] ??
+              '',
+          'fee_period':
+              invoice['fee_period'] ??
+              invoice['billing_period'] ??
+              invoice['installment'] ??
+              invoice['term'] ??
+              '',
+          'counter_no': pr['counter_no'] ?? receipt['counter_no'] ?? '',
+          'bank_name': pr['bank_name'] ?? receipt['bank_name'] ?? '',
+          'concession_amount':
+              invoice['concession_amount'] ?? invoice['discount_amount'] ?? 0,
           'fee_component':
               invoice['fee_item_name'] ??
               invoice['category_name'] ??
@@ -361,21 +382,29 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
       );
       final paidAt =
           DateTime.tryParse(_text(_receiptData['paid_at'])) ?? DateTime.now();
+      var school = _school;
+      if (school.isEmpty) {
+        try {
+          school = await BackendApiClient.instance.getCurrentSchool();
+        } on Object {
+          // Keep the embedded receipt metadata as a last-resort fallback.
+        }
+      }
       final schoolName = _text(
-        _school['name'] ?? _receiptData['school_name'],
+        school['name'] ?? _receiptData['school_name'],
         fallback: 'School',
       );
       final schoolAddress = [
-        _school['address'],
-        _school['address_line1'],
-        _school['address_line2'],
-        _school['city'],
-        _school['state'],
-        _school['postal_code'],
+        school['address'],
+        school['address_line1'],
+        school['address_line2'],
+        school['city'],
+        school['state'],
+        school['postal_code'],
       ].map(_text).where((value) => value.isNotEmpty).toSet().join(', ');
       final assets = await Future.wait([
-        _networkImageBytes(_text(_school['logo_url'])),
-        _networkImageBytes(_text(_school['authorized_signature_url'])),
+        _networkImageBytes(_text(school['logo_url'])),
+        _networkImageBytes(_text(school['authorized_signature_url'])),
       ]);
       final pdf = await PdfService.getInstance().generateFeeReceipt(
         documentKind: FeeDocumentKind.paymentReceipt,
@@ -393,8 +422,10 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
             'amount': amount,
           },
         ],
-        totalAmount: (_receiptData['invoice_total'] as num?)?.toDouble() ?? amount,
-        paidAmount: (_receiptData['cumulative_paid'] as num?)?.toDouble() ?? amount,
+        totalAmount:
+            (_receiptData['invoice_total'] as num?)?.toDouble() ?? amount,
+        paidAmount:
+            (_receiptData['cumulative_paid'] as num?)?.toDouble() ?? amount,
         balance: (_receiptData['balance'] as num?)?.toDouble() ?? 0,
         paymentMode: _text(_receiptData['payment_mode'], fallback: 'UPI'),
         paymentDate: paidAt,
@@ -402,9 +433,16 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         schoolAddress: schoolAddress,
         schoolLogo: assets[0],
         authorizedSignature: assets[1],
-        authorizedSignatoryName: _text(_school['principal_name']),
+        authorizedSignatoryName: _text(school['principal_name']),
         transactionReference: _text(_receiptData['transaction_ref']),
         thisPaymentAmount: amount,
+        admissionNo: _text(_receiptData['admission_no'], fallback: rollNo),
+        academicYear: _text(_receiptData['academic_year']),
+        feePeriod: _text(_receiptData['fee_period']),
+        counterNo: _text(_receiptData['counter_no']),
+        bankName: _text(_receiptData['bank_name']),
+        concessionAmount:
+            (_receiptData['concession_amount'] as num?)?.toDouble() ?? 0,
       );
       if (!mounted) return;
       await const ShareExportService().shareBytes(

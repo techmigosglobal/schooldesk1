@@ -295,7 +295,9 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
       _backToSections();
       return;
     }
-    Navigator.of(context).maybePop();
+    // Keep the wizard in control of back navigation. At the first step this
+    // is the only point where the enclosing Fee Home route should be popped.
+    Navigator.of(context).pop();
   }
 
   // ── Build ────────────────────────────────────────────────────────────────
@@ -303,9 +305,12 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _currentStep == 0 && !_saving,
+      // Prevent Android/system back from bypassing the wizard stages. The
+      // first stage calls Navigator.pop() explicitly from _handleWizardBack.
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _handleWizardBack();
+        if (didPop) return;
+        _handleWizardBack();
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF0FDF4),

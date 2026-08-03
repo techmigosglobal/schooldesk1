@@ -1652,6 +1652,11 @@ export async function handleFees(
       if (url.searchParams.get("academic_year_id")) {
         q = q.eq("academic_year_id", url.searchParams.get("academic_year_id")!);
       }
+      // Cancelled/void invoices remain available for explicit audit reads,
+      // but must not enter normal operational fee lists or payment selectors.
+      if (url.searchParams.get("include_cancelled") !== "true") {
+        q = q.not("status", "in", "(cancelled,void,voided)");
+      }
       const { data, error, count } = await q;
       if (error) return fail(error.message);
       let invoicesWithReceipts: Record<string, unknown>[];
@@ -2415,6 +2420,37 @@ export async function handleFees(
         ...atomicPayment,
       });
     }
+
+    // DELETE /fees/payments/:id — reverse a payment and recompute invoice totals
+    if (seg && method === "DELETE") {
+      const { data: pmt, error: pmtErr } = await svc.from("payments")
+        .select("id, invoice_id, amount, status")
+        .eq("id", seg).eq("school_id", school).maybeSingle();
+      if (pmtErr) return fail(pmtErr.message);
+      if (!pmt) return fail("Payment not found", 404);
+      const { data: inv, error: invErr } = await svc.from("fee_invoices")
+        .select("id, paid_amount, net_amount, balance")
+        .eq("id", pmt.invoice_id).eq("school_id", school).maybeSingle();
+      if (invErr) return fail(invErr.message);
+      if (!inv) return fail("Invoice not found", 404);
+      const newPaid = Math.max(0, Number(inv.paid_amount ?? 0) - Number(pmt.amount ?? 0));
+      const newBalance = Math.max(0, Number(inv.net_amount ?? 0) - newPaid);
+      const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
+      // Delete in dependency order: snapshots → receipts → payment
+      await svc.from("finance_document_snapshots").delete().eq("payment_id", seg).eq("school_id", school);
+      await svc.from("fee_receipts").delete().eq("payment_id", seg).eq("school_id", school);
+      const { error: delErr } = await svc.from("payments")
+        .delete().eq("id", seg).eq("school_id", school);
+      if (delErr) return fail(delErr.message);
+      const { error: updateErr } = await svc.from("fee_invoices").update({
+        paid_amount: newPaid,
+        balance: newBalance,
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      }).eq("id", pmt.invoice_id).eq("school_id", school);
+      if (updateErr) return fail(updateErr.message);
+      return ok({ success: true, invoice_id: pmt.invoice_id, new_balance: newBalance, new_status: newStatus });
+    }
   }
 
   if (/^\/parent\/students\/[^/]+\/fees$/.test(path) && method === "GET") {
@@ -2432,12 +2468,19 @@ export async function handleFees(
     }
     // This is the parent-safe invoice source. Include payments here so parent
     // fee/history screens never need the principal-wide /fees/invoices route.
-    const { data, error } = await svc.from("fee_invoices").select(
+    let invoiceQuery = svc.from("fee_invoices").select(
       "*, student:students(first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))), fee_invoice_items(*), payments(*)",
-    ).eq("school_id", school).eq("student_id", studentId).order(
-      "invoice_date",
-      { ascending: false },
-    );
+    ).eq("school_id", school).eq("student_id", studentId);
+    // Parent-facing invoice sheets must never show cancelled/void operational
+    // rows. Principals can request them explicitly for audit purposes.
+    if (
+      isParent || url.searchParams.get("include_cancelled") !== "true"
+    ) {
+      invoiceQuery = invoiceQuery.not("status", "in", "(cancelled,void,voided)");
+    }
+    const { data, error } = await invoiceQuery.order("invoice_date", {
+      ascending: false,
+    });
     if (error) return fail(error.message);
     const invoices = data ?? [];
     const paymentIds = invoices.flatMap((invoice: Record<string, unknown>) =>

@@ -67,6 +67,11 @@ void main() {
       }
 
       for (final routeName in routeNames) {
+        // PrincipalDrawer also contains the conditional coordinator home
+        // destination. It is intentionally not principal-accessible.
+        if (entry.key == 'principal' && routeName == 'coordinatorDashboard') {
+          continue;
+        }
         final route = routeConstants[routeName];
         expect(
           route,

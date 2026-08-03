@@ -71,7 +71,8 @@ void main() {
       'schooldesk-web/components/preschool-essentials.tsx',
     ).readAsStringSync();
     expect(website, contains('handleWebsiteEnquiry'));
-    expect(website, contains('entry_type: "enquiry"'));
+    expect(website, contains('svc.from("admission_inquiries").insert'));
+    expect(website, contains('const programs ='));
     expect(publicSite, contains('Explore programs'));
     expect(publicSite, contains('A safe campus, every day.'));
     expect(publicSite, contains('Submit enquiry'));

@@ -1,6 +1,7 @@
 // handlers/timetable.ts
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok } from "../index.ts";
+import { isSchoolLeader, roleName } from "./authorization.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -42,6 +43,7 @@ async function resolveSectionDefaultStaffId(
 type Assignment = {
   subject_id: string | null;
   subject_name: string;
+  staff_id: string;
 };
 
 type BreakDraft = {
@@ -72,6 +74,13 @@ async function buildClassSubjectAssignments(
     .or(`academic_year_id.eq.${academicYearId},academic_year_id.is.null`);
   if (gradeSubjectError) throw gradeSubjectError;
 
+  const { data: staffSubjectRows, error: staffSubjectError } = await svc.from(
+    "staff_subjects",
+  ).select(
+    "subject_id, staff_id, grade_id, section_id, academic_year_id, is_primary",
+  ).eq("school_id", school);
+  if (staffSubjectError) throw staffSubjectError;
+
   const seen = new Set<string>();
   return (gradeSubjectRows ?? []).map((row: Record<string, unknown>) => {
     const subject = row.subject && typeof row.subject === "object"
@@ -83,8 +92,147 @@ async function buildClassSubjectAssignments(
     return {
       subject_id: subjectId,
       subject_name: textValue(subject.subject_name, "General"),
+      staff_id: preferredStaffId(
+        staffSubjectRows ?? [],
+        subjectId,
+        sectionId,
+        gradeId,
+        academicYearId,
+      ),
     };
   }).filter(Boolean) as Assignment[];
+}
+
+function preferredStaffId(
+  rows: Array<Record<string, unknown>>,
+  subjectId: string,
+  sectionId: string,
+  gradeId: string,
+  academicYearId: string,
+): string {
+  const candidates = rows
+    .filter((row) => textValue(row.subject_id) === subjectId)
+    .filter((row) => {
+      const rowSectionId = textValue(row.section_id);
+      const rowGradeId = textValue(row.grade_id);
+      const rowYearId = textValue(row.academic_year_id);
+      const matchesScope = rowSectionId === sectionId || rowGradeId === gradeId;
+      const matchesYear = !rowYearId || rowYearId === academicYearId;
+      return matchesScope && matchesYear;
+    })
+    .sort((a, b) => {
+      const score = (row: Record<string, unknown>) => {
+        const rowSectionId = textValue(row.section_id);
+        const rowGradeId = textValue(row.grade_id);
+        const rowYearId = textValue(row.academic_year_id);
+        const isPrimary = row.is_primary === true ||
+          textValue(row.is_primary).toLowerCase() === "true";
+        return (rowSectionId === sectionId ? 8 : 0) +
+          (rowGradeId === gradeId ? 4 : 0) +
+          (rowYearId === academicYearId ? 2 : 0) +
+          (isPrimary ? 1 : 0);
+      };
+      return score(b) - score(a);
+    });
+  return textValue(candidates[0]?.staff_id);
+}
+
+async function mappedStaffIdForSubject(
+  svc: SupabaseClient,
+  school: string,
+  sectionId: string,
+  subjectId: string,
+  academicYearId: string,
+): Promise<string> {
+  if (!sectionId || !subjectId) return "";
+  const { data: section, error: sectionError } = await svc.from("sections")
+    .select("grade_id").eq("id", sectionId).eq("school_id", school)
+    .maybeSingle();
+  if (sectionError) throw sectionError;
+  const gradeId = textValue(section?.grade_id);
+  if (!gradeId) return "";
+  const { data: rows, error } = await svc.from("staff_subjects").select(
+    "subject_id, staff_id, grade_id, section_id, academic_year_id, is_primary",
+  ).eq("school_id", school).eq("subject_id", subjectId);
+  if (error) throw error;
+  return preferredStaffId(rows ?? [], subjectId, sectionId, gradeId, academicYearId);
+}
+
+async function sectionExists(
+  svc: SupabaseClient,
+  school: string,
+  sectionId: string,
+): Promise<boolean> {
+  if (!sectionId) return false;
+  const { data, error } = await svc.from("sections").select("id").eq(
+    "id",
+    sectionId,
+  ).eq("school_id", school).maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.id);
+}
+
+type TimetableReaderScope = {
+  staffId: string;
+  sectionIds: Set<string>;
+};
+
+async function readerScope(
+  svc: SupabaseClient,
+  school: string,
+  user: User,
+): Promise<TimetableReaderScope> {
+  const role = roleName(user);
+  if (role === "teacher") {
+    const { data: profile, error: profileError } = await svc.from("users")
+      .select("linked_type, linked_id").eq("id", user.id).eq(
+        "school_id",
+        school,
+      ).maybeSingle();
+    if (profileError) throw profileError;
+    const staffId = textValue(
+      profile?.linked_type === "staff" ? profile.linked_id : "",
+    );
+    const sectionIds = new Set<string>();
+    if (staffId) {
+      const { data: sections, error: sectionError } = await svc.from("sections")
+        .select("id").eq("school_id", school).or(
+          `class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`,
+        );
+      if (sectionError) throw sectionError;
+      for (const row of sections ?? []) {
+        const id = textValue(row.id);
+        if (id) sectionIds.add(id);
+      }
+      const { data: assignments, error: assignmentError } = await svc.from(
+        "staff_subjects",
+      ).select("section_id").eq("school_id", school).eq("staff_id", staffId);
+      if (assignmentError) throw assignmentError;
+      for (const row of assignments ?? []) {
+        const id = textValue(row.section_id);
+        if (id) sectionIds.add(id);
+      }
+    }
+    return { staffId, sectionIds };
+  }
+
+  if (role === "parent") {
+    const { data: links, error: linkError } = await svc.from(
+      "parent_student_links",
+    ).select("student:students(current_section_id)").eq("school_id", school)
+      .eq("parent_user_id", user.id);
+    if (linkError) throw linkError;
+    const sectionIds = new Set<string>();
+    for (const link of links ?? []) {
+      const value = link.student;
+      const student = Array.isArray(value) ? value[0] : value;
+      const id = textValue((student as Record<string, unknown> | null)?.current_section_id);
+      if (id) sectionIds.add(id);
+    }
+    return { staffId: "", sectionIds };
+  }
+
+  return { staffId: "", sectionIds: new Set<string>() };
 }
 
 function parseBreaks(value: unknown, defaultDays: number[]): BreakDraft[] {
@@ -122,6 +270,7 @@ function distributeSubjectsBalancedWeekly(
     return {
       subject_id: null,
       subject_name: "Study Period",
+      staff_id: "",
     };
   }
   return assignments[index % assignments.length];
@@ -222,7 +371,7 @@ async function generateSlots(
         academic_year_id: academicYearId,
         term_id: textValue(body.term_id) || null,
         subject_id: assignment.subject_id,
-        staff_id: defaultStaffId || null,
+        staff_id: assignment.staff_id || defaultStaffId || null,
         room_id: textValue(body.room_id) || null,
         day_of_week: day,
         period_number: period,
@@ -249,6 +398,11 @@ export async function handleTimetable(
   user: User,
 ): Promise<Response> {
   const school = sid(user);
+  const isReaderSlotsRequest = method === "GET" &&
+    (path === "/timetable/slots" || path === "/timetable");
+  if (!isSchoolLeader(user) && !isReaderSlotsRequest) {
+    return fail("school leadership access required", 403);
+  }
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
 
   if (path === "/timetable/slots" || path === "/timetable") {
@@ -259,9 +413,25 @@ export async function handleTimetable(
       if (url.searchParams.get("section_id")) q = q.eq("section_id", url.searchParams.get("section_id")!);
       if (url.searchParams.get("staff_id")) q = q.eq("staff_id", url.searchParams.get("staff_id")!);
       if (url.searchParams.get("academic_year_id")) q = q.eq("academic_year_id", url.searchParams.get("academic_year_id")!);
+      const dayOfWeek = intValue(url.searchParams.get("day_of_week"), 0);
+      if (dayOfWeek >= 1 && dayOfWeek <= 7) q = q.eq("day_of_week", dayOfWeek);
       const { data, error } = await q.order("day_of_week").order("start_time");
       if (error) return fail(error.message);
-      return ok(data ?? []);
+      if (isSchoolLeader(user)) return ok(data ?? []);
+      const scope = await readerScope(svc, school, user);
+      const requestedSectionId = textValue(url.searchParams.get("section_id"));
+      const requestedStaffId = textValue(url.searchParams.get("staff_id"));
+      if (requestedSectionId && !scope.sectionIds.has(requestedSectionId)) {
+        return fail("timetable access denied", 403);
+      }
+      if (requestedStaffId && requestedStaffId !== scope.staffId) {
+        return fail("timetable access denied", 403);
+      }
+      const visible = (data ?? []).filter((row: Record<string, unknown>) =>
+        (scope.staffId && textValue(row.staff_id) === scope.staffId) ||
+        scope.sectionIds.has(textValue(row.section_id))
+      );
+      return ok(visible);
     }
     if (method === "DELETE") {
       let q = svc.from("timetable_slots").delete().eq("school_id", school);
@@ -277,14 +447,29 @@ export async function handleTimetable(
         unknown
       >;
       const sectionId = textValue(payload.section_id);
+      const academicYearId = textValue(payload.academic_year_id);
       const slotType = textValue(payload.slot_type, "regular");
       const resolvedStaffId = textValue(payload.staff_id);
+      if (!sectionId || !academicYearId) {
+        return fail("section_id and academic_year_id required");
+      }
+      if (!await sectionExists(svc, school, sectionId)) {
+        return fail("Class section not found", 404);
+      }
       const defaultStaffId = await resolveSectionDefaultStaffId(svc, school, sectionId);
+      const mappedStaffId = await mappedStaffIdForSubject(
+        svc,
+        school,
+        sectionId,
+        textValue(payload.subject_id),
+        academicYearId,
+      );
       const finalStaffId = slotType === "break" || slotType === "free" || !textValue(payload.subject_id)
         ? null
-        : resolvedStaffId || defaultStaffId || null;
+        : resolvedStaffId || mappedStaffId || defaultStaffId || null;
       const { data, error } = await svc.from("timetable_slots").insert({
         ...payload,
+        academic_year_id: academicYearId,
         staff_id: finalStaffId,
         school_id: school,
       }).select(
@@ -302,15 +487,41 @@ export async function handleTimetable(
         string,
         unknown
       >;
-      const sectionId = textValue(payload.section_id);
+      const { data: existingSlot, error: existingError } = await svc.from(
+        "timetable_slots",
+      ).select("section_id, academic_year_id").eq("id", slotMatch[1]).eq(
+        "school_id",
+        school,
+      ).maybeSingle();
+      if (existingError) return fail(existingError.message);
+      if (!existingSlot) return fail("Timetable slot not found", 404);
+      const sectionId = textValue(payload.section_id || existingSlot.section_id);
+      const academicYearId = textValue(
+        payload.academic_year_id || existingSlot.academic_year_id,
+      );
       const slotType = textValue(payload.slot_type, "regular");
       const resolvedStaffId = textValue(payload.staff_id);
+      if (!sectionId || !academicYearId) {
+        return fail("section_id and academic_year_id required");
+      }
+      if (!await sectionExists(svc, school, sectionId)) {
+        return fail("Class section not found", 404);
+      }
       const defaultStaffId = await resolveSectionDefaultStaffId(svc, school, sectionId);
+      const mappedStaffId = await mappedStaffIdForSubject(
+        svc,
+        school,
+        sectionId,
+        textValue(payload.subject_id),
+        academicYearId,
+      );
       const finalStaffId = slotType === "break" || slotType === "free" || !textValue(payload.subject_id)
         ? null
-        : resolvedStaffId || defaultStaffId || null;
+        : resolvedStaffId || mappedStaffId || defaultStaffId || null;
       const { data, error } = await svc.from("timetable_slots").update({
         ...payload,
+        section_id: sectionId,
+        academic_year_id: academicYearId,
         staff_id: finalStaffId,
         updated_at: new Date().toISOString(),
       }).eq("id", slotMatch[1]).eq("school_id", school).select(

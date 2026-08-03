@@ -44,7 +44,8 @@ void main() {
     expect(manager, contains('getPrincipalEventPosts()'));
     expect(manager, contains('All school posts'));
     expect(manager, contains('Future<void> _deletePost'));
-    expect(handler, contains('userRole !== "principal"'));
+    expect(handler, contains('roleValue(user)'));
+    expect(handler, contains('canManageParentLinks'));
     expect(handler, contains('if (!seg && method === "GET")'));
   });
 }

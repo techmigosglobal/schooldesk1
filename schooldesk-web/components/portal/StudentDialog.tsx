@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { studentSchema } from "@/lib/schemas";
 import type { Row } from "./types";
 import { api, rowsFrom, rowText, stringValue, splitName, displayName, nested } from "./utils";
+import { LoadingIndicator } from "@/components/loading-skeletons";
 import { Dialog } from "./Dialog";
 import { FormActions } from "./FormActions";
 import { ImageCropperModal } from "./ImageCropperModal";
@@ -49,6 +50,7 @@ export function StudentDialog({
   const [sectionId, setSectionId] = useState(() => getStudentSectionId(row));
   const [parentId, setParentId] = useState(() => linkedParentId(row));
   const [createParent, setCreateParent] = useState(false);
+  const [loadingRefs, setLoadingRefs] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
@@ -68,7 +70,8 @@ export function StudentDialog({
         setError(
           event instanceof Error ? event.message : "Unable to load classes and parents"
         )
-      );
+      )
+      .finally(() => setLoadingRefs(false));
   }, []);
 
   useEffect(() => {
@@ -101,7 +104,7 @@ export function StudentDialog({
   }
 
   async function submit(form: FormData) {
-    if (readOnly) return;
+    if (readOnly || saving) return;
     setSaving(true);
     setError("");
     try {
@@ -199,7 +202,20 @@ export function StudentDialog({
         title={readOnly ? "Student details" : row ? "Update student" : "Add student"}
         onClose={onClose}
       >
-        <form action={submit} className="ops-detail-form">
+        {loadingRefs && (
+          <div className="dialog-loading-progress" role="status" aria-live="polite">
+            <LoadingIndicator label="Loading classes and parent accounts…" announce={false} />
+          </div>
+        )}
+        <form
+          className="ops-detail-form"
+          aria-busy={saving}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (saving) return;
+            void submit(new FormData(event.currentTarget));
+          }}
+        >
           <div className="student-profile-editor">
             <div className="student-profile-preview">
               {profilePhoto && !imgError ? (

@@ -426,7 +426,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
         AppRoutes.teacherLessonPlanner,
       ),
       (
-        'Homework',
+        'Dairy',
         'Assignments & review',
         Icons.assignment_rounded,
         const Color(0xFF7C3AED),

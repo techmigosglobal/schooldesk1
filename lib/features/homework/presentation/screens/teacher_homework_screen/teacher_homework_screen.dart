@@ -112,7 +112,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
         _skippedToday = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Homework reminder skipped for today')),
+        const SnackBar(content: Text('Dairy reminder skipped for today')),
       );
     } on Object catch (error) {
       if (!mounted) return;
@@ -135,9 +135,9 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Homework'),
+        title: const Text('Delete Dairy'),
         content: Text(
-          'Are you sure you want to delete "${teacherFlowText(row['title'], fallback: 'Homework')}"?',
+          'Are you sure you want to delete "${teacherFlowText(row['title'], fallback: 'Dairy')}"?',
         ),
         actions: [
           TextButton(
@@ -158,12 +158,12 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
     try {
       final id = _homeworkId(row);
       if (id.isEmpty) {
-        throw Exception('Homework record is missing its server id.');
+        throw Exception('Dairy record is missing its server id.');
       }
       await BackendApiClient.instance.deleteHomework(id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Homework deleted successfully')),
+        const SnackBar(content: Text('Dairy deleted successfully')),
       );
       await _loadHomework(forceRefresh: true);
     } on Object catch (e) {
@@ -177,8 +177,8 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
   @override
   Widget build(BuildContext context) {
     return TeacherFlowScaffold(
-      title: 'Homework / Assignments',
-      subtitle: 'Assignments, homework sharing, and submission review',
+      title: 'Dairy / Assignments',
+      subtitle: 'Assignments, dairy sharing, and submission review',
       selectedIndex: TeacherNav.diary,
       loading: _loading,
       error: _error,
@@ -205,7 +205,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
               tabs: [
                 const Tab(
                   icon: Icon(Icons.add_task_rounded, size: 20),
-                  text: 'Assign Homework',
+                  text: 'Assign Dairy',
                 ),
                 Tab(
                   icon: Stack(
@@ -345,7 +345,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
   final _dueDateController = TextEditingController();
 
   final Set<String> _selectedSubjects = {};
-  String _homeworkType = 'Homework';
+  String _homeworkType = 'Dairy';
   bool _saving = false;
   bool _uploading = false;
   String? _formError;
@@ -354,7 +354,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
   final List<_AttachmentItem> _attachments = [];
 
   static const List<String> _workTypes = [
-    'Homework',
+    'Dairy',
     'Classwork',
     'Project',
     'Revision',
@@ -505,14 +505,14 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
       );
       setState(() {
         _saving = false;
-        _homeworkType = 'Homework';
+        _homeworkType = 'Dairy';
         _selectedSubjects.clear();
         final opts = _subjectOptions;
         if (opts.isNotEmpty) _selectedSubjects.add(opts.first);
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('✅ Homework assigned successfully!'),
+          content: Text('✅ Dairy assigned successfully!'),
           backgroundColor: Color(0xFF0F9F8E),
         ),
       );
@@ -548,10 +548,10 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
       children: [
         // ── Class Info ───────────────────────────────────────────
         TeacherCurrentClassCard(
-          greeting: 'Assign Homework',
+          greeting: 'Assign Dairy',
           classLabel: RoleAccessService.teacherClassName,
           subject: RoleAccessService.teacherSubject,
-          timeLabel: 'Create homework for your class',
+          timeLabel: 'Create dairy for your class',
           actions: const [],
         ),
 
@@ -561,8 +561,8 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
             padding: const EdgeInsets.only(top: 18),
             child: TeacherFlowCard(
               icon: Icons.notification_important_rounded,
-              title: 'Homework Pending for Today',
-              subtitle: 'You have not assigned homework yet.',
+              title: 'Dairy Pending for Today',
+              subtitle: 'You have not assigned dairy yet.',
               status: 'Action required',
               statusColor: Colors.orange,
               body: TeacherFlowActionWrap(
@@ -664,7 +664,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                       .toList(),
                   onChanged: _saving
                       ? null
-                      : (v) => setState(() => _homeworkType = v ?? 'Homework'),
+                      : (v) => setState(() => _homeworkType = v ?? 'Dairy'),
                 ),
                 const SizedBox(height: 16),
 
@@ -865,7 +865,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                         )
                       : const Icon(Icons.send_rounded),
                   label: Text(
-                    _saving ? 'Assigning...' : 'Assign Homework',
+                    _saving ? 'Assigning...' : 'Assign Dairy',
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -885,12 +885,12 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
         if (widget.homework.isEmpty)
           const TeacherFlowCard(
             icon: Icons.assignment_late_rounded,
-            title: 'No homework yet',
+            title: 'No dairy yet',
             subtitle: 'Assignments you create appear here.',
           )
         else
           ...widget.homework.map((row) {
-            final title = teacherFlowText(row['title'], fallback: 'Homework');
+            final title = teacherFlowText(row['title'], fallback: 'Dairy');
             final subject = teacherFlowText(
               row['subject'] ?? row['subject_id'],
               fallback: RoleAccessService.teacherSubject,
@@ -1090,7 +1090,7 @@ class _ReviewTab extends StatelessWidget {
           greeting: 'Review Submissions',
           classLabel: RoleAccessService.teacherClassName,
           subject: RoleAccessService.teacherSubject,
-          timeLabel: 'Grade and review student homework submissions',
+          timeLabel: 'Grade and review student dairy submissions',
           actions: const [],
         ),
         const SizedBox(height: 18),
@@ -1104,7 +1104,7 @@ class _ReviewTab extends StatelessWidget {
               tone: const Color(0xFFEAF0FF),
             ),
             TeacherFlowMetric(
-              label: 'Homework Items',
+              label: 'Dairy Items',
               value: '${homework.length}',
               icon: Icons.assignment_rounded,
               color: teacherFlowAccent,
@@ -1113,20 +1113,20 @@ class _ReviewTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 18),
-        const TeacherFlowSectionHeader(title: 'Homework to Review'),
+        const TeacherFlowSectionHeader(title: 'Dairy to Review'),
         const SizedBox(height: 10),
         if (homework.isEmpty)
           const TeacherFlowCard(
             icon: Icons.rate_review_rounded,
             title: 'No submissions yet',
             subtitle:
-                'Student submissions will appear here once homework is assigned.',
+                'Student submissions will appear here once dairy is assigned.',
           )
         else
           ...homework.map((row) {
             final id = homeworkId(row);
             final count = submissionCounts[id] ?? 0;
-            final title = teacherFlowText(row['title'], fallback: 'Homework');
+            final title = teacherFlowText(row['title'], fallback: 'Dairy');
             final subject = teacherFlowText(
               row['subject'] ?? row['subject_id'],
               fallback: RoleAccessService.teacherSubject,

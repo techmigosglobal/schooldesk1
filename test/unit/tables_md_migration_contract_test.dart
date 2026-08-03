@@ -23,9 +23,10 @@ void main() {
       ),
     );
     expect(backendApi, contains('SchoolDeskApi.instance.client.homework('));
+    expect(backendApi, contains("part 'api_modules/notifications_api.dart';"));
     expect(
       backendApi,
-      contains('SchoolDeskApi.instance.client.notifications()'),
+      contains('Future<NotificationPage> getNotificationsPage'),
     );
     expect(backendApi, contains('SchoolDeskApi.instance.client.events('));
     expect(backendApi, isNot(contains('SchoolDeskApi.instance.client.exams(')));

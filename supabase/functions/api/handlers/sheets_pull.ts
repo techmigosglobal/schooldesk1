@@ -168,6 +168,8 @@ export async function handleSheetsPullStudents(
         std_gender:                  r.std_gender ?? r.gender ?? "",
         std_adm_date:                r.std_adm_date ?? r.admission_date ?? "",
         status:                      r.status ?? "active",
+        // Deliberately do not map photo_url. Student photos remain owned by
+        // SchoolDesk and must never be cleared by a sheet row that omits it.
       };
       const res     = await handleSheetsSyncStudent(makeRequest(payload), svc);
       const resBody = await res.json();

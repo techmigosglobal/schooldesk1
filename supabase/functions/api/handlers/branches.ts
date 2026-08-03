@@ -67,7 +67,7 @@ export async function handleBranches(
         svc.from("students").select("id", { count: "exact", head: true }).eq(
           "school_id",
           schoolId,
-        ),
+        ).eq("is_test_account", false),
         svc.from("staff").select("id", { count: "exact", head: true }).eq(
           "school_id",
           schoolId,

@@ -508,7 +508,7 @@ class _TeacherQuickActionGrid extends StatelessWidget {
         AppRoutes.teacherLessonPlanner,
       ),
       const _QuickAction(
-        'Homework',
+        'Dairy',
         'Assignments & review',
         SchoolDeskUiIllustrations.homework,
         AppRoutes.teacherHomework,

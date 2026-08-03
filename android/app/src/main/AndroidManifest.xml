@@ -9,6 +9,8 @@
         android:label="Arish Ville"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:resizeableActivity="true"
         android:usesCleartextTraffic="false">
         <activity

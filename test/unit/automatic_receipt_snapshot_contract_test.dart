@@ -28,6 +28,9 @@ void main() {
       ).readAsStringSync();
 
       expect(pdfService, contains("'PAYMENT INFORMATION'"));
+      expect(pdfService, contains("'FEE RECEIPT'"));
+      expect(pdfService, contains("'Admission No.'"));
+      expect(pdfService, contains('_isCashPayment'));
       expect(pdfService, contains("'Reference / Cheque No.'"));
       expect(pdfService, contains('Amount in words:'));
       expect(pdfService, contains('authorizedSignature'));

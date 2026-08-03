@@ -20,6 +20,7 @@ export function TimetableGeneratorDialog({
   const [classes, setClasses] = useState<Row[]>([]);
   const [years, setYears] = useState<Row[]>([]);
   const [sectionId, setSectionId] = useState(defaultSectionId || "");
+  const [academicYearId, setAcademicYearId] = useState("");
   const [dayPreset, setDayPreset] = useState("mon-sat");
   const [includeBreak, setIncludeBreak] = useState(true);
 
@@ -30,8 +31,21 @@ export function TimetableGeneratorDialog({
     ])
       .then(([cRes, yRes]) => {
         const cList = rowsFrom(cRes);
+        const yList = rowsFrom(yRes);
         setClasses(cList);
-        setYears(rowsFrom(yRes));
+        setYears(yList);
+        setAcademicYearId((current) => {
+          const selectedClass = cList.find(
+            (cls) => stringValue(cls.section_id || cls.id) === sectionId,
+          ) || cList[0];
+          const classYearId = stringValue(selectedClass?.academic_year_id);
+          if (classYearId) return classYearId;
+          if (current) return current;
+          const currentYear = yList.find(
+            (year) => year.is_current === true || year.isCurrent === true,
+          );
+          return stringValue(currentYear?.id || yList[0]?.id);
+        });
         if (!sectionId && cList.length > 0) {
           setSectionId(stringValue(cList[0].section_id || cList[0].id));
         }
@@ -40,11 +54,12 @@ export function TimetableGeneratorDialog({
   }, [sectionId]);
 
   async function submit(form: FormData) {
+    if (saving) return;
     setSaving(true);
     setError("");
     try {
       const selectedSection = sectionId || stringValue(form.get("section_id"));
-      const selectedYear = stringValue(form.get("academic_year_id"));
+      const selectedYear = stringValue(form.get("academic_year_id")) || academicYearId;
       const periodsPerDay = Number(form.get("periods_per_day") || 7);
       const startTime = stringValue(form.get("start_time")) || "08:30";
       const duration = Number(form.get("period_duration") || 40);
@@ -54,6 +69,7 @@ export function TimetableGeneratorDialog({
       const breakEnd = stringValue(form.get("break_end")) || "10:35";
 
       if (!selectedSection) throw new Error("Please select a class section.");
+      if (!selectedYear) throw new Error("Please select an academic year.");
 
       const days = dayPreset === "mon-fri" ? [1, 2, 3, 4, 5] : [1, 2, 3, 4, 5, 6];
       const breaks = includeBreak
@@ -92,7 +108,15 @@ export function TimetableGeneratorDialog({
       title="Auto-generate class timetable"
       onClose={onClose}
     >
-      <form action={submit} className="ops-detail-form">
+      <form
+        className="ops-detail-form"
+        aria-busy={saving}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (saving) return;
+          void submit(new FormData(event.currentTarget));
+        }}
+      >
         <p style={{ fontSize: "0.85rem", color: "#4f6575", marginBottom: "1rem" }}>
           Automatically generate a balanced weekly timetable with subjects, educators, and break slots for the selected class.
         </p>
@@ -120,11 +144,16 @@ export function TimetableGeneratorDialog({
 
           <label className="field">
             Academic Year
-            <select name="academic_year_id">
-              <option value="">Current Academic Year</option>
+            <select
+              name="academic_year_id"
+              value={academicYearId}
+              onChange={(event) => setAcademicYearId(event.target.value)}
+              required
+            >
+              <option value="" disabled>Select academic year…</option>
               {years.map((y) => (
                 <option key={stringValue(y.id)} value={stringValue(y.id)}>
-                  {stringValue(y.year_label || y.name)}
+                  {stringValue(y.year_label || y.name)}{y.is_current === true || y.isCurrent === true ? " (Current)" : ""}
                 </option>
               ))}
             </select>

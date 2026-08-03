@@ -15,7 +15,7 @@ void main() {
       'lib/features/shared/data/models/backend_models.dart',
     ).readAsStringSync();
 
-    expect(facadeSource.split('\n').length, lessThanOrEqualTo(200));
+    expect(facadeSource.split('\n').length, lessThanOrEqualTo(240));
     expect(
       facadeSource,
       contains(

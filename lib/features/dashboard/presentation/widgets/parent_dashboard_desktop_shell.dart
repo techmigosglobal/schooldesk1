@@ -628,7 +628,7 @@ class _ChildOverviewPanel extends StatelessWidget {
                 ),
                 Divider(height: tokens.spacing.md, color: tokens.panelBorder),
                 _StatRow(
-                  label: 'Homework Pending',
+                  label: 'Dairy Pending',
                   value: '$homeworkPending',
                   icon: Icons.assignment_outlined,
                   color: homeworkPending > 0
@@ -706,7 +706,7 @@ class _ChildQuickActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = [
       ('Attendance', Icons.bar_chart_rounded, AppRoutes.parentAttendance),
-      ('Homework', Icons.assignment_rounded, AppRoutes.parentHomework),
+      ('Dairy', Icons.assignment_rounded, AppRoutes.parentHomework),
       ('Fee', Icons.account_balance_wallet_rounded, AppRoutes.parentFees),
       ('Leave', Icons.event_busy_rounded, AppRoutes.parentLeave),
     ];
@@ -826,7 +826,7 @@ class _ParentQuickAccessDesktopPanel extends StatelessWidget {
         AppRoutes.parentAttendance,
       ),
       (
-        'Homework',
+        'Dairy',
         'Assignments',
         Icons.assignment_rounded,
         const Color(0xFF7C3AED),

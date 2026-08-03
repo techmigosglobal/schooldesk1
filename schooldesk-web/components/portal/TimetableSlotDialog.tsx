@@ -35,11 +35,15 @@ export function TimetableSlotDialog({
     subjects: Row[];
     staff: Row[];
     years: Row[];
+    gradeSubjects: Row[];
+    staffSubjects: Row[];
   }>({
     classes: [],
     subjects: [],
     staff: [],
     years: [],
+    gradeSubjects: [],
+    staffSubjects: [],
   });
 
   const [sectionId, setSectionId] = useState(
@@ -52,6 +56,9 @@ export function TimetableSlotDialog({
   const [staffId, setStaffId] = useState(
     stringValue(row?.staff_id || (row?.staff as Row)?.id)
   );
+  const [academicYearId, setAcademicYearId] = useState(
+    stringValue(row?.academic_year_id)
+  );
 
   useEffect(() => {
     void Promise.all([
@@ -59,20 +66,102 @@ export function TimetableSlotDialog({
       api("subjects").catch(() => []),
       api("staff?page=1&page_size=100").catch(() => []),
       api("academic-years").catch(() => []),
+      api("grade-subjects?page_size=500").catch(() => []),
+      api("staff-subjects?page_size=500").catch(() => []),
     ])
-      .then(([cRes, subRes, stRes, yRes]) => {
+      .then(([cRes, subRes, stRes, yRes, gsRes, ssRes]) => {
+        const classRows = rowsFrom(cRes);
+        const yearRows = rowsFrom(yRes);
         setRefs({
-          classes: rowsFrom(cRes),
+          classes: classRows,
           subjects: rowsFrom(subRes),
           staff: rowsFrom(stRes),
-          years: rowsFrom(yRes),
+          years: yearRows,
+          gradeSubjects: rowsFrom(gsRes),
+          staffSubjects: rowsFrom(ssRes),
+        });
+        setAcademicYearId((current) => {
+          if (current) return current;
+          const selectedClassRow = classRows.find(
+            (cls) => stringValue(cls.section_id || cls.id) === sectionId,
+          );
+          const classYearId = stringValue(selectedClassRow?.academic_year_id);
+          if (classYearId) return classYearId;
+          const currentYear = yearRows.find(
+            (year) => year.is_current === true || year.isCurrent === true,
+          );
+          return stringValue(currentYear?.id || yearRows[0]?.id);
         });
       })
       .catch(() => undefined);
   }, []);
 
+  const selectedClass = refs.classes.find(
+    (cls) => stringValue(cls.section_id || cls.id) === sectionId,
+  );
+  const selectedGradeId = stringValue(
+    selectedClass?.grade_id || (selectedClass?.grade as Row)?.id,
+  );
+  const appliesToClass = (mapping: Row) => {
+    if (!sectionId) return false;
+    const mappingSectionId = stringValue(mapping.section_id);
+    const mappingGradeId = stringValue(mapping.grade_id || (mapping.grade as Row)?.id);
+    const mappingYearId = stringValue(mapping.academic_year_id);
+    return (
+      (mappingSectionId ? mappingSectionId === sectionId : mappingGradeId === selectedGradeId) &&
+      (!mappingYearId || !academicYearId || mappingYearId === academicYearId)
+    );
+  };
+  const mappedSubjectIds = new Set(
+    refs.gradeSubjects
+      .filter(appliesToClass)
+      .map((mapping) => stringValue(mapping.subject_id || (mapping.subject as Row)?.id))
+      .filter(Boolean),
+  );
+  const subjectOptions = refs.subjects.filter((subject) => {
+    const id = stringValue(subject.id);
+    return mappedSubjectIds.has(id) || id === subjectId;
+  });
+  const mappedStaffRows = refs.staffSubjects
+    .filter(appliesToClass)
+    .filter((mapping) => stringValue(mapping.subject_id || (mapping.subject as Row)?.id) === subjectId)
+    .sort((a, b) => {
+      const primary = (value: Row) => value.is_primary === true || value.isPrimary === true ? 1 : 0;
+      return primary(b) - primary(a);
+    });
+  const mappedStaffIds = new Set(
+    mappedStaffRows
+      .map((mapping) => stringValue(mapping.staff_id || (mapping.staff as Row)?.id))
+      .filter(Boolean),
+  );
+  const sectionStaffIds = new Set(
+    [selectedClass?.class_teacher_id, selectedClass?.co_teacher_id]
+      .map((value) => stringValue(value))
+      .filter(Boolean),
+  );
+  const staffOptions = refs.staff.filter((staff) => {
+    const id = stringValue(staff.id);
+    return mappedStaffIds.has(id) || sectionStaffIds.has(id) || id === staffId;
+  });
+  const defaultStaffIdForSubject = (nextSubjectId: string) => {
+    const mapping = refs.staffSubjects
+      .filter(appliesToClass)
+      .filter((item) => stringValue(item.subject_id || (item.subject as Row)?.id) === nextSubjectId)
+      .sort((a, b) => {
+        const score = (value: Row) => {
+          const sectionMatch = stringValue(value.section_id) === sectionId;
+          const gradeMatch = stringValue(value.grade_id) === selectedGradeId;
+          const yearMatch = stringValue(value.academic_year_id) === academicYearId;
+          const primary = value.is_primary === true || value.isPrimary === true;
+          return (sectionMatch ? 8 : 0) + (gradeMatch ? 4 : 0) + (yearMatch ? 2 : 0) + (primary ? 1 : 0);
+        };
+        return score(b) - score(a);
+      })[0];
+    return stringValue(mapping?.staff_id || (mapping?.staff as Row)?.id);
+  };
+
   async function submit(form: FormData) {
-    if (readOnly) return;
+    if (readOnly || saving) return;
     setSaving(true);
     setError("");
     try {
@@ -83,9 +172,13 @@ export function TimetableSlotDialog({
       const endTime = stringValue(form.get("end_time")) || "09:10";
       const customSubjectName = stringValue(form.get("custom_subject_name"));
       const roomNumber = stringValue(form.get("room_number"));
-      const yearId = stringValue(form.get("academic_year_id"));
+      const yearId = stringValue(form.get("academic_year_id")) || academicYearId;
 
       if (!selectedSection) throw new Error("Please select a class section.");
+      if (!yearId) throw new Error("Please select an academic year.");
+      if (slotType === "regular" && !subjectId && !customSubjectName) {
+        throw new Error("Select a mapped subject for a regular teaching period.");
+      }
 
       const selectedSub = refs.subjects.find((s) => stringValue(s.id) === subjectId);
       const finalSubjectName =
@@ -133,7 +226,15 @@ export function TimetableSlotDialog({
       title={readOnly ? "Period slot details" : row ? "Update period slot" : "Add period slot"}
       onClose={onClose}
     >
-      <form action={submit} className="ops-detail-form">
+      <form
+        className="ops-detail-form"
+        aria-busy={saving}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (saving) return;
+          void submit(new FormData(event.currentTarget));
+        }}
+      >
         <div className="form-grid">
           <label className="field">
             Class section
@@ -141,7 +242,16 @@ export function TimetableSlotDialog({
               name="section_id"
               disabled={readOnly}
               value={sectionId}
-              onChange={(e) => setSectionId(e.target.value)}
+              onChange={(e) => {
+                setSectionId(e.target.value);
+                if (!row?.academic_year_id) {
+                  const nextClass = refs.classes.find(
+                    (cls) => stringValue(cls.section_id || cls.id) === e.target.value,
+                  );
+                  const nextYear = stringValue(nextClass?.academic_year_id);
+                  if (nextYear) setAcademicYearId(nextYear);
+                }
+              }}
               required
             >
               <option value="">Select class section…</option>
@@ -155,6 +265,24 @@ export function TimetableSlotDialog({
                   </option>
                 );
               })}
+            </select>
+          </label>
+
+          <label className="field">
+            Academic year
+            <select
+              name="academic_year_id"
+              disabled={readOnly}
+              value={academicYearId}
+              onChange={(e) => setAcademicYearId(e.target.value)}
+              required
+            >
+              <option value="" disabled>Select academic year…</option>
+              {refs.years.map((year) => (
+                <option key={stringValue(year.id)} value={stringValue(year.id)}>
+                  {stringValue(year.year_label || year.name)}{year.is_current === true || year.isCurrent === true ? " (Current)" : ""}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -226,10 +354,16 @@ export function TimetableSlotDialog({
                   name="subject_id"
                   disabled={readOnly}
                   value={subjectId}
-                  onChange={(e) => setSubjectId(e.target.value)}
+                  required={!readOnly}
+                  onChange={(e) => {
+                    setSubjectId(e.target.value);
+                    setStaffId(defaultStaffIdForSubject(e.target.value));
+                  }}
                 >
-                  <option value="">Select subject…</option>
-                  {refs.subjects.map((sub) => (
+                  <option value="">
+                    {subjectOptions.length ? "Select mapped subject…" : "No mapped subjects for this class"}
+                  </option>
+                  {subjectOptions.map((sub) => (
                     <option key={stringValue(sub.id)} value={stringValue(sub.id)}>
                       {stringValue(sub.subject_name)} {sub.subject_code ? `(${sub.subject_code})` : ""}
                     </option>
@@ -245,8 +379,8 @@ export function TimetableSlotDialog({
                   value={staffId}
                   onChange={(e) => setStaffId(e.target.value)}
                 >
-                  <option value="">Use Section Class Teacher</option>
-                  {refs.staff.map((st) => (
+                  <option value="">Use mapped subject teacher / section teacher</option>
+                  {staffOptions.map((st) => (
                     <option key={stringValue(st.id)} value={stringValue(st.id)}>
                       {displayName(st)} {st.staff_code ? `(${st.staff_code})` : ""}
                     </option>

@@ -30,7 +30,15 @@ class RealtimeRefreshService {
       return const RealtimeRefreshSubscription.empty();
     }
 
-    final client = Supabase.instance.client;
+    late final SupabaseClient client;
+    try {
+      client = Supabase.instance.client;
+    } on AssertionError {
+      // Widgets can be rendered before Supabase initialization (offline demo,
+      // tests, or failed startup initialization). Realtime is optional and
+      // must not prevent the underlying screen from rendering.
+      return const RealtimeRefreshSubscription.empty();
+    }
     unawaited(
       TokenStorageService.getAccessToken().then((token) {
         if (token != null && token.isNotEmpty) client.realtime.setAuth(token);
@@ -96,7 +104,12 @@ class RealtimeRefreshSubscription {
   final List<RealtimeChannel> _channels;
 
   void dispose() {
-    final client = Supabase.instance.client;
+    late final SupabaseClient client;
+    try {
+      client = Supabase.instance.client;
+    } on AssertionError {
+      return;
+    }
     for (final channel in _channels) {
       unawaited(client.removeChannel(channel));
     }

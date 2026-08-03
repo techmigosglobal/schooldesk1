@@ -23,6 +23,7 @@ export function GenericDialog({
   const [error, setError] = useState("");
 
   async function submit(form: FormData) {
+    if (readOnly || saving) return;
     setSaving(true);
     setError("");
     const payload: Row = {};
@@ -62,7 +63,14 @@ export function GenericDialog({
       }
       onClose={onClose}
     >
-      <form action={submit}>
+      <form
+        aria-busy={saving}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (saving) return;
+          void submit(new FormData(event.currentTarget));
+        }}
+      >
         {module.fields.map((field) => (
           <label className="field" key={field.key}>
             {field.label}

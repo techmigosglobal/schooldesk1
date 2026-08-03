@@ -250,36 +250,43 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
           final isActive = _selectedDay == dayNum;
           final dayName = _days[index];
           return Expanded(
-            child: GestureDetector(
+            child: Semantics(
+              button: true,
+              selected: isActive,
+              label: dayName,
+              hint: 'Show $dayName timetable',
               onTap: () => setState(() => _selectedDay = dayNum),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  gradient: isActive
-                      ? const LinearGradient(
-                          colors: [Color(0xFF0F766E), Color(0xFF1A6B4A)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
-                  borderRadius: BorderRadius.circular(9),
-                  boxShadow: isActive
-                      ? [
-                          BoxShadow(
-                            color: const Color(0xFF1A6B4A).withAlpha(50),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  dayName.substring(0, 3),
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                    color: isActive ? Colors.white : context.appTheme.muted,
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedDay = dayNum),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: BoxDecoration(
+                    gradient: isActive
+                        ? const LinearGradient(
+                            colors: [Color(0xFF0F766E), Color(0xFF1A6B4A)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
+                    borderRadius: BorderRadius.circular(9),
+                    boxShadow: isActive
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFF1A6B4A).withAlpha(50),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    dayName.substring(0, 3),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                      color: isActive ? Colors.white : context.appTheme.muted,
+                    ),
                   ),
                 ),
               ),
@@ -453,50 +460,59 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
                             ],
                           ),
                         ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: gradient[0].withAlpha(15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: gradient[0].withAlpha(40),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
                                 ),
-                              ),
-                              child: Text(
-                                '$startTime – $endTime',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: gradient[0],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.room_rounded,
-                                  size: 11,
-                                  color: context.appTheme.muted,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  'Rm $room',
-                                  style: GoogleFonts.dmSans(
-                                    fontSize: 11,
-                                    color: context.appTheme.muted,
+                                decoration: BoxDecoration(
+                                  color: gradient[0].withAlpha(15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: gradient[0].withAlpha(40),
                                   ),
                                 ),
-                              ],
-                            ),
-                          ],
+                                child: Text(
+                                  '$startTime – $endTime',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: gradient[0],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.room_rounded,
+                                    size: 11,
+                                    color: context.appTheme.muted,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Flexible(
+                                    child: Text(
+                                      'Rm $room',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.dmSans(
+                                        fontSize: 11,
+                                        color: context.appTheme.muted,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

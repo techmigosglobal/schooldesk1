@@ -63,7 +63,7 @@ void main() {
       );
       expect(
         principalDashboard,
-        contains("api.getDashboard('principal', forceRefresh: true)"),
+        contains('api.getDashboard(_leadershipRole, forceRefresh: true)'),
       );
     },
   );

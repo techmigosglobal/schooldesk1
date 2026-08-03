@@ -50,8 +50,8 @@ void main() {
       routes,
       contains('principalFees: (context) => const FeeHomeScreen()'),
     );
-    expect(feeHome, contains("title: 'Generate Invoice'"));
-    expect(feeHome, contains("title: 'Reports & Exports'"));
+    expect(feeHome, contains("title: 'Collect Fee'"));
+    expect(feeHome, contains("title: 'Student Ledger & Dues'"));
   });
 
   test('Approval and notification workflows keep actions explicit', () {

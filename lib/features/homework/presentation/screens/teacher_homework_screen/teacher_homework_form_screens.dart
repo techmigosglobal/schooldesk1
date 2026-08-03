@@ -63,7 +63,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   final Set<String> _selectedSubjects = {};
   String _sectionId = '';
   String _studentId = '';
-  String _homeworkType = 'Homework';
+  String _homeworkType = 'Dairy';
   String _attachmentUrl = '';
   String _attachmentName = '';
   String _teacherStaffId = '';
@@ -252,7 +252,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
         Navigator.pop(
           context,
           TeacherHomeworkResult(
-            widget.args.isEditing ? 'Homework updated' : 'Homework shared',
+            widget.args.isEditing ? 'Dairy updated' : 'Dairy shared',
           ),
         );
       }
@@ -269,8 +269,8 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   Widget build(BuildContext context) {
     if (_loadingContext) {
       return TeacherFlowScaffold(
-        title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
-        subtitle: 'Loading teacher homework context',
+        title: widget.args.isEditing ? 'Edit Dairy' : 'Assign Dairy',
+        subtitle: 'Loading teacher dairy context',
         selectedIndex: TeacherNav.diary,
         loading: true,
         child: const SizedBox.shrink(),
@@ -278,19 +278,19 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
     }
     if (_missingRequiredContext) {
       return _TeacherModuleEntryError(
-        title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
+        title: widget.args.isEditing ? 'Edit Dairy' : 'Assign Dairy',
         selectedIndex: TeacherNav.diary,
       );
     }
 
     return TeacherFlowScaffold(
-      title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
+      title: widget.args.isEditing ? 'Edit Dairy' : 'Assign Dairy',
       subtitle: 'Minimal typing flow with class defaults',
       selectedIndex: TeacherNav.diary,
       child: TeacherFlowScrollView(
         children: [
           TeacherCurrentClassCard(
-            greeting: 'Homework details',
+            greeting: 'Dairy details',
             classLabel: _defaultClassName,
             subject: _defaultSubject,
             timeLabel: 'Parents and students are notified after save',
@@ -307,7 +307,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                     prefixIcon: Icon(Icons.title_rounded),
                   ),
                   validator: (value) =>
-                      _required(value, 'Enter a homework title.'),
+                      _required(value, 'Enter a dairy title.'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -364,7 +364,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                   ),
                   items:
                       const [
-                            'Homework',
+                            'Dairy',
                             'Classwork',
                             'Project',
                             'Revision',
@@ -381,7 +381,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                   onChanged: _saving
                       ? null
                       : (value) =>
-                            setState(() => _homeworkType = value ?? 'Homework'),
+                            setState(() => _homeworkType = value ?? 'Dairy'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -494,8 +494,8 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                     _saving
                         ? 'Saving...'
                         : widget.args.isEditing
-                        ? 'Save Homework'
-                        : 'Share Homework',
+                        ? 'Save Dairy'
+                        : 'Share Dairy',
                   ),
                 ),
               ],
@@ -620,7 +620,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       'type': 'homework',
       'class': _selectedClassLabel,
       'subject': _selectedSubjects.join(', '),
-      'title': 'Homework assigned',
+      'title': 'Dairy assigned',
       'homework': _descriptionController.text.trim(),
       'notes':
           'Due ${_dueDateController.text.trim()} · ${_studentId.isEmpty ? 'Full class' : 'Individual student'}',
@@ -687,34 +687,35 @@ class _TeacherHomeworkSubmissionsScreenState
     }
   }
 
-  Future<void> _review(Map<String, dynamic> submission, String status) async {
-    final normalizedStatus = _normalizeReviewStatus(status);
-    final isApproval = normalizedStatus == 'reviewed';
-    final comment = await _askForFeedback(
-      defaultComment: isApproval
-          ? 'Well done! Homework reviewed and approved.'
-          : 'Please revise and resubmit',
-      isApproval: isApproval,
-    );
+  Future<void> _review(Map<String, dynamic> submission) async {
+    final comment = await _askForFeedback();
     if (comment == null) return;
     final submissionId = teacherFlowText(
       submission['id'] ?? submission['submission_id'],
     );
+    if (submissionId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This submission cannot be marked done yet.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     try {
       await BackendApiClient.instance.reviewHomeworkSubmission(
         _homeworkId,
         submissionId,
-        status: normalizedStatus,
+        status: 'reviewed',
         remarks: comment,
       );
       await _loadSubmissions();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              normalizedStatus == 'needs_revision'
-                  ? 'Revision sent to parent'
-                  : 'Homework approved',
+              'Dairy marked done and feedback sent to parent',
             ),
             behavior: SnackBarBehavior.floating,
           ),
@@ -731,97 +732,11 @@ class _TeacherHomeworkSubmissionsScreenState
     }
   }
 
-  String _normalizeReviewStatus(String status) {
-    switch (status.trim().toLowerCase()) {
-      case 'approved':
-      case 'reviewed':
-        return 'reviewed';
-      case 'needs_revision':
-      case 'revision_requested':
-      default:
-        return 'needs_revision';
-    }
-  }
-
-  Future<String?> _askForFeedback({
-    required String defaultComment,
-    required bool isApproval,
-  }) {
-    final controller = TextEditingController(text: defaultComment);
+  Future<String?> _askForFeedback() {
     return showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(
-              isApproval ? Icons.check_circle_rounded : Icons.replay_rounded,
-              color: isApproval ? Colors.green : Colors.orange,
-              size: 22,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              isApproval ? 'Approve Homework' : 'Request Revision',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isApproval
-                  ? 'Write a feedback comment for the parent (optional)'
-                  : 'Explain what the student needs to improve',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              minLines: 3,
-              maxLines: 5,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: isApproval
-                    ? 'Great work! Well done.'
-                    : 'Please revise and resubmit the assignment.',
-                alignLabelWithHint: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: isApproval ? Colors.green : Colors.orange,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: isApproval ? Colors.green : Colors.orange,
-                    width: 1.5,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              Navigator.pop(ctx, value.isEmpty ? defaultComment : value);
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: isApproval ? Colors.green : Colors.orange,
-            ),
-            child: Text(isApproval ? 'Approve & Notify' : 'Send for Revision'),
-          ),
-        ],
-      ),
-    ).whenComplete(controller.dispose);
+      builder: (ctx) => const _HomeworkFeedbackDialog(),
+    );
   }
 
   @override
@@ -835,7 +750,7 @@ class _TeacherHomeworkSubmissionsScreenState
 
     final title = teacherFlowText(
       widget.args.homework['title'],
-      fallback: 'Homework',
+      fallback: 'Dairy',
     );
     return TeacherFlowScaffold(
       title: 'Submissions',
@@ -850,7 +765,7 @@ class _TeacherHomeworkSubmissionsScreenState
             greeting: 'Review queue',
             classLabel: title,
             subject: '${_submissions.length} submissions',
-            timeLabel: 'Approve or request revision',
+            timeLabel: 'Add feedback before marking done',
           ),
           const SizedBox(height: 18),
           if (_submissions.isEmpty)
@@ -883,7 +798,10 @@ class _TeacherHomeworkSubmissionsScreenState
         (rawAnswer == teacherFeedback && teacherFeedback.isNotEmpty)
         ? ''
         : rawAnswer;
-    final status = teacherFlowText(submission['status'], fallback: 'submitted');
+    final status = teacherFlowText(
+      submission['status'],
+      fallback: 'submitted',
+    ).toLowerCase();
     final submittedRaw = teacherFlowText(
       submission['submitted_at'] ?? submission['created_at'],
     );
@@ -901,7 +819,7 @@ class _TeacherHomeworkSubmissionsScreenState
         icon: Icons.file_present_rounded,
         title: studentName,
         subtitle: answerText.isEmpty ? 'No written answer' : answerText,
-        status: teacherFlowTitleCase(status),
+        status: status == 'reviewed' ? 'Done' : teacherFlowTitleCase(status),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -960,22 +878,10 @@ class _TeacherHomeworkSubmissionsScreenState
               actions: [
                 if (status != 'reviewed')
                   TeacherFlowAction(
-                    label: 'Approve',
+                    label: 'Done',
                     icon: Icons.check_rounded,
                     filled: true,
-                    onTap: () => _review(submission, 'reviewed'),
-                  ),
-                if (status != 'reviewed')
-                  TeacherFlowAction(
-                    label: 'Needs Revision',
-                    icon: Icons.replay_rounded,
-                    onTap: () => _review(submission, 'needs_revision'),
-                  ),
-                if (status == 'reviewed')
-                  TeacherFlowAction(
-                    label: 'Re-review',
-                    icon: Icons.rate_review_rounded,
-                    onTap: () => _review(submission, 'needs_revision'),
+                    onTap: () => _review(submission),
                   ),
               ],
             ),
@@ -1000,6 +906,106 @@ class _TeacherHomeworkSubmissionsScreenState
       }
     }
     return urls;
+  }
+}
+
+class _HomeworkFeedbackDialog extends StatefulWidget {
+  const _HomeworkFeedbackDialog();
+
+  @override
+  State<_HomeworkFeedbackDialog> createState() =>
+      _HomeworkFeedbackDialogState();
+}
+
+class _HomeworkFeedbackDialogState extends State<_HomeworkFeedbackDialog> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Colors.green;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(
+        children: [
+          Icon(Icons.check_circle_rounded, color: accent, size: 22),
+          SizedBox(width: 8),
+          Text(
+            'Complete Dairy Review',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 320),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Feedback for the parent is required before marking this dairy done.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _controller,
+                minLines: 3,
+                maxLines: 5,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText:
+                      'Share clear feedback about the student submission.',
+                  errorText: _error,
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: accent),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: accent, width: 1.5),
+                  ),
+                ),
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final value = _controller.text.trim();
+            if (value.isEmpty) {
+              setState(() => _error = 'Feedback is required.');
+              return;
+            }
+            Navigator.pop(context, value);
+          },
+          style: FilledButton.styleFrom(backgroundColor: accent),
+          child: const Text('Done & Notify Parent'),
+        ),
+      ],
+    );
   }
 }
 

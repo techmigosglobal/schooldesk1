@@ -239,6 +239,9 @@ async function getNotificationPreferences(
       events: true,
       messages: true,
       emergency_alerts: true,
+      pending_approvals: true,
+      fee_reminders: true,
+      general_alerts: true,
     };
 
     return ok(preferences);
@@ -255,12 +258,29 @@ async function updateNotificationPreferences(
 ): Promise<Response> {
   try {
     const body = await req.json() as Record<string, unknown>;
-    const preferences = {
+    const preferenceKeys = [
+      "enable_push",
+      "enable_email",
+      "enable_sms",
+      "announcements",
+      "attendance",
+      "fees",
+      "academics",
+      "events",
+      "messages",
+      "emergency_alerts",
+      "pending_approvals",
+      "fee_reminders",
+      "general_alerts",
+    ] as const;
+    const preferences: Record<string, unknown> = {
       school_id: school,
       user_id: userId,
-      ...body,
       updated_at: new Date().toISOString(),
     };
+    for (const key of preferenceKeys) {
+      if (typeof body[key] === "boolean") preferences[key] = body[key];
+    }
 
     const { error } = await svc
       .from("notification_preferences")
@@ -274,7 +294,9 @@ async function updateNotificationPreferences(
 
     return ok({ message: "Preferences updated successfully" });
   } catch (error) {
-    return fail(`Error updating preferences: ${error instanceof Error ? error.message : String(error)}`);
+    return fail(
+      `Error updating preferences: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 

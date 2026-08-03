@@ -12,17 +12,24 @@ export function FormActions({
   label?: string;
 }) {
   return (
-    <div className="dialog-footer">
-      <button className="secondary-button" type="button" onClick={onClose}>
-        Cancel
-      </button>
-      <button className="primary-button" disabled={saving}>
-        {saving ? (
-          <LoadingIndicator label="Saving…" compact announce={false} />
-        ) : (
-          label
-        )}
-      </button>
-    </div>
+    <>
+      {saving && (
+        <div className="dialog-save-progress" role="status" aria-live="polite">
+          <LoadingIndicator label="Saving changes…" announce={false} />
+        </div>
+      )}
+      <div className="dialog-footer">
+        <button className="secondary-button" type="button" onClick={onClose} disabled={saving}>
+          Cancel
+        </button>
+        <button className="primary-button" type="submit" disabled={saving} aria-busy={saving}>
+          {saving ? (
+            <LoadingIndicator label="Saving…" compact announce={false} />
+          ) : (
+            label
+          )}
+        </button>
+      </div>
+    </>
   );
 }

@@ -46,7 +46,7 @@ export function ParentDialog({
   }, [row]);
 
   async function submit(form: FormData) {
-    if (readOnly) return;
+    if (readOnly || saving) return;
     setSaving(true);
     setError("");
     try {
@@ -110,7 +110,15 @@ export function ParentDialog({
       title={readOnly ? "Parent profile details" : row ? "Update parent account" : "Register parent account"}
       onClose={onClose}
     >
-      <form action={submit} className="ops-detail-form">
+      <form
+        className="ops-detail-form"
+        aria-busy={saving}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (saving) return;
+          void submit(new FormData(event.currentTarget));
+        }}
+      >
         <div className="form-grid">
           <label className="field">
             Parent name

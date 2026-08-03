@@ -113,6 +113,16 @@ void main() {
     },
   );
 
+  test('normal invoice reads exclude cancelled rows unless auditing', () {
+    final source = File(
+      'supabase/functions/api/handlers/fees.ts',
+    ).readAsStringSync();
+
+    expect(source, contains('include_cancelled'));
+    expect(source, contains('q.not("status", "in", "(cancelled,void,voided)")'));
+    expect(source, contains('invoiceQuery.not("status", "in", "(cancelled,void,voided)")'));
+  });
+
   test(
     'invoice generation fills missing student components without duplicating paid or unpaid invoices',
     () {
@@ -145,8 +155,13 @@ void main() {
     expect(source, contains('deleteFeeStructureWorkflowRows'));
     expect(source, contains('archived_at'));
     expect(source, contains('Financial history is immutable'));
-    expect(source, isNot(contains('svc.from("fee_receipts").delete()')));
-    expect(source, isNot(contains('svc.from("payments").delete()')));
+    final workflowStart = source.indexOf('async function deleteFeeStructureWorkflowRows');
+    final workflowEnd = source.indexOf('export async function handleFees');
+    expect(workflowStart, isNonNegative);
+    expect(workflowEnd, greaterThan(workflowStart));
+    final workflow = source.substring(workflowStart, workflowEnd);
+    expect(workflow, isNot(contains('svc.from("fee_receipts").delete()')));
+    expect(workflow, isNot(contains('svc.from("payments").delete()')));
   });
 
   test(

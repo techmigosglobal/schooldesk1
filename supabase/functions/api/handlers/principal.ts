@@ -641,6 +641,7 @@ function serializeClassRow(
   },
   todayAttendancePct: number | null = null,
   includeFees = true,
+  students: Array<Record<string, unknown>> = [],
 ) {
   const sectionName = text(section["section_name"]);
   const gradeName = text(grade?.["grade_name"]);
@@ -685,6 +686,7 @@ function serializeClassRow(
     academic_year_id: text(section["academic_year_id"]),
     student_count: studentCount,
     total_students: studentCount,
+    students,
     ...financeSummary,
     today_attendance_pct: todayAttendancePct,
     pending_issues: pendingIssues,
@@ -698,8 +700,11 @@ async function studentCountsBySection(
   // Mobile app stores status as 'Active' (capital A), web stores 'active'.
   // Use ilike for case-insensitive match so both are counted.
   const { data, error } = await svc.from("students").select(
-    "current_section_id",
-  ).eq("school_id", school).ilike("status", "active");
+    "current_section_id, is_test_account",
+  ).eq("school_id", school).eq("is_test_account", false).ilike(
+    "status",
+    "active",
+  );
   if (error) throw new Error(error.message);
   const counts = new Map<string, number>();
   for (const row of data ?? []) {
@@ -708,6 +713,38 @@ async function studentCountsBySection(
     counts.set(sectionId, (counts.get(sectionId) ?? 0) + 1);
   }
   return counts;
+}
+
+async function studentsBySection(
+  svc: SupabaseClient,
+  school: string,
+) {
+  const { data, error } = await svc.from("students").select(
+    "id, first_name, last_name, admission_number, student_id_number, current_section_id, photo_url",
+  ).eq("school_id", school).eq("is_test_account", false).ilike(
+    "status",
+    "active",
+  ).order("first_name", { ascending: true }).order("last_name", {
+    ascending: true,
+  });
+  if (error) throw new Error(error.message);
+  const grouped = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of data ?? []) {
+    const sectionId = text(row.current_section_id);
+    if (!sectionId) continue;
+    const student = {
+      id: text(row.id),
+      first_name: text(row.first_name),
+      last_name: text(row.last_name),
+      admission_number: text(row.admission_number),
+      student_id_number: text(row.student_id_number),
+      photo_url: text(row.photo_url),
+    };
+    const list = grouped.get(sectionId) ?? [];
+    list.push(student);
+    grouped.set(sectionId, list);
+  }
+  return grouped;
 }
 
 async function feeDuesBySection(
@@ -1326,6 +1363,7 @@ export async function handlePrincipal(
       }).order("created_at", { ascending: true });
       if (error) return fail(error.message);
       const counts = await studentCountsBySection(svc, school);
+      const students = await studentsBySection(svc, school);
       const sectionYears = new Map(
         (data ?? []).map((
           row: Record<string, unknown>,
@@ -1348,6 +1386,7 @@ export async function handlePrincipal(
           pendingFeeProofs.get(text(row["id"])),
           attendancePct.get(text(row["id"])) ?? null,
           includeFees,
+          students.get(text(row["id"])) ?? [],
         )
       );
       const totalStudents = classes.reduce(

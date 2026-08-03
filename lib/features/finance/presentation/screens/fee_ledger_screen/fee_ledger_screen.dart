@@ -259,12 +259,20 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                money(account.balance),
+                                'Paid ${money(account.paid)}',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
+                                  color: context.appTheme.success,
+                                ),
+                              ),
+                              Text(
+                                'Balance ${money(account.balance)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
                                   color: account.balance > 0
                                       ? context.appTheme.error
-                                      : context.appTheme.success,
+                                      : context.appTheme.muted,
                                 ),
                               ),
                               FeeStatusPill(
@@ -656,6 +664,9 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
         (row) => textValue(row['id']) == textValue(payment['invoice_id']),
         orElse: () => const <String, dynamic>{},
       );
+      final student = invoice['student'] is Map
+          ? Map<String, dynamic>.from(invoice['student'] as Map)
+          : const <String, dynamic>{};
       final paid = numValue(totals['this_payment_amount'] ?? payment['amount']);
       final receiptNumber = textValue(payment['receipt']);
       if (receiptNumber.isEmpty) {
@@ -705,6 +716,29 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
           source['reference_number'] ?? payment['transaction_id'],
         ),
         thisPaymentAmount: paid,
+        admissionNo: textValue(
+          source['admission_number'] ??
+              student['admission_number'] ??
+              student['student_id_number'],
+          fallback: account.studentId,
+        ),
+        academicYear: textValue(
+          source['academic_year'] ??
+              invoice['academic_year_label'] ??
+              invoice['academic_year_name'],
+        ),
+        feePeriod: textValue(
+          source['fee_period'] ??
+              invoice['fee_period'] ??
+              invoice['billing_period'] ??
+              invoice['installment'] ??
+              invoice['term'],
+        ),
+        counterNo: textValue(source['counter_no'] ?? payment['counter_no']),
+        bankName: textValue(source['bank_name'] ?? payment['bank_name']),
+        concessionAmount: numValue(
+          totals['concession_amount'] ?? invoice['discount'],
+        ),
         schoolName: textValue(school['name'], fallback: 'SchoolDesk'),
         schoolAddress: _schoolAddress(school),
         schoolLogo: assets[0],

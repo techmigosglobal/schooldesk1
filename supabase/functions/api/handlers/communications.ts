@@ -1683,13 +1683,24 @@ export async function handleCommunications(
 
   // ── Notifications ─────────────────────────────────────────
   if (path === "/notifications" && method === "GET") {
+    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const pageSize = Math.min(
+      Math.max(parseInt(url.searchParams.get("page_size") ?? "50") || 50, 1),
+      100,
+    );
+    const from = (page - 1) * pageSize;
+    // Read one extra row so an exact page multiple does not create a phantom
+    // empty page at the end of the notification history.
+    const to = from + pageSize;
     const { data, error } = await svc.from("notification_logs")
       .select("*, student:students(photo_url)")
       .eq("user_id", user.id)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
-      .limit(50);
+      .range(from, to);
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row: Record<string, unknown>) => ({
+    const rows = (data ?? []).slice(0, pageSize);
+    const items = rows.map((row: Record<string, unknown>) => ({
       ...row,
       notification_type: row.type ?? "general",
       reference_type: row.entity_type ?? "",
@@ -1704,7 +1715,13 @@ export async function handleCommunications(
       student_photo_url: (row.student as Record<string, unknown> | null)
         ?.photo_url ?? "",
       sent_at: row.created_at ?? null,
-    })));
+    }));
+    return ok({
+      items,
+      page,
+      page_size: pageSize,
+      has_more: (data ?? []).length > pageSize,
+    });
   }
   if (path === "/notifications/push-diagnostics" && method === "POST") {
     return runPushDiagnostics(svc, user, school);
@@ -1712,7 +1729,10 @@ export async function handleCommunications(
   if (path === "/notifications" && method === "POST") {
     const { data, error } = await svc.from("notification_logs").insert({
       school_id: school,
-      user_id: body.user_id ?? user.id,
+      // A signed-in client may create a local log entry for itself, never for
+      // another user. Server-side fanout handlers write recipient rows with
+      // the service client instead.
+      user_id: user.id,
       target_role: body.target_role ?? body.role ?? null,
       title: body.title ?? body.subject ?? "Notification",
       body: body.body ?? body.message ?? "",
@@ -1743,17 +1763,37 @@ export async function handleCommunications(
     });
   }
   if (path === "/notifications/mark-read" && method === "POST") {
-    await svc.from("notification_logs").update({ is_read: true }).eq(
-      "user_id",
-      user.id,
-    );
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const requestedRole = `${body.target_role ?? ""}`.trim().toLowerCase();
+    const targetRole = [
+      "principal",
+      "coordinator",
+      "teacher",
+      "parent",
+      "student",
+      "admin",
+      "super_admin",
+    ].includes(requestedRole)
+      ? requestedRole
+      : "";
+    let update = svc.from("notification_logs").update({ is_read: true })
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (targetRole) {
+      update = update.or(
+        `target_role.is.null,target_role.eq.all,target_role.eq.${targetRole}`,
+      );
+    }
+    const { error } = await update;
+    if (error) return fail(error.message);
     return ok({ success: true });
   }
   const notificationReadMatch = path.match(/^\/notifications\/([^/]+)\/read$/);
   if (notificationReadMatch && (method === "POST" || method === "PUT")) {
     const { data, error } = await svc.from("notification_logs").update({
       is_read: true,
-    }).eq("id", notificationReadMatch[1]).eq("user_id", user.id).select()
+    }).eq("id", notificationReadMatch[1]).eq("user_id", user.id)
+      .is("deleted_at", null).select()
       .single();
     if (error) return fail(error.message);
     return ok({
@@ -1770,6 +1810,16 @@ export async function handleCommunications(
       teacher_id: data?.teacher_id ?? "",
       sent_at: data?.created_at ?? null,
     });
+  }
+  const notificationDeleteMatch = path.match(/^\/notifications\/([^/]+)$/);
+  if (notificationDeleteMatch && method === "DELETE") {
+    const { data, error } = await svc.from("notification_logs").update({
+      deleted_at: new Date().toISOString(),
+    }).eq("id", notificationDeleteMatch[1]).eq("user_id", user.id)
+      .is("deleted_at", null).select("id").maybeSingle();
+    if (error) return fail(error.message);
+    if (!data) return fail("notification not found", 404);
+    return ok({ deleted: true, id: data.id });
   }
   if (path === "/notifications/device-tokens" && method === "POST") {
     const { token, platform } = body;
@@ -2104,7 +2154,7 @@ export async function handleCommunications(
           svc,
           school,
           targetUserId,
-          "New homework message",
+          "New dairy message",
           messageText,
           text(convId),
           targetRole,

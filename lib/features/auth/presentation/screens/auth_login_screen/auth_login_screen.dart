@@ -10,10 +10,7 @@ import 'package:schooldesk1/core/errors/exceptions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
-import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/services/notification_topic_manager.dart';
 import 'package:schooldesk1/core/services/demo_sandbox_service.dart';
-import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AuthLoginScreen extends StatefulWidget {
@@ -56,9 +53,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
         return;
       }
 
-      // Reset any previous sign-out guard so RoleAccessService can re-initialize.
-      RoleAccessService.resetSignOutGuard();
-
       final response = await BackendApiClient.instance.login(
         LoginRequest(username: username, password: password),
       );
@@ -69,12 +63,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
       unawaited(
         PushNotificationService.instance.registerDeviceTokenIfPossible(),
       );
-
-      // Set up notification topics for the user's role
-      final role = _roleFromRoleName(response.user.roleName);
-      if (role != null) {
-        unawaited(NotificationTopicManager().setupTopicsForRole(role));
-      }
 
       if (!mounted) return;
       // Navigate to the loading screen which will initialize
@@ -121,29 +109,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text('Demo unavailable: $error')));
       }
-    }
-  }
-
-  SchoolDeskRole? _roleFromRoleName(String roleName) {
-    final lower = roleName.trim().toLowerCase();
-    switch (lower) {
-      case AppConstants.rolePrincipal:
-      case AppConstants.roleAdmin:
-      case 'super_admin':
-        return SchoolDeskRole.principal;
-      case AppConstants.roleCoordinator:
-        return SchoolDeskRole.coordinator;
-      case AppConstants.roleTeacher:
-        return SchoolDeskRole.teacher;
-      case AppConstants.roleParent:
-        return SchoolDeskRole.parent;
-      case 'student':
-        return SchoolDeskRole.student;
-      case 'kiosk':
-        return SchoolDeskRole
-            .student; // Map kiosk to student for notification purposes
-      default:
-        return null;
     }
   }
 

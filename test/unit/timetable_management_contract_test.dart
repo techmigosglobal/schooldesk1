@@ -90,6 +90,29 @@ void main() {
     expect(principal, isNot(contains('for (final slot in _slots)')));
   });
 
+  test('timetable educator defaults prefer mapped subject staff', () {
+    final principal = File(
+      'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
+    ).readAsStringSync();
+    final roleAccess = File(
+      'lib/core/services/role_access_service.dart',
+    ).readAsStringSync();
+    final parent = File(
+      'lib/features/academics/presentation/screens/parent_timetable_screen/parent_timetable_screen.dart',
+    ).readAsStringSync();
+
+    expect(
+      principal.indexOf('for (final row in _staffSubjects)'),
+      lessThan(
+        principal.indexOf('if (section.classTeacherId.trim().isNotEmpty)'),
+      ),
+    );
+    expect(roleAccess, contains('Future.wait('));
+    expect(roleAccess, contains('assignedSectionIds.map'));
+    expect(parent, contains('selected: isActive'));
+    expect(parent, contains(r"hint: 'Show $dayName timetable'"));
+  });
+
   test(
     'principal save replaces class timetable with regular free and break cells',
     () {

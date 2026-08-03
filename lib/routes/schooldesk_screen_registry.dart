@@ -508,19 +508,19 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/teacher-homework-screen',
-      title: 'Homework',
+      title: 'Dairy',
       module: 'Classroom',
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
       route: '/teacher-homework-screen/form',
-      title: 'Post Homework',
+      title: 'Post Dairy',
       module: 'Classroom',
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
       route: '/teacher-homework-screen/submissions',
-      title: 'Homework Feedback',
+      title: 'Dairy Feedback',
       module: 'Classroom',
       portal: 'teacher',
     ),
@@ -544,13 +544,13 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/parent-homework-screen',
-      title: 'Homework',
+      title: 'Dairy',
       module: 'Child Academics',
       portal: 'parent',
     ),
     SchoolDeskScreenMetadata(
       route: '/parent-homework-screen/submit',
-      title: 'Submit Homework',
+      title: 'Submit Dairy',
       module: 'Child Academics',
       portal: 'parent',
     ),
@@ -744,7 +744,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/homework-messaging-screen',
-      title: 'Homework Messaging',
+      title: 'Dairy Messaging',
       module: 'Shared Tools',
       portal: 'shared',
       isShared: true,

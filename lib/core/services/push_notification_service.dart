@@ -87,40 +87,6 @@ class PushNotificationService {
     return '${token.substring(0, 6)}...${token.substring(token.length - 4)}';
   }
 
-  // ─── Topic Subscriptions (replaces legacy FcmService) ─────────────────────
-
-  /// Subscribe to an FCM topic.
-  Future<void> subscribeToTopic(String topic) async {
-    final messaging = _messaging;
-    if (messaging == null) return;
-    try {
-      await messaging
-          .subscribeToTopic(topic)
-          .timeout(_firebaseOperationTimeout);
-    } on Object catch (error) {
-      developer.log(
-        'Failed to subscribe to topic $topic: $error',
-        name: 'PushNotificationService',
-      );
-    }
-  }
-
-  /// Unsubscribe from an FCM topic.
-  Future<void> unsubscribeFromTopic(String topic) async {
-    final messaging = _messaging;
-    if (messaging == null) return;
-    try {
-      await messaging
-          .unsubscribeFromTopic(topic)
-          .timeout(_firebaseOperationTimeout);
-    } on Object catch (error) {
-      developer.log(
-        'Failed to unsubscribe from topic $topic: $error',
-        name: 'PushNotificationService',
-      );
-    }
-  }
-
   static Future<bool> ensureFirebaseInitialized() async {
     if (Firebase.apps.isNotEmpty) return true;
     try {
@@ -211,6 +177,7 @@ class PushNotificationService {
           .timeout(_deviceRegistrationTimeout);
       _deviceRegistrationSucceeded = true;
       _lastRegistrationError = null;
+      unawaited(syncApplicationBadge());
     } on Object catch (error) {
       _deviceRegistrationSucceeded = false;
       _lastRegistrationError = error.toString();
@@ -393,30 +360,100 @@ class PushNotificationService {
   }
 
   Future<void> _handleForeground(RemoteMessage message) async {
-    if (!_localNotificationsReady) return;
+    // Android does not display an FCM notification automatically while the
+    // app is foregrounded. Retry the local-notification setup here so a
+    // transient startup/plugin failure does not silently turn a delivered
+    // push into an in-app-only notification.
+    if (!_localNotificationsReady) {
+      await _initializeLocalNotifications();
+    }
+    if (!_localNotificationsReady) {
+      developer.log(
+        'Foreground push could not be displayed because local notifications are unavailable.',
+        name: 'PushNotificationService',
+      );
+      return;
+    }
+    int? badgeCount;
+    try {
+      final service = await NotificationService.getInstance();
+      await service.refresh();
+      badgeCount = service.totalUnread;
+    } on Object catch (_) {
+      // Showing the push remains useful if notification history is offline.
+    }
     final notification = message.notification;
     final title =
         notification?.title ?? message.data['title'] ?? AppConstants.appName;
     final body = notification?.body ?? message.data['body'] ?? '';
-    await _localNotifications.show(
-      id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
-      title: title,
-      body: body,
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          _androidChannel.id,
-          _androidChannel.name,
-          channelDescription: _androidChannel.description,
-          importance: Importance.high,
-          priority: Priority.high,
+    try {
+      await _localNotifications.show(
+        id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
+        title: title,
+        body: body,
+        notificationDetails: NotificationDetails(
+          android: AndroidNotificationDetails(
+            _androidChannel.id,
+            _androidChannel.name,
+            channelDescription: _androidChannel.description,
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(badgeNumber: badgeCount),
+          macOS: const DarwinNotificationDetails(),
+          linux: const LinuxNotificationDetails(),
         ),
-        iOS: const DarwinNotificationDetails(),
-        macOS: const DarwinNotificationDetails(),
-        linux: const LinuxNotificationDetails(),
-      ),
-      payload: jsonEncode(message.data),
-    );
-    NotificationService.getInstance().then((s) => s.refresh());
+        payload: jsonEncode(message.data),
+      );
+    } on Object catch (error) {
+      developer.log(
+        'Failed to display foreground push notification: $error',
+        name: 'PushNotificationService',
+      );
+    }
+  }
+
+  /// Synchronizes the application icon badge after local read/delete actions.
+  /// iOS is the only target where this explicit badge update is required;
+  /// Android badge behavior is owned by the launcher and notification shade.
+  Future<void> syncApplicationBadge({int? count}) async {
+    if (!_localNotificationsReady ||
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    var badgeCount = count;
+    if (badgeCount == null) {
+      try {
+        final service = await NotificationService.getInstance();
+        badgeCount = service.totalUnread;
+      } on Object catch (_) {
+        return;
+      }
+    }
+    try {
+      await _localNotifications.show(
+        id: -2147483000,
+        title: '',
+        body: '',
+        notificationDetails: NotificationDetails(
+          iOS: DarwinNotificationDetails(
+            presentAlert: false,
+            presentSound: false,
+            presentBadge: true,
+            badgeNumber: badgeCount < 0
+                ? 0
+                : badgeCount > 99999
+                ? 99999
+                : badgeCount,
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      developer.log(
+        'Failed to synchronize iOS notification badge: $error',
+        name: 'PushNotificationService',
+      );
+    }
   }
 
   Future<void> _handleRemoteInteraction(RemoteMessage message) async {
@@ -449,6 +486,7 @@ class PushNotificationService {
       if (notificationId.isNotEmpty) {
         await service.markAsRead(notificationId);
       }
+      await syncApplicationBadge(count: service.totalUnread);
     } on Object catch (_) {
       // Navigation should still proceed if notification refresh fails.
     }

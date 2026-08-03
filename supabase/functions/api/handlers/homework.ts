@@ -247,14 +247,15 @@ export async function handleHomework(
               school_id: school,
               user_id: link.parent_user_id,
               target_role: "parent",
-              title: `New Homework: ${text(body.title, "Assignment")}`,
-              body: `Homework assigned for ${
+              title: `New Dairy: ${text(body.title, "Assignment")}`,
+              body: `Dairy assigned for ${
                 text(body.subject_id, "your child's class")
               }.`,
               type: "homework",
               entity_type: "homework",
               entity_id: id,
               is_read: false,
+              priority: "high",
               route: "/parent-homework-screen/submit",
               student_id: link.student_id,
             }),
@@ -283,8 +284,8 @@ export async function handleHomework(
                 event_type: "homework_assigned",
                 event_data: {
                   homework_id: id,
-                  title: `New Homework: ${hwTitle}`,
-                  message: `Homework assigned for ${subjectLabel}.`,
+                  title: `New Dairy: ${hwTitle}`,
+                  message: `Dairy assigned for ${subjectLabel}.`,
                   reference_type: "homework",
                   reference_id: id,
                   action: "assignment",
@@ -433,7 +434,7 @@ export async function handleHomework(
     const hw = await loadHomework(svc, school, homeworkId);
     if (hw) {
       const staffId = text(hw.staff_id ?? hw.teacher_id);
-      const hwTitle = text(hw.title, "Homework");
+      const hwTitle = text(hw.title, "Dairy");
       const hasAttachment = fileUrls.length > 0;
       const studentName = await studentNameForId(svc, school, studentId);
       const notifBody = `${studentName} submitted${
@@ -446,12 +447,13 @@ export async function handleHomework(
       const notifBase = {
         school_id: school,
         target_role: "teacher",
-        title: `Homework Submitted: ${hwTitle}`,
+        title: `Dairy Submitted: ${hwTitle}`,
         body: notifBody,
         type: "homework",
         entity_type: "homework",
         entity_id: text((data as Record<string, unknown>).id),
         is_read: false,
+        priority: "high",
         route: "/teacher-homework-screen/submissions",
         student_id: studentId,
         teacher_id: staffId,
@@ -478,7 +480,7 @@ export async function handleHomework(
               event_type: "homework_submitted",
               event_data: {
                 homework_id: homeworkId,
-                title: `Homework Submitted: ${hwTitle}`,
+                title: `Dairy Submitted: ${hwTitle}`,
                 message: notifBody,
                 reference_type: "homework",
                 reference_id: text((data as Record<string, unknown>).id),
@@ -500,6 +502,9 @@ export async function handleHomework(
   if (reviewMatch && (method === "PUT" || method === "PATCH")) {
     const reviewStatus = text(body.status, "reviewed");
     const reviewRemarks = text(body.remarks);
+    if (reviewStatus === "reviewed" && !reviewRemarks) {
+      return fail("feedback is required before marking the dairy done", 422);
+    }
     const { data, error } = await svc.from("homework_submissions").update({
       status: reviewStatus,
       grade: text(body.grade),
@@ -515,20 +520,21 @@ export async function handleHomework(
     const submissionRow = data as Record<string, unknown>;
     const studentId = text(submissionRow.student_id);
     const hw = await loadHomework(svc, school, homeworkId);
-    const hwTitle = text(hw?.title, "Homework");
+    const hwTitle = text(hw?.title, "Dairy");
     if (studentId) {
       const { data: linkRows } = await svc.from("parent_student_links")
         .select("parent_user_id")
+        .eq("school_id", school)
         .eq("student_id", studentId);
       if (linkRows && linkRows.length > 0) {
         const feedbackTitle = reviewStatus === "reviewed"
-          ? `Homework Approved: ${hwTitle}`
-          : `Homework Needs Revision: ${hwTitle}`;
+          ? `Dairy Approved: ${hwTitle}`
+          : `Dairy Needs Revision: ${hwTitle}`;
         const feedbackBody = reviewRemarks.length > 0
           ? reviewRemarks
           : (reviewStatus === "reviewed"
-            ? "Your child's homework has been approved by the teacher."
-            : "Your child's homework needs revision. Please check the feedback.");
+            ? "Your child's dairy has been approved by the teacher."
+            : "Your child's dairy needs revision. Please check the feedback.");
         const parentNotifs = linkRows.map((l: { parent_user_id: string }) => ({
           school_id: school,
           user_id: l.parent_user_id,
@@ -539,6 +545,7 @@ export async function handleHomework(
           entity_type: "homework",
           entity_id: homeworkId,
           is_read: false,
+          priority: "high",
           route: "/parent-homework-screen/submit",
           student_id: studentId,
         }));
@@ -562,8 +569,15 @@ export async function handleHomework(
                 event_type: "homework_feedback",
                 event_data: {
                   homework_id: homeworkId,
+                  title: feedbackTitle,
                   message: feedbackBody,
                   reference_type: "homework",
+                  reference_id: homeworkId,
+                  action: reviewStatus === "reviewed"
+                    ? "approved"
+                    : "needs_revision",
+                  route: "/parent-homework-screen/submit",
+                  student_id: studentId,
                 },
               }).select("id").maybeSingle();
             if (eventRow?.id) eventIds.push(eventRow.id);

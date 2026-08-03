@@ -25,6 +25,65 @@ function parseDayOfWeek(day: unknown): number {
   return parseInt(d) || 1;
 }
 
+export function canonicalGradeKey(value: unknown): string {
+  const compact = text(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+  // Preserve compatibility with the source sheet's historical typo while
+  // matching against the canonical grade already stored in Supabase.
+  return compact === "nuesery" ? "nursery" : compact;
+}
+
+async function resolveGrade(
+  svc: SupabaseClient,
+  schoolId: string,
+  className: string,
+): Promise<Record<string, string> | null> {
+  const { data, error } = await svc.from("grades").select(
+    "id, grade_name",
+  ).eq("school_id", schoolId);
+  if (error) throw new Error(`Grade lookup error: ${error.message}`);
+  const key = canonicalGradeKey(className);
+  return ((data ?? []) as Record<string, string>[]).find((grade) =>
+    canonicalGradeKey(grade.grade_name) === key
+  ) ?? null;
+}
+
+async function resolveSection(
+  svc: SupabaseClient,
+  schoolId: string,
+  sectionName: string,
+  gradeId: string,
+): Promise<string | null> {
+  const { data, error } = await svc.from("sections").select("id").eq(
+    "school_id",
+    schoolId,
+  ).eq("grade_id", gradeId).eq("section_name", sectionName).limit(2);
+  if (error) throw new Error(`Section lookup error: ${error.message}`);
+  if ((data ?? []).length > 1) {
+    throw new Error(
+      `Multiple sections found for class and section "${sectionName}"`,
+    );
+  }
+  return data?.[0]?.id ?? null;
+}
+
+async function resolveUniqueSection(
+  svc: SupabaseClient,
+  schoolId: string,
+  sectionName: string,
+): Promise<string | null> {
+  const { data, error } = await svc.from("sections").select("id").eq(
+    "school_id",
+    schoolId,
+  ).eq("section_name", sectionName).limit(2);
+  if (error) throw new Error(`Section lookup error: ${error.message}`);
+  if ((data ?? []).length > 1) {
+    throw new Error(
+      `Section "${sectionName}" is ambiguous; provide the class name too`,
+    );
+  }
+  return data?.[0]?.id ?? null;
+}
+
 export async function handleSheetsSyncStudent(
   req: Request,
   svc: SupabaseClient,
@@ -46,66 +105,22 @@ export async function handleSheetsSyncStudent(
     const sectionName = text(body.section_name);
     const className = text(body.class_name);
 
-    if (className && sectionName) {
-      // Look up section matching both section_name and the grade's grade_name
-      const { data: sectionData, error: sectionError } = await svc
-        .from("sections")
-        .select(`
-          id,
-          grades!inner (grade_name)
-        `)
-        .eq("school_id", schoolId)
-        .eq("section_name", sectionName)
-        .eq("grades.grade_name", className)
-        .maybeSingle();
-
-      if (sectionError) {
-        if (sectionError.code !== "PGRST116") {
-          return fail(`Section lookup error: ${sectionError.message}`);
-        }
-      } else if (sectionData) {
-        sectionId = sectionData.id;
-      }
+    const grade = className
+      ? await resolveGrade(svc, schoolId, className)
+      : null;
+    if (className && !grade) {
+      return fail(`Class "${className}" was not found for this school`);
     }
-
-    // Try combined name or fallbacks
-    const combinedSectionName = className && sectionName
-      ? `${className} ${sectionName}`
-      : sectionName || className;
-
-    if (!sectionId && combinedSectionName) {
-      const lookupNames = combinedSectionName !== sectionName && sectionName
-        ? [combinedSectionName, sectionName]
-        : [combinedSectionName];
-
-      for (const nameToTry of lookupNames) {
-        const { data: sectionData, error: sectionError } = await svc
-          .from("sections")
-          .select("id")
-          .eq("school_id", schoolId)
-          .eq("section_name", nameToTry)
-          .maybeSingle();
-
-        if (sectionError) {
-          if (sectionError.code === "PGRST116") {
-            const { data: multipleSections } = await svc
-              .from("sections")
-              .select("id")
-              .eq("school_id", schoolId)
-              .eq("section_name", nameToTry)
-              .limit(1);
-            if (multipleSections && multipleSections.length > 0) {
-              sectionId = multipleSections[0].id;
-              break;
-            }
-          } else {
-            return fail(`Section lookup error: ${sectionError.message}`);
-          }
-        } else if (sectionData) {
-          sectionId = sectionData.id;
-          break;
-        }
-      }
+    if (grade && sectionName) {
+      sectionId = await resolveSection(
+        svc,
+        schoolId,
+        sectionName,
+        grade.id,
+      );
+    } else if (!className && sectionName) {
+      // A section name such as "A" is only safe when it is unique school-wide.
+      sectionId = await resolveUniqueSection(svc, schoolId, sectionName);
     }
 
     if (!sectionId && (sectionName || className)) {
@@ -116,18 +131,7 @@ export async function handleSheetsSyncStudent(
         .eq("is_current", true)
         .maybeSingle();
 
-      let gradeId: string | null = null;
-      if (className) {
-        const { data: gradeData } = await svc
-          .from("grades")
-          .select("id")
-          .eq("school_id", schoolId)
-          .eq("grade_name", className)
-          .maybeSingle();
-        if (gradeData) {
-          gradeId = gradeData.id;
-        }
-      }
+      let gradeId: string | null = grade?.id ?? null;
 
       if (!gradeId) {
         const { data: defaultGrade } = await svc
@@ -231,7 +235,7 @@ export async function handleSheetsSyncStudent(
     // Check if student exists
     const { data: existingStudent, error: findStudentErr } = await svc
       .from("students")
-      .select("id")
+      .select("id, photo_url")
       .eq("school_id", schoolId)
       .eq("student_id_number", studentIdNumber)
       .maybeSingle();
@@ -239,12 +243,19 @@ export async function handleSheetsSyncStudent(
     if (findStudentErr) return fail(`Student lookup error: ${findStudentErr.message}`);
 
     let studentId: string;
+    const incomingPhotoUrl = nullableText(body.photo_url);
+    // Student photos are not a destructive Sheets-sync field.  A sheet row
+    // normally has no photo_url column, so preserve the existing backend
+    // reference instead of converting an omitted value into NULL.
+    const existingPhotoUrl = existingStudent
+      ? nullableText(existingStudent.photo_url)
+      : null;
     const studentData = {
       school_id: schoolId,
       first_name: firstName,
       last_name: lastName,
       student_id_number: studentIdNumber,
-      class_name: className || null,
+      class_name: (grade?.grade_name ?? className) || null,
       father_first_name: fatherFirstName || null,
       father_last_name: fatherLastName || null,
       mother_first_name: motherFirstName || null,
@@ -254,7 +265,7 @@ export async function handleSheetsSyncStudent(
       admission_date: nullableText(body.std_adm_date ?? body.admission_date) || new Date().toISOString().slice(0, 10),
       current_section_id: sectionId,
       status: text(body.status) || "active",
-      photo_url: nullableText(body.photo_url),
+      photo_url: incomingPhotoUrl || existingPhotoUrl || null,
     };
 
     if (existingStudent) {

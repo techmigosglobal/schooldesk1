@@ -347,16 +347,18 @@ export function TeacherDirectory({
                           title="View staff profile"
                           onClick={() => void openTeacher(teacher, true)}
                           disabled={loadingStaff}
+                          aria-busy={loadingStaff}
                         >
-                          <Eye size={15} />
+                          {loadingStaff ? <span className="activity-spinner" aria-hidden="true" /> : <Eye size={15} />}
                         </button>
                         <button
                           className="icon-button"
                           title="Edit staff member"
                           onClick={() => void openTeacher(teacher, false)}
                           disabled={loadingStaff}
+                          aria-busy={loadingStaff}
                         >
-                          <Pencil size={15} />
+                          {loadingStaff ? <span className="activity-spinner" aria-hidden="true" /> : <Pencil size={15} />}
                         </button>
                         <button
                           className="icon-button danger"
@@ -400,6 +402,7 @@ export function TeacherDirectory({
         <TeacherDialog
           row={dialog.row}
           readOnly={dialog.readOnly}
+          classes={classes}
           onClose={() => setDialog({ open: false })}
           onSaved={() => {
             onSaved();

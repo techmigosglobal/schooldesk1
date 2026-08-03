@@ -17,9 +17,14 @@ class NotificationService extends ChangeNotifier {
   final Map<String, bool> _settings = {};
   bool _loaded = false;
   Future<void>? _loadFuture;
+  int _currentPage = 1;
+  bool _hasMore = false;
+  bool _loadingMore = false;
 
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
   int get totalUnread => _notifications.where((n) => !n.isRead).length;
+  bool get hasMore => _hasMore;
+  bool get isLoadingMore => _loadingMore;
 
   int getBadgeCount(String category) =>
       _notifications.where((n) => n.category == category && !n.isRead).length;
@@ -39,8 +44,18 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> _load() async {
     try {
-      final rows = await _api.getNotifications();
-      _notifications = rows.map(AppNotification.fromJson).toList();
+      final page = await _api.getNotificationsPage(page: 1);
+      _notifications = page.items.map(AppNotification.fromJson).toList();
+      _currentPage = page.page;
+      _hasMore = page.hasMore;
+      try {
+        final preferences = await _api.getNotificationPreferences();
+        _hydrateSettings(preferences);
+      } on Object catch (_) {
+        // Notification history remains usable if preference hydration is
+        // temporarily unavailable; defaults remain enabled until the next load.
+        _settings.clear();
+      }
       _loaded = true;
     } finally {
       _loadFuture = null;
@@ -54,6 +69,25 @@ class NotificationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    _loadingMore = true;
+    try {
+      final page = await _api.getNotificationsPage(page: _currentPage + 1);
+      final existingIds = _notifications.map((item) => item.id).toSet();
+      _notifications.addAll(
+        page.items
+            .map(AppNotification.fromJson)
+            .where((item) => existingIds.add(item.id)),
+      );
+      _currentPage = page.page;
+      _hasMore = page.hasMore;
+      notifyListeners();
+    } finally {
+      _loadingMore = false;
+    }
+  }
+
   Future<void> addNotification(AppNotification notification) async {
     _notifications.insert(0, notification);
     notifyListeners();
@@ -61,11 +95,7 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> markAsRead(String id) async {
     if (!id.startsWith('transient_')) {
-      try {
-        await _api.markNotificationRead(id);
-      } on Object catch (_) {
-        // If the backend fails, still mark it locally so the user isn't stuck
-      }
+      await _api.markNotificationRead(id);
     }
     final idx = _notifications.indexWhere((n) => n.id == id);
     if (idx >= 0) {
@@ -75,18 +105,13 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<void> markAllAsRead(String role) async {
-    final targets = _notifications.where(
-      (n) => _isVisibleToRole(n, role) && !n.isRead,
+    final targets = _notifications
+        .where((n) => _isVisibleToRole(n, role) && !n.isRead)
+        .toList();
+    final hasPersistentTargets = targets.any(
+      (notification) => !notification.id.startsWith('transient_'),
     );
-    for (final notification in targets) {
-      if (!notification.id.startsWith('transient_')) {
-        try {
-          await _api.markNotificationRead(notification.id);
-        } on Object catch (_) {
-          // Ignore individual failures to ensure all are marked locally
-        }
-      }
-    }
+    if (hasPersistentTargets) await _api.markAllNotificationsRead(role: role);
     _notifications = _notifications
         .map((n) => _isVisibleToRole(n, role) ? n.copyWith(isRead: true) : n)
         .toList();
@@ -94,13 +119,36 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<void> deleteNotification(String id) async {
+    if (!id.startsWith('transient_')) await _api.deleteNotification(id);
     _notifications.removeWhere((n) => n.id == id);
     notifyListeners();
   }
 
   Future<void> updateSetting(String key, bool value) async {
+    final previous = _settings[key];
     _settings[key] = value;
     notifyListeners();
+    try {
+      await _api.updateNotificationPreferences({key: value});
+    } on Object catch (_) {
+      if (previous == null) {
+        _settings.remove(key);
+      } else {
+        _settings[key] = previous;
+      }
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  void _hydrateSettings(Map<String, dynamic> preferences) {
+    _settings
+      ..clear()
+      ..addEntries(
+        const ['pending_approvals', 'fee_reminders', 'general_alerts']
+            .where((key) => preferences[key] is bool)
+            .map((key) => MapEntry(key, preferences[key] as bool)),
+      );
   }
 
   List<AppNotification> getNotificationsForRole(String role) {
@@ -270,7 +318,7 @@ class NotificationService extends ChangeNotifier {
     required String studentName,
     bool hasAttachment = false,
   }) async {
-    final title = 'Homework Submitted';
+    final title = 'Dairy Submitted';
     final body = [
       if (studentName.trim().isNotEmpty) studentName.trim(),
       if (homeworkTitle.trim().isNotEmpty) homeworkTitle.trim(),
@@ -300,7 +348,7 @@ class NotificationService extends ChangeNotifier {
     required String comment,
     required String studentId,
   }) async {
-    final title = 'Homework Feedback';
+    final title = 'Dairy Feedback';
     final cleanComment = comment.trim();
     final body = cleanComment.isEmpty
         ? 'Teacher added feedback for ${homeworkTitle.trim().isEmpty ? 'homework' : homeworkTitle.trim()}.'
@@ -362,7 +410,8 @@ class NotificationService extends ChangeNotifier {
     required String paymentMode,
   }) async {
     final title = 'Fee Payment Received';
-    final body = '$studentName has submitted a fee payment of ₹$amount via $paymentMode.';
+    final body =
+        '$studentName has submitted a fee payment of ₹$amount via $paymentMode.';
 
     await addNotification(
       AppNotification.transient(

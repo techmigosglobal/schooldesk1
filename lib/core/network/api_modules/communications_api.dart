@@ -143,11 +143,23 @@ extension BackendCommunicationsApi on BackendApiClient {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getNotifications() async {
+  Future<NotificationPage> getNotificationsPage({
+    int page = 1,
+    int pageSize = 50,
+  }) async {
     try {
-      final response = await SchoolDeskApi.instance.client.notifications();
-      if (response.success == true) {
-        return _asListMap(response.data).map((notification) {
+      final response = await _dio.get(
+        '/notifications',
+        queryParameters: {'page': page, 'page_size': pageSize},
+      );
+      final envelope = _asMap(response.data);
+      if (envelope['success'] == true) {
+        final rawData = envelope['data'];
+        final data = rawData is Map
+            ? _asMap(rawData)
+            : const <String, dynamic>{};
+        final rows = rawData is Map ? data['items'] : rawData;
+        final items = _asListMap(rows).map((notification) {
           final normalized = Map<String, dynamic>.from(notification);
           normalized['id'] ??= normalized['notification_id'];
           normalized['body'] ??= normalized['message'];
@@ -155,18 +167,30 @@ extension BackendCommunicationsApi on BackendApiClient {
           normalized['user_id'] ??= normalized['target_user_id'];
           return normalized;
         }).toList();
+        return NotificationPage(
+          items: items,
+          page: page,
+          pageSize: pageSize,
+          hasMore: rawData is Map
+              ? data['has_more'] == true
+              : items.length == pageSize,
+        );
       }
       throw ServerException(
-        message: response.error ?? 'Failed to get notifications',
+        message: envelope['error'] ?? 'Failed to get notifications',
       );
     } on AuthException catch (_) {
       // Auth token may be expired or cleared by a concurrent request.
       // Return empty list instead of crashing — the user will see the
       // login screen shortly if the session is truly expired.
-      return const [];
+      return NotificationPage.empty(page: page, pageSize: pageSize);
     } on DioException catch (e) {
       throw _handleError(e);
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getNotifications() async {
+    return (await getNotificationsPage()).items;
   }
 
   Future<List<Map<String, dynamic>>> getCommunications({
@@ -294,6 +318,39 @@ extension BackendCommunicationsApi on BackendApiClient {
       if (response.success != true) {
         throw ServerException(
           message: response.error ?? 'Failed to mark notification as read',
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> markAllNotificationsRead({String role = ''}) async {
+    try {
+      final response = await _dio.post(
+        '/notifications/mark-read',
+        data: {
+          if (role.trim().isNotEmpty) 'target_role': role.trim().toLowerCase(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] != true) {
+        throw ServerException(
+          message: data['error'] ?? 'Failed to mark notifications as read',
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> deleteNotification(String notificationId) async {
+    try {
+      final response = await _dio.delete('/notifications/$notificationId');
+      final data = _asMap(response.data);
+      if (data['success'] != true) {
+        throw ServerException(
+          message: data['error'] ?? 'Failed to delete notification',
         );
       }
     } on DioException catch (e) {
@@ -522,4 +579,22 @@ extension BackendCommunicationsApi on BackendApiClient {
       throw _handleError(e);
     }
   }
+}
+
+class NotificationPage {
+  const NotificationPage({
+    required this.items,
+    required this.page,
+    required this.pageSize,
+    required this.hasMore,
+  });
+
+  const NotificationPage.empty({required this.page, required this.pageSize})
+    : items = const [],
+      hasMore = false;
+
+  final List<Map<String, dynamic>> items;
+  final int page;
+  final int pageSize;
+  final bool hasMore;
 }

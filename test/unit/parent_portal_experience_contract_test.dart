@@ -21,7 +21,7 @@ void main() {
     expect(screen, contains("value: _percentage(child['attendance_pct'])"));
     expect(screen, contains("value: _metricNumber(child['homework_due'])"));
     expect(screen, contains("label: 'Unread Messages'"));
-    expect(screen, contains('ParentChildSelector('));
+    expect(screen, contains('_ParentChildTopSwitcher('));
   });
 
   test('parent home keeps a tall feed and compact overview cards', () {
@@ -36,24 +36,16 @@ void main() {
     expect(screen, contains('height: 72'));
   });
 
-  test('Book & Kit remains one-time while tuition keeps month selection', () {
+  test('parent payments remain balance-first and fee-type governed', () {
     final paymentFlow = source(
       'lib/features/finance/presentation/screens/parent_hub/parent_payment_flow.dart',
     );
     final handler = source('supabase/functions/api/handlers/fees.ts');
 
-    expect(paymentFlow, contains("if (_isTuition) ...["));
-    expect(
-      paymentFlow,
-      contains('bool get _isTuition => isTuitionInvoice(_selectedFee)'),
-    );
-    expect(paymentFlow, contains("'\$_selectedFeeLabel: one-time payment'"));
-    expect(paymentFlow, isNot(contains("'Book & Kit: one-time payment'")));
-    expect(
-      paymentFlow,
-      contains('Month selection is only available for tuition.'),
-    );
-    expect(handler, contains('This fee is one-time only and cannot be split'));
+    expect(paymentFlow, contains('double get _remainingBalance'));
+    expect(paymentFlow, contains('amount > _remainingBalance'));
+    expect(paymentFlow, contains('createFeePaymentIntent'));
+    expect(handler, contains('billing_mode'));
   });
 
   test('shared chrome retains Help with parent-local toolbar actions', () {

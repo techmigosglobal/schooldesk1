@@ -218,9 +218,9 @@ export async function handleDashboard(
       parentPaymentRequests,
       approvalRequests,
     ] = await Promise.all([
-      svc.from("students").select("id, status, current_section_id", {
+      svc.from("students").select("id, status, current_section_id, is_test_account", {
         count: "exact",
-      }).eq("school_id", school),
+      }).eq("school_id", school).eq("is_test_account", false),
       svc.from("staff").select("id", { count: "exact", head: true }).eq(
         "school_id",
         school,

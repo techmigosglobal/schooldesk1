@@ -237,11 +237,15 @@ void main() {
 
     expect(client, contains("_dio.put('/students/\$id'"));
     expect(students, contains('return cors({'));
-    expect(students, contains('data: data ?? []'));
+    expect(students, contains('data: directory.data'));
     expect(students, contains('total: count ?? 0'));
     expect(students, contains('page_size: size'));
     expect(students, contains('method === "PATCH" || method === "PUT"'));
     expect(students, contains('nullableText(payload.current_section_id)'));
+    expect(students, contains('["transferred", "transfer"]'));
+    expect(students, contains('["withdrawn", "inactive"]'));
+    expect(students, contains('parent_accounts: parentAccounts'));
+    expect(students, contains('parent_user_id: text(links[0]?.parent_user_id) || null'));
   });
 
   test(

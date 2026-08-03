@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
@@ -1703,6 +1704,11 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           {'description': 'Fee payment', 'amount': amount, 'status': 'Paid'},
         ];
       }
+      final school = await BackendApiClient.instance.getCurrentSchool();
+      final assets = await Future.wait([
+        _networkImageBytes(_textValue(school['logo_url'])),
+        _networkImageBytes(_textValue(school['authorized_signature_url'])),
+      ]);
       final bytes = await pdfService.generateFeeReceipt(
         receiptNo: _textValue(payment['receipt'], fallback: 'RCP'),
         studentName: _textValue(payment['name'], fallback: 'Student'),
@@ -1716,6 +1722,33 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         paymentMode: _textValue(payment['mode'], fallback: 'Recorded'),
         paymentDate:
             DateTime.tryParse(_textValue(payment['date'])) ?? DateTime.now(),
+        transactionReference: _textValue(
+          payment['reference_number'] ?? payment['transaction_id'],
+        ),
+        admissionNo: _textValue(
+          payment['admission_number'] ?? payment['student_id_number'],
+          fallback: _textValue(payment['roll'], fallback: '-'),
+        ),
+        academicYear: _textValue(
+          payment['academic_year_label'] ?? payment['academic_year_name'],
+        ),
+        feePeriod: _textValue(
+          payment['fee_period'] ?? payment['billing_period'] ?? payment['term'],
+        ),
+        counterNo: _textValue(payment['counter_no']),
+        bankName: _textValue(payment['bank_name']),
+        schoolName: _textValue(school['name'], fallback: 'School'),
+        schoolAddress: [
+          school['address'],
+          school['address_line1'],
+          school['address_line2'],
+          school['city'],
+          school['state'],
+          school['postal_code'],
+        ].map(_textValue).where((value) => value.isNotEmpty).toSet().join(', '),
+        schoolLogo: assets[0],
+        authorizedSignature: assets[1],
+        authorizedSignatoryName: _textValue(school['principal_name']),
       );
       if (!mounted) return;
       await pdfService.previewDocument(context, bytes, 'Fee Receipt');
@@ -1764,6 +1797,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       }
 
       final bytes = await pdfService.generateFeeReceipt(
+        documentKind: FeeDocumentKind.feeInvoice,
         receiptNo: _textValue(invoice['invoice_number'], fallback: 'INV'),
         studentName: _textValue(invoice['name'], fallback: 'Student'),
         className: _textValue(invoice['class'], fallback: 'Class'),
@@ -1843,6 +1877,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
 
       final pdfService = PdfService.getInstance();
       final bytes = await pdfService.generateFeeReceipt(
+        documentKind: FeeDocumentKind.accountStatement,
         receiptNo: 'RPT-${DateTime.now().millisecondsSinceEpoch}',
         studentName: 'All Students',
         className: 'All Classes',
@@ -2035,6 +2070,17 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     }
     if (lower.contains('reject')) return Colors.red;
     return Colors.orange;
+  }
+
+  Future<Uint8List?> _networkImageBytes(String url) async {
+    if (url.trim().isEmpty) return null;
+    try {
+      return (await NetworkAssetBundle(
+        Uri.parse(url),
+      ).load(url)).buffer.asUint8List();
+    } on Object {
+      return null;
+    }
   }
 
   void _snack(String message, {bool success = false}) {

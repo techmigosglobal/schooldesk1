@@ -638,6 +638,19 @@ class StudentModel {
 
   factory StudentModel.fromJson(Map<String, dynamic> json) {
     final guardians = _guardianList(json);
+    final parentLinks = _asListMap(json['parent_student_links']);
+    final linkedParentAccounts = parentLinks
+        .map((link) => _asMap(link['parent']))
+        .where((parent) => parent.isNotEmpty)
+        .toList();
+    final parentAccounts = _asListMap(json['parent_accounts']);
+    final firstParentLink = parentLinks.isNotEmpty ? parentLinks.first : null;
+    final linkedParentId = firstParentLink == null
+        ? null
+        : '${firstParentLink['parent_user_id'] ?? ''}'.trim();
+    final currentSection = _asMap(json['current_section']).isNotEmpty
+        ? _asMap(json['current_section'])
+        : _asMap(json['section']);
     final primaryGuardian = _asMap(json['primary_guardian']).isNotEmpty
         ? _asMap(json['primary_guardian'])
         : guardians.isNotEmpty
@@ -658,13 +671,17 @@ class StudentModel {
       activeEnrollmentId: '${json['active_enrollment_id'] ?? ''}',
       status: json['status'] as String? ?? 'active',
       photoUrl: _photoUrlFromJson(json),
-      parentUserId: json['parent_user_id'] as String?,
+      parentUserId:
+          (json['parent_user_id'] as String?) ??
+          (linkedParentId?.isEmpty == true ? null : linkedParentId),
       guardians: guardians,
       documents: _asListMap(json['documents']),
-      parentAccounts: _asListMap(json['parent_accounts']),
+      parentAccounts: parentAccounts.isNotEmpty
+          ? parentAccounts
+          : linkedParentAccounts,
       primaryGuardian: primaryGuardian,
       medicalRecord: _asMap(json['medical_record']),
-      currentSection: _asMap(json['current_section']),
+      currentSection: currentSection,
       attendanceSummary: _asMap(json['attendance_summary']),
       feeSummary: _asMap(json['fee_summary']),
       performanceSummary: _asMap(json['performance_summary']),

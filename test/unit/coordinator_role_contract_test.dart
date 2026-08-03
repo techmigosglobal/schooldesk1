@@ -33,7 +33,6 @@ void main() {
         AppRoutes.principalPaymentRequests,
         AppRoutes.principalFees,
         AppRoutes.academicYearFeesExport,
-        AppRoutes.legacyPrincipalFeeReports,
       ]) {
         expect(
           RouteAccessGuard.isRoleAllowedFor(

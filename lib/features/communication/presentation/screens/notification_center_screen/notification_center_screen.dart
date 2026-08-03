@@ -73,6 +73,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       if (forceRefresh || _isSchoolLeader) {
         await _service?.refresh();
       }
+      await PushNotificationService.instance.syncApplicationBadge(
+        count: _service?.totalUnread,
+      );
     } on Object catch (error) {
       _error = error.toString();
     }
@@ -281,7 +284,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     return switch (role.trim().toLowerCase()) {
       'teacher' => const [
         Tab(text: 'All'),
-        Tab(text: 'Homework'),
+        Tab(text: 'Dairy'),
         Tab(text: 'Birthdays'),
         Tab(text: 'Health'),
         Tab(text: 'Circulars'),
@@ -397,6 +400,25 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                       ),
                       SizedBox(height: tokens.spacing.sm),
                     ],
+                  if ((_service?.hasMore ?? false) && items.isNotEmpty) ...[
+                    SizedBox(height: tokens.spacing.sm),
+                    OutlinedButton.icon(
+                      onPressed: _service?.isLoadingMore == true
+                          ? null
+                          : _loadMore,
+                      icon: _service?.isLoadingMore == true
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.expand_more_rounded),
+                      label: Text(
+                        _service?.isLoadingMore == true
+                            ? 'Loading…'
+                            : 'Load more notifications',
+                      ),
+                    ),
+                  ],
                 ],
               ),
       ),
@@ -447,6 +469,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     setState(() => _markingAllRead = true);
     try {
       await _service?.markAllAsRead(role);
+      await PushNotificationService.instance.syncApplicationBadge(
+        count: _service?.totalUnread,
+      );
     } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -484,6 +509,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     }
     final haystack = '${item.title} ${item.body}'.toLowerCase();
     return haystack.contains('homework') ||
+        haystack.contains('dairy') ||
         haystack.contains('attendance') ||
         haystack.contains('academ') ||
         haystack.contains('leave') ||
@@ -501,7 +527,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     if (item.category == NotificationCategory.healthAlert) {
       return Icons.medical_services_rounded;
     }
-    if (text.contains('homework')) return Icons.assignment_rounded;
+    if (text.contains('homework') || text.contains('dairy')) {
+      return Icons.assignment_rounded;
+    }
     if (text.contains('leave')) return Icons.verified_user_rounded;
     if (text.contains('attendance')) return Icons.bar_chart_rounded;
     return Icons.campaign_rounded;
@@ -518,7 +546,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     if (item.category == NotificationCategory.healthAlert) {
       return const Color(0xFFFF9800);
     }
-    if (text.contains('homework')) return const Color(0xFF2563EB);
+    if (text.contains('homework') || text.contains('dairy')) {
+      return const Color(0xFF2563EB);
+    }
     if (text.contains('leave')) return const Color(0xFF16A34A);
     if (text.contains('attendance')) return const Color(0xFF16A34A);
     return const Color(0xFF2563EB);
@@ -637,6 +667,23 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                 ),
               ),
             ),
+          if ((_service?.hasMore ?? false) && items.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _service?.isLoadingMore == true ? null : _loadMore,
+              icon: _service?.isLoadingMore == true
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.expand_more_rounded),
+              label: Text(
+                _service?.isLoadingMore == true
+                    ? 'Loading…'
+                    : 'Load more notifications',
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
         ],
       ),
@@ -691,6 +738,23 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     }
   }
 
+  Future<void> _loadMore() async {
+    final service = _service;
+    if (service == null || service.isLoadingMore || !service.hasMore) return;
+    try {
+      await service.loadMore();
+      if (mounted) setState(() {});
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not load more notifications: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _openNotification(AppNotification notif) async {
     final target = NotificationRouteResolver.resolve(
       data: notif.routingData,
@@ -707,6 +771,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     if (notification.isRead) return;
     try {
       await _service?.markAsRead(notification.id);
+      await PushNotificationService.instance.syncApplicationBadge(
+        count: _service?.totalUnread,
+      );
       if (mounted) setState(() {});
     } on Object catch (error) {
       if (!mounted) return;

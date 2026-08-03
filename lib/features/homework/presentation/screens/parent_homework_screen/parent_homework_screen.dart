@@ -173,7 +173,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     );
     if (_loading) {
       return SchoolDeskModuleScaffold(
-        title: 'Homework & Assignments',
+        title: 'Dairy & Assignments',
         subtitle: 'Track pending and submitted work for linked children',
         drawer: drawer,
         body: const Center(child: CircularProgressIndicator()),
@@ -181,7 +181,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     }
     if (_error != null) {
       return SchoolDeskModuleScaffold(
-        title: 'Homework & Assignments',
+        title: 'Dairy & Assignments',
         subtitle: 'Track pending and submitted work for linked children',
         drawer: drawer,
         body: Center(
@@ -204,7 +204,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     }
     if (_children.isEmpty) {
       return SchoolDeskModuleScaffold(
-        title: 'Homework & Assignments',
+        title: 'Dairy & Assignments',
         subtitle: 'Track pending and submitted work for linked children',
         drawer: drawer,
         body: const Center(
@@ -219,7 +219,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       );
     }
     return SchoolDeskModuleScaffold(
-      title: 'Homework & Assignments',
+      title: 'Dairy & Assignments',
       subtitle: 'Track pending and submitted work for linked children',
       drawer: drawer,
       floatingActionButton: const DashboardFabWidget(
@@ -359,7 +359,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'No homework published',
+                    'No dairy published',
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       color: context.appTheme.muted,
@@ -388,7 +388,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     final isUrgent = hw['urgent'] == true;
     final title = _text(
       hw['title'],
-      fallback: 'Homework details not published',
+      fallback: 'Dairy details not published',
     );
     final subject = _text(hw['subject']);
     final deadline = _text(hw['deadline']);
@@ -529,7 +529,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
               (hw['attachments'] as List).isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
-              'Homework Attachments:',
+              'Dairy Attachments:',
               style: GoogleFonts.dmSans(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -632,8 +632,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                 icon: const Icon(Icons.upload_file_rounded, size: 18),
                 label: Text(
                   _text(hw['submission_status']) == 'needs_revision'
-                      ? 'Resubmit Homework'
-                      : 'Submit Homework',
+                      ? 'Resubmit Dairy'
+                      : 'Submit Dairy',
                 ),
               ),
             ),

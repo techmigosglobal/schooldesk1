@@ -24,12 +24,18 @@ function nullableText(value: unknown): string | null {
   const clean = text(value);
   return clean.length > 0 ? clean : null;
 }
-// Normalise status: only accepted values are active/inactive/transfer/pending.
-// Any near-miss typo (e.g. "acive") falls back to "active".
+// Normalise status to the values shared by Flutter, the website, and the
+// database workflows. Older clients used the longer display labels, so keep
+// those aliases compatible at the API boundary.
 const VALID_STATUSES = new Set(["active", "inactive", "transfer", "pending"]);
 function normaliseStatus(raw: unknown): string {
   const s = text(raw).toLowerCase();
-  return VALID_STATUSES.has(s) ? s : "active";
+  const canonical = new Map([
+    ["transferred", "transfer"],
+    ["withdrawn", "inactive"],
+    ["acive", "active"],
+  ]).get(s) ?? s;
+  return VALID_STATUSES.has(canonical) ? canonical : "active";
 }
 
 function studentPayload(body: Record<string, unknown>, school: string) {
@@ -135,12 +141,19 @@ async function attachParentAccounts(
       const links = Array.isArray(student.parent_student_links)
         ? student.parent_student_links as Record<string, unknown>[]
         : [];
+      const hydratedLinks = links.map((link) => ({
+        ...link,
+        parent: parentById.get(text(link.parent_user_id)) ?? null,
+      }));
+      const parentAccounts = hydratedLinks
+        .map((link) => link.parent)
+        .filter((parent) => Boolean(parent && typeof parent === "object")) as
+        Record<string, unknown>[];
       return {
         ...student,
-        parent_student_links: links.map((link) => ({
-          ...link,
-          parent: parentById.get(text(link.parent_user_id)) ?? null,
-        })),
+        parent_user_id: text(links[0]?.parent_user_id) || null,
+        parent_accounts: parentAccounts,
+        parent_student_links: hydratedLinks,
       };
     }),
     error: null,
@@ -200,7 +213,11 @@ async function attachFeeSummaries(
 
   const { data: invoices, error } = await svc.from("fee_invoices").select(
     "student_id, total_amount, discount_amount, paid_amount, balance, net_amount, status",
-  ).eq("school_id", school).in("student_id", studentIds);
+  ).eq("school_id", school).in("student_id", studentIds).not(
+    "status",
+    "in",
+    "(cancelled,void,voided)",
+  );
   if (error) return { data: students, error };
 
   const summaryById = new Map<string, Record<string, unknown>>();
@@ -479,10 +496,11 @@ export async function handleStudents(
   if (id && sub === "fees" && method === "GET") {
     const { data, error } = await svc.from("fee_invoices").select(
       "*, fee_invoice_items(*)",
-    ).eq("school_id", school).eq("student_id", id).order(
-      "invoice_date",
-      { ascending: false },
-    );
+    ).eq("school_id", school).eq("student_id", id).not(
+      "status",
+      "in",
+      "(cancelled,void,voided)",
+    ).order("invoice_date", { ascending: false });
     if (error) return fail(error.message);
     return ok(data ?? []);
   }
@@ -494,6 +512,9 @@ export async function handleStudents(
     let q = svc.from("students").select(studentDirectorySelect, {
       count: "exact",
     }).eq("school_id", school).range((page - 1) * size, page * size - 1);
+    if (url.searchParams.get("include_test_accounts") !== "true") {
+      q = q.eq("is_test_account", false);
+    }
     if (url.searchParams.get("section_id")) {
       q = q.eq("current_section_id", url.searchParams.get("section_id")!);
     }

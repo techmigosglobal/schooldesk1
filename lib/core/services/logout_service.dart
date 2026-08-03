@@ -5,11 +5,9 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/services/notification_topic_manager.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/demo_sandbox_service.dart';
-import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class LogoutService {
   LogoutService._();
@@ -47,9 +45,8 @@ class LogoutService {
 
   /// Signs the user out and navigates to the landing page.
   ///
-  /// Navigation happens immediately; background cleanup (token revocation,
-  /// topic cleanup, backend logout) runs fire-and-forget so the UI is never
-  /// blocked by slow network calls.
+  /// Navigation happens immediately; backend logout runs fire-and-forget so
+  /// the UI is never blocked by slow network calls.
   static Future<void> signOut(BuildContext context) async {
     if (_signingOut) return;
     _signingOut = true;
@@ -115,15 +112,8 @@ class LogoutService {
   }
 
   static void _backgroundCleanup({String? refreshToken}) {
-    // Fire-and-forget: unsubscribe topics and notify the backend.
+    // Fire-and-forget: notify the backend.
     Future(() async {
-      try {
-        for (final role in SchoolDeskRole.values) {
-          await NotificationTopicManager().cleanupTopicsForRole(role);
-        }
-      } on Object catch (_) {
-        // Ignore — topic cleanup is best-effort.
-      }
       // Notify the backend about the logout using the saved refresh token.
       // We cannot use BackendApiClient.instance.logout() here because
       // the auth token has already been cleared.

@@ -307,8 +307,8 @@ export function StudentDirectory({
                       </td>
                       <td><span className={`student-status ${status}`}>{statusLabel(status)}</span></td>
                       <td className="actions-cell">
-                        <button className="icon-button" title="View student profile" onClick={() => void openStudent(student, true)} disabled={loadingStudent}><Eye size={15} /></button>
-                        <button className="icon-button" title="Edit student" onClick={() => void openStudent(student, false)} disabled={loadingStudent}><Pencil size={15} /></button>
+                        <button className="icon-button" title="View student profile" onClick={() => void openStudent(student, true)} disabled={loadingStudent} aria-busy={loadingStudent}>{loadingStudent ? <span className="activity-spinner" aria-hidden="true" /> : <Eye size={15} />}</button>
+                        <button className="icon-button" title="Edit student" onClick={() => void openStudent(student, false)} disabled={loadingStudent} aria-busy={loadingStudent}>{loadingStudent ? <span className="activity-spinner" aria-hidden="true" /> : <Pencil size={15} />}</button>
                         <button className="icon-button danger" title="Delete student" onClick={() => setDeleteTarget(student)}><Trash2 size={15} /></button>
                       </td>
                     </tr>

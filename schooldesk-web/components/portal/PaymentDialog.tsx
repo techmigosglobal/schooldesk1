@@ -26,6 +26,7 @@ export function PaymentDialog({
   );
 
   async function submit(form: FormData) {
+    if (saving) return;
     setSaving(true);
     setError("");
     try {
@@ -68,7 +69,15 @@ export function PaymentDialog({
 
   return (
     <Dialog kicker="Payment" title="Record fee payment" onClose={onClose}>
-      <form action={submit} className="ops-detail-form">
+      <form
+        className="ops-detail-form"
+        aria-busy={saving}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (saving) return;
+          void submit(new FormData(event.currentTarget));
+        }}
+      >
         <div className="form-grid">
           {preselectedInvoiceId ? (() => {
             const pre = invoices.find((i) => stringValue(i.id) === preselectedInvoiceId);

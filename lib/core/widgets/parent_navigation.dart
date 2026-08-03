@@ -154,7 +154,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
               index: ParentNav.homework,
               icon: Icons.assignment_outlined,
               activeIcon: Icons.assignment_rounded,
-              label: 'Homework',
+              label: 'Dairy',
               route: AppRoutes.parentHomework,
             ),
 

@@ -24,7 +24,7 @@ export function ClassDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [tab, setTab] = useState<"general" | "subjects">("general");
+  const [tab, setTab] = useState<"general" | "subjects" | "students">("general");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [refs, setRefs] = useState<{
@@ -112,7 +112,7 @@ export function ClassDialog({
   }
 
   async function submit(form: FormData) {
-    if (readOnly) return;
+    if (readOnly || saving) return;
     setSaving(true);
     setError("");
     try {
@@ -162,6 +162,7 @@ export function ClassDialog({
 
   const initialGradeName = stringValue(row?.grade_name);
   const initialSectionName = stringValue(row?.section_name ?? row?.name);
+  const students = Array.isArray(row?.students) ? row.students as Row[] : [];
 
   return (
     <Dialog
@@ -184,9 +185,24 @@ export function ClassDialog({
         >
           Subject Curriculum ({subjectMappings.length})
         </button>
+        <button
+          type="button"
+          className={tab === "students" ? "active" : ""}
+          onClick={() => setTab("students")}
+        >
+          Students ({students.length})
+        </button>
       </div>
 
-      <form action={submit} className="ops-detail-form">
+      <form
+        className="ops-detail-form"
+        aria-busy={saving}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (saving) return;
+          void submit(new FormData(event.currentTarget));
+        }}
+      >
         {/* preserve sort order so edits don't reset all sections to grade_number=1 */}
         <input type="hidden" name="grade_number" value={Number(row?.grade_number ?? 1)} />
         {tab === "general" ? (
@@ -279,7 +295,7 @@ export function ClassDialog({
               </select>
             </label>
           </div>
-        ) : (
+        ) : tab === "subjects" ? (
           <div style={{ display: "grid", gap: "1rem" }}>
             {!readOnly && (
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -356,6 +372,57 @@ export function ClassDialog({
             ) : (
               <p style={{ color: "#718592", fontSize: "0.85rem", padding: "1rem 0" }}>
                 No subjects assigned to this class section yet.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "0.7rem" }}>
+            <p style={{ margin: 0, color: "#718592", fontSize: "0.85rem" }}>
+              Active students currently assigned to {initialGradeName || "this class"} - {initialSectionName || "this section"}.
+            </p>
+            {students.length ? students.map((student, index) => {
+              const name = [stringValue(student.first_name), stringValue(student.last_name)]
+                .filter(Boolean)
+                .join(" ") || "Unnamed student";
+              const identifier = stringValue(student.student_id_number || student.admission_number);
+              return (
+                <div
+                  key={stringValue(student.id) || `${name}-${index}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    padding: "0.7rem 0.8rem",
+                    background: "#f9fcfd",
+                    border: "1px solid #dce8ee",
+                    borderRadius: "10px",
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: "50%",
+                      display: "grid",
+                      placeItems: "center",
+                      background: "#e7f1fa",
+                      color: "#0e5ea8",
+                      fontWeight: 800,
+                      fontSize: "0.78rem",
+                    }}
+                  >
+                    {name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span style={{ display: "grid", gap: "0.15rem" }}>
+                    <b>{name}</b>
+                    {identifier && <small style={{ color: "#718592" }}>ID: {identifier}</small>}
+                  </span>
+                </div>
+              );
+            }) : (
+              <p style={{ color: "#718592", fontSize: "0.85rem", padding: "1rem 0" }}>
+                No active students are currently assigned to this class section.
               </p>
             )}
           </div>

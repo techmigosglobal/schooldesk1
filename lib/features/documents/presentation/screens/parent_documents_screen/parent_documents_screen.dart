@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:printing/printing.dart';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -132,6 +132,27 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
                     row['payment_method'] ?? row['payment_mode'] ?? '',
                 'paymentDate':
                     row['paid_at'] ?? row['payment_date'] ?? row['created_at'],
+                'admissionNo':
+                    row['admission_number'] ??
+                    child['admission_number'] ??
+                    child['student_id_number'],
+                'academicYear':
+                    row['academic_year_label'] ??
+                    row['academic_year_name'] ??
+                    row['academic_year'],
+                'feePeriod':
+                    row['fee_period'] ??
+                    row['billing_period'] ??
+                    row['installment'] ??
+                    row['term'],
+                'counterNo': row['counter_no'],
+                'bankName': row['bank_name'],
+                'transactionRef':
+                    row['transaction_ref'] ??
+                    row['transaction_id'] ??
+                    row['reference_number'],
+                'concessionAmount':
+                    row['concession_amount'] ?? row['discount_amount'] ?? 0,
                 'studentName':
                     child['name'] ??
                     '${child['first_name'] ?? ''} ${child['last_name'] ?? ''}'
@@ -227,6 +248,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
         [
               _school['address'],
               _school['address_line1'],
+              _school['address_line2'],
               _school['city'],
               _school['state'],
               _school['postal_code'],
@@ -237,6 +259,10 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
             .join(', ');
     final paymentDate =
         DateTime.tryParse('${doc['paymentDate'] ?? ''}') ?? DateTime.now();
+    final assets = await Future.wait([
+      _networkImageBytes('${_school['logo_url'] ?? ''}'),
+      _networkImageBytes('${_school['authorized_signature_url'] ?? ''}'),
+    ]);
 
     final pdfBytes = await pdfService.generateFeeReceipt(
       receiptNo: doc['receiptNo'] as String? ?? '${doc['id'] ?? ''}',
@@ -254,12 +280,33 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
       paymentDate: paymentDate,
       schoolName: schoolName.isEmpty ? 'School' : schoolName,
       schoolAddress: schoolAddress,
+      schoolLogo: assets[0],
+      authorizedSignature: assets[1],
+      authorizedSignatoryName: '${_school['principal_name'] ?? ''}'.trim(),
+      transactionReference: '${doc['transactionRef'] ?? ''}'.trim(),
+      admissionNo: '${doc['admissionNo'] ?? rollNo}'.trim(),
+      academicYear: '${doc['academicYear'] ?? ''}'.trim(),
+      feePeriod: '${doc['feePeriod'] ?? ''}'.trim(),
+      counterNo: '${doc['counterNo'] ?? ''}'.trim(),
+      bankName: '${doc['bankName'] ?? ''}'.trim(),
+      concessionAmount: (doc['concessionAmount'] as num?)?.toDouble() ?? 0,
     );
 
     await Printing.layoutPdf(
       onLayout: (_) async => Uint8List.fromList(pdfBytes),
       name: 'FeeReceipt_${childName}_$termLabel',
     );
+  }
+
+  Future<Uint8List?> _networkImageBytes(String url) async {
+    if (url.trim().isEmpty) return null;
+    try {
+      return (await NetworkAssetBundle(
+        Uri.parse(url),
+      ).load(url)).buffer.asUint8List();
+    } on Object {
+      return null;
+    }
   }
 
   Future<void> _deleteStudentDoc(String studentId, String docId) async {

@@ -141,7 +141,7 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
               DropdownMenuItem(value: 'users', child: Text('Users')),
               DropdownMenuItem(value: 'students', child: Text('Students')),
               DropdownMenuItem(value: 'staff', child: Text('Staff')),
-              DropdownMenuItem(value: 'homework', child: Text('Homework')),
+              DropdownMenuItem(value: 'homework', child: Text('Dairy')),
               DropdownMenuItem(value: 'fees', child: Text('Fees')),
               DropdownMenuItem(value: 'attendance', child: Text('Attendance')),
               DropdownMenuItem(
@@ -359,7 +359,7 @@ class _AuditLogPresentation {
       'events': 'Events',
       'fees': 'Fees',
       'guardians': 'Parents',
-      'homework': 'Homework',
+      'homework': 'Dairy',
       'staff': 'Staff',
       'students': 'Students',
       'users': 'Accounts',

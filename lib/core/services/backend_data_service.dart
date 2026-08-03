@@ -82,6 +82,14 @@ class BackendDataService {
         final students = await _fetchAll(
           (page, pageSize) => _api.getStudents(page: page, pageSize: pageSize),
         );
+        Map<String, SectionModel> sectionsById = const {};
+        try {
+          final sections = await _api.getSections();
+          sectionsById = {for (final section in sections) section.id: section};
+        } on Object {
+          // The embedded student section remains a valid fallback when the
+          // directory endpoint is temporarily unavailable.
+        }
         // Fetch attendance summaries in parallel batches of 10 to avoid an N+1
         // pattern. 200 students → 20 parallel batches instead of 200 sequential
         // requests, reducing wall-clock time by ~10×.
@@ -98,10 +106,34 @@ class BackendDataService {
           for (var j = 0; j < batch.length; j++) {
             final student = batch[j];
             final summary = summaries[j];
+            final embeddedSection = student.currentSection;
+            final sectionModel = sectionsById[student.currentSectionId];
+            final embeddedGrade = embeddedSection['grade'];
+            final gradeName = sectionModel?.gradeName.isNotEmpty == true
+                ? sectionModel!.gradeName
+                : _reportText(
+                    embeddedGrade is Map
+                        ? embeddedGrade['grade_name'] ?? embeddedGrade['name']
+                        : null,
+                  );
+            final sectionName = sectionModel?.sectionName.isNotEmpty == true
+                ? sectionModel!.sectionName
+                : _reportText(
+                    embeddedSection['section_name'] ?? embeddedSection['name'],
+                  );
+            final classLabel = [
+              gradeName,
+              sectionName,
+            ].where((value) => value.isNotEmpty).join(' - ');
             rows.add({
-              'class': (student.currentSectionId ?? '').isEmpty
-                  ? 'Unassigned'
-                  : student.currentSectionId,
+              'class': classLabel.isEmpty
+                  ? ((student.currentSectionId ?? '').isEmpty
+                        ? 'Unassigned'
+                        : student.currentSectionId)
+                  : classLabel,
+              'section_id': student.currentSectionId ?? '',
+              'grade': gradeName,
+              'section': sectionName,
               'student_id': student.id,
               'student_name': student.fullName,
               'present': summary['present_days'] ?? 0,
@@ -681,6 +713,11 @@ Map<String, dynamic> _studentDirectoryMap(StudentModel student) {
 }
 
 String _text(Object? value) => value?.toString().trim() ?? '';
+
+String _reportText(Object? value) {
+  final text = _text(value);
+  return text == 'null' ? '' : text;
+}
 
 String _nestedText(Map<String, dynamic> source, String key, String nestedKey) {
   final nested = source[key];
