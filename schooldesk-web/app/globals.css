@@ -1077,13 +1077,13 @@ button .activity-spinner {
 .breaking-news-item i { display:inline-block; margin:0 1.55rem; color:#dcefff; font-size:.72em; font-style:normal; vertical-align:.08em; }
 .breaking-news:hover .breaking-news-track,.breaking-news:focus-within .breaking-news-track { animation-play-state:paused; }
 @keyframes breaking-news-scroll { from { transform:translate3d(0,0,0); } to { transform:translate3d(-50%,0,0); } }
-@media (prefers-reduced-motion:no-preference) { .breaking-news-track { animation:breaking-news-scroll 28s linear infinite; } }
+@media (prefers-reduced-motion:no-preference) { .breaking-news-track { animation:breaking-news-scroll 90s linear infinite; } }
 @media (prefers-reduced-motion:reduce) {
   /* The announcement and progress feedback remain gently moving so they never look frozen. */
   .breaking-news-track {
     width:max-content;
     min-width:max-content;
-    animation:breaking-news-scroll 100s linear infinite !important;
+    animation:breaking-news-scroll 140s linear infinite !important;
     animation-iteration-count:infinite !important;
     transform:translate3d(0,0,0);
     will-change:transform;

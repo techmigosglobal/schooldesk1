@@ -9,7 +9,7 @@ import { BreakingNewsTicker } from "@/components/breaking-news-ticker";
 const navigation = [
   ["/", "Home"], ["/about-us", "About"], ["/programs", "Programs"],
   ["/admissions", "Admissions"], ["/campus-safety", "Campus & Safety"],
-  ["/gallery", "Gallery"], ["/news-events", "News & Events"], ["/contact", "Contact"],
+  ["/gallery", "Gallery"], ["/contact", "Contact"],
 ] as const;
 
 export function PublicHeader() {
