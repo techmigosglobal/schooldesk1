@@ -7,7 +7,6 @@
 - Supabase CLI
 - Deno, required by `supabase functions serve`
 - Patrol CLI for Patrol tests
-
 Install examples:
 
 ```sh
