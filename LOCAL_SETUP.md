@@ -13,11 +13,9 @@ Install examples:
 npm install -g supabase
 dart pub global activate patrol_cli
 ```
-
 ## Environment
 
 Create `env.local.json` from `env.local.example.json` or run:
-
 ```sh
 cp env.local.example.json env.local.json
 ```
