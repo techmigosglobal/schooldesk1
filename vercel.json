@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd schooldesk-web && npm ci",
+  "buildCommand": "cd schooldesk-web && npm run build",
+  "outputDirectory": "schooldesk-web/.next"
+}
