@@ -141,6 +141,7 @@ function eventPostRow(row: Record<string, unknown>, author = "") {
     destinations,
     visibility: `${row.visibility ?? "school"}`,
     event_date: row.event_date ?? row.created_at ?? null,
+    public_gallery_visible: row.public_gallery_visible !== false,
     rejection_reason: row.rejection_reason ?? "",
     author: author || `${row.author ?? row.posted_by ?? ""}`.trim(),
   };
@@ -1934,6 +1935,9 @@ export async function handleEvents(
       visibility: textValue(body.visibility, "school"),
       destinations,
       event_date: body.event_date ?? new Date().toISOString(),
+      // Website gallery inclusion is an explicit principal-side selection;
+      // app destinations alone must never publish a post publicly.
+      public_gallery_visible: body.public_gallery_visible === true,
       // Principal posts are already approved by their publisher. Teacher
       // submissions remain pending so the existing review workflow is intact.
       status: directPublish
@@ -1997,7 +2001,10 @@ export async function handleEvents(
       return fail("forbidden", 403);
     }
     const currentStatus = `${existing.status ?? "draft"}`.trim().toLowerCase();
-    const description = textValue(body.description ?? body.body);
+    const description = textValue(
+      body.description ?? body.body,
+      textValue(existing.description ?? existing.body),
+    );
     const destinations = normalizeDestinations(
       body.destinations ?? existing.destinations,
       body.visibility ?? existing.visibility,
@@ -2014,17 +2021,20 @@ export async function handleEvents(
       ),
       body: description,
       media_urls: media,
-      visibility: textValue(body.visibility, "school"),
+      visibility: textValue(body.visibility, textValue(existing.visibility, "school")),
       destinations,
       event_date: body.event_date ?? existing.event_date ??
         new Date().toISOString(),
+      public_gallery_visible: typeof body.public_gallery_visible === "boolean"
+        ? body.public_gallery_visible
+        : existing.public_gallery_visible !== false,
       status: directPublish
         ? "approved"
         : body.is_submit === true
         ? "pending"
         : textValue(body.status, currentStatus),
       updated_at: new Date().toISOString(),
-      event_id: body.event_id ?? null,
+      event_id: body.event_id ?? existing.event_id ?? null,
       rejection_reason: body.is_submit === true
         ? null
         : body.rejection_reason ?? existing.rejection_reason ?? null,

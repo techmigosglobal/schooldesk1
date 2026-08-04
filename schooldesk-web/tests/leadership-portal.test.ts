@@ -53,8 +53,11 @@ test("public homepage and gallery render image media only", () => {
   const galleryPage = source("../app/gallery/page.tsx");
 
   expect(homepageGallery).toContain("filter(isPublicGalleryImage)");
+  expect(homepageGallery).toContain("uniqueGalleryItems(gallery)");
   expect(homepageGallery).not.toContain("<video");
   expect(galleryPage).toContain("filter(isPublicGalleryImage)");
+  expect(galleryPage).not.toContain("preschoolPhotography");
+  expect(galleryPage).toContain("No school moments have been selected for the public gallery yet.");
   expect(galleryPage).not.toContain("<video");
 });
 
@@ -130,6 +133,20 @@ test("login shows immediate progress and guards the submit while authenticating"
   expect(loginForm).toContain('<LoadingIndicator label="Signing in securely…" compact announce={false} />');
   expect(loginForm).toContain('disabled={loading}');
   expect(loginForm).toContain('aria-busy={loading}');
+});
+
+test("login exposes a clear accessible invalid-credentials response", () => {
+  const loginForm = source("../components/login-form.tsx");
+  const route = source("../app/api/auth/login/route.ts");
+  const errors = source("../lib/login-errors.ts");
+
+  expect(errors).toContain("Invalid credentials. Please check your username/email and password.");
+  expect(errors).toContain('"invalid username or password"');
+  expect(route).toContain("upstream.status === 401");
+  expect(route).toContain("INVALID_CREDENTIALS_MESSAGE");
+  expect(loginForm).toContain("loginErrorMessage(");
+  expect(loginForm).toContain('id="login-api-error"');
+  expect(loginForm).toContain('role="alert" aria-live="assertive"');
 });
 
 test("leadership feature workspaces use layout-shaped loading states", () => {

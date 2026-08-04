@@ -18,8 +18,28 @@ function galleryRow(svc: SupabaseClient, row: Record<string, unknown>) {
   return { ...row, media_url: publicUrl(svc, text(row.media_path)) };
 }
 
+function eventMediaItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") return [value];
+  if (typeof value !== "string") return [];
+  const source = value.trim();
+  if (!source) return [];
+  if (source.startsWith("[") || source.startsWith("{")) {
+    try {
+      const decoded = JSON.parse(source);
+      if (Array.isArray(decoded)) return decoded;
+      if (decoded && typeof decoded === "object") return [decoded];
+    } catch {
+      // Continue with the legacy comma-separated URL format below.
+    }
+  }
+  return source.split(/,(?=\s*(?:https?:\/\/|\/))/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function eventGalleryRows(row: Record<string, unknown>) {
-  const media = Array.isArray(row.media_urls) ? row.media_urls : [];
+  const media = eventMediaItems(row.media_urls);
   return media
     .map((item, index) => {
       const object = item !== null && typeof item === "object"
@@ -27,7 +47,7 @@ function eventGalleryRows(row: Record<string, unknown>) {
         : {};
       const mediaUrl = typeof item === "string"
         ? item.trim()
-        : text(object.url ?? object.media_url ?? object.secure_url);
+        : text(object.url ?? object.media_url ?? object.mediaUrl ?? object.secure_url);
       return {
         id: `event:${text(row.id)}:${index}`,
         source: "event_post",
@@ -36,7 +56,12 @@ function eventGalleryRows(row: Record<string, unknown>) {
         alt_text: text(object.alt_text ?? row.title) || "School gallery image",
         caption: text(row.body ?? row.description),
         media_url: mediaUrl,
-        media_type: text(object.media_type ?? object.type) || "image",
+        media_type: text(
+          object.media_type ?? object.mediaType ?? object.mime_type ??
+            object.content_type ?? object.kind ?? object.type,
+        ) || "image",
+        public_gallery_visible: row.public_gallery_visible !== false,
+        is_published: row.public_gallery_visible !== false,
         created_at: row.created_at,
       };
     })
@@ -65,10 +90,10 @@ export async function handleWebsitePublic(
       .eq("school_id", school).eq("is_published", true).order("sort_order")
       .order("created_at", { ascending: false }),
     svc.from("event_posts").select(
-      "id, title, body, media_urls, created_at",
+      "id, title, body, media_urls, public_gallery_visible, created_at",
     )
       .eq("school_id", school).in("status", ["approved", "published"])
-      .contains("destinations", JSON.stringify(["SCHOOL_GALLERY"]))
+      .eq("public_gallery_visible", true)
       .order("created_at", { ascending: false }),
     svc.from("school_website_sections").select("section_key, title, body, image_url")
       .eq("status", "published").order("created_at"),
@@ -217,9 +242,8 @@ export async function handleWebsite(
         school,
       ).order("sort_order").order("created_at", { ascending: false }),
       svc.from("event_posts").select(
-        "id, title, body, media_urls, status, destinations, created_at",
+        "id, title, body, media_urls, public_gallery_visible, status, destinations, created_at",
       ).eq("school_id", school).in("status", ["approved", "published"])
-        .contains("destinations", JSON.stringify(["SCHOOL_GALLERY"]))
         .order("created_at", { ascending: false }),
     ]);
     if (galleryResult.error) return fail(galleryResult.error.message);
@@ -230,9 +254,10 @@ export async function handleWebsite(
     const selectedEventMedia = (eventResult.data ?? []).flatMap((row) =>
       eventGalleryRows(row as Record<string, unknown>).map((media) => ({
         ...media,
-        is_published: true,
+        is_published: row.public_gallery_visible !== false,
+        public_gallery_visible: row.public_gallery_visible !== false,
         status: text(row.status),
-        destinations: ["SCHOOL_GALLERY"],
+        destinations: row.destinations ?? [],
       }))
     );
     return ok([...selectedEventMedia, ...managedMedia]);
@@ -266,7 +291,9 @@ export async function handleWebsite(
         caption: text(form?.get("caption")),
         media_type: file.type,
         sort_order: Number(form?.get("sort_order") ?? 0) || 0,
-        is_published: form?.get("is_published") !== "false",
+        is_published: form?.has("is_published")
+          ? form.get("is_published") === "true"
+          : true,
         created_by: user.id,
       }).select().single();
     if (error) {

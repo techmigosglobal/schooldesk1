@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { backendFetch, unwrap } from "@/lib/backend";
+import { INVALID_CREDENTIALS_MESSAGE, loginErrorMessage } from "@/lib/login-errors";
 import { cookieNames, secureCookie } from "@/lib/session";
 import { isPortalRole } from "@/lib/roles";
 import { checkRateLimit, retryAfterSeconds } from "@/lib/rate-limit";
@@ -39,7 +40,20 @@ export async function POST(request: NextRequest) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: identity, password }),
     });
-    const payload = await upstream.json();
+    const payload = await upstream.json().catch(() => ({}));
+
+    if (!upstream.ok) {
+      return NextResponse.json(
+        {
+          error: loginErrorMessage(
+            (payload as { error?: unknown }).error,
+            upstream.status === 401 ? INVALID_CREDENTIALS_MESSAGE : undefined,
+          ),
+        },
+        { status: upstream.status },
+      );
+    }
+
     const data = unwrap<{
       access_token: string;
       refresh_token: string;
@@ -70,8 +84,8 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to sign in." },
-      { status: 401 },
+      { error: loginErrorMessage(error) },
+      { status: 502 },
     );
   }
 }

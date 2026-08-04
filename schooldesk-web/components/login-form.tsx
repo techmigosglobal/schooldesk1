@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingIndicator } from "@/components/loading-skeletons";
+import { INVALID_CREDENTIALS_MESSAGE, loginErrorMessage } from "@/lib/login-errors";
 import type { PortalRole } from "@/lib/roles";
 import { loginSchema } from "@/lib/schemas";
 
@@ -56,7 +57,14 @@ export function LoginForm({ role }: { role: PortalRole }) {
       const body = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setApiError(body.error || "Unable to sign in. Please check your credentials.");
+        setApiError(
+          loginErrorMessage(
+            body.error,
+            response.status === 401
+              ? INVALID_CREDENTIALS_MESSAGE
+              : undefined,
+          ),
+        );
         return;
       }
 
@@ -138,7 +146,7 @@ export function LoginForm({ role }: { role: PortalRole }) {
           </div>
 
           {apiError && (
-            <p className="form-error" role="alert">
+            <p id="login-api-error" className="form-error" role="alert" aria-live="assertive">
               {apiError}
             </p>
           )}
