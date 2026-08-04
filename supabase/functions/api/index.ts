@@ -216,6 +216,13 @@ export async function authedClient(req: Request) {
         requested?.organization_id &&
         home.organization_id === requested.organization_id,
     );
+  } else if (currentRole === "coordinator") {
+    permitted = Boolean(
+      requestedBranch === profile.school_id &&
+        (await svc.from("branch_memberships").select("id")
+          .eq("user_id", user.id).eq("school_id", profile.school_id)
+          .eq("is_active", true).maybeSingle()).data,
+    );
   } else {
     permitted = Boolean(
       (await svc.from("branch_memberships").select("id")

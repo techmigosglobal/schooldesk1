@@ -26,7 +26,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
   List<Map<String, dynamic>> _childRows = [];
   List<dynamic> _allSlots = [];
   bool _loading = true;
-  int _selectedDay = 1; // 1 = Monday, 2 = Tuesday, etc.
+  int _selectedDay = 1; // 1 = Monday, 2 = Tuesday, ..., 7 = Sunday.
 
   // Monotonically increasing token. Each _loadChildTimetable call captures the
   // current token; if it no longer matches when the await returns, the result
@@ -40,14 +40,15 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
     'Thursday',
     'Friday',
     'Saturday',
+    'Sunday',
   ];
 
   @override
   void initState() {
     super.initState();
-    // Set selected day to current day of week (Monday-Saturday)
+    // Set selected day to the current day of week.
     final weekday = DateTime.now().weekday;
-    if (weekday >= 1 && weekday <= 6) {
+    if (weekday >= 1 && weekday <= 7) {
       _selectedDay = weekday;
     } else {
       _selectedDay = 1;

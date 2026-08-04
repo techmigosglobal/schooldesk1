@@ -73,7 +73,7 @@ class RouteAccessGuard {
     AppRoutes.principalLessonPlanner: {'principal'},
     AppRoutes.principalEventApprovals: {'principal'},
     AppRoutes.principalEventPosts: {'principal'},
-    AppRoutes.principalTimetable: {'principal'},
+    AppRoutes.principalTimetable: {'principal', 'coordinator'},
     AppRoutes.principalDocuments: {'principal'},
     AppRoutes.principalAuditLogs: {'principal'},
     AppRoutes.guardianDirectory: {'principal'},

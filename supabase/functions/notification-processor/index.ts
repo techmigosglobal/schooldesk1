@@ -322,6 +322,12 @@ function withEventRouting(
     ...(template.data["section_id"] || !eventValue(eventData, "section_id")
       ? {}
       : { section_id: eventValue(eventData, "section_id") }),
+    ...(template.data["student_name"] || !eventValue(eventData, "student_name")
+      ? {}
+      : { student_name: eventValue(eventData, "student_name") }),
+    ...(template.data["class_label"] || !eventValue(eventData, "class_label")
+      ? {}
+      : { class_label: eventValue(eventData, "class_label") }),
     ...(template.data["teacher_id"] || !eventValue(eventData, "teacher_id")
       ? {}
       : { teacher_id: eventValue(eventData, "teacher_id") }),
@@ -423,6 +429,22 @@ function getNotificationTemplate(
           event_type: "announcement",
           reference_type: "announcement",
           announcement_id: String(eventData.announcement_id || ""),
+        },
+      };
+
+    case "message":
+      return {
+        title: String(eventData.title || "New message"),
+        body: String(eventData.message || "You have a new message."),
+        data: {
+          event_type: "message",
+          reference_type: "message",
+          reference_id: String(eventData.reference_id || ""),
+          route: String(eventData.route || "/notification-center-screen"),
+          student_id: String(eventData.student_id || ""),
+          section_id: String(eventData.section_id || ""),
+          student_name: String(eventData.student_name || ""),
+          class_label: String(eventData.class_label || ""),
         },
       };
 

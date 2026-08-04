@@ -45,6 +45,10 @@ function normalizeChatConversation(
     parent_id: row.parent_id ?? "",
     teacher_id: row.teacher_id ?? "",
     student_id: row.student_id ?? "",
+    section_id: row.section_id ?? "",
+    student_name: row.student_name ?? "",
+    class_label: row.class_label ?? "",
+    contact_role: row.contact_role ?? "",
     last_message: row.last_message ?? "",
     last_message_at: row.last_message_at ?? row.updated_at ?? row.created_at,
     unread_count: unreadCount,
@@ -75,6 +79,28 @@ function normalizeChatMessage(
 
 function uniqueText(values: unknown[]) {
   return [...new Set(values.map((value) => text(value)).filter(Boolean))];
+}
+
+function classLabel(section: Record<string, unknown> | null | undefined) {
+  if (!section) return "";
+  const grade = section.grade as Record<string, unknown> | undefined;
+  return [text(grade?.grade_name), text(section.section_name)]
+    .filter(Boolean)
+    .join(" - ");
+}
+
+function chatContext(
+  student: Record<string, unknown> | null | undefined,
+  section: Record<string, unknown> | null | undefined,
+) {
+  return {
+    student_id: text(student?.id),
+    student_name: [text(student?.first_name), text(student?.last_name)]
+      .filter(Boolean)
+      .join(" "),
+    section_id: text(section?.id ?? student?.current_section_id),
+    class_label: classLabel(section),
+  };
 }
 
 async function teacherUserIdForStaff(
@@ -311,7 +337,8 @@ async function validateChatConversationScope(
       return "parent_teacher scope requires a linked student";
     }
 
-    // Check teacher is class teacher or co-teacher of student's section
+    // Teachers may message families for any section assigned through class,
+    // co-teacher, or subject-teacher mapping.
     const { data: student, error: studentError } = await svc.from("students")
       .select("current_section_id")
       .eq("id", studentId)
@@ -322,25 +349,17 @@ async function validateChatConversationScope(
       return "student does not have a current section";
     }
 
-    const { data: section, error: sectionError } = await svc.from("sections")
-      .select("class_teacher_id, co_teacher_id")
-      .eq("id", student.current_section_id)
-      .eq("school_id", school)
-      .maybeSingle();
-
-    if (sectionError || !section) {
-      return "section not found";
-    }
-
-    if (
-      section.class_teacher_id !== teacherId &&
-      section.co_teacher_id !== teacherId
-    ) {
-      return "teacher must be class teacher or co-teacher";
+    const assignedSections = await lessonPlannerAssignedSectionIds(
+      svc,
+      school,
+      teacherId,
+    );
+    if (!assignedSections.has(`${student.current_section_id}`)) {
+      return "teacher is not assigned to this class section";
     }
   } else if (type === "principal_parent") {
-    if (!parentId) {
-      return "principal_parent scope requires a parent participant";
+    if (!parentId || !studentId) {
+      return "principal_parent scope requires a parent and linked student";
     }
     const { data: parentUser, error: pError } = await svc.from("users")
       .select("role_name")
@@ -354,6 +373,13 @@ async function validateChatConversationScope(
     ) {
       return "principal_parent scope requires a parent participant";
     }
+    const { data: link } = await svc.from("parent_student_links")
+      .select("student_id")
+      .eq("school_id", school)
+      .eq("parent_user_id", parentId)
+      .eq("student_id", studentId)
+      .maybeSingle();
+    if (!link) return "parent is not linked to this student";
   } else if (type === "principal_teacher") {
     if (!teacherId) {
       return "principal_teacher scope requires a teacher participant";
@@ -391,6 +417,7 @@ async function parentChatContacts(
   const { data: links } = await studentQuery;
   const contacts: any[] = [];
   const addedKeys = new Set<string>();
+  const leaderContexts: Record<string, unknown>[] = [];
 
   for (const link of links ?? []) {
     const student = (link as any).students;
@@ -402,13 +429,15 @@ async function parentChatContacts(
 
     const { data: section } = await svc.from("sections")
       .select(
-        "id, class_teacher:staff!sections_class_teacher_id_fkey(*), co_teacher:staff!sections_co_teacher_id_fkey(*)",
+        "id, section_name, grade:grades(grade_name), class_teacher:staff!sections_class_teacher_id_fkey(*), co_teacher:staff!sections_co_teacher_id_fkey(*)",
       )
       .eq("id", sectionId)
       .eq("school_id", school)
       .maybeSingle();
 
     if (section) {
+      const context = chatContext(student, section as Record<string, unknown>);
+      leaderContexts.push(context);
       const ct = (section as any).class_teacher;
       if (ct) {
         const key = `teacher:${ct.id}:${student.id}`;
@@ -419,8 +448,7 @@ async function parentChatContacts(
             name: [ct.first_name, ct.last_name].filter(Boolean).join(" "),
             role: "teacher",
             contact_role: "class_teacher",
-            student_id: student.id,
-            student_name: studentName,
+            ...context,
             type: "parent_teacher",
           });
         }
@@ -435,8 +463,7 @@ async function parentChatContacts(
             name: [co.first_name, co.last_name].filter(Boolean).join(" "),
             role: "teacher",
             contact_role: "co_teacher",
-            student_id: student.id,
-            student_name: studentName,
+            ...context,
             type: "parent_teacher",
           });
         }
@@ -450,18 +477,21 @@ async function parentChatContacts(
     .eq("school_id", school)
     .in("role_name", ["principal", "coordinator"]);
 
-  for (const p of principals ?? []) {
-    const leaderRole = text(p.role_name, "principal").toLowerCase();
-    const key = `${leaderRole}:${p.id}`;
-    if (!addedKeys.has(key)) {
-      addedKeys.add(key);
-      contacts.push({
-        id: p.id,
-        name: p.name || p.username ||
-          (leaderRole === "coordinator" ? "Coordinator" : "Principal"),
-        role: leaderRole,
-        type: "principal_parent",
-      });
+  for (const context of leaderContexts) {
+    for (const p of principals ?? []) {
+      const leaderRole = text(p.role_name, "principal").toLowerCase();
+      const key = `${leaderRole}:${p.id}:${text(context.student_id)}`;
+      if (!addedKeys.has(key)) {
+        addedKeys.add(key);
+        contacts.push({
+          id: p.id,
+          name: p.name || p.username ||
+            (leaderRole === "coordinator" ? "Coordinator" : "Principal"),
+          role: leaderRole,
+          ...context,
+          type: "principal_parent",
+        });
+      }
     }
   }
 
@@ -476,19 +506,26 @@ async function teacherChatContacts(
   const staffId = linkedStaffId(user);
   if (!staffId) return [];
 
-  const { data: sections } = await svc.from("sections")
+  const assignedSectionIds = await lessonPlannerAssignedSectionIds(
+    svc,
+    school,
+    staffId,
+  );
+  const sectionsQuery = svc.from("sections")
     .select(
-      "id, class_teacher:staff!sections_class_teacher_id_fkey(*), co_teacher:staff!sections_co_teacher_id_fkey(*)",
+      "id, section_name, grade:grades(grade_name), class_teacher:staff!sections_class_teacher_id_fkey(*), co_teacher:staff!sections_co_teacher_id_fkey(*)",
     )
-    .eq("school_id", school)
-    .or(`class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`);
+    .eq("school_id", school);
+  const { data: sections } = assignedSectionIds.size
+    ? await sectionsQuery.in("id", [...assignedSectionIds])
+    : { data: [] };
 
   const contacts: any[] = [];
   const addedKeys = new Set<string>();
 
   for (const section of sections ?? []) {
     const { data: students } = await svc.from("students")
-      .select("id, first_name, last_name")
+      .select("id, first_name, last_name, current_section_id")
       .eq("current_section_id", section.id)
       .eq("school_id", school);
 
@@ -496,6 +533,10 @@ async function teacherChatContacts(
       const studentName = [student.first_name, student.last_name].filter(
         Boolean,
       ).join(" ");
+      const context = chatContext(
+        student as Record<string, unknown>,
+        section as Record<string, unknown>,
+      );
       const { data: links } = await svc.from("parent_student_links")
         .select(
           "parent_user_id, parent:users!parent_student_links_parent_user_id_fkey(*)",
@@ -513,8 +554,7 @@ async function teacherChatContacts(
             id: p.id,
             name: p.name || p.username || "Parent",
             role: "parent",
-            student_id: student.id,
-            student_name: studentName,
+            ...context,
             contact_role: "student_parent",
             type: "parent_teacher",
           });
@@ -606,60 +646,94 @@ async function principalChatContacts(
   }
 
   const { data: parents } = await svc.from("users")
-    .select("*")
+    .select("id, name, username")
     .eq("school_id", school)
     .ilike("role_name", "parent");
 
   const { data: links } = await svc.from("parent_student_links").select(
-    "parent_user_id, student:students(current_section_id)",
+    "parent_user_id, student:students(id, first_name, last_name, current_section_id)",
   ).eq("school_id", school);
-  const labelsByParent = new Map<string, string[]>();
-  for (const link of links ?? []) {
-    const parentId = text(link.parent_user_id);
-    const label =
-      labelsBySection.get(text((link as any).student?.current_section_id)) ??
-        "";
-    if (parentId && label) {
-      labelsByParent.set(
-        parentId,
-        [...(labelsByParent.get(parentId) ?? []), label],
-      );
+  const parentIds = new Set((parents ?? []).map((parent) => text(parent.id)));
+  const studentsBySection = new Map<string, Record<string, unknown>>();
+  const sectionIds = uniqueText((links ?? []).map((link: any) =>
+    link.student?.current_section_id
+  ));
+  if (sectionIds.length > 0) {
+    const { data: linkedSections } = await svc.from("sections")
+      .select("id, section_name, grade:grades(grade_name)")
+      .eq("school_id", school)
+      .in("id", sectionIds);
+    for (const section of linkedSections ?? []) {
+      const sectionId = text(section.id);
+      if (sectionId) studentsBySection.set(sectionId, section);
     }
   }
 
-  for (const p of parents ?? []) {
-    const key = `parent:${p.id}`;
-    if (!addedKeys.has(key)) {
-      addedKeys.add(key);
-      contacts.push({
-        id: p.id,
-        name: p.name || p.username || "Parent",
-        role: "parent",
-        type: "principal_parent",
-        class_sections: uniqueText(labelsByParent.get(text(p.id)) ?? []),
-      });
-    }
+  for (const link of links ?? []) {
+    const parentId = text(link.parent_user_id);
+    const student = (link as any).student as Record<string, unknown> | null;
+    const studentId = text(student?.id);
+    if (!parentId || !studentId || !parentIds.has(parentId)) continue;
+    const section = studentsBySection.get(text(student?.current_section_id));
+    const parent = (parents ?? []).find((row) => text(row.id) === parentId);
+    const context = chatContext(student, section);
+    contacts.push({
+      id: parentId,
+      name: parent?.name || parent?.username || "Parent",
+      role: "parent",
+      type: "principal_parent",
+      contact_role: "student_parent",
+      ...context,
+      class_sections: context.class_label ? [context.class_label] : [],
+    });
   }
 
   return contacts;
 }
 
 async function getTeacherAllowedConversationsStaffIds(
+  _svc: SupabaseClient,
+  _school: string,
+  staffId: string,
+): Promise<string[]> {
+  return staffId ? [staffId] : [];
+}
+
+async function parentIsLinkedToStudent(
+  svc: SupabaseClient,
+  school: string,
+  parentId: string,
+  studentId: string,
+) {
+  if (!parentId || !studentId) return false;
+  const { data } = await svc.from("parent_student_links").select("id")
+    .eq("school_id", school)
+    .eq("parent_user_id", parentId)
+    .eq("student_id", studentId)
+    .maybeSingle();
+  return Boolean(data?.id);
+}
+
+async function teacherIsAssignedToStudent(
   svc: SupabaseClient,
   school: string,
   staffId: string,
-): Promise<string[]> {
-  const { data: sections } = await svc.from("sections")
-    .select("class_teacher_id, co_teacher_id")
+  studentId: string,
+) {
+  if (!staffId || !studentId) return false;
+  const { data: student } = await svc.from("students")
+    .select("current_section_id")
     .eq("school_id", school)
-    .or(`class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`);
-
-  const ids = new Set<string>([staffId]);
-  for (const s of sections ?? []) {
-    if (s.class_teacher_id) ids.add(s.class_teacher_id);
-    if (s.co_teacher_id) ids.add(s.co_teacher_id);
-  }
-  return [...ids];
+    .eq("id", studentId)
+    .maybeSingle();
+  const sectionId = text(student?.current_section_id);
+  if (!sectionId) return false;
+  const assignedSections = await lessonPlannerAssignedSectionIds(
+    svc,
+    school,
+    staffId,
+  );
+  return assignedSections.has(sectionId);
 }
 
 async function canReadChatConversation(
@@ -671,38 +745,26 @@ async function canReadChatConversation(
   if (canManageSchoolContent(user)) return true;
   const userRole = role(user);
   if (userRole === "parent") {
-    return text(conversation.parent_id) === user.id;
+    return text(conversation.parent_id) === user.id &&
+      await parentIsLinkedToStudent(
+        svc,
+        school,
+        user.id,
+        text(conversation.student_id),
+      );
   }
   if (userRole === "teacher") {
     const staffId = linkedStaffId(user);
     if (!staffId) return false;
     const convTeacherId = text(conversation.teacher_id);
-    if (convTeacherId === staffId) return true;
-
-    // Check if user is counterpart teacher for the student's class
+    if (convTeacherId !== staffId) return false;
     const studentId = text(conversation.student_id);
-    if (!studentId) return false;
-
-    const { data: student } = await svc.from("students")
-      .select("current_section_id")
-      .eq("id", studentId)
-      .eq("school_id", school)
-      .maybeSingle();
-    if (!student || !student.current_section_id) return false;
-
-    const { data: section } = await svc.from("sections")
-      .select("class_teacher_id, co_teacher_id")
-      .eq("id", student.current_section_id)
-      .eq("school_id", school)
-      .maybeSingle();
-    if (!section) return false;
-
-    const isUserTeacher = section.class_teacher_id === staffId ||
-      section.co_teacher_id === staffId;
-    const isConvTeacher = section.class_teacher_id === convTeacherId ||
-      section.co_teacher_id === convTeacherId;
-
-    return isUserTeacher && isConvTeacher;
+    return !studentId || await teacherIsAssignedToStudent(
+      svc,
+      school,
+      staffId,
+      studentId,
+    );
   }
   return false;
 }
@@ -716,8 +778,7 @@ async function canSendChatMessage(
   const userRole = role(user);
   const type = text(conversation.type) || "parent_teacher";
   if (type === "parent_teacher") {
-    return await canReadChatConversation(svc, school, conversation, user) &&
-      !canManageSchoolContent(user);
+    return await canReadChatConversation(svc, school, conversation, user);
   }
   if (canManageSchoolContent(user)) {
     return text(conversation.leader_id ?? conversation.created_by) === user.id;
@@ -788,6 +849,7 @@ async function enrichChatConversations(
   const parentsById = new Map<string, Record<string, unknown>>();
   const studentsById = new Map<string, Record<string, unknown>>();
   const leadersById = new Map<string, Record<string, unknown>>();
+  const sectionsById = new Map<string, Record<string, unknown>>();
 
   if (teacherIds.length) {
     const { data } = await svc.from("staff").select("*").eq("school_id", school)
@@ -806,6 +868,17 @@ async function enrichChatConversations(
     ).in("id", studentIds);
     for (const row of data ?? []) studentsById.set(`${row.id}`, row);
   }
+  const sectionIds = uniqueText([
+    ...rows.map((row) => row.section_id),
+    ...[...studentsById.values()].map((student) => student.current_section_id),
+  ]);
+  if (sectionIds.length) {
+    const { data } = await svc.from("sections")
+      .select("id, section_name, grade:grades(grade_name)")
+      .eq("school_id", school)
+      .in("id", sectionIds);
+    for (const row of data ?? []) sectionsById.set(`${row.id}`, row);
+  }
   if (leaderIds.length) {
     const { data } = await svc.from("users")
       .select("id, name, username, role_name")
@@ -814,13 +887,21 @@ async function enrichChatConversations(
     for (const row of data ?? []) leadersById.set(`${row.id}`, row);
   }
 
-  return rows.map((row) => ({
-    ...row,
-    teacher: teachersById.get(`${row.teacher_id ?? ""}`) ?? null,
-    parent: parentsById.get(`${row.parent_id ?? ""}`) ?? null,
-    student: studentsById.get(`${row.student_id ?? ""}`) ?? null,
-    leader: leadersById.get(`${row.leader_id ?? ""}`) ?? null,
-  }));
+  return rows.map((row) => {
+    const student = studentsById.get(`${row.student_id ?? ""}`) ?? null;
+    const section = sectionsById.get(
+      `${row.section_id ?? student?.current_section_id ?? ""}`,
+    ) ?? null;
+    const context = chatContext(student, section);
+    return {
+      ...row,
+      ...context,
+      teacher: teachersById.get(`${row.teacher_id ?? ""}`) ?? null,
+      parent: parentsById.get(`${row.parent_id ?? ""}`) ?? null,
+      student,
+      leader: leadersById.get(`${row.leader_id ?? ""}`) ?? null,
+    };
+  });
 }
 
 async function appendNotification(
@@ -831,6 +912,8 @@ async function appendNotification(
   body: string,
   entityId: string,
   targetRole = "all",
+  route = "/communication-center-screen",
+  context: Record<string, string> = {},
 ) {
   if (!userId) return;
   await svc.from("notification_logs").insert({
@@ -842,7 +925,7 @@ async function appendNotification(
     type: "message",
     entity_type: "message",
     entity_id: entityId,
-    route: "/communication-center-screen",
+    route,
     priority: "medium",
     is_read: false,
   });
@@ -851,17 +934,107 @@ async function appendNotification(
     const { data } = await svc.from("notification_events").insert({
       school_id: school,
       user_id: userId,
-      event_type: "announcement",
+      event_type: "message",
       event_data: {
         title,
         message: body,
-        announcement_id: entityId,
         reference_type: "message",
         reference_id: entityId,
+        route,
+        ...context,
       },
     }).select("id").maybeSingle();
     if (data?.id) triggerPushProcessing(data.id);
   } catch (_) { /* best-effort */ }
+}
+
+function chatRouteForRole(targetRole: string) {
+  return targetRole === "parent"
+    ? "/parent-teacher-chat-screen"
+    : targetRole === "teacher"
+    ? "/teacher-communication-screen"
+    : "/communication-center-screen";
+}
+
+async function chatConversationContext(
+  svc: SupabaseClient,
+  school: string,
+  conversation: Record<string, unknown>,
+) {
+  const studentId = text(conversation.student_id);
+  if (!studentId) {
+    return { student_id: "", section_id: "", student_name: "", class_label: "" };
+  }
+  const { data: student } = await svc.from("students")
+    .select("id, first_name, last_name, current_section_id")
+    .eq("id", studentId)
+    .eq("school_id", school)
+    .maybeSingle();
+  if (!student) {
+    return { student_id: studentId, section_id: "", student_name: "", class_label: "" };
+  }
+  const { data: section } = await svc.from("sections")
+    .select("id, section_name, grade:grades(grade_name)")
+    .eq("id", student.current_section_id)
+    .eq("school_id", school)
+    .maybeSingle();
+  const context = chatContext(
+    student as Record<string, unknown>,
+    section as Record<string, unknown> | null,
+  );
+  return context;
+}
+
+async function chatNotificationTargets(
+  svc: SupabaseClient,
+  school: string,
+  conversation: Record<string, unknown>,
+  user: User,
+) {
+  const type = text(conversation.type) || "parent_teacher";
+  if (type !== "parent_teacher") {
+    const target = await resolveChatNotificationTarget(
+      svc,
+      school,
+      conversation,
+      user,
+    );
+    if (!target) return [];
+    const teacherUserId = await teacherUserIdForStaff(
+      svc,
+      school,
+      text(conversation.teacher_id),
+    );
+    const targetRole = target === text(conversation.parent_id)
+      ? "parent"
+      : target === teacherUserId
+      ? "teacher"
+      : "all";
+    return [{ id: target, role: targetRole }];
+  }
+
+  const parentId = text(conversation.parent_id);
+  const teacherUserId = await teacherUserIdForStaff(
+    svc,
+    school,
+    text(conversation.teacher_id),
+  );
+  const targets: { id: string; role: string }[] = [];
+  if (canManageSchoolContent(user)) {
+    if (parentId && parentId !== user.id) {
+      targets.push({ id: parentId, role: "parent" });
+    }
+    if (teacherUserId && teacherUserId !== user.id) {
+      targets.push({ id: teacherUserId, role: "teacher" });
+    }
+    return targets;
+  }
+  if (parentId && parentId !== user.id) {
+    targets.push({ id: parentId, role: "parent" });
+  } else if (teacherUserId && teacherUserId !== user.id) {
+    targets.push({ id: teacherUserId, role: "teacher" });
+  }
+  return targets;
 }
 
 /**
@@ -1299,12 +1472,7 @@ export async function handleCommunications(
       if (userRole == "teacher") {
         const teacher = linkedStaffId(user);
         if (!teacher) return ok([]);
-        const allowedTeacherIds = await getTeacherAllowedConversationsStaffIds(
-          svc,
-          school,
-          teacher,
-        );
-        q = q.in("teacher_id", allowedTeacherIds);
+        q = q.eq("teacher_id", teacher);
       } else if (userRole == "parent") {
         q = q.eq("parent_id", user.id);
       }
@@ -1384,16 +1552,22 @@ export async function handleCommunications(
     if (conversationType == "parent_teacher" && (!teacherId || !parentId)) {
       return fail("teacher_id and parent_id are required");
     }
+    const context = await chatConversationContext(svc, school, {
+      student_id: studentId,
+    });
     let existing = svc.from("message_conversations").select("*")
       .eq("school_id", school)
       .eq("type", conversationType);
     if (teacherId) existing = existing.eq("teacher_id", teacherId);
     if (parentId) existing = existing.eq("parent_id", parentId);
-    if (conversationType === "parent_teacher" && studentId) {
+    if (studentId) {
       existing = existing.eq("student_id", studentId);
     }
     if (conversationType !== "parent_teacher") {
       existing = existing.eq("leader_id", conversationLeaderId);
+    }
+    if (conversationType === "principal_parent" && studentId) {
+      existing = existing.eq("student_id", studentId);
     }
     const { data: found, error: findError } = await existing.maybeSingle();
     if (findError) return fail(findError.message);
@@ -1406,6 +1580,8 @@ export async function handleCommunications(
       teacher_id: teacherId || null,
       parent_id: parentId || null,
       student_id: studentId || null,
+      section_id: text(context.section_id) || null,
+      class_label: text(context.class_label) || null,
       participant_ids: [teacherId, parentId].filter(Boolean),
       leader_id: conversationType === "parent_teacher"
         ? null
@@ -1443,7 +1619,12 @@ export async function handleCommunications(
       pageSize,
     );
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row) => normalizeChatMessage(row, user.id)));
+    return ok((data ?? []).map((row) => normalizeChatMessage({
+      ...row,
+      student_id: conversation.student_id ?? "",
+      student_name: conversation.student_name ?? "",
+      class_label: conversation.class_label ?? "",
+    }, user.id)));
   }
 
   if (chatMessagesMatch && method === "POST") {
@@ -1462,8 +1643,14 @@ export async function handleCommunications(
       return fail("message body required");
     }
     const senderRole = role(user) || text(body.sender_role) || "user";
+    const { data: senderProfile } = await svc.from("users")
+      .select("name, username, email")
+      .eq("school_id", school)
+      .eq("id", user.id)
+      .maybeSingle();
     const senderName = text(
-      user.user_metadata?.name ?? user.email ?? body.sender_name,
+      senderProfile?.name ?? senderProfile?.username ??
+        user.user_metadata?.name ?? user.email ?? body.sender_name,
     );
     const now = new Date().toISOString();
     const { data: message, error } = await svc.from("messages").insert({
@@ -1489,50 +1676,74 @@ export async function handleCommunications(
     }).eq("id", conversationId).eq("school_id", school);
     if (conversation) {
       const type = `${conversation.type ?? "parent_teacher"}`;
-      const targetUserId = await resolveChatNotificationTarget(
+      const context = await chatConversationContext(svc, school, conversation);
+      const contextPrefix = [context.class_label, context.student_name]
+        .filter(Boolean)
+        .join(" - ");
+      const notificationBody = contextPrefix
+        ? `${contextPrefix}: ${messageText}`
+        : messageText;
+      const targets = await chatNotificationTargets(
         svc,
         school,
         conversation,
         user,
       );
-      if (targetUserId && targetUserId != user.id) {
-        const conversationParentId = text(conversation.parent_id);
-        const targetRole = type == "principal_parent"
-          ? "parent"
-          : type == "principal_teacher"
-          ? "teacher"
-          : targetUserId == conversationParentId
-          ? "parent"
-          : "teacher";
+      for (const target of targets) {
+        if (!target.id || target.id === user.id) continue;
         await appendNotification(
           svc,
           school,
-          targetUserId,
+          target.id,
           type == "parent_teacher"
-            ? "New parent-teacher message"
+            ? canManageSchoolContent(user)
+              ? "School leader replied"
+              : "New parent-teacher message"
             : "New message",
-          messageText,
+          notificationBody,
           conversationId,
-          targetRole,
+          target.role,
+          chatRouteForRole(target.role),
+          {
+            student_id: text(context.student_id),
+            section_id: text(context.section_id),
+            student_name: text(context.student_name),
+            class_label: text(context.class_label),
+          },
         );
       }
-      if (type == "parent_teacher") {
+      if (type == "parent_teacher" && !canManageSchoolContent(user)) {
         const principalIds = await principalUserIdsForSchool(svc, school);
         for (const principalId of principalIds) {
-          if (principalId == user.id || principalId == targetUserId) continue;
+          if (principalId == user.id || targets.some((target) => target.id === principalId)) continue;
           await appendNotification(
             svc,
             school,
             principalId,
             "Parent-teacher chat updated",
-            messageText,
+            notificationBody,
             conversationId,
             "all",
+            chatRouteForRole("all"),
+            {
+              student_id: text(context.student_id),
+              section_id: text(context.section_id),
+              student_name: text(context.student_name),
+              class_label: text(context.class_label),
+            },
           );
         }
       }
     }
-    return ok(normalizeChatMessage(message, user.id));
+    const responseContext = await chatConversationContext(
+      svc,
+      school,
+      conversation,
+    );
+    return ok(normalizeChatMessage({
+      ...message,
+      ...responseContext,
+    }, user.id));
   }
 
   const chatReadMatch = path.match(/^\/chat\/conversations\/([^/]+)\/read$/);
@@ -2057,36 +2268,52 @@ export async function handleCommunications(
     }
     const { data, error } = await q.order("updated_at", { ascending: false });
     if (error) return fail(error.message);
-    return ok(data ?? []);
+    const visible = [];
+    for (const row of data ?? []) {
+      if (await canReadChatConversation(svc, school, row, user)) {
+        visible.push(row);
+      }
+    }
+    return ok(await enrichChatConversations(svc, school, visible));
   }
   if (path === "/message-conversations" && method === "POST") {
+    const conversationType = text(body.type) || "parent_teacher";
     let teacherId = text(body.teacher_id);
     let parentId = text(body.parent_id);
     const currentRole = role(user);
     if (currentRole === "teacher") teacherId = linkedStaffId(user);
     if (currentRole === "parent") parentId = user.id;
-    if (teacherId) {
-      const { data: teacher } = await svc.from("staff").select("id").eq(
-        "school_id",
-        school,
-      ).eq("id", teacherId).maybeSingle();
-      if (!teacher) teacherId = "";
+    const studentId = text(body.student_id);
+    const isLeader = canManageSchoolContent(user);
+    if (conversationType !== "parent_teacher" && !isLeader) {
+      return fail("school leadership access required", 403);
     }
-    if (parentId) {
-      const { data: parent } = await svc.from("users").select("id").eq(
-        "school_id",
-        school,
-      ).eq("id", parentId).ilike("role_name", "parent").maybeSingle();
-      if (!parent) parentId = "";
+    if (conversationType !== "parent_teacher" && isLeader) {
+      body.leader_id = user.id;
     }
+    const scopeError = await validateChatConversationScope(
+      svc,
+      school,
+      conversationType,
+      teacherId,
+      parentId,
+      studentId,
+    );
+    if (scopeError) return fail(scopeError, 403);
+    const context = await chatConversationContext(svc, school, {
+      student_id: studentId,
+    });
     const { data, error } = await svc.from("message_conversations").insert({
       school_id: school,
       title: body.title ?? null,
-      student_id: body.student_id ?? null,
+      student_id: studentId || null,
+      section_id: text(context.section_id) || null,
+      class_label: text(context.class_label) || null,
       participant_ids: body.participant_ids ?? [],
-      type: body.type ?? "parent_teacher",
+      type: conversationType,
       teacher_id: teacherId || null,
       parent_id: parentId || null,
+      leader_id: conversationType === "parent_teacher" ? null : user.id,
       created_by: user.id,
       last_message: body.last_message ?? "",
       last_message_at: body.last_message_time ?? new Date().toISOString(),
@@ -2095,13 +2322,21 @@ export async function handleCommunications(
     return ok(data);
   }
   if (path === "/messages" && method === "GET") {
+    const conversationId = text(url.searchParams.get("conversation_id"));
+    if (!conversationId) return fail("conversation_id is required", 400);
+    const { data: conversation, error: conversationError } = await svc.from(
+      "message_conversations",
+    ).select("*").eq("school_id", school).eq("id", conversationId)
+      .maybeSingle();
+    if (conversationError) return fail(conversationError.message);
+    if (!conversation) return fail("conversation not found", 404);
+    if (!await canReadChatConversation(svc, school, conversation, user)) {
+      return fail("forbidden", 403);
+    }
     let q = svc.from("messages").select("*, sender:users(name, role_name)").eq(
       "school_id",
       school,
-    );
-    if (url.searchParams.get("conversation_id")) {
-      q = q.eq("conversation_id", url.searchParams.get("conversation_id")!);
-    }
+    ).eq("conversation_id", conversationId);
     const { data, error } = await q.order("created_at", { ascending: true });
     if (error) return fail(error.message);
     return ok(data ?? []);
@@ -2109,12 +2344,14 @@ export async function handleCommunications(
   if (path === "/messages" && method === "POST") {
     const { conversation_id, message_body, attachments } = body;
     let convId = conversation_id;
-    if (!convId) {
-      const { data: conv } = await svc.from("message_conversations").insert({
-        school_id: school,
-        participant_ids: body.participant_ids ?? [],
-      }).select().single();
-      convId = conv?.id;
+    if (!convId) return fail("conversation_id is required", 400);
+    const { data: conversation, error: conversationError } = await svc.from(
+      "message_conversations",
+    ).select("*").eq("school_id", school).eq("id", convId).maybeSingle();
+    if (conversationError) return fail(conversationError.message);
+    if (!conversation) return fail("conversation not found", 404);
+    if (!await canSendChatMessage(svc, school, conversation, user)) {
+      return fail("forbidden", 403);
     }
     const sentAt = text(body.sent_at) || new Date().toISOString();
     const messageText = text(body.body ?? body.message ?? message_body);
@@ -2131,43 +2368,66 @@ export async function handleCommunications(
       delivered_at: sentAt,
     }).select().single();
     if (error) return fail(error.message);
-    const { data: conversation } = await svc.from("message_conversations")
-      .select("*").eq("id", convId).eq("school_id", school).maybeSingle();
-    if (conversation) {
-      await svc.from("message_conversations").update({
-        last_message: messageText,
-        last_message_at: sentAt,
-        last_sender_id: user.id,
-        updated_at: sentAt,
-      }).eq("id", convId).eq("school_id", school);
-      const targetUserId = await resolveChatNotificationTarget(
+    await svc.from("message_conversations").update({
+      last_message: messageText,
+      last_message_at: sentAt,
+      last_sender_id: user.id,
+      updated_at: sentAt,
+    }).eq("id", convId).eq("school_id", school);
+    const context = await chatConversationContext(svc, school, conversation);
+    const notificationBody = [context.class_label, context.student_name]
+      .filter(Boolean).join(" - ");
+    const targetUserId = await resolveChatNotificationTarget(
+      svc,
+      school,
+      conversation,
+      user,
+    );
+    if (targetUserId && targetUserId !== user.id) {
+      const targetRole = targetUserId === text(conversation.parent_id)
+        ? "parent"
+        : "teacher";
+      const notificationTitle = conversation.type === "homework"
+        ? "New homework message"
+        : "New chat message";
+      await appendNotification(
         svc,
         school,
-        conversation,
-        user,
+        targetUserId,
+        notificationTitle,
+        notificationBody ? `${notificationBody}: ${messageText}` : messageText,
+        text(convId),
+        targetRole,
+        chatRouteForRole(targetRole),
+        {
+          student_id: text(context.student_id),
+          section_id: text(context.section_id),
+          student_name: text(context.student_name),
+          class_label: text(context.class_label),
+        },
       );
-      if (targetUserId && targetUserId !== user.id) {
-        const targetRole = targetUserId === text(conversation.parent_id)
-          ? "parent"
-          : "teacher";
-        await appendNotification(
-          svc,
-          school,
-          targetUserId,
-          "New dairy message",
-          messageText,
-          text(convId),
-          targetRole,
-        );
-      }
     }
     return ok(data);
   }
   const messageMatch = path.match(/^\/messages\/([^/]+)$/);
   if (messageMatch && method === "PUT") {
-    const readBy = body.is_read == true ? [user.id] : body.read_by;
+    const { data: existingMessage, error: existingError } = await svc.from(
+      "messages",
+    ).select("id, conversation_id, read_by").eq("id", messageMatch[1])
+      .eq("school_id", school).maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (!existingMessage) return fail("message not found", 404);
+    const { data: conversation } = await svc.from("message_conversations")
+      .select("*").eq("id", existingMessage.conversation_id)
+      .eq("school_id", school).maybeSingle();
+    if (!conversation || !await canReadChatConversation(svc, school, conversation, user)) {
+      return fail("forbidden", 403);
+    }
+    const readBy = readByList(existingMessage.read_by);
+    if (body.is_read == true && !readBy.includes(user.id)) {
+      readBy.push(user.id);
+    }
     const { data, error } = await svc.from("messages").update({
-      ...body,
       read_by: readBy,
     }).eq("id", messageMatch[1]).eq("school_id", school).select().single();
     if (error) return fail(error.message);

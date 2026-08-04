@@ -74,6 +74,7 @@ void main() {
         AppRoutes.principalClasses,
         AppRoutes.principalAttendance,
         AppRoutes.principalSubjects,
+        AppRoutes.principalTimetable,
         AppRoutes.principalLessonPlanner,
         AppRoutes.principalDocuments,
         AppRoutes.principalAuditLogs,

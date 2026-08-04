@@ -14,6 +14,7 @@ import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
+import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 class ParentTeacherChatScreen extends StatefulWidget {
@@ -30,6 +31,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
 
   RealtimeChannel? _realtimeChannel;
   String _realtimeConversationId = '';
+  int _realtimeRequest = 0;
 
   bool _loading = true;
   bool _sending = false;
@@ -47,7 +49,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   void initState() {
     super.initState();
     _load();
-    _subscribeRealtime();
+    unawaited(_subscribeRealtime());
   }
 
   @override
@@ -60,20 +62,27 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
 
   // ── Realtime ──────────────────────────────────────────────────────────────
 
-  void _subscribeRealtime({String conversationId = ''}) {
+  Future<void> _subscribeRealtime({String conversationId = ''}) async {
     if (DemoLocalApiService.instance.isActive) return;
     if (_realtimeConversationId == conversationId && _realtimeChannel != null) {
+      await ChatRealtimeService.instance.refreshAuth();
       return;
     }
     _removeRealtimeChannel();
     _realtimeConversationId = conversationId;
-    _realtimeChannel = ChatRealtimeService.instance.subscribe(
+    final request = ++_realtimeRequest;
+    final channel = await ChatRealtimeService.instance.subscribe(
       channelName: 'parent-chat-$conversationId',
       conversationId: conversationId,
       onUpdate: () {
         if (mounted && !_sending) _loadIncremental();
       },
     );
+    if (!mounted || request != _realtimeRequest) {
+      if (channel != null) await Supabase.instance.client.removeChannel(channel);
+      return;
+    }
+    _realtimeChannel = channel;
   }
 
   void _removeRealtimeChannel() {
@@ -111,6 +120,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       );
       final principalConversations = await api.getUnifiedChatConversations(
         type: 'principal_parent',
+        studentId: selectedStudent,
       );
       final contacts = await api.getUnifiedChatContacts(
         role: 'parent',
@@ -179,7 +189,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         _loading = false;
       });
       _scrollToBottom();
-      _subscribeRealtime(conversationId: newConversationId);
+      unawaited(_subscribeRealtime(conversationId: newConversationId));
       if (newConversationId.isNotEmpty) {
         unawaited(api.markUnifiedChatConversationRead(newConversationId));
       }
@@ -208,6 +218,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       );
       final principalConversations = await api.getUnifiedChatConversations(
         type: 'principal_parent',
+        studentId: selectedStudent,
       );
       final contacts = await api.getUnifiedChatContacts(
         role: 'parent',
@@ -323,7 +334,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         threadKey: 'principal:$id',
         teacherId: 'principal:$id',
         teacherName: _name(_map(row['leader']), fallback: 'School leadership'),
-        subtitle: 'School leadership',
+        subtitle: _text(
+          row['class_label'],
+          fallback: 'School leadership',
+        ),
         studentId: _text(row['student_id'], fallback: studentId),
         studentName: _childName(
           children.firstWhere(
@@ -353,9 +367,9 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         threadKey: 'leader-contact:$leaderId',
         teacherId: '',
         teacherName: _text(user['name'], fallback: leaderLabel),
-        subtitle: 'School leadership - tap to start direct chat',
-        studentId: '',
-        studentName: '',
+        subtitle: '${_text(user['class_label'], fallback: 'School leadership')} - tap to start direct chat',
+        studentId: _text(user['student_id'], fallback: studentId),
+        studentName: _text(user['student_name']),
         conversationType: 'principal_parent',
         leaderId: leaderId,
       );
@@ -425,9 +439,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
               type: thread.conversationType,
               teacherId: thread.teacherId,
               parentId: _parentUserId,
-              studentId: thread.conversationType == 'parent_teacher'
-                  ? thread.studentId
-                  : '',
+              studentId: thread.studentId,
               leaderId: thread.leaderId,
               title: thread.teacherName,
             );
@@ -477,7 +489,25 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
 
   Widget _body() {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) return Center(child: Text(_error!));
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Column(
       children: [
         _childSelector(),
@@ -611,7 +641,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
                   onPressed: () => setState(() {
                     _selectedThread = null;
                     _clearMessages();
-                    _subscribeRealtime();
+                    unawaited(_subscribeRealtime());
                   }),
                 )
               : CircleAvatar(
@@ -625,11 +655,17 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
                     ),
                   ),
                 ),
-          title: Text(thread.teacherName),
+          title: Text(
+            thread.teacherName,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
           subtitle: Text(
             thread.studentName.isEmpty
                 ? thread.subtitle
                 : '${thread.studentName} - ${thread.subtitle}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         Expanded(
@@ -644,6 +680,14 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
                     _text(message['sender_user_id'] ?? message['sender_id']) ==
                     _parentUserId;
                 final isPending = message['_pending'] == true;
+                final senderName = _text(
+                  message['sender_name'],
+                  fallback: mine ? 'You' : thread.teacherName,
+                );
+                final senderRole = _text(
+                  message['sender_role'],
+                  fallback: mine ? 'Parent' : 'Teacher',
+                );
                 return Opacity(
                   opacity: isPending ? 0.6 : 1.0,
                   child: ChatBubbleWidget(
@@ -655,6 +699,8 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
                           ),
                     isMe: mine,
                     isRead: message['is_read'] == true,
+                    senderLabel: senderName,
+                    senderRoleLabel: senderRole,
                   ),
                 );
               },
@@ -736,9 +782,11 @@ class _TeacherThread {
 }
 
 String _contactSubtitle(Map<String, dynamic> row) {
+  final context = ChatContext.fromMap(row);
   final contactRole = _text(row['contact_role']);
-  if (contactRole == 'co_teacher') return 'Co-teacher';
-  return 'Teacher';
+  final role = contactRole == 'co_teacher' ? 'Co-teacher' : 'Teacher';
+  final classLabel = context.classLabel;
+  return classLabel.isEmpty ? role : '$classLabel - $role';
 }
 
 String _teacherThreadKey(String teacherId, String studentId) =>

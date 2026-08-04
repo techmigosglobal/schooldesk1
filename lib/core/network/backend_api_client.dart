@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
 import 'package:schooldesk1/features/shared/data/models/backend_models.dart';
+import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/core/network/generated/schooldesk_api_models.dart';
 import 'package:schooldesk1/core/network/schooldesk_api.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';

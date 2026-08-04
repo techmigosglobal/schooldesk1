@@ -6,12 +6,13 @@ extension BackendCommunicationsApi on BackendApiClient {
   Future<List<Map<String, dynamic>>> getUnifiedChatContacts({
     required String role,
     String studentId = '',
-  }) {
+  }) async {
     final params = <String, dynamic>{
       'role': role.trim().toLowerCase(),
       if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
     };
-    return getRawList('/chat/contacts', queryParameters: params);
+    final rows = await getRawList('/chat/contacts', queryParameters: params);
+    return rows.map(normalizeChatContextMap).toList();
   }
 
   Future<List<Map<String, dynamic>>> getUnifiedChatConversations({
@@ -20,7 +21,7 @@ extension BackendCommunicationsApi on BackendApiClient {
     String? parentId,
     String? studentId,
     bool monitor = false,
-  }) {
+  }) async {
     final params = <String, dynamic>{};
     if (type != null && type.trim().isNotEmpty) params['type'] = type.trim();
     if (teacherId != null && teacherId.trim().isNotEmpty) {
@@ -33,10 +34,11 @@ extension BackendCommunicationsApi on BackendApiClient {
       params['student_id'] = studentId.trim();
     }
     if (monitor) params['monitor'] = 'true';
-    return getRawList(
+    final rows = await getRawList(
       monitor ? '/chat/monitor' : '/chat/conversations',
       queryParameters: params.isEmpty ? null : params,
     );
+    return rows.map(normalizeChatContextMap).toList();
   }
 
   Future<Map<String, dynamic>> createUnifiedChatConversation({
@@ -512,9 +514,6 @@ extension BackendCommunicationsApi on BackendApiClient {
 
   // ─── Birthday Alerts ──────────────────────────────────────────────────────
 
-  /// Triggers the birthday alert job for today. Only principals/admins can
-  /// call this. The backend creates notification_logs entries for every
-  /// student whose date_of_birth matches today.
   Future<Map<String, dynamic>> triggerBirthdayAlerts() async {
     // Use a dedicated Dio instance without the auth-clearing error
     // interceptor so a 403/401 from this fire-and-forget endpoint never

@@ -17,6 +17,10 @@ function intValue(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function addMinutes(time: string, minutes: number): string {
   const [hoursText, minutesText] = textValue(time, "08:30").split(":");
   const baseHours = intValue(hoursText, 8);
@@ -172,6 +176,80 @@ async function sectionExists(
   return Boolean(data?.id);
 }
 
+async function sectionSubjectIds(
+  svc: SupabaseClient,
+  school: string,
+  sectionId: string,
+  academicYearId: string,
+): Promise<Set<string>> {
+  const { data: section, error: sectionError } = await svc.from("sections")
+    .select("grade_id").eq("id", sectionId).eq("school_id", school)
+    .maybeSingle();
+  if (sectionError) throw sectionError;
+  const gradeId = textValue(section?.grade_id);
+  if (!gradeId) return new Set<string>();
+  const { data, error } = await svc.from("grade_subjects")
+    .select("subject_id, section_id, grade_id, academic_year_id")
+    .eq("school_id", school);
+  if (error) throw error;
+  return new Set(
+    (data ?? [])
+      .filter((row: Record<string, unknown>) => {
+        const rowSection = textValue(row.section_id);
+        const rowGrade = textValue(row.grade_id);
+        const rowYear = textValue(row.academic_year_id);
+        return (!rowSection || rowSection === sectionId) &&
+          (!rowGrade || rowGrade === gradeId) &&
+          (!rowYear || rowYear === academicYearId);
+      })
+      .map((row: Record<string, unknown>) => textValue(row.subject_id))
+      .filter(Boolean),
+  );
+}
+
+function normalizedDays(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((day) => intValue(day, 0)))]
+    .filter((day) => day >= 1 && day <= 7)
+    .sort((a, b) => a - b);
+}
+
+function validateTemplateRows(
+  value: unknown,
+  mappedSubjectIds: Set<string>,
+): { rows: Array<Record<string, unknown>>; error?: string } {
+  if (!Array.isArray(value) || value.length === 0) {
+    return { rows: [], error: "at least one timetable row is required" };
+  }
+  let previousEnd = -1;
+  const rows: Array<Record<string, unknown>> = [];
+  for (const raw of value) {
+    const row = (raw ?? {}) as Record<string, unknown>;
+    const start = textValue(row.start_time);
+    const end = textValue(row.end_time);
+    const startMinutes = minutesOf(start);
+    const endMinutes = minutesOf(end);
+    const subjectId = textValue(row.subject_id);
+    if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) {
+      return { rows: [], error: "each row needs a valid HH:MM start and end time" };
+    }
+    if (startMinutes < previousEnd) {
+      return { rows: [], error: "timetable rows cannot overlap or be out of order" };
+    }
+    if (subjectId && (!isUuid(subjectId) || !mappedSubjectIds.has(subjectId))) {
+      return { rows: [], error: "every selected subject must be mapped to this class" };
+    }
+    rows.push({
+      start_time: start,
+      end_time: end,
+      subject_id: subjectId || null,
+      staff_id: textValue(row.staff_id) || null,
+    });
+    previousEnd = endMinutes;
+  }
+  return { rows };
+}
+
 type TimetableReaderScope = {
   staffId: string;
   sectionIds: Set<string>;
@@ -204,16 +282,10 @@ async function readerScope(
         const id = textValue(row.id);
         if (id) sectionIds.add(id);
       }
-      const { data: assignments, error: assignmentError } = await svc.from(
-        "staff_subjects",
-      ).select("section_id").eq("school_id", school).eq("staff_id", staffId);
-      if (assignmentError) throw assignmentError;
-      for (const row of assignments ?? []) {
-        const id = textValue(row.section_id);
-        if (id) sectionIds.add(id);
-      }
     }
-    return { staffId, sectionIds };
+    // Timetable visibility is class-owned. A subject assignment alone is not
+    // enough to expose a section's schedule to a teacher.
+    return { staffId: "", sectionIds };
   }
 
   if (role === "parent") {
@@ -405,6 +477,24 @@ export async function handleTimetable(
   }
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
 
+  if (path === "/timetable/working-days" && method === "GET") {
+    const { data, error } = await svc.from("working_day_configs")
+      .select("day_of_week, is_working")
+      .eq("school_id", school)
+      .order("day_of_week");
+    if (error) return fail(error.message);
+    const configured = (data ?? [])
+      .map((row: Record<string, unknown>) => ({
+        day: intValue(row.day_of_week, 0),
+        working: row.is_working !== false,
+      }))
+      .filter((row) => row.day >= 1 && row.day <= 7);
+    const days = configured.length
+      ? configured.filter((row) => row.working).map((row) => row.day)
+      : [1, 2, 3, 4, 5, 6];
+    return ok({ days });
+  }
+
   if (path === "/timetable/slots" || path === "/timetable") {
     if (method === "GET") {
       let q = svc.from("timetable_slots").select(
@@ -478,6 +568,38 @@ export async function handleTimetable(
       if (error) return fail(error.message);
       return ok(data);
     }
+  }
+
+  if (path === "/timetable/slots/replace-days" && method === "PUT") {
+    const sectionId = textValue(body.section_id);
+    const academicYearId = textValue(body.academic_year_id);
+    const days = normalizedDays(body.days);
+    if (!sectionId || !academicYearId || days.length === 0) {
+      return fail("section_id, academic_year_id, and at least one day are required", 422);
+    }
+    if (!isUuid(sectionId) || !isUuid(academicYearId)) {
+      return fail("invalid timetable scope", 422);
+    }
+    if (!await sectionExists(svc, school, sectionId)) {
+      return fail("Class section not found", 404);
+    }
+    const mappedSubjectIds = await sectionSubjectIds(
+      svc,
+      school,
+      sectionId,
+      academicYearId,
+    );
+    const validated = validateTemplateRows(body.rows, mappedSubjectIds);
+    if (validated.error) return fail(validated.error, 422);
+    const { data, error } = await svc.rpc("replace_timetable_days", {
+      p_school_id: school,
+      p_section_id: sectionId,
+      p_academic_year_id: academicYearId,
+      p_days: days,
+      p_rows: validated.rows,
+    });
+    if (error) return fail(error.message);
+    return ok(data ?? { deleted_count: 0, created_count: 0, days });
   }
 
   const slotMatch = path.match(/^\/timetable\/slots\/([^/]+)$/);

@@ -59,10 +59,10 @@ void main() {
         handler,
         contains('parent_teacher scope requires a linked student'),
       );
-      expect(handler, contains('teacher must be class teacher or co-teacher'));
+      expect(handler, contains('teacher is not assigned to this class section'));
       expect(
         handler,
-        contains('principal_parent scope requires a parent participant'),
+        contains('principal_parent scope requires a parent and linked student'),
       );
       expect(
         handler,
@@ -112,7 +112,12 @@ void main() {
     ).readAsStringSync();
 
     expect(service, contains('final client = Supabase.instance.client;'));
-    expect(service, contains('client.realtime.setAuth(token)'));
+    expect(
+      service,
+      contains('await Supabase.instance.client.realtime.setAuth(token.trim())'),
+    );
+    expect(service, contains('Future<bool> refreshAuth()'));
+    expect(service, contains('if (!await refreshAuth()) return null;'));
     expect(service, contains('onPostgresChanges'));
     expect(service, contains("table: 'messages'"));
     expect(service, contains("table: 'message_conversations'"));
@@ -153,7 +158,7 @@ void main() {
       expect(parentScreen, contains("conversationType: 'principal_parent'"));
       expect(
         parentScreen,
-        contains('School leadership - tap to start direct chat'),
+        contains('tap to start direct chat'),
       );
       expect(parentScreen, contains('leaderId: leaderId'));
       expect(parentScreen, contains("tooltip: 'Back to chats'"));
@@ -177,15 +182,23 @@ void main() {
         contains('_mergeDirectConversationsWithContacts('),
       );
       expect(principalScreen, contains('_safeChatRows('));
-      expect(principalScreen, contains('_safeModelRows('));
       expect(
         principalScreen,
         contains('api.getUnifiedChatContacts(role: _leadershipRole)'),
       );
-      expect(principalScreen, contains("api.getStaff(page: 1, pageSize: 200)"));
-      expect(principalScreen, contains("api.getUsers(role: 'Parent'"));
+      expect(
+        principalScreen,
+        isNot(contains("api.getStaff(page: 1, pageSize: 200)")),
+      );
+      expect(
+        principalScreen,
+        isNot(contains("api.getUsers(role: 'Parent'")),
+      );
       expect(principalScreen, contains("'id': 'contact-teacher-\$id'"));
-      expect(principalScreen, contains("'id': 'contact-parent-\$id'"));
+      expect(
+        principalScreen,
+        contains("'id': 'contact-parent-\$id-\$studentId'"),
+      );
       expect(
         principalScreen,
         contains('_directContactHint(row, \'Teacher contact\')'),
@@ -269,11 +282,14 @@ void main() {
 
       expect(handler, contains('async function principalUserIdsForSchool'));
       expect(handler, contains('target_role: targetRole'));
-      expect(handler, contains('route: "/communication-center-screen"'));
+      expect(handler, contains('chatRouteForRole(target.role)'));
       expect(handler, contains('priority: "medium"'));
-      expect(handler, contains('if (type == "parent_teacher")'));
+      expect(handler, contains('if (type == "parent_teacher" &&'));
       expect(handler, contains('"Parent-teacher chat updated"'));
-      expect(handler, contains('targetUserId == conversationParentId'));
+      expect(handler, contains('async function chatNotificationTargets'));
+      expect(handler, contains('School leader replied'));
+      expect(handler, contains('event_type: "message"'));
+      expect(handler, contains('student_id: text(context.student_id)'));
     },
   );
 
@@ -380,13 +396,14 @@ void main() {
 
       expect(handler, contains('contact_role: "class_teacher"'));
       expect(handler, contains('contact_role: "co_teacher"'));
-      expect(handler, contains('student_name: studentName'));
+      expect(handler, contains('student_name: [text(student?.first_name)'));
+      expect(handler, contains('...context'));
       expect(handler, contains('type: "principal_parent"'));
       expect(handler, contains('type: "principal_teacher"'));
       expect(handler, isNot(contains('type: "teacher_teacher"')));
       expect(parentScreen, contains("_contactSubtitle(c)"));
-      expect(parentScreen, contains("return 'Co-teacher'"));
-      expect(parentScreen, contains("return 'Teacher'"));
+      expect(parentScreen, contains("contactRole == 'co_teacher'"));
+      expect(parentScreen, contains(": 'Teacher'"));
       expect(parentScreen, contains('_selectRetainedThread('));
       expect(parentScreen, contains('_clearMessages()'));
       expect(parentScreen, isNot(contains('orElse: () => threads.first')));
@@ -416,4 +433,79 @@ void main() {
       );
     },
   );
+
+  test('chat scope migration removes broad policies and preserves branch access', () {
+    final migration = File(
+      'supabase/migrations/20260804120000_chat_scope_and_realtime_rls.sql',
+    ).readAsStringSync();
+
+    expect(
+      migration,
+      contains('drop policy if exists "message_conversations_school_select"'),
+    );
+    expect(migration, contains('chat_can_access_conversation'));
+    expect(migration, contains('branch_memberships'));
+    expect(migration, contains('chat_messages_participant_select'));
+    expect(migration, contains('alter publication supabase_realtime'));
+    expect(migration, contains('replica identity full'));
+  });
+
+  test('leaders can reply inside monitored parent-teacher conversations', () {
+    final handler = File(
+      'supabase/functions/api/handlers/communications.ts',
+    ).readAsStringSync();
+    final principalScreen = File(
+      'lib/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart',
+    ).readAsStringSync();
+
+    expect(
+      handler,
+      contains(
+        'return await canReadChatConversation(svc, school, conversation, user);',
+      ),
+    );
+    expect(handler, contains('if (canManageSchoolContent(user))'));
+    expect(
+      principalScreen,
+      contains("if (_text(conversation['type']) == 'parent_teacher') return true;"),
+    );
+    expect(principalScreen, contains('replies stay in this thread'));
+  });
+
+  test('chat reads and notifications retain participant and student scope', () {
+    final handler = File(
+      'supabase/functions/api/handlers/communications.ts',
+    ).readAsStringSync();
+    final processor = File(
+      'supabase/functions/notification-processor/index.ts',
+    ).readAsStringSync();
+    final realtime = File(
+      'lib/core/services/chat_realtime_service.dart',
+    ).readAsStringSync();
+
+    expect(handler, contains('async function parentIsLinkedToStudent'));
+    expect(handler, contains('async function teacherIsAssignedToStudent'));
+    expect(handler, contains('lessonPlannerAssignedSectionIds'));
+    expect(handler, contains('if (!conversationId) return fail("conversation_id is required", 400);'));
+    expect(handler, contains('async function chatNotificationTargets'));
+    expect(handler, contains('event_type: "message"'));
+    expect(processor, contains('case "message":'));
+    expect(processor, contains('student_id: String(eventData.student_id || "")'));
+    expect(realtime, contains("column: 'conversation_id'"));
+    expect(
+      realtime,
+      isNot(matches(RegExp(r"table: 'messages',\s*callback"))),
+    );
+  });
+
+  test('coordinator uses the same leadership chat route with branch context', () {
+    final routes = File('lib/routes/route_access_guard.dart').readAsStringSync();
+    final apiIndex = File('supabase/functions/api/index.ts').readAsStringSync();
+
+    expect(routes, contains("AppRoutes.principalChatCommunications: {'principal'}"));
+    expect(routes, contains("return {...configured, 'coordinator'};"));
+    expect(apiIndex, contains('x-schooldesk-branch-id'));
+    expect(apiIndex, contains('currentRole === "coordinator"'));
+    expect(apiIndex, contains('branch_memberships'));
+  });
 }

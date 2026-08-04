@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -137,120 +139,122 @@ class ChatBubbleWidget extends StatelessWidget {
         ? context.appTheme.onPrimary
         : context.appTheme.onSurface;
 
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        child: Stack(
-          children: [
-            // Bubble Content
-            Container(
-              padding: type == 'image'
-                  ? const EdgeInsets.all(4)
-                  : const EdgeInsets.only(
-                      left: 14,
-                      top: 8,
-                      right: 14,
-                      bottom: 22, // Space for time & ticks
-                    ),
-              decoration: BoxDecoration(
-                color: bubbleColor,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(14),
-                  topRight: const Radius.circular(14),
-                  bottomLeft: Radius.circular(isMe ? 14 : 2),
-                  bottomRight: Radius.circular(isMe ? 2 : 14),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: isMe
-                        ? context.appTheme.primary.withAlpha(40)
-                        : Colors.black.withAlpha(15),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+    return LayoutBuilder(
+      builder: (context, constraints) => Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          constraints: BoxConstraints(
+            maxWidth: math.min(520, constraints.maxWidth * 0.84),
+          ),
+          child: Stack(
+            children: [
+              // Bubble Content
+              Container(
+                padding: type == 'image'
+                    ? const EdgeInsets.all(4)
+                    : const EdgeInsets.only(
+                        left: 14,
+                        top: 8,
+                        right: 14,
+                        bottom: 22, // Space for time & ticks
+                      ),
+                decoration: BoxDecoration(
+                  color: bubbleColor,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(14),
+                    topRight: const Radius.circular(14),
+                    bottomLeft: Radius.circular(isMe ? 14 : 2),
+                    bottomRight: Radius.circular(isMe ? 2 : 14),
                   ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (senderLabel.trim().isNotEmpty ||
-                      senderRoleLabel.trim().isNotEmpty) ...[
-                    Wrap(
-                      spacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if (senderLabel.trim().isNotEmpty)
-                          Text(
-                            senderLabel,
-                            style: GoogleFonts.ibmPlexSans(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: textColor.withAlpha(210),
-                            ),
-                          ),
-                        if (senderRoleLabel.trim().isNotEmpty)
-                          Text(
-                            senderRoleLabel,
-                            style: GoogleFonts.ibmPlexSans(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: textColor.withAlpha(170),
-                            ),
-                          ),
-                      ],
+                  boxShadow: [
+                    BoxShadow(
+                      color: isMe
+                          ? context.appTheme.primary.withAlpha(40)
+                          : Colors.black.withAlpha(15),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
                     ),
-                    const SizedBox(height: 4),
                   ],
-                  if (type != 'text' && attachmentWidget != null) ...[
-                    attachmentWidget!,
-                    if (messageText.isNotEmpty) const SizedBox(height: 6),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (senderLabel.trim().isNotEmpty ||
+                        senderRoleLabel.trim().isNotEmpty) ...[
+                      Wrap(
+                        spacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (senderLabel.trim().isNotEmpty)
+                            Text(
+                              senderLabel,
+                              style: GoogleFonts.ibmPlexSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: textColor.withAlpha(210),
+                              ),
+                            ),
+                          if (senderRoleLabel.trim().isNotEmpty)
+                            Text(
+                              senderRoleLabel,
+                              style: GoogleFonts.ibmPlexSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: textColor.withAlpha(170),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    if (type != 'text' && attachmentWidget != null) ...[
+                      attachmentWidget!,
+                      if (messageText.isNotEmpty) const SizedBox(height: 6),
+                    ],
+                    if (type == 'text' || messageText.isNotEmpty)
+                      Text(
+                        messageText,
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 14.5,
+                          color: textColor,
+                          height: 1.35,
+                        ),
+                      ),
                   ],
-                  if (type == 'text' || messageText.isNotEmpty)
+                ),
+              ),
+              // Time & Ticks overlay at bottom right
+              Positioned(
+                bottom: 4,
+                right: 8,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      messageText,
+                      time,
                       style: GoogleFonts.ibmPlexSans(
-                        fontSize: 14.5,
-                        color: textColor,
-                        height: 1.35,
+                        fontSize: 10,
+                        color: isMe
+                            ? context.appTheme.onPrimary.withAlpha(180)
+                            : context.appTheme.muted,
                       ),
                     ),
-                ],
-              ),
-            ),
-            // Time & Ticks overlay at bottom right
-            Positioned(
-              bottom: 4,
-              right: 8,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    time,
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 10,
-                      color: isMe
-                          ? context.appTheme.onPrimary.withAlpha(180)
-                          : context.appTheme.muted,
-                    ),
-                  ),
-                  if (isMe) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      isRead ? Icons.done_all_rounded : Icons.done_rounded,
-                      size: 14,
-                      color: isRead
-                          ? Colors.blueAccent
-                          : context.appTheme.onPrimary.withAlpha(180),
-                    ),
+                    if (isMe) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        isRead ? Icons.done_all_rounded : Icons.done_rounded,
+                        size: 14,
+                        color: isRead
+                            ? Colors.blueAccent
+                            : context.appTheme.onPrimary.withAlpha(180),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -276,81 +280,91 @@ class ChatInputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      color: Colors.transparent,
-      child: Row(
-        children: [
-          // Input pill
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: context.appTheme.surface,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(10),
-                    blurRadius: 5,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      decoration: InputDecoration(
-                        hintText: placeholder,
-                        hintStyle: GoogleFonts.ibmPlexSans(
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 160),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // Input pill
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: context.appTheme.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(10),
+                      blurRadius: 5,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        decoration: InputDecoration(
+                          hintText: placeholder,
+                          hintStyle: GoogleFonts.ibmPlexSans(
+                            color: context.appTheme.muted,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 4,
+                          ),
+                        ),
+                        maxLines: 4,
+                        minLines: 1,
+                        textCapitalization: TextCapitalization.sentences,
+                      ),
+                    ),
+                    if (onAttach != null)
+                      IconButton(
+                        icon: Icon(
+                          Icons.attach_file_rounded,
                           color: context.appTheme.muted,
                         ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 4,
-                        ),
+                        onPressed: onAttach,
                       ),
-                      maxLines: 4,
-                      minLines: 1,
-                      textCapitalization: TextCapitalization.sentences,
-                    ),
-                  ),
-                  if (onAttach != null)
-                    IconButton(
-                      icon: Icon(
-                        Icons.attach_file_rounded,
-                        color: context.appTheme.muted,
-                      ),
-                      onPressed: onAttach,
-                    ),
-                  const SizedBox(width: 8),
-                ],
+                    const SizedBox(width: 8),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            tooltip: 'Send message',
-            onPressed: isSending ? null : onSend,
-            icon: isSending
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              tooltip: 'Send message',
+              onPressed: isSending ? null : onSend,
+              icon: isSending
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation(Colors.white),
+                      ),
+                    )
+                  : const Icon(
+                      Icons.send_rounded,
+                      color: Colors.white,
+                      size: 20,
                     ),
-                  )
-                : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-            style: IconButton.styleFrom(
-              fixedSize: const Size(48, 48),
-              backgroundColor: context.appTheme.primary,
-              disabledBackgroundColor: context.appTheme.primary.withAlpha(130),
+              style: IconButton.styleFrom(
+                fixedSize: const Size(46, 46),
+                backgroundColor: context.appTheme.primary,
+                disabledBackgroundColor: context.appTheme.primary.withAlpha(
+                  130,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

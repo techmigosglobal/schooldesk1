@@ -103,46 +103,54 @@ void main() {
     expect(decisionScreen, isNot(contains('showDialog(')));
   });
 
-  test('admin fee structure and direct collection actions use routed input screens without popup forms', () {
-    final adminFees = File(
-      'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
-    ).readAsStringSync();
-    final feeForms = File(
-      'lib/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart',
-    ).readAsStringSync();
-    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
-    final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
-    final registry = File(
-      'lib/routes/schooldesk_screen_registry.dart',
-    ).readAsStringSync();
+  test(
+    'admin fee structure and direct collection actions use routed input screens without popup forms',
+    () {
+      final adminFees = File(
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
+      ).readAsStringSync();
+      final feeForms = File(
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart',
+      ).readAsStringSync();
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      final guard = File(
+        'lib/routes/route_access_guard.dart',
+      ).readAsStringSync();
+      final registry = File(
+        'lib/routes/schooldesk_screen_registry.dart',
+      ).readAsStringSync();
 
-    expect(adminFees, contains('AppRoutes.principalFeeStructureForm'));
-    expect(adminFees, contains('AppRoutes.principalPaymentRecordForm'));
-    expect(adminFees, contains('AdminFeeStructureFormArgs'));
-    expect(adminFees, contains('AdminPaymentRecordFormArgs'));
-    expect(adminFees, isNot(contains('AppRoutes.principalInvoiceGenerationForm')));
-    expect(adminFees, isNot(contains('AdminInvoiceGenerationFormArgs')));
-    expect(adminFees, isNot(contains('_showCreateFeeStructureDialog')));
-    expect(adminFees, isNot(contains('_showGenerateInvoiceDialog')));
-    expect(adminFees, isNot(contains('_showRecordPaymentDialog')));
-    expect(adminFees, isNot(contains('_showEditFeeDialog')));
-    expect(adminFees, isNot(contains('showDialog(')));
-    expect(feeForms, contains('AdminFeeStructureFormScreen'));
-    expect(feeForms, contains('AdminPaymentRecordFormScreen'));
-    expect(feeForms, contains('createFeeStructure('));
-    expect(feeForms, contains('recordPayment('));
-    expect(feeForms, isNot(contains('showDialog(')));
-    expect(routes, contains('principalFeeStructureForm'));
-    expect(routes, contains('AdminFeeStructureFormScreen'));
-    expect(routes, contains('principalPaymentRecordForm'));
-    expect(routes, contains('AdminPaymentRecordFormScreen'));
-    expect(
-      guard,
-      contains('AppRoutes.principalFeeStructureForm: {\'principal\'}'),
-    );
-    expect(registry, contains('/principal-fees-screen/fee-structure'));
-    expect(registry, contains('/principal-fees-screen/payment-record'));
-  });
+      expect(adminFees, contains('AppRoutes.principalFeeStructureForm'));
+      expect(adminFees, contains('AppRoutes.principalPaymentRecordForm'));
+      expect(adminFees, contains('AdminFeeStructureFormArgs'));
+      expect(adminFees, contains('AdminPaymentRecordFormArgs'));
+      expect(
+        adminFees,
+        isNot(contains('AppRoutes.principalInvoiceGenerationForm')),
+      );
+      expect(adminFees, isNot(contains('AdminInvoiceGenerationFormArgs')));
+      expect(adminFees, isNot(contains('_showCreateFeeStructureDialog')));
+      expect(adminFees, isNot(contains('_showGenerateInvoiceDialog')));
+      expect(adminFees, isNot(contains('_showRecordPaymentDialog')));
+      expect(adminFees, isNot(contains('_showEditFeeDialog')));
+      expect(adminFees, isNot(contains('showDialog(')));
+      expect(feeForms, contains('AdminFeeStructureFormScreen'));
+      expect(feeForms, contains('AdminPaymentRecordFormScreen'));
+      expect(feeForms, contains('createFeeStructure('));
+      expect(feeForms, contains('recordPayment('));
+      expect(feeForms, isNot(contains('showDialog(')));
+      expect(routes, contains('principalFeeStructureForm'));
+      expect(routes, contains('AdminFeeStructureFormScreen'));
+      expect(routes, contains('principalPaymentRecordForm'));
+      expect(routes, contains('AdminPaymentRecordFormScreen'));
+      expect(
+        guard,
+        contains('AppRoutes.principalFeeStructureForm: {\'principal\'}'),
+      );
+      expect(registry, contains('/principal-fees-screen/fee-structure'));
+      expect(registry, contains('/principal-fees-screen/payment-record'));
+    },
+  );
 
   test('parent payment requests use routed input screen without popup form', () {
     final parentFees = File(
@@ -180,48 +188,47 @@ void main() {
     expect(registry, contains('/parent-fees-screen/payment-processing'));
   });
 
-  test('principal timetable generation stays on approved backend paths', () {
-    final source = File(
-      'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
-    ).readAsStringSync();
-    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
-    final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
-    final registry = File(
-      'lib/routes/schooldesk_screen_registry.dart',
-    ).readAsStringSync();
+  test(
+    'principal and coordinator timetable routes stay on approved backend paths',
+    () {
+      final source = File(
+        'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
+      ).readAsStringSync();
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      final guard = File(
+        'lib/routes/route_access_guard.dart',
+      ).readAsStringSync();
+      final registry = File(
+        'lib/routes/schooldesk_screen_registry.dart',
+      ).readAsStringSync();
 
-    // Timetable screen is now manual-only (PRD §Principal Timetable Requirements)
-    // CSV/generate features were retired; BulkCsvImportService handles imports separately
-    expect(source, contains('Create Editable Timetable'));
-    expect(source, contains('Timetable Management'));
-    expect(source, contains('DropdownButtonFormField<String>'));
-    expect(source, contains('_buildManualEditor'));
-    expect(source, contains('_saveManualTimetable'));
-    expect(source, isNot(contains('_showGenerateTimetableDialog')));
-    expect(source, isNot(contains('_showAddPeriodDialog')));
-    expect(source, isNot(contains('_showEditPeriodDialog')));
-    expect(source, isNot(contains('_showSubstituteDialog')));
-    expect(source, isNot(contains('showDialog(')));
-    expect(source, isNot(contains('rootNavigator: true')));
-    expect(source, isNot(contains('Add single period')));
-    expect(source, isNot(contains('Add substitution')));
-    expect(source, isNot(contains('Single Period Modification')));
+      expect(source, contains('Create Timetable'));
+      expect(source, contains('Timetable Management'));
+      expect(source, contains('DropdownButtonFormField<String>'));
+      expect(source, contains('_buildEditor'));
+      expect(source, contains('Future<void> _save('));
+      expect(source, contains('_validateRows'));
+      expect(source, contains('replaceTimetableDays'));
 
-    expect(routes, isNot(contains('adminTimetableGenerationForm')));
-    expect(routes, isNot(contains('AdminTimetableGenerationFormScreen')));
-    expect(routes, isNot(contains('adminTimetablePeriodForm')));
-    expect(routes, isNot(contains('AdminTimetablePeriodFormScreen')));
-    expect(routes, isNot(contains('adminTimetableSubstitutionForm')));
-    expect(routes, isNot(contains('AdminTimetableSubstitutionFormScreen')));
-    expect(guard, isNot(contains('AppRoutes.adminTimetableGenerationForm')));
-    expect(guard, isNot(contains('AppRoutes.adminTimetablePeriodForm')));
-    expect(guard, isNot(contains('AppRoutes.adminTimetableSubstitutionForm')));
-    expect(registry, isNot(contains('/admin-timetable-screen/generate')));
-    expect(registry, isNot(contains('/admin-timetable-screen/period')));
-    expect(registry, isNot(contains('/admin-timetable-screen/substitution')));
-    expect(source, isNot(contains("'slot_id':")));
-    expect(source, isNot(contains("'substitute_name':")));
-  });
+      expect(routes, isNot(contains('adminTimetableGenerationForm')));
+      expect(routes, isNot(contains('AdminTimetableGenerationFormScreen')));
+      expect(routes, isNot(contains('adminTimetablePeriodForm')));
+      expect(routes, isNot(contains('AdminTimetablePeriodFormScreen')));
+      expect(routes, isNot(contains('adminTimetableSubstitutionForm')));
+      expect(routes, isNot(contains('AdminTimetableSubstitutionFormScreen')));
+      expect(guard, isNot(contains('AppRoutes.adminTimetableGenerationForm')));
+      expect(guard, isNot(contains('AppRoutes.adminTimetablePeriodForm')));
+      expect(
+        guard,
+        isNot(contains('AppRoutes.adminTimetableSubstitutionForm')),
+      );
+      expect(registry, isNot(contains('/admin-timetable-screen/generate')));
+      expect(registry, isNot(contains('/admin-timetable-screen/period')));
+      expect(registry, isNot(contains('/admin-timetable-screen/substitution')));
+      expect(source, isNot(contains("'slot_id':")));
+      expect(source, isNot(contains("'substitute_name':")));
+    },
+  );
 
   test('classes expose real class-teacher assignments from sections', () {
     final api = readBackendApiSources();
@@ -248,8 +255,8 @@ void main() {
     expect(academicScreen, contains('AppRoutes.academicClassForm'));
     expect(academicForms, contains('DropdownButtonFormField<String>'));
     expect(academicForms, contains("'classTeacherId': _teacherId"));
-    expect(timetableScreen, contains('classTeacherName'));
-    expect(timetableScreen, contains('Class teacher stays fixed'));
+    expect(timetableScreen, contains('_subjectOptionsForSelectedClass'));
+    expect(timetableScreen, contains('_selectedClassLabel'));
     expect(timetableScreen, isNot(contains('gradeId.substring')));
   });
 

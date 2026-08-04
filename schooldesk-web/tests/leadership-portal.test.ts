@@ -43,7 +43,7 @@ test("ticker keeps moving in normal and reduced-motion configurations", () => {
   expect(ticker).toContain("Array.from({ length: 6");
   expect(styles).toContain("@media (prefers-reduced-motion:no-preference)");
   expect(styles).toContain("translate3d(-50%,0,0)");
-  expect(styles).toContain("animation:breaking-news-scroll 100s linear infinite !important");
+  expect(styles).toContain("animation:breaking-news-scroll 90s linear infinite;");
   expect(styles).toContain('.breaking-news-group[aria-hidden="true"],.breaking-news-item:not(:first-child) { display:inline-flex; }');
   expect(styles).not.toContain(".breaking-news-track { animation: none; overflow: auto; }");
 });
@@ -178,23 +178,28 @@ test("leadership feature workspaces use layout-shaped loading states", () => {
 
 test("timetable management keeps class scope, academic year, and accessible actions", () => {
   const workspace = source("../components/portal/TimetableWorkspace.tsx");
-  const slotDialog = source("../components/portal/TimetableSlotDialog.tsx");
-  const generator = source("../components/portal/TimetableGeneratorDialog.tsx");
   const timetableHandler = source("../../supabase/functions/api/handlers/timetable.ts");
 
   expect(workspace).toContain("No class sections are available yet.");
-  expect(workspace).toContain('aria-pressed={viewMode === "grid"}');
+  expect(workspace).toContain("Select Class:");
+  expect(workspace).toContain("Apply to days");
+  expect(workspace).toContain("timetable/working-days");
+  expect(workspace).toContain("timetable-day-picker");
+  expect(workspace).toContain('aria-pressed={selected}');
+  expect(workspace).toContain("Save timetable");
+  expect(workspace).toContain("Free Period");
+  expect(workspace).toContain("From time row");
+  expect(workspace).toContain("To time row");
+  expect(workspace).toContain("Add row after");
+  expect(workspace).toContain("Remove row");
+  expect(workspace).toContain("[newRow(), newRow(), newRow()]");
+  expect(workspace).toContain('api("timetable/slots/replace-days"');
   expect(workspace).toContain('scope="col"');
-  expect(workspace).toContain("1px solid #eef3f6");
-  expect(workspace).toContain("aria-label={`Edit ${subjectName}");
-  expect(slotDialog).toContain("gradeSubjects");
-  expect(slotDialog).toContain("staffSubjects");
-  expect(slotDialog).toContain('name="academic_year_id"');
-  expect(slotDialog).toContain("Select a mapped subject for a regular teaching period.");
-  expect(generator).toContain("Please select an academic year.");
-  expect(generator).toContain('value={academicYearId}');
+  expect(workspace).toContain("Choose a subject mapped to this class");
+  expect(workspace).toContain("Rows must be in ascending order and cannot overlap.");
   expect(timetableHandler).toContain("if (!isSchoolLeader(user) && !isReaderSlotsRequest)");
   expect(timetableHandler).toContain("scope.sectionIds.has");
+  expect(timetableHandler).toContain("replace_timetable_days");
   expect(timetableHandler).toContain('q.eq("day_of_week", dayOfWeek)');
 });
 

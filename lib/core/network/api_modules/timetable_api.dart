@@ -1,6 +1,55 @@
 part of '../backend_api_client.dart';
 
 extension BackendTimetableApi on BackendApiClient {
+  Future<List<int>> getTimetableWorkingDays() async {
+    try {
+      final response = await _dio.get('/timetable/working-days');
+      final data = _asMap(response.data);
+      if (data['success'] != true) {
+        throw ServerException(
+          message: data['error'] ?? 'Failed to get working days',
+        );
+      }
+      final payload = _asMap(data['data']);
+      final days = payload['days'];
+      if (days is! List) return const [1, 2, 3, 4, 5, 6];
+      return days
+          .map((day) => int.tryParse('$day') ?? 0)
+          .where((day) => day >= 1 && day <= 7)
+          .toSet()
+          .toList()
+        ..sort();
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> replaceTimetableDays({
+    required String sectionId,
+    required String academicYearId,
+    required List<int> days,
+    required List<Map<String, dynamic>> rows,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/timetable/slots/replace-days',
+        data: {
+          'section_id': sectionId.trim(),
+          'academic_year_id': academicYearId.trim(),
+          'days': days,
+          'rows': rows,
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to replace timetable days',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getTimetableSlots({
     String? sectionId,
     String? academicYearId,

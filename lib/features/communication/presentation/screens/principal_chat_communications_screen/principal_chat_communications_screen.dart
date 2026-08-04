@@ -13,6 +13,7 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
+import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 class PrincipalChatCommunicationsScreen extends StatefulWidget {
@@ -33,6 +34,7 @@ class _PrincipalChatCommunicationsScreenState
 
   RealtimeChannel? _realtimeChannel;
   String _realtimeConversationId = '';
+  int _realtimeRequest = 0;
 
   bool _loading = true;
   bool _sending = false;
@@ -42,6 +44,7 @@ class _PrincipalChatCommunicationsScreenState
   String _teacherFilter = '';
   String _parentFilter = '';
   String _studentFilter = '';
+  String _monitorClassFilter = '';
   String _directRoleFilter = 'teacher';
   String _directClassFilter = '';
   DateTime? _dateFilter;
@@ -65,7 +68,7 @@ class _PrincipalChatCommunicationsScreenState
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _load();
-    _subscribeRealtime();
+    unawaited(_subscribeRealtime());
   }
 
   @override
@@ -80,20 +83,27 @@ class _PrincipalChatCommunicationsScreenState
 
   // ── Realtime ──────────────────────────────────────────────────────────────
 
-  void _subscribeRealtime({String conversationId = ''}) {
+  Future<void> _subscribeRealtime({String conversationId = ''}) async {
     if (DemoLocalApiService.instance.isActive) return;
     if (_realtimeConversationId == conversationId && _realtimeChannel != null) {
+      await ChatRealtimeService.instance.refreshAuth();
       return;
     }
     _removeRealtimeChannel();
     _realtimeConversationId = conversationId;
-    _realtimeChannel = ChatRealtimeService.instance.subscribe(
+    final request = ++_realtimeRequest;
+    final channel = await ChatRealtimeService.instance.subscribe(
       channelName: 'principal-chat-$conversationId',
       conversationId: conversationId,
       onUpdate: () {
         if (mounted && !_sending) _loadIncremental();
       },
     );
+    if (!mounted || request != _realtimeRequest) {
+      if (channel != null) await Supabase.instance.client.removeChannel(channel);
+      return;
+    }
+    _realtimeChannel = channel;
   }
 
   void _removeRealtimeChannel() {
@@ -142,23 +152,12 @@ class _PrincipalChatCommunicationsScreenState
       final directTeacher = results[2] as List<Map<String, dynamic>>;
       final directParent = results[3] as List<Map<String, dynamic>>;
       final contacts = results[4] as List<Map<String, dynamic>>;
-      List<dynamic> teacherContacts = contacts
+      final teacherContacts = contacts
           .where((row) => _text(row['role']).toLowerCase() == 'teacher')
           .toList();
-      List<dynamic> parentContacts = contacts
+      final parentContacts = contacts
           .where((row) => _text(row['role']).toLowerCase() == 'parent')
           .toList();
-      if (teacherContacts.isEmpty) {
-        teacherContacts = await _safeModelRows(
-          () async => (await api.getStaff(page: 1, pageSize: 200)).data,
-        );
-      }
-      if (parentContacts.isEmpty) {
-        parentContacts = await _safeModelRows(
-          () async =>
-              (await api.getUsers(role: 'Parent', page: 1, pageSize: 200)).data,
-        );
-      }
       final direct =
           _mergeDirectConversationsWithContacts(
             directTeacher: directTeacher,
@@ -222,7 +221,7 @@ class _PrincipalChatCommunicationsScreenState
         _loading = false;
       });
       _scrollToBottom();
-      _subscribeRealtime(conversationId: newConvId);
+      unawaited(_subscribeRealtime(conversationId: newConvId));
       if (selected != null &&
           _canSendIn(selected) &&
           !_isContactPlaceholder(selected)) {
@@ -273,23 +272,12 @@ class _PrincipalChatCommunicationsScreenState
       final directTeacher = results[1] as List<Map<String, dynamic>>;
       final directParent = results[2] as List<Map<String, dynamic>>;
       final contacts = results[3] as List<Map<String, dynamic>>;
-      List<dynamic> teacherContacts = contacts
+      final teacherContacts = contacts
           .where((row) => _text(row['role']).toLowerCase() == 'teacher')
           .toList();
-      List<dynamic> parentContacts = contacts
+      final parentContacts = contacts
           .where((row) => _text(row['role']).toLowerCase() == 'parent')
           .toList();
-      if (teacherContacts.isEmpty) {
-        teacherContacts = await _safeModelRows(
-          () async => (await api.getStaff(page: 1, pageSize: 200)).data,
-        );
-      }
-      if (parentContacts.isEmpty) {
-        parentContacts = await _safeModelRows(
-          () async =>
-              (await api.getUsers(role: 'Parent', page: 1, pageSize: 200)).data,
-        );
-      }
       final direct = _mergeDirectConversationsWithContacts(
         directTeacher: directTeacher,
         directParent: directParent,
@@ -358,16 +346,6 @@ class _PrincipalChatCommunicationsScreenState
       return await load();
     } on Object catch (_) {
       return const <Map<String, dynamic>>[];
-    }
-  }
-
-  Future<List<dynamic>> _safeModelRows(
-    Future<List<dynamic>> Function() load,
-  ) async {
-    try {
-      return await load();
-    } on Object catch (_) {
-      return const <dynamic>[];
     }
   }
 
@@ -487,6 +465,10 @@ class _PrincipalChatCommunicationsScreenState
       }
       if (_studentFilter.isNotEmpty &&
           _text(row['student_id']) != _studentFilter) {
+        return false;
+      }
+      if (_monitorClassFilter.isNotEmpty &&
+          _text(row['class_label']) != _monitorClassFilter) {
         return false;
       }
       if (_unreadOnly &&
@@ -633,7 +615,25 @@ class _PrincipalChatCommunicationsScreenState
 
   Widget _body() {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) return Center(child: Text(_error!));
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return TabBarView(
       controller: _tabController,
       children: [
@@ -730,6 +730,18 @@ class _PrincipalChatCommunicationsScreenState
                     },
                     onChanged: (value) =>
                         setState(() => _studentFilter = value),
+                  ),
+                  const SizedBox(width: 8),
+                  _filterMenu(
+                    label: 'Class',
+                    value: _monitorClassFilter,
+                    options: {
+                      for (final row in _monitorConversations)
+                        _text(row['class_label']):
+                            _text(row['class_label'], fallback: 'Class'),
+                    },
+                    onChanged: (value) =>
+                        setState(() => _monitorClassFilter = value),
                   ),
                   const SizedBox(width: 8),
                   FilterChip(
@@ -1064,7 +1076,7 @@ class _PrincipalChatCommunicationsScreenState
               _zeroUnreadFor(monitorMode, conversationId);
               _clearMessagesFor(monitorMode);
             });
-            _subscribeRealtime(conversationId: conversationId);
+            unawaited(_subscribeRealtime(conversationId: conversationId));
             if (!_isContactPlaceholder(row)) {
               await _markConversationRead(row, monitorMode);
               await _load(background: true);
@@ -1095,7 +1107,7 @@ class _PrincipalChatCommunicationsScreenState
                   onPressed: () => setState(() {
                     _selectFor(monitorMode, null);
                     _clearMessagesFor(monitorMode);
-                    _subscribeRealtime();
+                    unawaited(_subscribeRealtime());
                   }),
                 )
               : CircleAvatar(
@@ -1111,25 +1123,34 @@ class _PrincipalChatCommunicationsScreenState
             monitorMode
                 ? _monitorTitle(conversation)
                 : _directTitle(conversation),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           subtitle: Text(
             monitorMode
-                ? 'Teacher and parent messages - read only'
+                ? 'Class and student context · replies stay in this thread'
                 : 'Chatting with ${_directRoleLabel(conversation)}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           trailing: monitorMode
-              ? Wrap(
-                  spacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.school_rounded, size: 18),
-                      label: const Text('Message teacher'),
-                      onPressed: () => _startDirect(conversation, 'teacher'),
+              ? PopupMenuButton<String>(
+                  tooltip: 'Start a separate direct chat',
+                  onSelected: (target) => _startDirect(conversation, target),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'teacher',
+                      child: ListTile(
+                        leading: Icon(Icons.school_rounded),
+                        title: Text('Message teacher separately'),
+                      ),
                     ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.family_restroom_rounded, size: 18),
-                      label: const Text('Message parent'),
-                      onPressed: () => _startDirect(conversation, 'parent'),
+                    PopupMenuItem(
+                      value: 'parent',
+                      child: ListTile(
+                        leading: Icon(Icons.family_restroom_rounded),
+                        title: Text('Message parent separately'),
+                      ),
                     ),
                   ],
                 )
@@ -1141,7 +1162,7 @@ class _PrincipalChatCommunicationsScreenState
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: context.appTheme.warningContainer,
             child: Text(
-              'Read-only oversight. School-leader replies are sent through their own direct chats.',
+              'You are viewing the original class conversation. Replies are visible to the teacher and parent.',
               style: TextStyle(color: context.appTheme.onSurface),
             ),
           ),
@@ -1157,9 +1178,8 @@ class _PrincipalChatCommunicationsScreenState
                 final senderRole = _messageRole(message, conversation);
                 final senderName = _messageSenderName(message, conversation);
                 final mine =
-                    !monitorMode &&
                     _text(message['sender_user_id'] ?? message['sender_id']) ==
-                        _principalUserId;
+                    _principalUserId;
                 return Opacity(
                   opacity: isPending ? 0.6 : 1.0,
                   child: ChatBubbleWidget(
@@ -1169,10 +1189,10 @@ class _PrincipalChatCommunicationsScreenState
                         : _time(
                             _date(message['sent_at'] ?? message['created_at']),
                           ),
-                    isMe: monitorMode ? senderRole == 'teacher' : mine,
+                    isMe: mine,
                     isRead: message['is_read'] == true,
-                    senderLabel: monitorMode ? senderName : '',
-                    senderRoleLabel: monitorMode ? _roleTitle(senderRole) : '',
+                    senderLabel: senderName,
+                    senderRoleLabel: _roleTitle(senderRole),
                   ),
                 );
               },
@@ -1180,18 +1200,20 @@ class _PrincipalChatCommunicationsScreenState
           ),
         ),
         if (canSend)
-          ChatInputBar(
-            controller: _messageController,
-            isSending: _sending,
-            onSend: _send,
-            placeholder: 'Type a direct message',
-          ),
+        ChatInputBar(
+          controller: _messageController,
+          isSending: _sending,
+          onSend: _send,
+          placeholder: monitorMode
+              ? 'Reply in this class chat'
+              : 'Type a direct message',
+        ),
       ],
     );
   }
 
   bool _canSendIn(Map<String, dynamic> conversation) {
-    if (_text(conversation['type']) == 'parent_teacher') return false;
+    if (_text(conversation['type']) == 'parent_teacher') return true;
     final owner = _text(
       conversation['leader_id'] ?? conversation['created_by'],
     );
@@ -1213,7 +1235,8 @@ class _PrincipalChatCommunicationsScreenState
       }
     }
     for (final row in directParent.where(_canSendIn)) {
-      final key = 'parent_${_text(row['parent_id'])}';
+      final key =
+          'parent_${_text(row['parent_id'])}_${_text(row['student_id'])}';
       final existing = uniqueRows[key];
       if (existing == null || _sortTime(row) > _sortTime(existing)) {
         uniqueRows[key] = Map<String, dynamic>.from(row);
@@ -1225,10 +1248,13 @@ class _PrincipalChatCommunicationsScreenState
         .map((row) => _text(row['teacher_id']))
         .where((id) => id.isNotEmpty)
         .toSet();
-    final existingParentIds = rows
+    final existingParentKeys = rows
         .where((row) => _text(row['type']) == 'principal_parent')
-        .map((row) => _text(row['parent_id']))
-        .where((id) => id.isNotEmpty)
+        .map(
+          (row) =>
+              '${_text(row['parent_id'])}_${_text(row['student_id'])}',
+        )
+        .where((id) => id != '_')
         .toSet();
 
     for (final contact in teacherContacts) {
@@ -1259,18 +1285,30 @@ class _PrincipalChatCommunicationsScreenState
 
     for (final contact in parentContacts) {
       final id = _contactId(contact);
-      if (id.isEmpty || existingParentIds.contains(id)) continue;
+      final studentId = contact is Map ? _text(contact['student_id']) : '';
+      final parentKey = '${id}_$studentId';
+      if (id.isEmpty || studentId.isEmpty || existingParentKeys.contains(parentKey)) {
+        continue;
+      }
       final name = _contactName(contact);
       rows.add({
-        'id': 'contact-parent-$id',
+        'id': 'contact-parent-$id-$studentId',
         'type': 'principal_parent',
         'teacher_id': '',
         'parent_id': id,
-        'student_id': '',
+        'student_id': studentId,
+        'section_id': contact is Map ? contact['section_id'] ?? '' : '',
+        'class_label': contact is Map ? contact['class_label'] ?? '' : '',
         'last_message': '',
         'last_message_at': '',
         'unread_count': 0,
         'parent': {'id': id, 'name': name, 'full_name': name},
+        'student': {
+          'id': studentId,
+          'name': contact is Map
+              ? _text(contact['student_name'], fallback: 'Student')
+              : 'Student',
+        },
         'class_sections': contact is Map
             ? contact['class_sections'] ?? const []
             : const [],
@@ -1331,10 +1369,12 @@ class _PrincipalChatCommunicationsScreenState
   }
 
   String _monitorTitle(Map<String, dynamic> row) {
-    return [
+    final people = [
       _name(_map(row['teacher']), fallback: 'Teacher'),
       _name(_map(row['parent']), fallback: 'Parent'),
     ].join(' / ');
+    final context = ChatContext.fromMap(row).displayLabel;
+    return context.isEmpty ? people : '$people · $context';
   }
 
   String _directTitle(Map<String, dynamic> row) {
@@ -1342,7 +1382,9 @@ class _PrincipalChatCommunicationsScreenState
     if (type == 'principal_teacher') {
       return _name(_map(row['teacher']), fallback: 'Teacher');
     }
-    return _name(_map(row['parent']), fallback: 'Parent');
+    final parent = _name(_map(row['parent']), fallback: 'Parent');
+    final student = _studentLine(row);
+    return student == 'Student' ? parent : '$parent · $student';
   }
 
   String _directRoleLabel(Map<String, dynamic> row) {
@@ -1351,25 +1393,36 @@ class _PrincipalChatCommunicationsScreenState
 
   List<String> _classSectionsFor(Map<String, dynamic> row) {
     final raw = row['class_sections'];
-    if (raw is! Iterable) return const [];
-    return raw.map(_text).where((value) => value.isNotEmpty).toSet().toList()
-      ..sort();
+    final values = raw is Iterable
+        ? raw.map(_text).where((value) => value.isNotEmpty).toSet().toList()
+        : <String>[];
+    final classLabel = ChatContext.fromMap(row).classLabel;
+    if (classLabel.isNotEmpty) values.add(classLabel);
+    return values.toSet().toList()..sort();
   }
 
   String _directContactHint(Map<String, dynamic> row, String roleLabel) {
     final classes = _classSectionsFor(row);
-    final classDetail = classes.isEmpty ? '' : ' · ${classes.join(', ')}';
-    return '$roleLabel$classDetail · tap to start direct chat';
+    final classLabel = _text(row['class_label']);
+    final classDetail = classLabel.isNotEmpty
+        ? ' · $classLabel'
+        : classes.isEmpty
+        ? ''
+        : ' · ${classes.join(', ')}';
+    final student = _text(row['student_name']);
+    final studentDetail = student.isEmpty ? '' : ' · $student';
+    return '$roleLabel$classDetail$studentDetail · tap to start direct chat';
   }
 
   String _messageRole(
     Map<String, dynamic> message,
     Map<String, dynamic> conversation,
   ) {
+    final senderId = _text(message['sender_user_id'] ?? message['sender_id']);
+    if (senderId == _principalUserId) return _leadershipRole;
     final role = _text(message['sender_role']).toLowerCase();
     if (role.contains('teacher')) return 'teacher';
     if (role.contains('parent')) return 'parent';
-    final senderId = _text(message['sender_user_id'] ?? message['sender_id']);
     if (senderId == _text(conversation['parent_id'])) return 'parent';
     return 'teacher';
   }
@@ -1392,15 +1445,19 @@ class _PrincipalChatCommunicationsScreenState
       'teacher' => 'Teacher',
       'parent' => 'Parent',
       'principal' => 'Principal',
+      'coordinator' => 'Coordinator',
       _ => 'Sender',
     };
   }
 
   String _studentLine(Map<String, dynamic> row) {
+    final context = ChatContext.fromMap(row);
+    if (context.displayLabel.isNotEmpty) return context.displayLabel;
     final student = _map(row['student']);
     return _name(
       student,
-      fallback: _text(row['student_id'], fallback: 'Student'),
+      fallback: _text(row['student_name'],
+          fallback: _text(row['student_id'], fallback: 'Student')),
     );
   }
 

@@ -16,7 +16,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _slots = const [];
-  bool _usingAssignedClassFallback = false;
+  String _selectedSectionId = '';
 
   @override
   void initState() {
@@ -36,9 +36,12 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
       }
       final slots = await _loadTeacherTimetableSlots();
       if (!mounted) return;
+      final sectionIds = _sectionIdsFor(slots);
       setState(() {
-        _slots = slots.rows;
-        _usingAssignedClassFallback = slots.usedClassFallback;
+        _slots = slots;
+        _selectedSectionId = sectionIds.contains(_selectedSectionId)
+            ? _selectedSectionId
+            : (sectionIds.isEmpty ? '' : sectionIds.first);
         _loading = false;
       });
     } on Object catch (error) {
@@ -50,33 +53,38 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
     }
   }
 
-  Future<_TeacherTimetableLoadResult> _loadTeacherTimetableSlots() async {
-    final staffScopedSlots = await BackendApiClient.instance.getTimetableSlots(
-      staffId: RoleAccessService.teacherStaffId,
-    );
+  Future<List<Map<String, dynamic>>> _loadTeacherTimetableSlots() async {
     final assignedSectionIds = RoleAccessService.teacherSectionIds;
-    if (staffScopedSlots.isNotEmpty || assignedSectionIds.isEmpty) {
-      return _TeacherTimetableLoadResult(
-        rows: staffScopedSlots,
-        usedClassFallback: false,
-      );
-    }
-
     final classScopedSlots = <Map<String, dynamic>>[];
     for (final sectionId in assignedSectionIds) {
       classScopedSlots.addAll(
         await BackendApiClient.instance.getTimetableSlots(sectionId: sectionId),
       );
     }
-    return _TeacherTimetableLoadResult(
-      rows: classScopedSlots,
-      usedClassFallback: classScopedSlots.isNotEmpty,
-    );
+    return classScopedSlots;
+  }
+
+  List<String> _sectionIdsFor(List<Map<String, dynamic>> slots) {
+    final ids = <String>{...RoleAccessService.teacherSectionIds};
+    for (final slot in slots) {
+      final id = teacherFlowText(slot['section_id']);
+      if (id.isNotEmpty) ids.add(id);
+    }
+    return ids.toList();
+  }
+
+  List<Map<String, dynamic>> get _visibleSlots {
+    if (_selectedSectionId.isEmpty) return _slots;
+    return _slots
+        .where(
+          (slot) => teacherFlowText(slot['section_id']) == _selectedSectionId,
+        )
+        .toList();
   }
 
   Map<int, List<Map<String, dynamic>>> get _slotsByDay {
     final grouped = <int, List<Map<String, dynamic>>>{};
-    for (final slot in _slots) {
+    for (final slot in _visibleSlots) {
       final day = teacherFlowInt(slot['day_of_week']);
       if (day < 1 || day > 7) continue;
       grouped.putIfAbsent(day, () => <Map<String, dynamic>>[]).add(slot);
@@ -92,7 +100,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   }
 
   List<String> get _weeklySubjects {
-    return _slots
+    return _visibleSlots
         .map((s) {
           final sub = teacherFlowMap(s['subject']);
           return teacherFlowText(
@@ -106,12 +114,14 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   }
 
   String get _assignedClass {
-    if (_slots.isNotEmpty) {
-      final section = teacherFlowMap(_slots.first['section']);
+    if (_visibleSlots.isNotEmpty) {
+      final section = teacherFlowMap(_visibleSlots.first['section']);
       final grade = teacherFlowText(section['grade_name']);
       final sec = teacherFlowText(section['section_name']);
       if (grade.isNotEmpty) return sec.isEmpty ? grade : '$grade - $sec';
     }
+    final selected = _selectedSectionId;
+    if (selected.isNotEmpty) return selected;
     return RoleAccessService.teacherClassName;
   }
 
@@ -120,12 +130,11 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
     final slotsByDay = _slotsByDay;
     final subjects = _weeklySubjects;
     final classLabel = _assignedClass;
+    final sectionIds = _sectionIdsFor(_slots);
 
     return TeacherFlowScaffold(
       title: 'Weekly Timetable',
-      subtitle: _usingAssignedClassFallback
-          ? 'Timetable source: assigned class'
-          : 'Read-only schedule from Principal timetable setup',
+      subtitle: 'Read-only schedule from Principal timetable setup',
       selectedIndex: TeacherNav.timetable,
       loading: _loading,
       error: _error,
@@ -140,6 +149,32 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
                   'Your assignment will appear after Principal assigns you.',
             )
           else ...[
+            if (sectionIds.length > 1) ...[
+              const TeacherFlowSectionHeader(title: 'Select class'),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: sectionIds.contains(_selectedSectionId)
+                    ? _selectedSectionId
+                    : sectionIds.first,
+                decoration: const InputDecoration(
+                  labelText: 'Class / section',
+                  border: OutlineInputBorder(),
+                ),
+                items: sectionIds
+                    .map(
+                      (sectionId) => DropdownMenuItem<String>(
+                        value: sectionId,
+                        child: Text(_sectionLabel(sectionId)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _selectedSectionId = value);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
             // ── Card 1: Assigned Class Overview ───────────────────────────
             _FullDayClassCard(
               classLabel: classLabel,
@@ -151,7 +186,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
 
             const TeacherFlowSectionHeader(title: 'Weekly Timetable'),
             const SizedBox(height: 8),
-            if (_slots.isEmpty)
+            if (_visibleSlots.isEmpty)
               const TeacherFlowCard(
                 icon: Icons.calendar_month_outlined,
                 title: 'No timetable published yet.',
@@ -159,7 +194,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
                     'Ask Principal to assign subjects, staff, and timetable slots for your staff profile.',
               )
             else
-              ...List.generate(6, (index) => index + 1).map(
+              ...List.generate(7, (index) => index + 1).map(
                 (day) => _DayScheduleCard(
                   dayName: _dayName(day),
                   slots: slotsByDay[day] ?? const [],
@@ -171,6 +206,22 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
         ],
       ),
     );
+  }
+
+  String _sectionLabel(String sectionId) {
+    for (final slot in _slots) {
+      if (teacherFlowText(slot['section_id']) != sectionId) continue;
+      final section = teacherFlowMap(slot['section']);
+      final grade = teacherFlowText(section['grade_name']);
+      final name = teacherFlowText(section['section_name']);
+      if (grade.isNotEmpty) return name.isEmpty ? grade : '$grade - $name';
+    }
+    final assignedSectionIds = RoleAccessService.teacherSectionIds;
+    if (assignedSectionIds.isNotEmpty &&
+        sectionId == assignedSectionIds.first) {
+      return RoleAccessService.teacherClassName;
+    }
+    return sectionId;
   }
 
   String _slotSubject(Map<String, dynamic> slot) {
@@ -333,16 +384,6 @@ class _FullDayClassCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _TeacherTimetableLoadResult {
-  final List<Map<String, dynamic>> rows;
-  final bool usedClassFallback;
-
-  const _TeacherTimetableLoadResult({
-    required this.rows,
-    required this.usedClassFallback,
-  });
 }
 
 class _DayScheduleCard extends StatelessWidget {
