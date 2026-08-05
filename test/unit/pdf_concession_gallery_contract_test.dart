@@ -58,7 +58,7 @@ void main() {
         ).readAsStringSync();
 
         expect(handler, contains('eventGalleryRows'));
-        expect(handler, contains('SCHOOL_GALLERY'));
+        expect(handler, contains('public_gallery_visible'));
         expect(handler, contains('media_type'));
         expect(website, contains('filter(isPublicGalleryImage)'));
         expect(website, contains('gallery-media'));

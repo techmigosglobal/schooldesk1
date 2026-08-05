@@ -11,10 +11,47 @@ import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 
+class SchoolPostsRouteArgs {
+  final String initialTab;
+  final String referenceId;
+  final String referenceType;
+
+  const SchoolPostsRouteArgs({
+    this.initialTab = 'auto',
+    this.referenceId = '',
+    this.referenceType = '',
+  });
+
+  static SchoolPostsRouteArgs fromRoute(Object? raw) {
+    if (raw is SchoolPostsRouteArgs) return raw;
+    if (raw is Map) {
+      return SchoolPostsRouteArgs(
+        initialTab: (raw['initialTab'] ?? raw['initial_tab'] ?? 'auto')
+            .toString(),
+        referenceId: (raw['referenceId'] ?? raw['reference_id'] ?? '')
+            .toString()
+            .trim(),
+        referenceType: (raw['referenceType'] ?? raw['reference_type'] ?? '')
+            .toString()
+            .trim(),
+      );
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      return SchoolPostsRouteArgs(initialTab: raw.trim());
+    }
+    return const SchoolPostsRouteArgs();
+  }
+}
+
 class TeacherEventPostScreen extends StatefulWidget {
   final bool principalMode;
+  final SchoolPostsRouteArgs args;
 
-  const TeacherEventPostScreen({super.key, this.principalMode = false});
+  const TeacherEventPostScreen({
+    super.key,
+    this.principalMode = false,
+    this.args = const SchoolPostsRouteArgs(),
+  });
 
   @override
   State<TeacherEventPostScreen> createState() => _TeacherEventPostScreenState();
@@ -39,26 +76,66 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   bool _uploading = false;
 
   bool _loading = false;
+  bool _reviewLoading = false;
+  bool _reviewRefreshing = false;
   String? _error;
+  String? _reviewError;
   List<dynamic> _posts = [];
+  List<Map<String, dynamic>> _reviewPosts = [];
+  Map<String, dynamic>? _referencedReviewPost;
+  final Set<String> _viewedAttachmentPostIds = <String>{};
   NotificationService? _notificationService;
   Timer? _pollingTimer;
 
   bool get _canPublishDirectly => widget.principalMode;
   String get _postNoun =>
       _canPublishDirectly ? 'School Feed Post' : 'Event Post';
+  int get _manageTabIndex => widget.principalMode ? 2 : 1;
+
+  int _initialPrincipalTabIndex(String tab) {
+    switch (tab.trim().toLowerCase()) {
+      case 'review':
+      case 'event_posts':
+      case 'event_post':
+      case 'approval':
+      case 'approvals':
+        return 0;
+      case 'create':
+        return 1;
+      case 'manage':
+      case 'posts':
+        return 2;
+      case 'auto':
+      default:
+        return widget.args.referenceId.isNotEmpty ? 0 : 2;
+    }
+  }
 
   void _onNotificationChanged() {
     unawaited(_loadPosts(showSpinner: false));
+    if (widget.principalMode) {
+      unawaited(_loadReviewPosts(showSpinner: false));
+    }
   }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: widget.principalMode ? 3 : 2,
+      initialIndex: widget.principalMode
+          ? _initialPrincipalTabIndex(widget.args.initialTab)
+          : 0,
+      vsync: this,
+    );
     _tabController.addListener(() {
-      if (_tabController.index == 1) _loadPosts(showSpinner: false);
+      if (_tabController.index == _manageTabIndex) {
+        _loadPosts(showSpinner: false);
+      }
+      if (widget.principalMode && _tabController.index == 0) {
+        _loadReviewPosts(showSpinner: false);
+      }
     });
     NotificationService.getInstance().then((s) {
       if (!mounted) return;
@@ -71,6 +148,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       }
     });
     _loadPosts();
+    if (widget.principalMode) {
+      _loadReviewPosts();
+    }
   }
 
   @override
@@ -89,6 +169,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_loadPosts(showSpinner: false));
+      if (widget.principalMode) {
+        unawaited(_loadReviewPosts(showSpinner: false));
+      }
     }
   }
 
@@ -168,6 +251,68 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         _error = 'Failed to load posts: $e';
       });
     }
+  }
+
+  Future<void> _loadReviewPosts({bool showSpinner = true}) async {
+    if (!widget.principalMode) return;
+    if (showSpinner) {
+      setState(() {
+        _reviewLoading = true;
+        _reviewError = null;
+      });
+    } else if (mounted) {
+      setState(() => _reviewRefreshing = true);
+    }
+    try {
+      final pending = await BackendApiClient.instance.getPendingEventPosts();
+      Map<String, dynamic>? referenced;
+      final referenceId = widget.args.referenceId.trim();
+      if (referenceId.isNotEmpty) {
+        try {
+          referenced = await BackendApiClient.instance.getEventPost(
+            referenceId,
+          );
+        } on Object catch (_) {}
+      }
+      final rows = pending
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      if (referenced != null &&
+          !rows.any((row) => row['id']?.toString() == referenceId)) {
+        rows.insert(0, referenced);
+      }
+      if (!mounted) return;
+      setState(() {
+        _reviewPosts = rows;
+        _referencedReviewPost = referenced;
+        _reviewLoading = false;
+        _reviewRefreshing = false;
+        _reviewError = null;
+        _viewedAttachmentPostIds.removeWhere(
+          (postId) => !rows.any((post) => post['id']?.toString() == postId),
+        );
+      });
+      _resolvePrincipalInitialTab(rows.length);
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _reviewLoading = false;
+        _reviewRefreshing = false;
+        _reviewError = 'Failed to load school post approvals: $e';
+      });
+    }
+  }
+
+  void _resolvePrincipalInitialTab(int pendingCount) {
+    if (!widget.principalMode) return;
+    final initialTab = widget.args.initialTab.trim().toLowerCase();
+    if (widget.args.referenceId.isNotEmpty || initialTab != 'auto') return;
+    final targetIndex = pendingCount > 0 ? 0 : 2;
+    if (_tabController.index == targetIndex) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _tabController.animateTo(targetIndex);
+    });
   }
 
   Future<void> _submit(bool isSubmit) async {
@@ -261,9 +406,12 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       );
       setState(() {
         _loading = false;
-        _tabController.animateTo(1);
+        _tabController.animateTo(_manageTabIndex);
       });
       unawaited(_loadPosts(showSpinner: false));
+      if (widget.principalMode) {
+        unawaited(_loadReviewPosts(showSpinner: false));
+      }
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -317,7 +465,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
           destinations.contains('Landing Page') ||
           destinations.contains('Public Landing Page');
       _error = null;
-      _tabController.animateTo(0);
+      _tabController.animateTo(widget.principalMode ? 1 : 0);
     });
   }
 
@@ -367,6 +515,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         context,
       ).showSnackBar(const SnackBar(content: Text('Event post deleted.')));
       unawaited(_loadPosts(showSpinner: false));
+      if (widget.principalMode) {
+        unawaited(_loadReviewPosts(showSpinner: false));
+      }
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -380,6 +531,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.principalMode) return _buildPrincipalWorkspace();
     return SchoolDeskModuleScaffold(
       title: _canPublishDirectly ? 'School Feed Posts' : 'Event Posts',
       body: Column(
@@ -404,6 +556,470 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPrincipalWorkspace() {
+    return SchoolDeskModuleScaffold(
+      title: 'School Posts',
+      actions: [
+        IconButton(
+          tooltip: 'Refresh school posts',
+          onPressed: (_loading || _reviewRefreshing)
+              ? null
+              : () {
+                  _loadPosts(showSpinner: false);
+                  _loadReviewPosts(showSpinner: false);
+                },
+          icon: _reviewRefreshing
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh_rounded),
+        ),
+      ],
+      body: Column(
+        children: [
+          TabBar(
+            controller: _tabController,
+            labelColor: context.appTheme.primary,
+            unselectedLabelColor: context.appTheme.onSurface.withOpacity(0.6),
+            tabs: [
+              Tab(
+                text: 'Review',
+                icon: Badge(
+                  isLabelVisible: _reviewPosts.isNotEmpty,
+                  label: Text(_reviewPosts.length.toString()),
+                  child: const Icon(Icons.fact_check_rounded),
+                ),
+              ),
+              const Tab(text: 'Create', icon: Icon(Icons.add_box)),
+              const Tab(text: 'Manage', icon: Icon(Icons.history)),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildReviewList(),
+                _buildCreateForm(),
+                _buildStatusList(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReviewList() {
+    if (_reviewLoading && _reviewPosts.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_reviewError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _reviewError!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.appTheme.error),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _loadReviewPosts,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_reviewPosts.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('No school posts are waiting for review.'),
+        ),
+      );
+    }
+    final referencedId = widget.args.referenceId.trim();
+    Map<String, dynamic>? referenced = _referencedReviewPost;
+    if (referencedId.isNotEmpty) {
+      for (final post in _reviewPosts) {
+        if (post['id']?.toString() == referencedId) {
+          referenced = post;
+          break;
+        }
+      }
+    }
+    final referencedPostId = referenced?['id']?.toString();
+    final remaining = referencedPostId == null
+        ? _reviewPosts
+        : _reviewPosts
+              .where((post) => post['id']?.toString() != referencedPostId)
+              .toList();
+
+    return RefreshIndicator(
+      onRefresh: () => _loadReviewPosts(showSpinner: false),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        children: [
+          if (referenced != null) ...[
+            Text(
+              'Opened request',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            _buildReviewPostCard(referenced, highlighted: true),
+            const SizedBox(height: 20),
+          ],
+          Text(
+            referenced == null ? 'Pending review' : 'Other pending posts',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 10),
+          if (remaining.isEmpty)
+            const Text('No other school posts are waiting for review.')
+          else
+            ...remaining.map(_buildReviewPostCard),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReviewPostCard(
+    Map<String, dynamic> post, {
+    bool highlighted = false,
+  }) {
+    final attachments = EventPostMediaItem.parseList(post['media_urls']);
+    final postId = (post['id'] ?? '').toString().trim();
+    final status = (post['approval_status'] ?? post['status'] ?? 'pending')
+        .toString();
+    final destinations = _labels(post['destinations']);
+    return Card(
+      elevation: highlighted ? 1 : 0,
+      color: highlighted
+          ? context.appTheme.primary.withOpacity(0.06)
+          : context.appTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: highlighted
+              ? context.appTheme.primary.withOpacity(0.35)
+              : context.appTheme.outlineVariant,
+        ),
+      ),
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    (post['title'] ?? 'Untitled school post').toString(),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                _reviewStatusChip(status),
+              ],
+            ),
+            if ((post['description'] ?? post['body'] ?? '')
+                .toString()
+                .trim()
+                .isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text((post['description'] ?? post['body']).toString()),
+            ],
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                _reviewMetaChip(
+                  Icons.calendar_today_outlined,
+                  _dateInputText(post['event_date']).isEmpty
+                      ? 'No date'
+                      : _dateInputText(post['event_date']),
+                ),
+                if (destinations.isNotEmpty)
+                  _reviewMetaChip(
+                    Icons.place_outlined,
+                    destinations.join(', '),
+                  ),
+              ],
+            ),
+            _buildReviewAttachmentSection(attachments, postId: postId),
+            _buildReviewActions(post),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewAttachmentSection(
+    List<EventPostMediaItem> attachments, {
+    required String postId,
+  }) {
+    if (attachments.isEmpty) return const SizedBox(height: 14);
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Attachments',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: attachments
+                .map(
+                  (attachment) => SizedBox(
+                    width: attachment.isVideo ? 220 : 132,
+                    child: InkWell(
+                      onTap: () =>
+                          _openAttachmentPreview(attachment, postId: postId),
+                      borderRadius: BorderRadius.circular(10),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: EventPostMediaPreview(
+                          item: attachment,
+                          height: attachment.isVideo ? 124 : 96,
+                          compact: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReviewActions(Map<String, dynamic> post) {
+    final id = (post['id'] ?? '').toString();
+    final status = (post['approval_status'] ?? post['status'] ?? '')
+        .toString()
+        .toLowerCase();
+    final requiresDecision = status == 'pending' || status == 'submitted';
+    final attachments = EventPostMediaItem.parseList(post['media_urls']);
+    final requiresView = attachments.isNotEmpty;
+    final hasViewed = !requiresView || _viewedAttachmentPostIds.contains(id);
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        OutlinedButton.icon(
+          onPressed: id.isEmpty
+              ? null
+              : () => _startEditingPost(Map<String, dynamic>.from(post)),
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Edit'),
+        ),
+        OutlinedButton.icon(
+          onPressed: id.isEmpty
+              ? null
+              : () => _deletePost(Map<String, dynamic>.from(post)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: context.appTheme.error,
+            side: BorderSide(color: context.appTheme.error),
+          ),
+          icon: const Icon(Icons.delete_outline_rounded),
+          label: const Text('Delete'),
+        ),
+        if (requiresDecision)
+          OutlinedButton.icon(
+            onPressed: id.isEmpty ? null : () => _rejectReviewPost(id),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: context.appTheme.error,
+              side: BorderSide(color: context.appTheme.error),
+            ),
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Reject'),
+          ),
+        if (requiresDecision)
+          FilledButton.icon(
+            onPressed: id.isEmpty || !hasViewed
+                ? null
+                : () => _approveReviewPost(id),
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Approve'),
+          ),
+        if (requiresDecision && requiresView && !hasViewed)
+          Text(
+            'Open an attachment preview before approving.',
+            style: TextStyle(
+              fontSize: 12,
+              color: context.appTheme.onSurfaceVariant,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _approveReviewPost(String id) async {
+    try {
+      await BackendApiClient.instance.approveEventPost(id);
+      await _loadReviewPosts(showSpinner: false);
+      await _loadPosts(showSpinner: false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('School post approved.')));
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to approve: $e')));
+    }
+  }
+
+  Future<void> _rejectReviewPost(String id) async {
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        String? validationError;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Reject School Post'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Add a reason for the teacher before rejecting this request.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Rejection Reason *',
+                    border: const OutlineInputBorder(),
+                    errorText: validationError,
+                  ),
+                  maxLines: 3,
+                  onChanged: (_) {
+                    if (validationError != null) {
+                      setDialogState(() => validationError = null);
+                    }
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (reasonController.text.trim().isEmpty) {
+                    setDialogState(
+                      () => validationError = 'A rejection reason is required.',
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, true);
+                },
+                child: const Text('Reject'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    final reason = reasonController.text.trim();
+    reasonController.dispose();
+    if (confirmed != true || reason.isEmpty) return;
+    try {
+      await BackendApiClient.instance.rejectEventPost(id, reason: reason);
+      await _loadReviewPosts(showSpinner: false);
+      await _loadPosts(showSpinner: false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('School post rejected.')));
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to reject: $e')));
+    }
+  }
+
+  Future<void> _openAttachmentPreview(
+    EventPostMediaItem attachment, {
+    required String postId,
+  }) async {
+    await openEventPostMediaPreview(context, attachment);
+    if (postId.isNotEmpty && mounted) {
+      setState(() => _viewedAttachmentPostIds.add(postId));
+    }
+  }
+
+  Widget _reviewStatusChip(String status) {
+    final normalized = status.toLowerCase();
+    final color = switch (normalized) {
+      'approved' => Colors.green,
+      'rejected' => Colors.red,
+      'pending' || 'submitted' => Colors.orange,
+      _ => Colors.grey,
+    };
+    return Chip(
+      label: Text(
+        normalized.toUpperCase(),
+        style: const TextStyle(color: Colors.white, fontSize: 11),
+      ),
+      backgroundColor: color,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _reviewMetaChip(IconData icon, String label) {
+    return Chip(
+      avatar: Icon(icon, size: 16, color: context.appTheme.onSurfaceVariant),
+      label: Text(
+        label,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: context.appTheme.onSurface,
+        ),
+      ),
+      backgroundColor: context.appTheme.surface,
+      side: BorderSide(color: context.appTheme.outlineVariant),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     );
   }
 

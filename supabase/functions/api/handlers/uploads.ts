@@ -1,6 +1,10 @@
 // handlers/uploads.ts — multipart file upload → Supabase Storage
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, runDbStatements, triggerPushProcessing } from "../index.ts";
+import {
+  renderStructuredReportPdf,
+  StructuredExportTable,
+} from "../report_pdf.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -473,12 +477,28 @@ function documentRow(row: Record<string, unknown>) {
   };
 }
 
-type StructuredExportTable = {
-  title: string;
-  headers: string[];
-  rows: unknown[][];
-  weights?: number[];
-};
+async function uploadPrivateReportPdf(
+  svc: SupabaseClient,
+  school: string,
+  bytes: Uint8Array,
+): Promise<string> {
+  const filePath = `reports/${school}/${crypto.randomUUID()}.pdf`;
+  const bucket = "finance-documents";
+  const { error: uploadError } = await svc.storage.from(bucket).upload(
+    filePath,
+    bytes,
+    { contentType: "application/pdf", upsert: false },
+  );
+  if (uploadError) throw uploadError;
+  const { data, error } = await svc.storage.from(bucket).createSignedUrl(
+    filePath,
+    10 * 60,
+    { download: true },
+  );
+  if (error) throw error;
+  if (!data?.signedUrl) throw new Error("Failed to create report download URL");
+  return data.signedUrl;
+}
 
 async function performStructuredReportExport(
   svc: SupabaseClient,
@@ -583,7 +603,9 @@ async function performStructuredReportExport(
       ]),
       weights: [1.4, 2.4, 1.1, 0.9, 1.1],
     }];
-  } else if (tableName === "report_exports" && reportType === "admission_inquiry_summary") {
+  } else if (
+    tableName === "report_exports" && reportType === "admission_inquiry_summary"
+  ) {
     const { data, error } = await svc.from("admission_inquiries").select(
       "parent_name, phone, email, child_name, child_age, program, message, submitted_at",
     ).eq("school_id", school).order("submitted_at", { ascending: false });
@@ -605,16 +627,30 @@ async function performStructuredReportExport(
       {
         title: "Inquiry overview by program",
         headers: ["Program", "Inquiries"],
-        rows: [...programCounts.entries()].map(([program, count]) => [program, count]),
+        rows: [...programCounts.entries()].map((
+          [program, count],
+        ) => [program, count]),
         weights: [3, 1],
       },
       {
         title: "Recent family inquiries",
-        headers: ["Submitted", "Parent", "Child", "Program", "Phone", "Email", "Message"],
+        headers: [
+          "Submitted",
+          "Parent",
+          "Child",
+          "Program",
+          "Phone",
+          "Email",
+          "Message",
+        ],
         rows: inquiries.map((inquiry) => [
-          date(inquiry.submitted_at), value(inquiry.parent_name, "—"),
-          value(inquiry.child_name, "—"), value(inquiry.program, "—"),
-          value(inquiry.phone, "—"), value(inquiry.email, "—"), value(inquiry.message, "—"),
+          date(inquiry.submitted_at),
+          value(inquiry.parent_name, "—"),
+          value(inquiry.child_name, "—"),
+          value(inquiry.program, "—"),
+          value(inquiry.phone, "—"),
+          value(inquiry.email, "—"),
+          value(inquiry.message, "—"),
         ]),
         weights: [1, 1.3, 1.1, 1, 1.1, 1.7, 2.1],
       },
@@ -1030,7 +1066,7 @@ async function performStructuredReportExport(
       .replaceAll("—", "-")
       .replaceAll("–", "-")
       .replaceAll("•", "|")
-      .replace(/[^\x20-\x7E]/g, "?");
+      .normalize("NFC");
   const wrap = (input: unknown, limit: number) => {
     const source = pdfEscape(input) || "—";
     const lines: string[] = [];
@@ -1289,23 +1325,16 @@ async function performStructuredReportExport(
   });
   pdf += "trailer\n<< /Size " + (objects.length + 1) +
     " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
-  const fileId = crypto.randomUUID();
-  const isFinanceExport = tableName === "fee_report_exports";
-  const bucket = isFinanceExport ? "finance-documents" : "school-assets";
-  const filePath = (isFinanceExport ? "reports/" : "exports/") + school + "/" + fileId + ".pdf";
-  const { error: uploadError } = await svc.storage.from(bucket).upload(
-    filePath,
-    new TextEncoder().encode(pdf),
-    { contentType: "application/pdf", upsert: true },
-  );
-  if (uploadError) throw uploadError;
-  if (!isFinanceExport) {
-    return svc.storage.from(bucket).getPublicUrl(filePath).data.publicUrl;
-  }
-  const { data: signed, error: signedError } = await svc.storage.from(bucket)
-    .createSignedUrl(filePath, 10 * 60);
-  if (signedError) throw signedError;
-  return signed?.signedUrl ?? "";
+  const reportBytes = await renderStructuredReportPdf({
+    title,
+    schoolName,
+    branchCode,
+    academicYear,
+    scope,
+    metrics,
+    tables,
+  });
+  return await uploadPrivateReportPdf(svc, school, reportBytes);
 }
 
 async function performReportExport(
@@ -1671,22 +1700,19 @@ async function performReportExport(
   pdf += `trailer\n<< /Size ${
     objects.length + 1
   } /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  const fileId = crypto.randomUUID();
-  const filePath = `exports/${school}/${fileId}.pdf`;
-
-  const { error: uploadError } = await svc.storage.from("school-assets").upload(
-    filePath,
-    new TextEncoder().encode(pdf),
-    { contentType: "application/pdf", upsert: true },
+  const reportTitle = reportType.replaceAll("_", " ").replace(
+    /\b\w/g,
+    (character) => character.toUpperCase(),
   );
-  if (uploadError) {
-    console.error("Failed to upload report to storage:", uploadError);
-    throw uploadError;
-  }
-
-  const publicUrl =
-    svc.storage.from("school-assets").getPublicUrl(filePath).data.publicUrl;
-  return publicUrl;
+  const reportBytes = await renderStructuredReportPdf({
+    title: reportTitle,
+    schoolName: "SchoolDesk",
+    academicYear: textValue(parameters.academic_year, "Not specified"),
+    scope: [textValue(parameters.scope, "School-wide scope")],
+    metrics: [{ label: "Records", value: String(rows.length) }],
+    tables: [{ title: "Report data", headers, rows }],
+  });
+  return await uploadPrivateReportPdf(svc, school, reportBytes);
 }
 
 export async function queueReportExport(
@@ -2021,7 +2047,10 @@ export async function handleEvents(
       ),
       body: description,
       media_urls: media,
-      visibility: textValue(body.visibility, textValue(existing.visibility, "school")),
+      visibility: textValue(
+        body.visibility,
+        textValue(existing.visibility, "school"),
+      ),
       destinations,
       event_date: body.event_date ?? existing.event_date ??
         new Date().toISOString(),

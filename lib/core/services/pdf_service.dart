@@ -96,6 +96,14 @@ class PdfService {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.all(28),
+        maxPages: 100,
+        footer: (context) => pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'Page ${context.pageNumber} of ${context.pagesCount}',
+            style: const pw.TextStyle(fontSize: 8, color: _mutedText),
+          ),
+        ),
         build: (context) => [
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -854,38 +862,44 @@ class PdfService {
     final pdf = await _createDocument();
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              _buildReceiptHeader(schoolName, ''),
-              pw.SizedBox(height: 16),
-              _buildDivider(),
-              pw.SizedBox(height: 8),
-              pw.Center(
-                child: pw.Text(
-                  'ATTENDANCE REPORT - $month',
-                  style: pw.TextStyle(
-                    fontSize: 14,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _primaryColor,
-                  ),
+        maxPages: 100,
+        header: (_) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            _buildReceiptHeader(schoolName, ''),
+            pw.SizedBox(height: 16),
+            _buildDivider(),
+            pw.SizedBox(height: 8),
+            pw.Center(
+              child: pw.Text(
+                'ATTENDANCE REPORT - $month',
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _primaryColor,
                 ),
               ),
-              pw.Center(
-                child: pw.Text(
-                  'Class: $className',
-                  style: const pw.TextStyle(fontSize: 12, color: _mutedText),
-                ),
+            ),
+            pw.Center(
+              child: pw.Text(
+                'Class: $className',
+                style: const pw.TextStyle(fontSize: 12, color: _mutedText),
               ),
-              pw.SizedBox(height: 16),
-              _buildAttendanceTable(students),
-            ],
-          );
-        },
+            ),
+            pw.SizedBox(height: 16),
+          ],
+        ),
+        footer: (context) => pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'Page ${context.pageNumber} of ${context.pagesCount}',
+            style: const pw.TextStyle(fontSize: 8, color: _mutedText),
+          ),
+        ),
+        build: (_) => [_buildAttendanceTable(students)],
       ),
     );
 
@@ -1011,7 +1025,8 @@ class PdfService {
   }) async {
     final pdf = await _createDocument();
 
-    final tableWidgets = tables.map((table) {
+    final tableWidgets = <pw.Widget>[];
+    for (final table in tables) {
       final headers =
           (table['headers'] is List ? table['headers'] as List : const [])
               .map((header) => '$header')
@@ -1045,56 +1060,57 @@ class PdfService {
           ? rawWeights
           : List<double>.filled(headers.length, 1);
 
-      return pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-        children: [
-          pw.Text(
-            '${table['title'] ?? 'Report data'}',
-            style: pw.TextStyle(
-              fontSize: 12,
-              fontWeight: pw.FontWeight.bold,
-              color: _darkText,
-            ),
+      tableWidgets.addAll([
+        // Keep a section heading with at least its table header and first row.
+        pw.NewPage(freeSpace: 90),
+        pw.Text(
+          '${table['title'] ?? 'Report data'}',
+          style: pw.TextStyle(
+            fontSize: 12,
+            fontWeight: pw.FontWeight.bold,
+            color: _darkText,
           ),
-          pw.SizedBox(height: 6),
-          if (headers.isEmpty)
-            pw.Text(
-              'No report columns configured.',
-              style: const pw.TextStyle(fontSize: 9, color: _mutedText),
-            )
-          else
-            pw.TableHelper.fromTextArray(
-              headers: headers,
-              data: data,
-              headerCount: 1,
-              columnWidths: {
-                for (var index = 0; index < headers.length; index++)
-                  index: pw.FlexColumnWidth(weights[index]),
-              },
-              cellStyle: const pw.TextStyle(fontSize: 8, color: _darkText),
-              headerStyle: pw.TextStyle(
-                fontSize: 8,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
-              ),
-              headerDecoration: const pw.BoxDecoration(color: _primaryColor),
-              rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
-              oddRowDecoration: const pw.BoxDecoration(color: _lightGray),
-              cellPadding: const pw.EdgeInsets.symmetric(
-                horizontal: 5,
-                vertical: 5,
-              ),
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+        ),
+        pw.SizedBox(height: 6),
+        if (headers.isEmpty)
+          pw.Text(
+            'No report columns configured.',
+            style: const pw.TextStyle(fontSize: 9, color: _mutedText),
+          )
+        else
+          // This must remain a direct MultiPage child so the table can span.
+          pw.TableHelper.fromTextArray(
+            headers: headers,
+            data: data,
+            headerCount: 1,
+            columnWidths: {
+              for (var index = 0; index < headers.length; index++)
+                index: pw.FlexColumnWidth(weights[index]),
+            },
+            cellStyle: const pw.TextStyle(fontSize: 8, color: _darkText),
+            headerStyle: pw.TextStyle(
+              fontSize: 8,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.white,
             ),
-          pw.SizedBox(height: 16),
-        ],
-      );
-    }).toList();
+            headerDecoration: const pw.BoxDecoration(color: _primaryColor),
+            rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+            oddRowDecoration: const pw.BoxDecoration(color: _lightGray),
+            cellPadding: const pw.EdgeInsets.symmetric(
+              horizontal: 5,
+              vertical: 5,
+            ),
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+          ),
+        pw.SizedBox(height: 16),
+      ]);
+    }
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.fromLTRB(30, 24, 30, 30),
+        maxPages: 100,
         header: (_) => pw.Column(
           children: [
             _buildReceiptHeader(schoolName, schoolAddress, schoolLogo),
@@ -1472,6 +1488,7 @@ class PdfService {
             },
       children: [
         pw.TableRow(
+          repeat: true,
           decoration: const pw.BoxDecoration(color: _primaryColor),
           children: [
             if (receiptLayout) _tableCell('No.', isHeader: true),

@@ -288,7 +288,12 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   Widget _activePrincipalView() {
-    return _view == _AttendanceView.staff ? _staffView() : _studentsView();
+    return switch (_view) {
+      _AttendanceView.staff => _staffView(),
+      _AttendanceView.students || _AttendanceView.classes => _studentsView(),
+      _AttendanceView.monitor => _monitorView(),
+      _AttendanceView.reports => _reportsView(),
+    };
   }
 
   Widget _viewPage(Widget child) {
@@ -739,7 +744,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     );
   }
 
-  // ignore: unused_element
   Widget _monitorView() {
     final sessions = _filteredSessions;
     return Padding(
@@ -978,7 +982,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     );
   }
 
-  // ignore: unused_element
   Widget _reportsView() {
     final reports = [
       _ReportItem(

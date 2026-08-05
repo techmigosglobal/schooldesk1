@@ -1002,6 +1002,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
                 child: ApprovalItemWidget(
                   approval: a,
                   isActionLoading: _actionLoadingIds.contains(a.id),
+                  canRequestChanges: _canRequestChangesFor(a),
                   onApprove: () => _handleApprove(a),
                   onReject: (remarks) => _handleReject(a, remarks),
                   onRequestChanges: (note) => _handleRequestChanges(a, note),
@@ -1068,6 +1069,11 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         ),
       ],
     );
+  }
+
+  bool _canRequestChangesFor(ApprovalModel approval) {
+    final path = approval.decisionPath?.trim() ?? '';
+    return path.startsWith('/approvals/');
   }
 }
 

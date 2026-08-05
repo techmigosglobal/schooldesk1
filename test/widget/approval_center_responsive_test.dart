@@ -71,4 +71,39 @@ void main() {
       isEmpty,
     );
   });
+
+  testWidgets('approval item hides change requests when unsupported', (
+    tester,
+  ) async {
+    await collectFlutterErrors(
+      tester,
+      ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          ApprovalItemWidget(
+            approval: ApprovalModel(
+              id: 'leave-1',
+              type: ApprovalType.leave,
+              requesterName: 'Teacher',
+              requesterRole: 'Staff',
+              requesterClass: 'Leave',
+              submittedDate: '2026-05-09',
+              summary: 'Medical leave',
+              details: 'Teacher requested one day of medical leave.',
+              status: 'pending',
+              decisionPath: '/leave/applications/leave-1/approve',
+            ),
+            canRequestChanges: false,
+            onApprove: () {},
+            onReject: (_) {},
+            onRequestChanges: (_) {},
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('Approve'), findsOneWidget);
+    expect(find.text('Reject'), findsOneWidget);
+    expect(find.text('Request changes'), findsNothing);
+  });
 }

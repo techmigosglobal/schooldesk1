@@ -48,7 +48,9 @@ void main() {
     ).readAsStringSync();
 
     expect(routes, contains('principalEventPosts'));
-    expect(routes, contains('TeacherEventPostScreen(principalMode: true)'));
+    expect(routes, contains('TeacherEventPostScreen('));
+    expect(routes, contains('principalMode: true'));
+    expect(routes, contains('_schoolPostsArgs(context)'));
     expect(guard, contains("AppRoutes.principalEventPosts: {'principal'}"));
     expect(
       handler,

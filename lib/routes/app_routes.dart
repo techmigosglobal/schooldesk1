@@ -22,7 +22,6 @@ import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/event_post_screen.dart';
 import 'package:schooldesk1/features/shared/presentation/screens/school_gallery_screen.dart';
-import 'package:schooldesk1/features/communication/presentation/screens/principal_event_approval_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/principal_audit_logs_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
 import 'package:schooldesk1/features/dashboard/presentation/screens/super_admin_dashboard_screen/super_admin_dashboard_screen.dart';
@@ -292,13 +291,14 @@ class AppRoutes {
     principalParentChildAssignment: (context) => AccountChildAssignmentScreen(
       args: _childAssignmentArgs(context, 'principal'),
     ),
-    principalEventApprovals: (context) => PrincipalEventApprovalScreen(
-      args: EventApprovalRouteArgs.fromRoute(
-        ModalRoute.of(context)?.settings.arguments,
-      ),
+    principalEventApprovals: (context) => TeacherEventPostScreen(
+      principalMode: true,
+      args: _schoolPostsArgs(context, fallbackTab: 'review'),
     ),
-    principalEventPosts: (context) =>
-        const TeacherEventPostScreen(principalMode: true),
+    principalEventPosts: (context) => TeacherEventPostScreen(
+      principalMode: true,
+      args: _schoolPostsArgs(context),
+    ),
     principalTimetable: (context) => const AdminTimetableScreen(),
     principalDocuments: (context) => const AdminDocumentsScreen(),
     principalAuditLogs: (context) => const PrincipalAuditLogsScreen(),
@@ -448,6 +448,28 @@ class AppRoutes {
     throw StateError(
       'Route "$routeName" was requested without a screen or route builder.',
     );
+  }
+
+  static SchoolPostsRouteArgs _schoolPostsArgs(
+    BuildContext context, {
+    String fallbackTab = 'auto',
+  }) {
+    final raw = ModalRoute.of(context)?.settings.arguments;
+    if (raw is SchoolPostsRouteArgs) {
+      return raw.initialTab.trim().isEmpty
+          ? SchoolPostsRouteArgs(
+              initialTab: fallbackTab,
+              referenceId: raw.referenceId,
+              referenceType: raw.referenceType,
+            )
+          : raw;
+    }
+    if (raw is Map) {
+      final map = Map<String, dynamic>.from(raw);
+      map.putIfAbsent('initialTab', () => fallbackTab);
+      return SchoolPostsRouteArgs.fromRoute(map);
+    }
+    return SchoolPostsRouteArgs(initialTab: fallbackTab);
   }
 
   static AccountAccessFormArgs _accountFormArgs(

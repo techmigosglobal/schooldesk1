@@ -66,15 +66,13 @@ void main() {
       },
     );
 
-    test(
-      'routes construct event approval args from notification arguments',
-      () {
-        final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+    test('legacy approval route opens the combined review workspace', () {
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
 
-        expect(routes, contains('EventApprovalRouteArgs.fromRoute'));
-        expect(routes, contains('PrincipalEventApprovalScreen('));
-        expect(routes, contains('ModalRoute.of(context)?.settings.arguments'));
-      },
-    );
+      expect(routes, contains('SchoolPostsRouteArgs.fromRoute'));
+      expect(routes, contains('TeacherEventPostScreen('));
+      expect(routes, contains("fallbackTab: 'review'"));
+      expect(routes, contains('ModalRoute.of(context)?.settings.arguments'));
+    });
   });
 }

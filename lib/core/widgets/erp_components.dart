@@ -63,6 +63,8 @@ class SchoolDeskUiIllustrations {
   static const attendance = 'assets/images/ui/illustration-attendance.png';
   static const homework = 'assets/images/ui/homework.png';
   static const notices = 'assets/images/ui/principal-events.png';
+  static const principalApprovals = 'assets/images/ui/principal-approvals.png';
+  static const principalReports = 'assets/images/ui/principal-reports.png';
   static const schoolPostsApproval =
       'assets/images/ui/school-posts-approval.png';
   static const createposts = 'assets/images/ui/createposts.png';

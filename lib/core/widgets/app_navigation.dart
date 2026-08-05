@@ -264,17 +264,10 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.principalChatCommunications,
             ),
             SchoolDeskNavigationItem(
-              index: PrincipalNav.eventApprovals,
-              icon: Icons.approval_outlined,
-              activeIcon: Icons.approval_rounded,
-              label: 'School Posts Approval',
-              route: AppRoutes.principalEventApprovals,
-            ),
-            SchoolDeskNavigationItem(
               index: PrincipalNav.eventPosts,
               icon: Icons.campaign_outlined,
               activeIcon: Icons.campaign_rounded,
-              label: 'School Feed Posts',
+              label: 'School Posts',
               route: AppRoutes.principalEventPosts,
             ),
             SchoolDeskNavigationItem(

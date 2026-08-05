@@ -424,6 +424,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             accent: Color(0xFF2563EB),
             cardColor: Color(0xFFEEF7FF),
           ),
+          _AcademicModuleItem(
+            label: 'Approvals',
+            route: AppRoutes.approvalCenter,
+            illustration: SchoolDeskUiIllustrations.principalApprovals,
+            fallbackIcon: Icons.pending_actions_rounded,
+            accent: const Color(0xFF0F766E),
+            cardColor: const Color(0xFFE8F7F5),
+            badge: _data.totalPendingApprovals,
+          ),
           const _AcademicModuleItem(
             label: 'Class Hub',
             route: AppRoutes.principalClasses,
@@ -474,6 +483,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               cardColor: Color(0xFFE9F9EF),
             ),
           const _AcademicModuleItem(
+            label: 'Reports',
+            route: AppRoutes.reportsAnalytics,
+            illustration: SchoolDeskUiIllustrations.principalReports,
+            fallbackIcon: Icons.assessment_rounded,
+            accent: Color(0xFFE85D3F),
+            cardColor: Color(0xFFFFEEE9),
+          ),
+          const _AcademicModuleItem(
             label: 'Calendar',
             route: AppRoutes.eventsCalendar,
             illustration: SchoolDeskUiIllustrations.principalEvents,
@@ -482,21 +499,13 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             cardColor: Color(0xFFEAF4FF),
           ),
           _AcademicModuleItem(
-            label: 'School Posts Approval',
-            route: AppRoutes.principalEventApprovals,
+            label: 'School Posts',
+            route: AppRoutes.principalEventPosts,
             illustration: SchoolDeskUiIllustrations.schoolPostsApproval,
-            fallbackIcon: Icons.fact_check_rounded,
+            fallbackIcon: Icons.campaign_rounded,
             accent: const Color(0xFFC88700),
             cardColor: const Color(0xFFFFF7D6),
             badge: _data.pendingApprovals,
-          ),
-          const _AcademicModuleItem(
-            label: 'School Feed Posts',
-            route: AppRoutes.principalEventPosts,
-            illustration: SchoolDeskUiIllustrations.notices,
-            fallbackIcon: Icons.campaign_rounded,
-            accent: Color(0xFF54A9E8),
-            cardColor: Color(0xFFEEF7FF),
           ),
           const _AcademicModuleItem(
             label: 'Gallery',
@@ -658,6 +667,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     accent: Color(0xFF2563EB),
                     cardColor: Color(0xFFEEF7FF),
                   ),
+                  _AcademicModuleItem(
+                    label: 'Approvals',
+                    route: AppRoutes.approvalCenter,
+                    illustration: SchoolDeskUiIllustrations.principalApprovals,
+                    fallbackIcon: Icons.pending_actions_rounded,
+                    accent: const Color(0xFF0F766E),
+                    cardColor: const Color(0xFFE8F7F5),
+                    badge: _data.totalPendingApprovals,
+                  ),
                   const _AcademicModuleItem(
                     label: 'Class Hub',
                     route: AppRoutes.principalClasses,
@@ -708,6 +726,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                       cardColor: Color(0xFFE9F9EF),
                     ),
                   const _AcademicModuleItem(
+                    label: 'Reports',
+                    route: AppRoutes.reportsAnalytics,
+                    illustration: SchoolDeskUiIllustrations.principalReports,
+                    fallbackIcon: Icons.assessment_rounded,
+                    accent: Color(0xFFE85D3F),
+                    cardColor: Color(0xFFFFEEE9),
+                  ),
+                  const _AcademicModuleItem(
                     label: 'Calendar',
                     route: AppRoutes.eventsCalendar,
                     illustration: SchoolDeskUiIllustrations.principalEvents,
@@ -716,21 +742,13 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     cardColor: Color(0xFFEAF4FF),
                   ),
                   _AcademicModuleItem(
-                    label: 'School Posts Approval',
-                    route: AppRoutes.principalEventApprovals,
+                    label: 'School Posts',
+                    route: AppRoutes.principalEventPosts,
                     illustration: SchoolDeskUiIllustrations.schoolPostsApproval,
-                    fallbackIcon: Icons.fact_check_rounded,
+                    fallbackIcon: Icons.campaign_rounded,
                     accent: const Color(0xFFC88700),
                     cardColor: const Color(0xFFFFF7D6),
                     badge: _data.pendingApprovals,
-                  ),
-                  const _AcademicModuleItem(
-                    label: 'School Feed Posts',
-                    route: AppRoutes.principalEventPosts,
-                    illustration: SchoolDeskUiIllustrations.notices,
-                    fallbackIcon: Icons.campaign_rounded,
-                    accent: Color(0xFF54A9E8),
-                    cardColor: Color(0xFFEEF7FF),
                   ),
                   const _AcademicModuleItem(
                     label: 'Gallery',
@@ -1043,6 +1061,9 @@ class _PrincipalHomeData {
   final int pendingFeeRequests;
   final int pendingAccessApprovals;
   final List<_SetupStep> setupSteps;
+
+  int get totalPendingApprovals =>
+      pendingApprovals + pendingFeeRequests + pendingAccessApprovals;
 
   const _PrincipalHomeData({
     required this.principalName,

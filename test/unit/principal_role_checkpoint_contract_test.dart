@@ -87,10 +87,14 @@ void main() {
 
     final calendarBlock = dashboard.substring(
       dashboard.indexOf("label: 'Calendar'"),
-      dashboard.indexOf("label: 'School Posts Approval'"),
+      dashboard.indexOf("label: 'School Posts'"),
     );
     final approvalsBlock = dashboard.substring(
-      dashboard.indexOf("label: 'School Posts Approval'"),
+      dashboard.indexOf("label: 'Approvals'"),
+      dashboard.indexOf("label: 'Class Hub'"),
+    );
+    final schoolPostsBlock = dashboard.substring(
+      dashboard.indexOf("label: 'School Posts'"),
       dashboard.indexOf("label: 'Gallery'"),
     );
     final galleryBlock = dashboard.substring(
@@ -101,9 +105,24 @@ void main() {
       calendarBlock,
       contains('SchoolDeskUiIllustrations.principalEvents'),
     );
-    expect(approvalsBlock, contains('SchoolDeskUiIllustrations.notices'));
+    expect(dashboard, contains("label: 'Approvals'"));
+    expect(
+      approvalsBlock,
+      contains('SchoolDeskUiIllustrations.principalApprovals'),
+    );
+    expect(dashboard, contains("label: 'Reports'"));
+    expect(dashboard, contains('route: AppRoutes.reportsAnalytics'));
+    expect(dashboard, contains('SchoolDeskUiIllustrations.principalReports'));
+    expect(dashboard, isNot(contains("label: 'School Posts Approval'")));
+    expect(dashboard, isNot(contains("label: 'School Feed Posts'")));
+    expect(
+      schoolPostsBlock,
+      contains('SchoolDeskUiIllustrations.schoolPostsApproval'),
+    );
     expect(galleryBlock, contains('SchoolDeskUiIllustrations.resources'));
     expect(illustrations, contains('principal-timetable.png'));
+    expect(illustrations, contains('principal-approvals.png'));
+    expect(illustrations, contains('principal-reports.png'));
     expect(dashboard, contains('SchoolDeskUiIllustrations.principalTimetable'));
   });
 

@@ -10,6 +10,7 @@ class ApprovalItemWidget extends StatefulWidget {
   final Function(String remarks) onReject;
   final Function(String note) onRequestChanges;
   final bool isActionLoading;
+  final bool canRequestChanges;
 
   const ApprovalItemWidget({
     super.key,
@@ -18,6 +19,7 @@ class ApprovalItemWidget extends StatefulWidget {
     required this.onReject,
     required this.onRequestChanges,
     this.isActionLoading = false,
+    this.canRequestChanges = true,
   });
 
   @override
@@ -314,8 +316,10 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(width: double.infinity, child: approveButton),
-              const SizedBox(height: 8),
-              SizedBox(width: double.infinity, child: changesButton),
+              if (widget.canRequestChanges) ...[
+                const SizedBox(height: 8),
+                SizedBox(width: double.infinity, child: changesButton),
+              ],
               const SizedBox(height: 8),
               SizedBox(width: double.infinity, child: rejectButton),
             ],
@@ -325,8 +329,10 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return Row(
           children: [
             Expanded(child: rejectButton),
-            const SizedBox(width: 10),
-            Expanded(child: changesButton),
+            if (widget.canRequestChanges) ...[
+              const SizedBox(width: 10),
+              Expanded(child: changesButton),
+            ],
             const SizedBox(width: 10),
             Expanded(flex: 2, child: approveButton),
           ],
@@ -593,11 +599,15 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
               decoration: BoxDecoration(
                 color: widget.approval.status == 'approved'
                     ? context.appTheme.successContainer
+                    : widget.approval.status == 'changes_requested'
+                    ? context.appTheme.warningContainer
                     : context.appTheme.errorContainer,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: widget.approval.status == 'approved'
                       ? context.appTheme.success.withAlpha(77)
+                      : widget.approval.status == 'changes_requested'
+                      ? context.appTheme.warning.withAlpha(77)
                       : context.appTheme.error.withAlpha(77),
                   width: 1,
                 ),
@@ -608,10 +618,14 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                   Icon(
                     widget.approval.status == 'approved'
                         ? Icons.check_circle_outline_rounded
+                        : widget.approval.status == 'changes_requested'
+                        ? Icons.edit_note_rounded
                         : Icons.cancel_outlined,
                     size: 16,
                     color: widget.approval.status == 'approved'
                         ? context.appTheme.success
+                        : widget.approval.status == 'changes_requested'
+                        ? context.appTheme.warning
                         : context.appTheme.error,
                   ),
                   const SizedBox(width: 8),
@@ -623,6 +637,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                         fontWeight: FontWeight.w400,
                         color: widget.approval.status == 'approved'
                             ? context.appTheme.success
+                            : widget.approval.status == 'changes_requested'
+                            ? context.appTheme.warning
                             : context.appTheme.error,
                         height: 1.5,
                       ),

@@ -153,7 +153,6 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
         case AppRoutes.principalChatCommunications:
           return PrincipalNav.messages;
         case AppRoutes.principalEventApprovals:
-          return PrincipalNav.eventApprovals;
         case AppRoutes.principalEventPosts:
           return PrincipalNav.eventPosts;
         case AppRoutes.complaintManagement:

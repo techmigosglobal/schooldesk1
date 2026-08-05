@@ -6,6 +6,8 @@
   },
   "imports": {
     "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2",
+    "fontkit": "npm:fontkit@2.0.4",
+    "pdf-lib": "npm:pdf-lib@1.17.1",
     "postgres": "npm:postgres@3.4.5"
   },
   "lint": {

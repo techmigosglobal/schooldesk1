@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:printing/printing.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -21,7 +21,7 @@ class ReportsAnalyticsScreen extends StatefulWidget {
 
 class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     with SingleTickerProviderStateMixin {
-  int _selectedDrawerIndex = 11;
+  int _selectedDrawerIndex = PrincipalNav.reports;
   late TabController _tabController;
 
   double _totalBilled = 0;
@@ -38,6 +38,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   List<Map<String, dynamic>> _staffRows = [];
   List<Map<String, dynamic>> _complaintRows = [];
   List<StaffAttendanceModel> _staffAttendance = [];
+  Set<String> _staffOnLeaveIds = const {};
   bool _isLoading = true;
   String? _loadError;
   String? _exportingReport;
@@ -79,6 +80,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
       final school = await _safeSchool();
       final staffAttendance = await _safeStaffAttendance();
       final staffSummary = await _safeStaffSummary();
+      final staffOnLeaveIds = await _safeStaffOnLeaveIds();
 
       var billed = 0.0;
       var collected = 0.0;
@@ -109,6 +111,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         _attendanceRows = attendanceRows;
         _complaintRows = complaintRows;
         _staffAttendance = staffAttendance;
+        _staffOnLeaveIds = staffOnLeaveIds;
         _schoolName = schoolName;
         _schoolAddress = address.isEmpty ? AppConstants.schoolAddress : address;
         _schoolLogo = logo;
@@ -118,7 +121,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 currentYear.first['year_label'] ?? currentYear.first['name'],
                 fallback: AppConstants.academicYear,
               );
-        _onLeaveCount = _staffLeaveCount(staffSummary);
+        _onLeaveCount = staffOnLeaveIds.isEmpty
+            ? _staffLeaveCount(staffSummary)
+            : staffOnLeaveIds
+                  .where(
+                    (staffId) => !staffAttendance.any(
+                      (row) => row.staffId == staffId && row.checkedIn,
+                    ),
+                  )
+                  .length;
         _loadError = null;
         _isLoading = false;
       });
@@ -164,6 +175,28 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
       return await BackendApiClient.instance.getStaffDailyAttendanceSummary(
         date: _dateKey(DateTime.now()),
       );
+    } on Object {
+      return const {};
+    }
+  }
+
+  Future<Set<String>> _safeStaffOnLeaveIds() async {
+    try {
+      final today = DateUtils.dateOnly(DateTime.now());
+      final applications = await BackendApiClient.instance.getLeaveApplications(
+        status: 'approved',
+      );
+      return applications
+          .where((application) {
+            final from = DateTime.tryParse(application.fromDate);
+            final to = DateTime.tryParse(application.toDate);
+            if (from == null || to == null) return false;
+            final firstDay = DateUtils.dateOnly(from.toLocal());
+            final lastDay = DateUtils.dateOnly(to.toLocal());
+            return !today.isBefore(firstDay) && !today.isAfter(lastDay);
+          })
+          .map((application) => application.staffId)
+          .toSet();
     } on Object {
       return const {};
     }
@@ -740,8 +773,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     );
     final designation = _text(staff['designation'], fallback: 'Staff');
     final present = attendance?.checkedIn == true;
-    final status = present ? 'Present' : 'Absent / not recorded';
-    final color = present ? context.appTheme.success : context.appTheme.muted;
+    final onLeave = !present && _staffOnLeaveIds.contains(_text(staff['id']));
+    final status = present
+        ? 'Present'
+        : onLeave
+        ? 'On leave'
+        : 'Absent / not recorded';
+    final color = present
+        ? context.appTheme.success
+        : onLeave
+        ? context.appTheme.warning
+        : context.appTheme.muted;
     return Semantics(
       container: true,
       label: '$name, $designation, $status',
@@ -1037,7 +1079,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     if (_exportingReport != null) return;
     setState(() => _exportingReport = reportTitle);
     try {
-      await _generateAndPrintReport(reportTitle: reportTitle);
+      await _generateAndPreviewReport(reportTitle: reportTitle);
       await _recordSupportedBackendExport(reportTitle);
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1080,7 +1122,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     }
   }
 
-  Future<void> _generateAndPrintReport({required String reportTitle}) async {
+  Future<void> _generateAndPreviewReport({required String reportTitle}) async {
     final lower = reportTitle.toLowerCase();
     final isStaffReport = lower.contains('staff');
     final isAttendanceReport = lower.contains('attendance') && !isStaffReport;
@@ -1233,10 +1275,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
       metrics: metrics,
       tables: tables,
     );
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name:
-          '${reportTitle.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}_${_dateKey(DateTime.now())}',
+    if (!mounted) return;
+    await pdfService.previewDocument(
+      context,
+      bytes,
+      '${reportTitle.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}_${_dateKey(DateTime.now())}.pdf',
     );
   }
 
@@ -1359,11 +1402,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     };
     return _staffRows.map((staff) {
       final attendance = attendanceByStaff[_text(staff['id'])];
+      final present = attendance?.checkedIn == true;
+      final onLeave = !present && _staffOnLeaveIds.contains(_text(staff['id']));
       return {
         'name': _text(staff['name'], fallback: 'Staff member'),
         'designation': _text(staff['designation'], fallback: 'Staff'),
-        'status': attendance?.checkedIn == true
+        'status': present
             ? 'Present'
+            : onLeave
+            ? 'On leave'
             : 'Absent / not recorded',
         'check_in': attendance?.checkInTimeLabel,
         'check_out': attendance?.checkOutTimeLabel,

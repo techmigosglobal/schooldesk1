@@ -691,13 +691,13 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/principal-event-approvals-screen',
-      title: 'School Posts Approval',
+      title: 'School Posts',
       module: 'Communication',
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
       route: '/principal-event-posts-screen',
-      title: 'School Feed Posts',
+      title: 'School Posts',
       module: 'Communication',
       portal: 'principal',
     ),
