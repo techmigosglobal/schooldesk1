@@ -263,8 +263,8 @@ export function FeesWorkspace({
         currentSchool,
       ] = await Promise.all([
         api("fees/structures").catch(() => []),
-        api("fees/invoices?page=1&page_size=100").catch(() => []),
-        api("fees/payments?page=1&page_size=100").catch(() => []),
+        api("fees/invoices?page=1&page_size=2000").catch(() => []),
+        api("fees/payments?page=1&page_size=1000").catch(() => []),
         api("fees/payment-requests").catch(() => []),
         api("fees/concessions").catch(() => []),
         api("fees/categories").catch(() => []),
@@ -403,9 +403,10 @@ export function FeesWorkspace({
   const totalPaid = state.payments.reduce((s, r) => s + Number(r.amount_paid ?? r.amount ?? 0), 0);
   const totalOutstanding = operationalInvoices.reduce((s, r) => s + Number(r.balance || 0), 0);
   const collectionRate = totalBilled > 0 ? Math.min(100, Math.round((totalPaid / totalBilled) * 100)) : 0;
-  const pendingRequestsCount = state.requests.filter(
-    (r) => stringValue(r.status).toLowerCase() === "pending"
-  ).length;
+  const pendingRequestsCount = state.requests.filter((r) => {
+    const s = stringValue(r.status).toLowerCase();
+    return s === "pending" || s === "pending_verification" || s === "resubmitted";
+  }).length;
   const overdueInvoices = operationalInvoices.filter(
     (r) => Number(r.balance || 0) > 0 && stringValue(r.status).toLowerCase() !== "paid"
   );
@@ -500,7 +501,7 @@ export function FeesWorkspace({
     try {
       await api(`fees/payments/${paymentId}`, { method: "DELETE" });
       // Silent refresh — re-fetch only invoices so navigation state is preserved
-      const fresh = await api("fees/invoices?page=1&page_size=100").catch(() => null);
+      const fresh = await api("fees/invoices?page=1&page_size=2000").catch(() => null);
       if (fresh) setState((prev) => ({ ...prev, invoices: rowsFrom(fresh) }));
       onNotify("Payment deleted. Invoice totals updated.");
     } catch (event) {
@@ -1092,7 +1093,7 @@ export function FeesWorkspace({
                           </span>
                         </div>
                         <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                          {stringValue(r.status).toLowerCase() === "pending" ? (
+                          {(["pending", "pending_verification", "resubmitted"].includes(stringValue(r.status).toLowerCase())) ? (
                             <>
                               <button
                                 className="primary-button"
