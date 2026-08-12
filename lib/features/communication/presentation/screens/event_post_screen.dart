@@ -86,6 +86,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   final Set<String> _viewedAttachmentPostIds = <String>{};
   NotificationService? _notificationService;
   Timer? _pollingTimer;
+  Timer? _refreshDebounceTimer;
+  bool _postsRequestInFlight = false;
+  bool _reviewRequestInFlight = false;
 
   bool get _canPublishDirectly => widget.principalMode;
   String get _postNoun =>
@@ -112,10 +115,18 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   }
 
   void _onNotificationChanged() {
-    unawaited(_loadPosts(showSpinner: false));
-    if (widget.principalMode) {
-      unawaited(_loadReviewPosts(showSpinner: false));
-    }
+    _scheduleRefresh();
+  }
+
+  void _scheduleRefresh() {
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      unawaited(_loadPosts(showSpinner: false));
+      if (widget.principalMode) {
+        unawaited(_loadReviewPosts(showSpinner: false));
+      }
+    });
   }
 
   @override
@@ -142,9 +153,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       _notificationService = s;
       s.addListener(_onNotificationChanged);
     });
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    _pollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted && !_loading) {
-        unawaited(_loadPosts(showSpinner: false));
+        _scheduleRefresh();
       }
     });
     _loadPosts();
@@ -157,6 +168,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pollingTimer?.cancel();
+    _refreshDebounceTimer?.cancel();
     _notificationService?.removeListener(_onNotificationChanged);
     _tabController.dispose();
     _titleController.dispose();
@@ -168,10 +180,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(_loadPosts(showSpinner: false));
-      if (widget.principalMode) {
-        unawaited(_loadReviewPosts(showSpinner: false));
-      }
+      _scheduleRefresh();
     }
   }
 
@@ -232,6 +241,8 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   // ── Load + Submit ───────────────────────────────────────────────────────────
 
   Future<void> _loadPosts({bool showSpinner = true}) async {
+    if (_postsRequestInFlight) return;
+    _postsRequestInFlight = true;
     if (showSpinner) {
       setState(() => _loading = true);
     }
@@ -250,11 +261,15 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         if (showSpinner) _loading = false;
         _error = 'Failed to load posts: $e';
       });
+    } finally {
+      _postsRequestInFlight = false;
     }
   }
 
   Future<void> _loadReviewPosts({bool showSpinner = true}) async {
     if (!widget.principalMode) return;
+    if (_reviewRequestInFlight) return;
+    _reviewRequestInFlight = true;
     if (showSpinner) {
       setState(() {
         _reviewLoading = true;
@@ -300,6 +315,8 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         _reviewRefreshing = false;
         _reviewError = 'Failed to load school post approvals: $e';
       });
+    } finally {
+      _reviewRequestInFlight = false;
     }
   }
 

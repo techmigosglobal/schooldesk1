@@ -213,7 +213,11 @@ export async function handleSchools(
     const { error } = await svc.storage.from("school-assets").upload(
       path2,
       file,
-      { upsert: true },
+      {
+        upsert: true,
+        contentType: file.type || "application/octet-stream",
+        cacheControl: "31536000",
+      },
     );
     if (error) return fail(error.message);
     const { data: { publicUrl } } = svc.storage.from("school-assets")

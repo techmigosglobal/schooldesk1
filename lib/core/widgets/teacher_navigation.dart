@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/feature_availability_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/text_utils.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 
@@ -55,9 +56,12 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
   Future<void> _loadIdentity() async {
     final api = BackendApiClient.instance;
     try {
+      final cachedProfile = api.cachedProfile;
       final results = await Future.wait([
         api.getCurrentSchool(),
-        api.getProfile(),
+        cachedProfile == null
+            ? api.getProfile()
+            : Future<UserResponse>.value(cachedProfile),
       ]);
       if (!mounted) return;
       final school = results[0] as Map<String, dynamic>;
@@ -109,7 +113,11 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
       organizationLogo: _schoolLogo.isEmpty
           ? null
           : Image.network(
-              _assetUrl(_schoolLogo),
+              optimizedImageUrl(
+                _assetUrl(_schoolLogo),
+                width: 256,
+                height: 256,
+              ),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) =>
                   const Icon(Icons.cast_for_education_rounded),
@@ -120,7 +128,11 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
       userAvatar: _userAvatar.isEmpty
           ? null
           : Image.network(
-              _assetUrl(_userAvatar),
+              optimizedImageUrl(
+                _assetUrl(_userAvatar),
+                width: 256,
+                height: 256,
+              ),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
             ),

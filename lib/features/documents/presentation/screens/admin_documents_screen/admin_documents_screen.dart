@@ -313,6 +313,10 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                             .uploadFile(
                               selectedFile!.path!,
                               filename: selectedFile!.name,
+                              folder: 'student-documents',
+                              entityType: 'student_document',
+                              entityId: studentId,
+                              private: true,
                             );
                         await BackendApiClient.instance
                             .createRaw('/student-documents', {

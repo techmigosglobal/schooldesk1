@@ -1,4 +1,5 @@
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 
 Uri? resolveAttachmentUrl(String value) {
   final raw = value.trim();
@@ -13,7 +14,7 @@ Uri? resolveAttachmentUrl(String value) {
     if (uri.path.startsWith('/uploads/')) {
       return _apiUploadUri(base, uri.path);
     }
-    return uri;
+    return Uri.tryParse(optimizedImageUrl(uri.toString())) ?? uri;
   }
 
   final origin = Uri(
@@ -25,7 +26,8 @@ Uri? resolveAttachmentUrl(String value) {
     return _apiUploadUri(base, raw);
   }
   final path = raw.startsWith('/') ? raw.substring(1) : raw;
-  return origin.resolve(path);
+  return Uri.tryParse(optimizedImageUrl(origin.resolve(path).toString())) ??
+      origin.resolve(path);
 }
 
 Uri _apiUploadUri(Uri base, String uploadPath) {

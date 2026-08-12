@@ -5,6 +5,12 @@ import {
   renderStructuredReportPdf,
   StructuredExportTable,
 } from "../report_pdf.ts";
+import {
+  PRIVATE_FILES_BUCKET,
+  privateFileReference,
+  signedPrivateFileUrl,
+  storagePathFromValue,
+} from "../storage_helpers.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -487,7 +493,11 @@ async function uploadPrivateReportPdf(
   const { error: uploadError } = await svc.storage.from(bucket).upload(
     filePath,
     bytes,
-    { contentType: "application/pdf", upsert: false },
+    {
+      contentType: "application/pdf",
+      cacheControl: "3600",
+      upsert: false,
+    },
   );
   if (uploadError) throw uploadError;
   const { data, error } = await svc.storage.from(bucket).createSignedUrl(
@@ -1816,27 +1826,38 @@ export async function handleUploads(
   const folder = form.get("folder") as string ?? "uploads";
   const entityType = form.get("entity_type") as string ?? "";
   const entityId = form.get("entity_id") as string ?? "";
-  const filePath =
-    `${folder}/${school}/${entityType}/${entityId}/${Date.now()}-${file.name}`;
+  const privateUpload = ["true", "1", "yes"].includes(
+    `${form.get("private") ?? ""}`.trim().toLowerCase(),
+  );
+  const filePath = privateUpload
+    ? `${school}/${folder}/${entityType}/${entityId}/${Date.now()}-${file.name}`
+    : `${folder}/${school}/${entityType}/${entityId}/${Date.now()}-${file.name}`;
+  const bucket = privateUpload ? PRIVATE_FILES_BUCKET : "school-assets";
 
   // Explicitly forward the content type so Supabase Storage never falls back
   // to application/octet-stream for MP4 and other video files.
   const contentType = file.type || _guessMimeFromName(file.name);
-  const { error: uploadErr } = await svc.storage.from("school-assets").upload(
+  const { error: uploadErr } = await svc.storage.from(bucket).upload(
     filePath,
     file,
-    { upsert: true, contentType },
+    {
+      upsert: true,
+      contentType,
+      cacheControl: privateUpload ? "3600" : "31536000",
+    },
   );
   if (uploadErr) return fail(uploadErr.message);
 
-  const { data: { publicUrl } } = svc.storage.from("school-assets")
-    .getPublicUrl(filePath);
+  const url = privateUpload
+    ? await signedPrivateFileUrl(svc, privateFileReference(filePath))
+    : svc.storage.from(bucket).getPublicUrl(filePath).data.publicUrl;
+  if (!url) return fail("failed to create file URL");
 
   const { data } = await svc.from("uploaded_files").insert({
     school_id: school,
     uploader_id: user.id,
-    url: publicUrl,
-    path: filePath,
+    url: privateUpload ? privateFileReference(filePath) : url,
+    path: privateUpload ? privateFileReference(filePath) : filePath,
     folder,
     entity_type: entityType,
     entity_id: entityId,
@@ -1845,7 +1866,7 @@ export async function handleUploads(
     mime_type: file.type,
   }).select().single();
 
-  return ok({ url: publicUrl, file: data });
+  return ok({ url, path: privateUpload ? privateFileReference(filePath) : filePath, file: data });
 }
 
 // handlers/events.ts
@@ -2312,7 +2333,11 @@ export async function handleDocuments(
       ascending: false,
     });
     if (error) return fail(error.message);
-    return ok(data ?? []);
+    const rows = await Promise.all((data ?? []).map(async (row) => ({
+      ...row,
+      file_url: await signedPrivateFileUrl(svc, row.file_url),
+    })));
+    return ok(rows);
   }
 
   if (path === "/student-documents" && method === "POST") {
@@ -2345,11 +2370,15 @@ export async function handleDocuments(
     const title = textValue(body.title);
     if (!fileUrl) return fail("file_url required");
 
+    const privatePath = storagePathFromValue(fileUrl, PRIVATE_FILES_BUCKET);
+    const storedFileUrl = privatePath
+      ? privateFileReference(privatePath)
+      : fileUrl;
     const { data, error } = await svc.from("student_documents").insert({
       student_id: studentId,
       school_id: school,
       doc_type: docType,
-      file_url: fileUrl,
+      file_url: storedFileUrl,
       title: title,
     }).select().single();
     if (error) return fail(error.message);
@@ -2369,7 +2398,10 @@ export async function handleDocuments(
         );
       }
     }
-    return ok(data);
+    return ok({
+      ...data,
+      file_url: await signedPrivateFileUrl(svc, data.file_url),
+    });
   }
 
   const studentDocMatch = path.match(/^\/student-documents\/([^/]+)$/);
@@ -2421,7 +2453,10 @@ export async function handleDocuments(
         ascending: false,
       });
       if (error) return fail(error.message);
-      return ok(data ?? []);
+      return ok(await Promise.all((data ?? []).map(async (row) => ({
+        ...row,
+        file_url: await signedPrivateFileUrl(svc, row.file_url),
+      }))));
     } else if (["principal", "coordinator"].includes(userRole)) {
       let query = svc.from("staff_documents").select(
         "*, staff:staff(id, school_id, first_name, last_name)",
@@ -2433,7 +2468,10 @@ export async function handleDocuments(
         ascending: false,
       });
       if (error) return fail(error.message);
-      return ok(data ?? []);
+      return ok(await Promise.all((data ?? []).map(async (row) => ({
+        ...row,
+        file_url: await signedPrivateFileUrl(svc, row.file_url),
+      }))));
     } else {
       return fail("unauthorized", 403);
     }
@@ -2456,15 +2494,22 @@ export async function handleDocuments(
     const title = textValue(body.title);
     if (!fileUrl) return fail("file_url required");
 
+    const privatePath = storagePathFromValue(fileUrl, PRIVATE_FILES_BUCKET);
+    const storedFileUrl = privatePath
+      ? privateFileReference(privatePath)
+      : fileUrl;
     const { data, error } = await svc.from("staff_documents").insert({
       staff_id: staffId,
       school_id: school,
       doc_type: docType,
-      file_url: fileUrl,
+      file_url: storedFileUrl,
       title: title,
     }).select().single();
     if (error) return fail(error.message);
-    return ok(data);
+    return ok({
+      ...data,
+      file_url: await signedPrivateFileUrl(svc, data.file_url),
+    });
   }
 
   const staffDocMatch = path.match(/^\/staff-documents\/([^/]+)$/);

@@ -524,7 +524,11 @@ export async function handleAuth(
       profile?.school_id ?? "common"
     }/${user.id}/${Date.now()}-${file.name}`;
     const { error: uploadError } = await svc().storage.from("school-assets")
-      .upload(filePath, file, { upsert: true });
+      .upload(filePath, file, {
+        upsert: true,
+        contentType: file.type || "application/octet-stream",
+        cacheControl: "31536000",
+      });
     if (uploadError) return fail(uploadError.message);
     const { data: { publicUrl } } = svc().storage.from("school-assets")
       .getPublicUrl(filePath);

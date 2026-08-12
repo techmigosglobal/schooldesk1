@@ -3,7 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:dio/dio.dart';
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:dio_cache_interceptor_hive_store/dio_cache_interceptor_hive_store.dart';
@@ -47,6 +47,8 @@ part 'api_modules/issues_api.dart';
 part 'api_modules/demo_api.dart';
 
 typedef ApiErrorReporter = void Function(DioException error);
+
+const _forceRefreshCacheExtraKey = 'schooldesk_force_refresh_cache';
 
 /// Backend API client for school-desk backend
 /// Handles all HTTP communication with the FastAPI backend.
@@ -126,9 +128,15 @@ class BackendApiClient {
 
   void setCurrentUserId(String? userId) {
     final normalized = userId?.trim();
-    _currentUserId = normalized == null || normalized.isEmpty
+    final nextUserId = normalized == null || normalized.isEmpty
         ? null
         : normalized;
+    if (_currentUserId != nextUserId) {
+      // Never retain an in-memory profile across account changes on a shared
+      // device. The persistent response cache is independently user-scoped.
+      _cachedProfile = null;
+    }
+    _currentUserId = nextUserId;
   }
 
   Future<void> setActiveBranchId(String? schoolId) async {
@@ -177,9 +185,9 @@ class BackendApiClient {
       final store = HiveCacheStore(p.join(dir.path, 'schooldesk_http_cache'));
       _cacheOptions = CacheOptions(
         store: store,
-        // request: always try the network; serve cached response only on error.
-        // Per-request interceptors override this with forceCache for
-        // long-lived structural data (academic years, grades, etc.).
+        keyBuilder: _authenticatedCacheKey,
+        // Per-request policy and TTL are assigned by
+        // _ReadCacheOptionsInterceptor.
         policy: CachePolicy.request,
         hitCacheOnErrorExcept: const [401, 403],
         maxStale: const Duration(minutes: 5),

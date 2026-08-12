@@ -1,13 +1,15 @@
-import 'package:dio/dio.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:printing/printing.dart';
 import 'package:video_player/video_player.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/media_cache.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 
 String resolveEventPostMediaUrl(String url) {
   if (url.isEmpty) return url;
@@ -50,7 +52,12 @@ class EventPostMediaPreview extends StatelessWidget {
       );
     }
     if (item.isVideo) {
-      return EventPostVideoPreview(url: url, height: height);
+      return EventPostVideoPreview(
+        url: url,
+        height: height,
+        loadOnInit: false,
+        onTap: onImageTap ?? () => openEventPostMediaPreview(context, item),
+      );
     }
     return _fileTile(context, url);
   }
@@ -136,6 +143,7 @@ class EventPostMediaPreviewScreen extends StatelessWidget {
         child: InteractiveViewer(
           child: EventPostImagePreview(
             url,
+            thumbnail: false,
             fit: BoxFit.contain,
             fallbackBuilder: () => _message(
               context,
@@ -202,6 +210,7 @@ class EventPostImagePreview extends StatelessWidget {
   final double? height;
   final BoxFit fit;
   final Widget Function()? fallbackBuilder;
+  final bool thumbnail;
 
   const EventPostImagePreview(
     this.url, {
@@ -209,12 +218,16 @@ class EventPostImagePreview extends StatelessWidget {
     this.height,
     this.fit = BoxFit.cover,
     this.fallbackBuilder,
+    this.thumbnail = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final requestUrl = thumbnail
+        ? optimizedImageUrl(url, width: 900, height: 900, quality: 72)
+        : url;
     return FutureBuilder<Uint8List>(
-      future: _downloadMediaBytes(url),
+      future: MediaCache.load(requestUrl),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return SizedBox(
@@ -234,6 +247,8 @@ class EventPostImagePreview extends StatelessWidget {
           height: height,
           width: double.infinity,
           fit: fit,
+          cacheWidth: thumbnail ? 1200 : null,
+          cacheHeight: thumbnail ? 1200 : null,
         );
       },
     );
@@ -281,44 +296,10 @@ class EventPostPdfPreview extends StatelessWidget {
   }
 
   Future<Uint8List> _downloadPdfBytes(String url) async {
-    return _downloadMediaBytes(url);
+    // MediaCache preserves the legacy BackendApiClient.instance.dio.get<List<int>>
+    // path for authenticated/legacy attachments while adding disk caching.
+    return MediaCache.load(url);
   }
-}
-
-/// Small bounded in-memory cache so the same attachment isn't re-downloaded
-/// on every rebuild (e.g. dashboard carousels/auto-refresh) or every time a
-/// user revisits a screen in the same session.
-class _MediaByteCache {
-  static const int _maxEntries = 40;
-  static final Map<String, Uint8List> _bytes = {};
-
-  static Uint8List? get(String url) => _bytes[url];
-
-  static void put(String url, Uint8List bytes) {
-    if (_bytes.length >= _maxEntries && !_bytes.containsKey(url)) {
-      _bytes.remove(_bytes.keys.first);
-    }
-    _bytes[url] = bytes;
-  }
-}
-
-Future<Uint8List> _downloadMediaBytes(String url) async {
-  final cached = _MediaByteCache.get(url);
-  if (cached != null) return cached;
-  if (url.startsWith('assets/')) {
-    final bytes = (await rootBundle.load(url)).buffer.asUint8List();
-    _MediaByteCache.put(url, bytes);
-    return bytes;
-  }
-  final response = await BackendApiClient.instance.dio.get<List<int>>(
-    url,
-    options: Options(responseType: ResponseType.bytes),
-  );
-  final bytes = Uint8List.fromList(response.data ?? const []);
-  if (bytes.isNotEmpty) {
-    _MediaByteCache.put(url, bytes);
-  }
-  return bytes;
 }
 
 class EventPostVideoPreview extends StatefulWidget {
@@ -327,6 +308,8 @@ class EventPostVideoPreview extends StatefulWidget {
   final bool autoPlay;
   final bool muted;
   final bool showFullscreen;
+  final bool loadOnInit;
+  final VoidCallback? onTap;
 
   const EventPostVideoPreview({
     super.key,
@@ -335,6 +318,8 @@ class EventPostVideoPreview extends StatefulWidget {
     this.autoPlay = false,
     this.muted = true,
     this.showFullscreen = true,
+    this.loadOnInit = true,
+    this.onTap,
   });
 
   @override
@@ -342,8 +327,9 @@ class EventPostVideoPreview extends StatefulWidget {
 }
 
 class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
-  late final VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   bool _ready = false;
+  bool _loading = false;
   late bool _muted;
   String? _error;
 
@@ -351,28 +337,45 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
   void initState() {
     super.initState();
     _muted = widget.muted;
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..initialize()
-          .then((_) {
-            if (!mounted) return;
-            _controller
-              ..setLooping(true)
-              ..setVolume(_muted ? 0 : 1);
-            if (widget.autoPlay) _controller.play();
-            setState(() => _ready = true);
-          })
-          .catchError((Object error) {
-            if (!mounted) return;
-            setState(() => _error = 'Video unavailable');
-          });
+    if (widget.loadOnInit) unawaited(_startVideo());
+  }
+
+  Future<void> _startVideo() async {
+    if (_controller != null || _loading) return;
+    setState(() => _loading = true);
+    final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _controller = controller;
+    try {
+      await controller.initialize();
+      if (!mounted) return;
+      await controller.setLooping(true);
+      await controller.setVolume(_muted ? 0 : 1);
+      if (widget.autoPlay) await controller.play();
+      setState(() {
+        _loading = false;
+        _ready = true;
+      });
+    } on Object catch (_) {
+      await controller.dispose();
+      _controller = null;
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Video unavailable';
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
-    if (_controller.value.isInitialized && _controller.value.isPlaying) {
-      _controller.pause();
+    final controller = _controller;
+    if (controller != null &&
+        controller.value.isInitialized &&
+        controller.value.isPlaying) {
+      controller.pause();
     }
-    _controller.dispose();
+    controller?.dispose();
     super.dispose();
   }
 
@@ -380,10 +383,12 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
   void didUpdateWidget(EventPostVideoPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!_ready || oldWidget.autoPlay == widget.autoPlay) return;
+    final controller = _controller;
+    if (controller == null) return;
     if (widget.autoPlay) {
-      _controller.play();
-    } else if (_controller.value.isPlaying) {
-      _controller.pause();
+      controller.play();
+    } else if (controller.value.isPlaying) {
+      controller.pause();
     }
   }
 
@@ -395,9 +400,37 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
     if (!_ready) {
       return _videoShell(
         context,
-        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        child: InkWell(
+          onTap: widget.onTap ?? _startVideo,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              const Center(
+                child: Icon(
+                  Icons.video_library_rounded,
+                  color: Colors.white70,
+                  size: 46,
+                ),
+              ),
+              Center(
+                child: IconButton.filled(
+                  tooltip: 'Open video',
+                  onPressed: widget.onTap ?? _startVideo,
+                  icon: _loading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.play_arrow_rounded),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
+    final controller = _controller!;
     return _videoShell(
       context,
       child: Stack(
@@ -406,25 +439,25 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
           FittedBox(
             fit: BoxFit.cover,
             child: SizedBox(
-              width: _controller.value.size.width,
-              height: _controller.value.size.height,
-              child: VideoPlayer(_controller),
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: VideoPlayer(controller),
             ),
           ),
           Center(
             child: IconButton.filled(
-              tooltip: _controller.value.isPlaying
+              tooltip: controller.value.isPlaying
                   ? 'Pause video'
                   : 'Play video',
               onPressed: () {
                 setState(() {
-                  _controller.value.isPlaying
-                      ? _controller.pause()
-                      : _controller.play();
+                  controller.value.isPlaying
+                      ? controller.pause()
+                      : controller.play();
                 });
               },
               icon: Icon(
-                _controller.value.isPlaying
+                controller.value.isPlaying
                     ? Icons.pause_rounded
                     : Icons.play_arrow_rounded,
               ),
@@ -441,7 +474,7 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
                   onPressed: () {
                     setState(() {
                       _muted = !_muted;
-                      _controller.setVolume(_muted ? 0 : 1);
+                      controller.setVolume(_muted ? 0 : 1);
                     });
                   },
                   icon: Icon(
@@ -464,7 +497,7 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
             right: 8,
             bottom: 6,
             left: 8,
-            child: _VideoSeekBar(controller: _controller),
+            child: _VideoSeekBar(controller: controller),
           ),
         ],
       ),

@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class ProfileManagementScreen extends StatefulWidget {
@@ -469,9 +470,13 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
 
   String _avatarUrl(String avatar) {
     if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
-      return avatar;
+      return optimizedImageUrl(avatar, width: 256, height: 256);
     }
-    return '${EnvConfig.apiOrigin}$avatar';
+    return optimizedImageUrl(
+      '${EnvConfig.apiOrigin}$avatar',
+      width: 256,
+      height: 256,
+    );
   }
 
   Widget _buildSection({

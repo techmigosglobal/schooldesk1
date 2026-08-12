@@ -30,7 +30,7 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
     _loadLeave();
   }
 
-  Future<void> _loadLeave() async {
+  Future<void> _loadLeave({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -44,9 +44,9 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
         fallback: RoleAccessService.teacherStaffId,
       );
       final results = await Future.wait([
-        api.getLeaveTypes(),
-        api.getLeaveBalances(staffId: staffId),
-        api.getLeaveApplications(staffId: staffId),
+        api.getLeaveTypes(forceRefresh: forceRefresh),
+        api.getLeaveBalances(staffId: staffId, forceRefresh: forceRefresh),
+        api.getLeaveApplications(staffId: staffId, forceRefresh: forceRefresh),
       ]);
       if (!mounted) return;
       setState(() {
@@ -139,7 +139,7 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
       selectedIndex: TeacherNav.leave,
       loading: _loading,
       error: _error,
-      onRefresh: _loadLeave,
+      onRefresh: () => _loadLeave(forceRefresh: true),
       child: TeacherFlowScrollView(
         children: [
           TeacherCurrentClassCard(

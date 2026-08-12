@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/text_utils.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
@@ -115,7 +116,11 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
       organizationLogo: _schoolLogo.isEmpty
           ? null
           : Image.network(
-              _assetUrl(_schoolLogo),
+              optimizedImageUrl(
+                _assetUrl(_schoolLogo),
+                width: 256,
+                height: 256,
+              ),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) =>
                   const Icon(Icons.account_balance_rounded),
@@ -126,7 +131,11 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
       userAvatar: _userAvatar.isEmpty
           ? null
           : Image.network(
-              _assetUrl(_userAvatar),
+              optimizedImageUrl(
+                _assetUrl(_userAvatar),
+                width: 256,
+                height: 256,
+              ),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
             ),
@@ -431,9 +440,13 @@ class _PrincipalShellBottomBarState extends State<PrincipalShellBottomBar> {
         child: avatar.startsWith('assets/')
             ? Image.asset(avatar, fit: BoxFit.cover)
             : Image.network(
-                avatar.startsWith('http')
-                    ? avatar
-                    : '${EnvConfig.apiOrigin}$avatar',
+                optimizedImageUrl(
+                  avatar.startsWith('http')
+                      ? avatar
+                      : '${EnvConfig.apiOrigin}$avatar',
+                  width: 128,
+                  height: 128,
+                ),
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => Icon(
                   isSelected
@@ -647,7 +660,11 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
       organizationLogo: _schoolLogo.isEmpty
           ? null
           : Image.network(
-              _assetUrl(_schoolLogo),
+              optimizedImageUrl(
+                _assetUrl(_schoolLogo),
+                width: 256,
+                height: 256,
+              ),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const Icon(Icons.security_rounded),
             ),
@@ -657,7 +674,11 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
       userAvatar: _userAvatar.isEmpty
           ? null
           : Image.network(
-              _assetUrl(_userAvatar),
+              optimizedImageUrl(
+                _assetUrl(_userAvatar),
+                width: 256,
+                height: 256,
+              ),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
             ),
@@ -858,9 +879,13 @@ class _SuperAdminShellBottomBarState extends State<SuperAdminShellBottomBar> {
         child: avatar.startsWith('assets/')
             ? Image.asset(avatar, fit: BoxFit.cover)
             : Image.network(
-                avatar.startsWith('http')
-                    ? avatar
-                    : '${EnvConfig.apiOrigin}$avatar',
+                optimizedImageUrl(
+                  avatar.startsWith('http')
+                      ? avatar
+                      : '${EnvConfig.apiOrigin}$avatar',
+                  width: 128,
+                  height: 128,
+                ),
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => Icon(
                   isSelected

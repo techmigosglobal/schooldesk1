@@ -2,6 +2,11 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
 import { isSchoolLeader } from "./authorization.ts";
+import {
+  PRIVATE_FILES_BUCKET,
+  privateFileReference,
+  signedPrivateFileUrl,
+} from "../storage_helpers.ts";
 
 const studentDirectorySelect =
   "*, section:sections(*), guardians(*), student_guardians(guardian:guardians(*)), parent_student_links(parent_user_id)";
@@ -385,7 +390,11 @@ export async function handleStudents(
     const { error: uploadError } = await svc.storage.from("school-assets").upload(
       p,
       file,
-      { upsert: true },
+      {
+        upsert: true,
+        contentType: file.type || "application/octet-stream",
+        cacheControl: "31536000",
+      },
     );
     if (uploadError) return fail(uploadError.message);
     const { data: { publicUrl } } = svc.storage.from("school-assets")
@@ -402,20 +411,27 @@ export async function handleStudents(
     const form = await req.formData();
     const file = form.get("document") as File;
     if (!file) return fail("document required");
-    const p = `documents/students/${id}/${Date.now()}-${file.name}`;
-    await svc.storage.from("school-assets").upload(p, file, { upsert: true });
-    const { data: { publicUrl } } = svc.storage.from("school-assets")
-      .getPublicUrl(p);
+    const p = `${school}/student-documents/${id}/${Date.now()}-${file.name}`;
+    const { error: uploadError } = await svc.storage.from(PRIVATE_FILES_BUCKET)
+      .upload(p, file, {
+        upsert: true,
+        contentType: file.type || "application/octet-stream",
+        cacheControl: "3600",
+      });
+    if (uploadError) return fail(uploadError.message);
     const doc_type = form.get("doc_type") as string ?? "other";
     const { data, error } = await svc.from("student_documents").insert({
       student_id: id,
       school_id: school,
       doc_type,
-      file_url: publicUrl,
+      file_url: privateFileReference(p),
       title: form.get("title") as string ?? "",
     }).select().single();
     if (error) return fail(error.message);
-    return ok(data);
+    return ok({
+      ...data,
+      file_url: await signedPrivateFileUrl(svc, data.file_url),
+    });
   }
 
   if (id && sub === "attendance" && method === "GET") {
@@ -561,7 +577,18 @@ export async function handleStudents(
       data as Record<string, unknown>,
     ]);
     if (detail.error) return fail(detail.error.message);
-    return ok(detail.data[0]);
+    const student = detail.data[0] as Record<string, unknown>;
+    return ok({
+      ...student,
+      student_documents: await Promise.all(
+        (Array.isArray(student.student_documents)
+          ? student.student_documents
+          : []).map(async (document) => ({
+            ...document,
+            file_url: await signedPrivateFileUrl(svc, document.file_url),
+          })),
+      ),
+    });
   }
 
   if (id && (method === "PATCH" || method === "PUT")) {

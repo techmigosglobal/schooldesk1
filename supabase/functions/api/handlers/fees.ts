@@ -588,7 +588,11 @@ async function uploadPrivatePaymentProof(
   const { error } = await svc.storage.from("payment-proofs").upload(
     path,
     file,
-    { upsert: false },
+    {
+      upsert: false,
+      contentType: file.type || "application/octet-stream",
+      cacheControl: "3600",
+    },
   );
   if (error) throw error;
   return `payment-proofs/${path}`;

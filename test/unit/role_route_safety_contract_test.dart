@@ -322,6 +322,22 @@ void main() {
       }
     }
   });
+
+  test('role-select login revokes a session issued for a different role', () {
+    final source = File(
+      'lib/features/auth/presentation/controllers/auth_controller.dart',
+    ).readAsStringSync();
+    final mismatchStart = source.indexOf(
+      "if (role != null && actualRole != role.toLowerCase())",
+    );
+    final mismatchEnd = source.indexOf('return null;', mismatchStart);
+
+    expect(mismatchStart, greaterThanOrEqualTo(0));
+    expect(mismatchEnd, greaterThan(mismatchStart));
+    final mismatchBlock = source.substring(mismatchStart, mismatchEnd);
+    expect(mismatchBlock, contains('BackendApiClient.instance.logout()'));
+    expect(mismatchBlock, contains('RoleAccessService.clear()'));
+  });
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

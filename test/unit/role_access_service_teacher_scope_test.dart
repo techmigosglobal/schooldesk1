@@ -39,6 +39,36 @@ void main() {
   });
 
   test(
+    'teacher profile failure never falls back to another school staff member',
+    () async {
+      BackendApiClient.instance.setCurrentRole('teacher');
+      BackendApiClient.instance.setCurrentUserId('teacher-user-1');
+      adapter.routes['GET /staff'] = _okList([
+        {
+          'id': 'staff-other',
+          'school_id': 'school-1',
+          'staff_code': 'STAFF-OTHER',
+          'first_name': 'Karpagam',
+          'last_name': '',
+          'status': 'active',
+        },
+      ], total: 1);
+
+      await RoleAccessService.initialize();
+
+      expect(RoleAccessService.teacherName, 'Teacher');
+      expect(RoleAccessService.teacherStaffId, isEmpty);
+      expect(
+        adapter.requests,
+        isNot(contains('GET /staff')),
+        reason:
+            'A teacher session must never load the school-wide staff directory '
+            'as an identity fallback.',
+      );
+    },
+  );
+
+  test(
     'teacher scope keeps assigned subject from backend timetable even when it is not today',
     () async {
       final nonTodayWeekday = DateTime.now().weekday == DateTime.monday

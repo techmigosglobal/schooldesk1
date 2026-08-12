@@ -129,10 +129,18 @@ extension BackendEventsApi on BackendApiClient {
     String filePath, {
     required String filename,
     String? mimeType,
+    String folder = 'uploads',
+    String entityType = '',
+    String entityId = '',
+    bool private = false,
   }) async {
     try {
       final contentType = _resolveMediaType(mimeType, filename);
       final formData = FormData.fromMap({
+        'folder': folder,
+        'entity_type': entityType,
+        'entity_id': entityId,
+        'private': private,
         'file': await MultipartFile.fromFile(
           filePath,
           filename: filename,

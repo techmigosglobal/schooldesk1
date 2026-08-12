@@ -4,6 +4,7 @@ extension BackendLeaveApi on BackendApiClient {
   Future<List<Map<String, dynamic>>> getStudentLeaveApplications({
     String? studentId,
     String? status,
+    bool forceRefresh = false,
     int page = 1,
     int pageSize = 100,
   }) async {
@@ -17,6 +18,9 @@ extension BackendLeaveApi on BackendApiClient {
       }
       if (status != null && status.trim().isNotEmpty) {
         queryParams['status'] = status.trim();
+      }
+      if (forceRefresh) {
+        queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
       }
       final response = await _dio.get(
         '/student-leave/applications',
@@ -94,13 +98,21 @@ extension BackendLeaveApi on BackendApiClient {
 
   // ─── Leave ──────────────────────────────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> getLeaveTypes() {
-    return getRawList('/leave/types');
+  Future<List<Map<String, dynamic>>> getLeaveTypes({
+    bool forceRefresh = false,
+  }) {
+    return getRawList(
+      '/leave/types',
+      queryParameters: forceRefresh
+          ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
+          : null,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getLeaveBalances({
     String? staffId,
     String? academicYearId,
+    bool forceRefresh = false,
   }) {
     final queryParams = <String, dynamic>{};
     if (staffId != null && staffId.trim().isNotEmpty) {
@@ -108,6 +120,9 @@ extension BackendLeaveApi on BackendApiClient {
     }
     if (academicYearId != null && academicYearId.trim().isNotEmpty) {
       queryParams['academic_year_id'] = academicYearId.trim();
+    }
+    if (forceRefresh) {
+      queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
     }
     return getRawList(
       '/leave/balances',
@@ -118,11 +133,15 @@ extension BackendLeaveApi on BackendApiClient {
   Future<List<LeaveApplicationModel>> getLeaveApplications({
     String? staffId,
     String? status,
+    bool forceRefresh = false,
   }) async {
     try {
       final queryParams = <String, dynamic>{};
       if (staffId != null) queryParams['staff_id'] = staffId;
       if (status != null) queryParams['status'] = status;
+      if (forceRefresh) {
+        queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
+      }
 
       final response = await _dio.get(
         '/leave/applications',

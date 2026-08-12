@@ -35,7 +35,10 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
     _loadData();
   }
 
-  Future<void> _loadData({bool showSpinner = true}) async {
+  Future<void> _loadData({
+    bool showSpinner = true,
+    bool forceRefresh = false,
+  }) async {
     if (showSpinner) {
       setState(() {
         _loading = true;
@@ -43,7 +46,11 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       });
     }
     try {
-      final children = await _api.getMyStudents();
+      final children = await _api.getMyStudents(
+        refreshNonce: forceRefresh
+            ? DateTime.now().millisecondsSinceEpoch
+            : null,
+      );
       final selectedIndex = await ParentChildSelectionService.indexFor(
         children,
         fallback: _activeChildIndex,
@@ -57,7 +64,10 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       final studentId = selectedChild?['id']?.toString() ?? '';
       final requests = studentId.isEmpty
           ? <Map<String, dynamic>>[]
-          : await _api.getStudentLeaveApplications(studentId: studentId);
+          : await _api.getStudentLeaveApplications(
+              studentId: studentId,
+              forceRefresh: forceRefresh,
+            );
       if (!mounted) return;
       setState(() {
         _children = children;
@@ -99,7 +109,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
 
       body: RefreshIndicator(
-        onRefresh: () => _loadData(showSpinner: false),
+        onRefresh: () => _loadData(showSpinner: false, forceRefresh: true),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -126,7 +136,8 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
                 ),
                 IconButton(
                   tooltip: 'Refresh',
-                  onPressed: () => _loadData(showSpinner: false),
+                  onPressed: () =>
+                      _loadData(showSpinner: false, forceRefresh: true),
                   icon: const Icon(Icons.refresh_rounded, size: 18),
                 ),
               ],
@@ -183,7 +194,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
             ),
           ),
           TextButton(
-            onPressed: () => _loadData(),
+            onPressed: () => _loadData(forceRefresh: true),
             child: Text('Retry', style: GoogleFonts.dmSans(fontSize: 12)),
           ),
         ],
@@ -641,7 +652,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       ),
     );
     if (created == true && mounted) {
-      await _loadData(showSpinner: false);
+      await _loadData(showSpinner: false, forceRefresh: true);
     }
   }
 

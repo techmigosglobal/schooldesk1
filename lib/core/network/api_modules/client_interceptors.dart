@@ -1,5 +1,28 @@
 part of '../backend_api_client.dart';
 
+extension BackendAuthenticatedCache on BackendApiClient {
+  String _authenticatedCacheKey(RequestOptions request) {
+    final query = Map<String, dynamic>.from(request.queryParameters)
+      ..remove('refresh_nonce');
+    final normalizedUri = request.copyWith(queryParameters: query).uri;
+    final scope = [
+      _currentUserId ?? 'no-user',
+      _activeBranchId ?? 'no-branch',
+      _currentRoleName ?? 'no-role',
+    ].join('|');
+    final scopedUri = normalizedUri.replace(
+      fragment: 'schooldesk-cache-scope=${Uri.encodeComponent(scope)}',
+    );
+    return CacheOptions.defaultCacheKeyBuilder(
+      RequestOptions(path: scopedUri.toString()),
+    );
+  }
+
+  @visibleForTesting
+  String cacheKeyForRequest(RequestOptions request) =>
+      _authenticatedCacheKey(request);
+}
+
 // ─── Auth Interceptor ─────────────────────────────────────────────────────────
 
 class _DemoLocalApiInterceptor extends Interceptor {
@@ -40,6 +63,7 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
     final cacheOptions = _client._cacheOptions;
     if (cacheOptions == null ||
         !_client.isAuthenticated ||
+        (_client.currentUserId?.trim().isEmpty ?? true) ||
         options.method.toUpperCase() != 'GET' ||
         !_isCacheablePath(options.path)) {
       handler.next(options);
@@ -50,12 +74,7 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
       cacheOptions
           .copyWith(
             maxStale: Nullable(_ttlForPath(options.path)),
-            // Long-lived structural data (academic years, grades…) uses
-            // forceCache to avoid unnecessary round-trips on every navigation.
-            // Volatile data (dashboard, students…) uses CachePolicy.request so
-            // the UI always tries the network first and falls back to cache on
-            // error.
-            policy: _policyForPath(options.path),
+            policy: _policyForRequest(options),
           )
           .toExtra(),
     );
@@ -83,6 +102,12 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
         clean.contains('/timetable') ||
         clean.contains('/homework') ||
         clean.contains('/lesson-planners') ||
+        clean.contains('/leave/') ||
+        clean.contains('/student-leave/') ||
+        clean.contains('/announcements') ||
+        clean.contains('/event-posts') ||
+        clean.contains('/documents') ||
+        clean.contains('/health') ||
         // Parent attendance screens hit this endpoint on every visit; it
         // was previously missing from the cacheable list entirely (unlike
         // `/students/:id/attendance`, which is covered above), so it always
@@ -102,25 +127,20 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
       return const Duration(hours: 6);
     }
     if (clean.contains('/dashboard/')) return const Duration(minutes: 2);
+    if (clean.contains('/leave/') || clean.contains('/student-leave/')) {
+      return const Duration(minutes: 1);
+    }
+    if (clean.contains('/attendance/')) return const Duration(minutes: 1);
     return const Duration(minutes: 5);
   }
 
-  /// Returns [CachePolicy.forceCache] for structural data that rarely changes
-  /// (academic setup, timetables, fee structures) and [CachePolicy.networkFirst]
-  /// for volatile data like dashboard summaries.
-  CachePolicy _policyForPath(String path) {
-    final clean = path.toLowerCase();
-    if (clean.contains('/academic-years') ||
-        clean.contains('/grades') ||
-        clean.contains('/sections') ||
-        clean.contains('/subjects') ||
-        clean.contains('/fees/structures') ||
-        clean.contains('/fees/categories') ||
-        clean.contains('/timetable') ||
-        clean.contains('/lesson-planners')) {
-      return CachePolicy.forceCache;
-    }
-    return CachePolicy.request;
+  CachePolicy _policyForRequest(RequestOptions options) {
+    final isExplicitRefresh =
+        options.extra[_forceRefreshCacheExtraKey] == true ||
+        options.queryParameters.containsKey('refresh_nonce');
+    return isExplicitRefresh
+        ? CachePolicy.refreshForceCache
+        : CachePolicy.forceCache;
   }
 }
 

@@ -66,6 +66,8 @@ class _PrincipalEventApprovalScreenState
   Map<String, dynamic>? _selectedPost;
   NotificationService? _notificationService;
   Timer? _pollingTimer;
+  Timer? _refreshDebounceTimer;
+  bool _requestInFlight = false;
   bool _loading = true;
   bool _refreshing = false;
   String? _error;
@@ -81,9 +83,9 @@ class _PrincipalEventApprovalScreenState
       _notificationService = service;
       service.addListener(_onNotificationChanged);
     });
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    _pollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted && !_loading) {
-        unawaited(_loadPosts(showSpinner: false));
+        _scheduleRefresh();
       }
     });
     _loadPosts();
@@ -93,6 +95,7 @@ class _PrincipalEventApprovalScreenState
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pollingTimer?.cancel();
+    _refreshDebounceTimer?.cancel();
     _notificationService?.removeListener(_onNotificationChanged);
     super.dispose();
   }
@@ -100,18 +103,27 @@ class _PrincipalEventApprovalScreenState
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(_loadPosts(showSpinner: false));
+      _scheduleRefresh();
     }
   }
 
   void _onNotificationChanged() {
-    unawaited(_loadPosts(showSpinner: false));
+    _scheduleRefresh();
+  }
+
+  void _scheduleRefresh() {
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) unawaited(_loadPosts(showSpinner: false));
+    });
   }
 
   Future<void> _loadPosts({
     bool showSpinner = true,
     Map<String, dynamic>? keepPost,
   }) async {
+    if (_requestInFlight) return;
+    _requestInFlight = true;
     if (showSpinner) {
       setState(() {
         _loading = true;
@@ -166,6 +178,8 @@ class _PrincipalEventApprovalScreenState
         _refreshing = false;
         _error = 'Failed to load event approvals: $e';
       });
+    } finally {
+      _requestInFlight = false;
     }
   }
 

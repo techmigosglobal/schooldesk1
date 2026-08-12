@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:schooldesk1/core/app_export.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 
 extension ImageTypeExtension on String {
   ImageType get imageType {
@@ -154,11 +155,16 @@ class CustomImageWidget extends StatelessWidget {
             semanticLabel: semanticLabel,
           );
         case ImageType.network:
+          final optimizedUrl = optimizedImageUrl(
+            imageUrl!,
+            width: decodeWidth ?? 900,
+            height: decodeHeight ?? 900,
+          );
           return CachedNetworkImage(
             height: height,
             width: width,
             fit: fit,
-            imageUrl: imageUrl!,
+            imageUrl: optimizedUrl,
             color: color,
             memCacheWidth: decodeWidth,
             memCacheHeight: decodeHeight,

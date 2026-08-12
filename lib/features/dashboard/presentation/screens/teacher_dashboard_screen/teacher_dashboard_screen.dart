@@ -57,7 +57,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       channelName: 'teacher-dashboard',
       modules: const {'announcements', 'event_posts', 'attendance'},
       onRefresh: () {
-        if (mounted) _loadDashboardData();
+        if (mounted) _loadDashboardData(forceRefresh: true);
       },
     );
   }
@@ -68,7 +68,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _loadDashboardData() async {
+  Future<void> _loadDashboardData({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -77,8 +77,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       await RoleAccessService.initialize();
       final api = BackendApiClient.instance;
       final results = await Future.wait([
-        api.getDashboard('teacher'),
-        api.getAnnouncements(),
+        api.getDashboard('teacher', forceRefresh: forceRefresh),
+        api.getAnnouncements(forceRefresh: forceRefresh),
         _loadMyAttendanceSafely(api),
         _loadUnreadNotificationsCount(),
       ]);
@@ -139,7 +139,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       AppRoutes.teacherMyAttendance,
       arguments: {'auto_scan': true},
     );
-    if (mounted) await _loadDashboardData();
+    if (mounted) await _loadDashboardData(forceRefresh: true);
   }
 
   @override
@@ -203,7 +203,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       ],
       loading: _loading,
       error: _error,
-      onRefresh: _loadDashboardData,
+      onRefresh: () => _loadDashboardData(forceRefresh: true),
       child: isDesktop
           ? TeacherDashboardDesktopBody(
               teacherName: _teacherName,
@@ -216,7 +216,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               hasStaffLink: RoleAccessService.hasTeacherStaffLink,
               hasAssignedClasses: RoleAccessService.hasAssignedClasses,
               myAttendance: _myAttendance,
-              onRefresh: _loadDashboardData,
+              onRefresh: () => _loadDashboardData(forceRefresh: true),
             )
           : TeacherFlowScrollView(
               children: [
@@ -271,7 +271,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 TeacherFlowSectionHeader(
                   title: 'Today Action Queue',
                   actionLabel: 'Refresh',
-                  onAction: _loadDashboardData,
+                  onAction: () => _loadDashboardData(forceRefresh: true),
                 ),
                 const SizedBox(height: 10),
                 ..._teacherActionQueue(context),

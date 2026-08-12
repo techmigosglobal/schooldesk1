@@ -48,7 +48,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadDashboardData(forceRefresh: true);
+    _loadDashboardData();
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'parent-dashboard',
       modules: const {'announcements', 'event_posts', 'attendance', 'fees'},
@@ -1167,6 +1167,8 @@ class _PostMediaCarouselState extends State<_PostMediaCarousel> {
                 height: widget.height,
                 autoPlay: widget.isActive && index == _currentIndex,
                 muted: true,
+                loadOnInit: false,
+                onTap: () => openEventPostMediaPreview(context, item),
               );
             }
             return EventPostMediaPreview(

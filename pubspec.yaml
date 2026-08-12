@@ -1,7 +1,7 @@
 name: schooldesk1
 description: A new Flutter project.
 publish_to: none
-version: 1.0.16+27
+version: 1.0.18+29
 
 environment:
   sdk: ^3.9.0
@@ -45,6 +45,7 @@ dependencies:
   json_annotation: 4.9.0
   dio_cache_interceptor: ^3.5.1
   dio_cache_interceptor_hive_store: ^4.0.0
+  flutter_cache_manager: ^3.4.1
   path_provider: ^2.1.6
   path: ^1.9.1
   table_calendar: ^3.1.3

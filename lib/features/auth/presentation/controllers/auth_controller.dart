@@ -44,6 +44,13 @@ class AuthController extends ChangeNotifier {
       );
       final actualRole = response.user.roleName.toLowerCase();
       if (role != null && actualRole != role.toLowerCase()) {
+        // The backend has already issued and persisted a valid session at this
+        // point. Revoke it before showing the role mismatch so a parent token,
+        // for example, cannot remain active behind the teacher login screen.
+        await BackendApiClient.instance.logout();
+        RoleAccessService.clear();
+        _currentRole = null;
+        _isLoggedIn = false;
         _setError(
           'Access denied for role "$role". Logged in user role is "${response.user.roleName}".',
         );

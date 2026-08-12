@@ -1,6 +1,11 @@
 // handlers/staff.ts — CRUD, auth-backed staff access, photo upload, documents
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
+import {
+  PRIVATE_FILES_BUCKET,
+  privateFileReference,
+  signedPrivateFileUrl,
+} from "../storage_helpers.ts";
 
 function sid(user: User) {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -229,7 +234,11 @@ export async function handleStaff(
     const file = form.get("photo") as File;
     if (!file) return fail("photo required");
     const p = `staff/${school}/${id}/${Date.now()}-${file.name}`;
-    await svc.storage.from("school-assets").upload(p, file, { upsert: true });
+    await svc.storage.from("school-assets").upload(p, file, {
+      upsert: true,
+      contentType: file.type || "application/octet-stream",
+      cacheControl: "31536000",
+    });
     const { data: { publicUrl } } = svc.storage.from("school-assets")
       .getPublicUrl(p);
     await svc.from("staff").update({ photo_url: publicUrl }).eq("id", id);
@@ -241,19 +250,26 @@ export async function handleStaff(
     const file = form.get("document") as File;
     const docType = (form.get("doc_type") as string) ?? "other";
     if (!file) return fail("document required");
-    const p = `documents/staff/${id}/${Date.now()}-${file.name}`;
-    await svc.storage.from("school-assets").upload(p, file, { upsert: true });
-    const { data: { publicUrl } } = svc.storage.from("school-assets")
-      .getPublicUrl(p);
+    const p = `${school}/staff-documents/${id}/${Date.now()}-${file.name}`;
+    const { error: uploadError } = await svc.storage.from(PRIVATE_FILES_BUCKET)
+      .upload(p, file, {
+        upsert: true,
+        contentType: file.type || "application/octet-stream",
+        cacheControl: "3600",
+      });
+    if (uploadError) return fail(uploadError.message);
     const { data, error } = await svc.from("staff_documents").insert({
       staff_id: id,
       school_id: school,
       doc_type: docType,
       title: ((form.get("title") as string) ?? "").trim(),
-      file_url: publicUrl,
+      file_url: privateFileReference(p),
     }).select().single();
     if (error) return fail(error.message);
-    return ok(data);
+    return ok({
+      ...data,
+      file_url: await signedPrivateFileUrl(svc, data.file_url),
+    });
   }
 
   if (!id && method === "GET") {
@@ -276,6 +292,16 @@ export async function handleStaff(
     }
     const { data, error, count } = await q;
     if (error) return fail(error.message);
+    for (const row of data ?? []) {
+      row.documents = await Promise.all(
+        (Array.isArray(row.documents) ? row.documents : []).map(
+          async (document) => ({
+            ...document,
+            file_url: await signedPrivateFileUrl(svc, document.file_url),
+          }),
+        ),
+      );
+    }
     return cors({
       success: true,
       data: data ?? [],
@@ -318,7 +344,17 @@ export async function handleStaff(
       .eq("school_id", school)
       .single();
     if (error) return fail(error.message);
-    return ok(data);
+    return ok({
+      ...data,
+      documents: await Promise.all(
+        (Array.isArray(data.documents) ? data.documents : []).map(
+          async (document) => ({
+            ...document,
+            file_url: await signedPrivateFileUrl(svc, document.file_url),
+          }),
+        ),
+      ),
+    });
   }
 
   if (id && (method === "PUT" || method === "PATCH")) {

@@ -279,7 +279,11 @@ export async function handleWebsite(
     const { error: uploadError } = await svc.storage.from(bucket).upload(
       mediaPath,
       file,
-      { contentType: file.type, upsert: false },
+      {
+        contentType: file.type,
+        cacheControl: "31536000",
+        upsert: false,
+      },
     );
     if (uploadError) return fail(uploadError.message);
     const { data, error } = await svc.from("school_website_gallery_items")

@@ -24,19 +24,22 @@ class RoleAccessService {
       return;
     }
 
-    final profile = await _try(() => api.getProfile());
-    final profileRole = profile?.roleName.trim().toLowerCase();
-    // Only overwrite the role if the profile returned a non-empty value.
-    // A null profile (network failure) or empty roleName must not wipe the
-    // role that was already set correctly by the login response.
-    if (profile != null && profileRole != null && profileRole.isNotEmpty) {
-      final loginRole = api.currentRoleName?.trim().toLowerCase() ?? '';
-      // Never downgrade super_admin based on a stale public.users row.
-      if (loginRole != 'super_admin' || profileRole == 'super_admin') {
-        api.setCurrentRole(profile.roleName);
-      }
+    // The login response is already held in memory and is the safest identity
+    // fallback when the profile endpoint is temporarily unavailable. Reusing it
+    // also avoids an unnecessary Supabase round-trip on every screen change.
+    final profile = api.cachedProfile ?? await _try(() => api.getProfile());
+    final profileRole = profile?.roleName.trim().toLowerCase() ?? '';
+    final sessionRole = api.currentRoleName?.trim().toLowerCase() ?? '';
+    final effectiveRole = sessionRole.isNotEmpty ? sessionRole : profileRole;
+
+    // A profile response may be stale, but it must never replace a role already
+    // established by the authenticated session. Only fill a missing role or
+    // confirm the same role.
+    if (profileRole.isNotEmpty &&
+        (sessionRole.isEmpty || sessionRole == profileRole)) {
+      api.setCurrentRole(profile!.roleName);
     }
-    final teacherDashboard = profileRole == 'teacher'
+    final teacherDashboard = effectiveRole == 'teacher'
         ? await _try(() => api.getDashboard('teacher'))
         : null;
     _teacherDashboard = teacherDashboard ?? const {};
@@ -63,7 +66,7 @@ class RoleAccessService {
     // `_teacherTimetable`/`_todayTimetable`, or `_invoices`), adding several
     // unnecessary sequential network round-trips to every parent login and
     // app resume.
-    final isParent = profileRole == 'parent';
+    final isParent = effectiveRole == 'parent';
     final students = isParent
         ? null
         : await _try(
@@ -73,7 +76,7 @@ class RoleAccessService {
               pageSize: 100,
             ),
           );
-    final staff = (profileRole == 'teacher' || isParent)
+    final staff = (effectiveRole == 'teacher' || isParent)
         ? null
         : await _try(() => api.getStaff(page: 1, pageSize: 100));
     final parentChildren = isParent
@@ -107,7 +110,7 @@ class RoleAccessService {
             .toList();
       }
     }
-    final invoices = (profileRole == 'teacher' || isParent)
+    final invoices = (effectiveRole == 'teacher' || isParent)
         ? <Map<String, dynamic>>[]
         : await _try(() => api.getInvoices());
 
@@ -153,7 +156,7 @@ class RoleAccessService {
     _todayTimetable = _filterTodayTimetable(timetableRows);
     _invoices = invoices ?? [];
 
-    if (profileRole == 'teacher') {
+    if (effectiveRole == 'teacher') {
       final profileEmail = profile?.email.trim().toLowerCase() ?? '';
       final matches = _teachers.where(
         (teacher) =>

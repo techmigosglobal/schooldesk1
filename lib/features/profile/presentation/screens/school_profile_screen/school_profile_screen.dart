@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class SchoolProfileScreen extends StatefulWidget {
@@ -223,9 +224,13 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
 
   String _assetUrl(String path) {
     if (path.startsWith('http://') || path.startsWith('https://')) {
-      return path;
+      return optimizedImageUrl(path, width: 900, height: 900);
     }
-    return '${EnvConfig.apiOrigin}$path';
+    return optimizedImageUrl(
+      '${EnvConfig.apiOrigin}$path',
+      width: 900,
+      height: 900,
+    );
   }
 
   void _showSnack(String message, {bool isError = false}) {

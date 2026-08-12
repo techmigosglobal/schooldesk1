@@ -191,6 +191,9 @@ class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
                             .uploadFile(
                               selectedFile!.path!,
                               filename: selectedFile!.name,
+                              folder: 'staff-documents',
+                              entityType: 'staff_document',
+                              private: true,
                             );
                         await BackendApiClient.instance
                             .createRaw('/staff-documents', {

@@ -2,7 +2,6 @@ part of '../backend_api_client.dart';
 
 extension BackendCommunicationsApi on BackendApiClient {
   // ─── Unified Chat ─────────────────────────────────────────────────────────
-
   Future<List<Map<String, dynamic>>> getUnifiedChatContacts({
     required String role,
     String studentId = '',
@@ -94,12 +93,16 @@ extension BackendCommunicationsApi on BackendApiClient {
   }
 
   // ─── Announcements ──────────────────────────────────────────────────────────
-
-  Future<List<AnnouncementModel>> getAnnouncements({String? schoolId}) async {
+  Future<List<AnnouncementModel>> getAnnouncements({
+    String? schoolId,
+    bool forceRefresh = false,
+  }) async {
     try {
       final queryParams = <String, dynamic>{};
       if (schoolId != null) queryParams['school_id'] = schoolId;
-
+      if (forceRefresh) {
+        queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
+      }
       final response = await _dio.get(
         '/announcements',
         queryParameters: queryParams,
@@ -587,11 +590,9 @@ class NotificationPage {
     required this.pageSize,
     required this.hasMore,
   });
-
   const NotificationPage.empty({required this.page, required this.pageSize})
     : items = const [],
       hasMore = false;
-
   final List<Map<String, dynamic>> items;
   final int page;
   final int pageSize;
