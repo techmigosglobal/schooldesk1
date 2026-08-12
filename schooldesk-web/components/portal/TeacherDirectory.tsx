@@ -63,6 +63,16 @@ function teacherClassAssignments(teacherId: string, staffCode: string, classes: 
   return assigned;
 }
 
+function uniqueSections(classes: Row[]) {
+  const byId = new Map<string, Row>();
+  for (const item of classes) {
+    const id = stringValue(item.section_id ?? item.id);
+    if (!id || byId.has(id)) continue;
+    byId.set(id, item);
+  }
+  return [...byId.values()];
+}
+
 export function TeacherDirectory({
   createToken,
   onSaved,
@@ -117,6 +127,7 @@ export function TeacherDirectory({
     () => Array.from(new Set(teachers.map((t) => stringValue(t.designation || "Teacher")))).filter(Boolean).sort(),
     [teachers]
   );
+  const sectionOptions = useMemo(() => uniqueSections(classes), [classes]);
 
   const filteredTeachers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -272,7 +283,7 @@ export function TeacherDirectory({
                   const teacherId = stringValue(teacher.id);
                   const staffCode = stringValue(teacher.staff_code);
                   const designation = stringValue(teacher.designation || "Teacher");
-                  const assignments = teacherClassAssignments(teacherId, staffCode, classes);
+                  const assignments = teacherClassAssignments(teacherId, staffCode, sectionOptions);
                   const isActive = teacher.is_active !== false;
 
                   return (
@@ -402,7 +413,7 @@ export function TeacherDirectory({
         <TeacherDialog
           row={dialog.row}
           readOnly={dialog.readOnly}
-          classes={classes}
+          classes={sectionOptions}
           onClose={() => setDialog({ open: false })}
           onSaved={() => {
             onSaved();

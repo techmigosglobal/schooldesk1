@@ -207,11 +207,14 @@ test("staff records can manage class assignments from the staff dialog", () => {
   const teacherDialog = source("../components/portal/TeacherDialog.tsx");
   const teacherDirectory = source("../components/portal/TeacherDirectory.tsx");
 
-  expect(teacherDialog).toContain("Class assignment");
+  expect(teacherDialog).toContain("Class / section assignments");
+  expect(teacherDialog).toContain("Each row is one available section");
+  expect(teacherDialog).toContain("one class teacher and one different");
   expect(teacherDialog).toContain('value="class_teacher">Class teacher');
   expect(teacherDialog).toContain('value="co_teacher">Co-teacher');
   expect(teacherDialog).toContain('api(`principal/classes/${id}`');
-  expect(teacherDirectory).toContain("classes={classes}");
+  expect(teacherDirectory).toContain("classes={sectionOptions}");
+  expect(teacherDirectory).toContain("uniqueSections(classes)");
 });
 
 test("record forms expose immediate save progress and duplicate-submit guards", () => {

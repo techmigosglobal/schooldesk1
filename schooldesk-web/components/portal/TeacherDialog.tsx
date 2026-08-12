@@ -310,8 +310,13 @@ export function TeacherDialog({
         </div>
 
         <fieldset className="staff-class-assignment" disabled={readOnly}>
-          <legend>Class assignment</legend>
-          <p>Assign this educator as a class teacher or co-teacher for one or more sections.</p>
+          <legend>Class / section assignments</legend>
+          <p>
+            Each row is one available section, not a duplicate teacher record.
+            Every section supports one class teacher and one different
+            co-teacher. Select only the section(s) this educator should access;
+            leave all other rows as No assignment.
+          </p>
           {classes.length ? (
             <div className="staff-class-assignment-list">
               {classes.map((item) => {
