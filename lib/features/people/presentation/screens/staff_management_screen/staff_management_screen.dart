@@ -410,7 +410,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     final subjectLabels = <String>{};
 
     for (final section in sections) {
-      if (section.classTeacherId != staffId) continue;
+      if (section.classTeacherId != staffId && section.coTeacherId != staffId) {
+        continue;
+      }
       classLabels.add(_sectionLabel(section, grades: grades));
     }
 

@@ -69,6 +69,31 @@ void main() {
     },
   );
 
+  test('staff management mirrors class and co-teacher section assignments', () {
+    final staffManagement = File(
+      'lib/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart',
+    ).readAsStringSync();
+    final sectionModel = File(
+      'lib/features/shared/data/models/backend_models.dart',
+    ).readAsStringSync();
+
+    expect(
+      staffManagement,
+      matches(
+        RegExp(
+          r'section\.classTeacherId != staffId\s*&&\s*section\.coTeacherId != staffId',
+        ),
+      ),
+      reason:
+          'Assigned Classes must include sections where the staff member is '
+          'the co-teacher, not only the class teacher.',
+    );
+    expect(
+      sectionModel,
+      contains("coTeacherId: _stringValue(json['co_teacher_id'])"),
+    );
+  });
+
   test('principal classes overview includes live class-hub fee dues', () {
     final principal = File(
       'supabase/functions/api/handlers/principal.ts',
