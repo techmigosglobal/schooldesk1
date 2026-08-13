@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -48,6 +49,12 @@ class StudentModel {
   final String feeStatus;
   final List<Map<String, dynamic>> documents;
   final List<Map<String, dynamic>> parentAccounts;
+
+  String? get parentUserId {
+    if (parentAccounts.isEmpty) return null;
+    final id = '${parentAccounts.first['id'] ?? ''}'.trim();
+    return id.isEmpty ? null : id;
+  }
 
   const StudentModel({
     required this.id,
@@ -141,6 +148,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   List<api.AcademicYearModel> _academicYears = const [];
   List<Map<String, dynamic>> _feeStructures = const [];
   List<api.UserAccountModel> _parents = const [];
+  int _activeStudentTotal = 0;
+  Map<String, int> _activeStudentsBySection = const {};
+  int _unlinkedActiveStudents = 0;
 
   String _searchQuery = '';
   String _selectedClass = 'All';
@@ -231,6 +241,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           .getAcademicYears(forceRefresh: true);
       final feeStructures = await _loadFeeStructuresSafely();
       final parents = await _loadParentAccounts();
+      final directorySummary = await api.BackendApiClient.instance
+          .getStudentDirectorySummary();
+      final parentIntegrity = await api.BackendApiClient.instance
+          .getStudentParentIntegrityReport();
       final sectionMap = {for (final s in sections) s.id: s};
       final gradeMap = {for (final g in grades) g.id: g};
       final parentMap = {for (final p in parents) p.id: p};
@@ -278,6 +292,19 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         _academicYears = academicYears;
         _feeStructures = feeStructures;
         _parents = parents;
+        _activeStudentTotal =
+            (directorySummary['active_student_count'] as num?)?.toInt() ??
+            loaded.where((student) => _isActiveStudent(student)).length;
+        final rawCounts = directorySummary['active_students_by_section'];
+        _activeStudentsBySection = rawCounts is Map
+            ? rawCounts.map(
+                (key, value) => MapEntry('$key', (value as num?)?.toInt() ?? 0),
+              )
+            : const {};
+        _unlinkedActiveStudents =
+            (parentIntegrity['unlinked_active_student_count'] as num?)
+                ?.toInt() ??
+            0;
         _allStudents
           ..clear()
           ..addAll(loaded);
@@ -311,6 +338,57 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         _loadError = error.toString();
       });
     }
+  }
+
+  bool _isActiveStudent(StudentModel student) =>
+      student.status.trim().toLowerCase() == 'active';
+
+  int _countForClass(String classLabel) {
+    final section = _sections.firstWhere(
+      (candidate) => _classLabelForSection(candidate) == classLabel,
+      orElse: () => const api.SectionModel(
+        id: '',
+        gradeId: '',
+        gradeName: '',
+        academicYearId: '',
+        sectionName: '',
+        classTeacherId: '',
+        classTeacherName: '',
+        roomId: '',
+        roomNumber: '',
+        roomType: '',
+        capacity: 0,
+      ),
+    );
+    if (section.id.isNotEmpty &&
+        _activeStudentsBySection.containsKey(section.id)) {
+      return _activeStudentsBySection[section.id] ?? 0;
+    }
+    return _allStudents
+        .where(
+          (student) =>
+              _isActiveStudent(student) && student.classSection == classLabel,
+        )
+        .length;
+  }
+
+  String _classLabelForSection(api.SectionModel section) {
+    final grade = _grades.firstWhere(
+      (candidate) => candidate.id == section.gradeId,
+      orElse: () => api.GradeModel(
+        id: '',
+        schoolId: '',
+        gradeNumber: 0,
+        gradeName: section.gradeName,
+      ),
+    );
+    final gradeName = _gradeLabel(grade, section);
+    final sectionName = section.sectionName.trim();
+    return gradeName.isNotEmpty && sectionName.isNotEmpty
+        ? 'Class $gradeName / Section $sectionName'
+        : gradeName.isNotEmpty
+        ? 'Class $gradeName'
+        : 'Section $sectionName';
   }
 
   String _routeClassFilterLabel(
@@ -820,6 +898,25 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       padding: const EdgeInsets.fromLTRB(22, 4, 22, 4),
       child: Column(
         children: [
+          if (_unlinkedActiveStudents > 0)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Text(
+                '$_unlinkedActiveStudents active student${_unlinkedActiveStudents == 1 ? '' : 's'} need a valid parent login link before parent features can work.',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.orange.shade900,
+                ),
+              ),
+            ),
           _SearchBox(
             hint: 'Search students...',
             onChanged: (value) {
@@ -835,7 +932,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
               physics: const BouncingScrollPhysics(),
               children: [
                 _DirectoryChip(
-                  label: 'All Students',
+                  label: 'All Students ($_activeStudentTotal)',
                   selected: _selectedClass == 'All' && _selectedStatus == 'All',
                   onTap: () {
                     _selectedClass = 'All';
@@ -850,7 +947,8 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                       (value) => Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: _DirectoryChip(
-                          label: _compactClassLabel(value),
+                          label:
+                              '${_compactClassLabel(value)} (${_countForClass(value)})',
                           selected: _selectedClass == value,
                           onTap: () {
                             _selectedClass = value;
@@ -1088,36 +1186,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
     final client = api.BackendApiClient.instance;
     final studentId = input.studentId;
-    late final String savedStudentId;
-    if (studentId == null || studentId.isEmpty) {
-      final student = await client.createStudent(
-        firstName: firstName,
-        lastName: lastName,
-        dateOfBirth: input.backendDateOfBirth,
-        gender: input.gender.toLowerCase(),
-        admissionNumber: input.admissionNumber,
-        studentCode: input.systemId,
-        currentSectionId: input.sectionId,
-        admissionDate: _backendDate(DateTime.now()),
-        status: 'active',
-      );
-      savedStudentId = student.id;
-    } else {
-      await client.updateStudent(
-        studentId,
-        firstName: firstName,
-        lastName: lastName,
-        dateOfBirth: input.backendDateOfBirth,
-        gender: input.gender.toLowerCase(),
-        admissionNumber: input.admissionNumber,
-        studentCode: input.systemId,
-        currentSectionId: input.sectionId,
-        status: 'active',
-      );
-      savedStudentId = studentId;
-    }
-
     var parentUserId = input.parentUserId;
+    String? newlyCreatedParentId;
+    String? savedStudentId;
     if (input.shouldCreateParentLogin) {
       final parent = await client.createUser(
         username: input.parentUsername.trim(),
@@ -1132,25 +1203,72 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         isActive: true,
       );
       parentUserId = parent.id;
+      newlyCreatedParentId = parent.id;
     }
 
-    if ((parentUserId ?? '').isNotEmpty) {
-      await client.setStudentParent(
-        studentId: savedStudentId,
-        parentUserId: parentUserId,
-      );
+    try {
+      if (studentId == null || studentId.isEmpty) {
+        final student = await client.createStudent(
+          firstName: firstName,
+          lastName: lastName,
+          dateOfBirth: input.backendDateOfBirth,
+          gender: input.gender.toLowerCase(),
+          admissionNumber: input.admissionNumber,
+          studentCode: input.systemId,
+          currentSectionId: input.sectionId,
+          parentUserId: parentUserId,
+          requireParentLink: true,
+          admissionDate: _backendDate(DateTime.now()),
+          status: 'active',
+        );
+        savedStudentId = student.id;
+      } else {
+        await client.updateStudent(
+          studentId,
+          firstName: firstName,
+          lastName: lastName,
+          dateOfBirth: input.backendDateOfBirth,
+          gender: input.gender.toLowerCase(),
+          admissionNumber: input.admissionNumber,
+          studentCode: input.systemId,
+          currentSectionId: input.sectionId,
+          parentUserId: parentUserId,
+          requireParentLink: true,
+          status: 'active',
+        );
+        savedStudentId = studentId;
+      }
+
+      if ((parentUserId ?? '').isNotEmpty) {
+        await client.setStudentParent(
+          studentId: savedStudentId,
+          parentUserId: parentUserId,
+        );
+      }
+    } on Object catch (_) {
+      if (newlyCreatedParentId != null && savedStudentId == null) {
+        try {
+          await client.deleteUser(newlyCreatedParentId, permanent: true);
+        } on Object catch (_) {
+          // Keep the original student-save error visible; the backend account
+          // repair report will surface an orphaned login if cleanup fails.
+        }
+      }
+      rethrow;
     }
+
+    final savedId = savedStudentId;
 
     if (input.shouldCreateParentLogin &&
         (input.fatherFirstName.isNotEmpty ||
             input.motherFirstName.isNotEmpty)) {
-      await _createGuardianProfilesForStudent(savedStudentId, input);
+      await _createGuardianProfilesForStudent(savedId, input);
     }
 
     if ((input.photoPath ?? '').isNotEmpty ||
         (input.photoBytes?.isNotEmpty ?? false)) {
       await client.uploadStudentPhoto(
-        studentId: savedStudentId,
+        studentId: savedId,
         filePath: input.photoPath,
         fileBytes: input.photoBytes,
         fileName: input.photoName,
@@ -1159,7 +1277,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
     for (final document in input.documents) {
       await client.uploadStudentDocument(
-        studentId: savedStudentId,
+        studentId: savedId,
         filePath: document.filePath,
         fileBytes: document.fileBytes,
         fileName: document.fileName,
@@ -1168,7 +1286,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     }
 
     if (input.assignFees) {
-      await _assignStudentFees(savedStudentId, input);
+      await _assignStudentFees(savedId, input);
     }
 
     await _loadData();
@@ -2160,6 +2278,9 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
         : widget.sections.isNotEmpty
         ? widget.sections.first.id
         : null;
+    _parentUserId = initial?.parentUserId?.trim().isNotEmpty == true
+        ? initial!.parentUserId!.trim()
+        : null;
     _fatherFirstNameCtrl = TextEditingController();
     _fatherLastNameCtrl = TextEditingController();
     _motherFirstNameCtrl = TextEditingController();
@@ -2294,6 +2415,13 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       );
       return;
     }
+    if (!_createParentLogin && (_parentUserId ?? '').trim().isEmpty) {
+      setState(
+        () => _error =
+            'Select an existing parent login or create one before saving',
+      );
+      return;
+    }
 
     setState(() {
       _saving = true;
@@ -2304,6 +2432,14 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       final photoBytes = _photoFile == null
           ? null
           : await _photoFile!.readAsBytes();
+      final optimizedPhoto = photoBytes == null
+          ? null
+          : ImageUploadOptimizer.fromBytes(
+              photoBytes,
+              filename: _photoFile?.name ?? 'student-photo.jpg',
+              mimeType: 'image/jpeg',
+              preset: ImageUploadPreset.portrait,
+            );
       // Merge editable labels from UI controllers into document list
       final labelledDocuments = _documents.asMap().entries.map((entry) {
         final index = entry.key;
@@ -2340,8 +2476,8 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
           parentEmail: _parentEmailCtrl.text.trim(),
           parentPhone: _parentPhoneCtrl.text.trim(),
           photoPath: _photoFile?.path,
-          photoBytes: photoBytes,
-          photoName: _photoFile?.name,
+          photoBytes: optimizedPhoto?.bytes,
+          photoName: optimizedPhoto?.filename,
           documents: List<_StudentDocumentInput>.unmodifiable(
             labelledDocuments,
           ),

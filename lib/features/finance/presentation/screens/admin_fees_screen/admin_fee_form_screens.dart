@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
@@ -1124,25 +1123,6 @@ class _AdminInvoiceGenerationFormScreenState
           });
       if (!mounted) return;
       final createdCount = (result['created'] as num?)?.toInt() ?? 0;
-      // Send notification to parents about new invoices
-      if (createdCount > 0) {
-        try {
-          final gradeLabel =
-              widget.args.grades
-                  .where((g) => g.id == _selectedGradeId)
-                  .firstOrNull
-                  ?.gradeName ??
-              'Class';
-          final notifService = await NotificationService.getInstance();
-          await notifService.triggerInvoiceGeneratedAlert(
-            invoiceCount: createdCount,
-            classLabel: gradeLabel,
-            termLabel: _selectedTermLabel,
-          );
-        } on Object catch (_) {
-          // Notification is best-effort
-        }
-      }
       if (!mounted) return;
       Navigator.pop(
         context,
@@ -1237,7 +1217,6 @@ class AdminPaymentRecordFormScreen extends StatefulWidget {
 class _AdminPaymentRecordFormScreenState
     extends State<AdminPaymentRecordFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _receiptController;
   late final TextEditingController _amountController;
   late final TextEditingController _paymentDateController;
   final _transactionController = TextEditingController();
@@ -1269,9 +1248,6 @@ class _AdminPaymentRecordFormScreenState
       initialId,
       _pendingDues.map((due) => '${due['id']}'),
     );
-    _receiptController = TextEditingController(
-      text: 'RCP${DateTime.now().millisecondsSinceEpoch}',
-    );
     _amountController = TextEditingController(
       text: _selectedBalance > 0 ? _selectedBalance.toStringAsFixed(0) : '',
     );
@@ -1282,7 +1258,6 @@ class _AdminPaymentRecordFormScreenState
 
   @override
   void dispose() {
-    _receiptController.dispose();
     _amountController.dispose();
     _paymentDateController.dispose();
     _transactionController.dispose();
@@ -1366,13 +1341,15 @@ class _AdminPaymentRecordFormScreenState
   Widget _buildPaymentFields() {
     return Column(
       children: [
-        TextFormField(
-          controller: _receiptController,
-          enabled: !_saving,
-          decoration: const InputDecoration(labelText: 'Receipt number'),
-          validator: (value) => _required(value, 'Enter receipt number.'),
+        const ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(Icons.receipt_long_outlined),
+          title: Text('Receipt number generated automatically'),
+          subtitle: Text(
+            'A finalized payment receives its official AV receipt number.',
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         TextFormField(
           controller: _amountController,
           enabled: !_saving,
@@ -1509,7 +1486,6 @@ class _AdminPaymentRecordFormScreenState
       await BackendApiClient.instance.recordPayment(
         PaymentRequest(
           invoiceId: _selectedInvoiceId,
-          receiptNumber: _receiptController.text.trim(),
           amountPaid: amount,
           paymentDate: _paymentDateController.text.trim(),
           paymentMode: _paymentMode,

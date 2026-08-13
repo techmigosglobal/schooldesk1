@@ -620,17 +620,8 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               status: 'active',
             );
             if (_isPrincipal) {
-              final created = await BackendApiClient.instance.createStudent(
-                firstName: payload['first_name']!,
-                lastName: payload['last_name']!,
-                dateOfBirth: payload['date_of_birth']!,
-                gender: payload['gender']!,
-                admissionNumber: payload['admission_number'] ?? '',
-                studentCode: payload['student_code'] ?? '',
-                currentSectionId: payload['current_section_id'],
-                status: 'active',
-              );
               var parentUserId = values.parentUserId;
+              String? newlyCreatedParentId;
               if (values.shouldCreateParentLogin) {
                 final parent = await BackendApiClient.instance.createUser(
                   username: values.parentUsername,
@@ -642,14 +633,43 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                   isActive: true,
                 );
                 parentUserId = parent.id;
+                newlyCreatedParentId = parent.id;
               }
-              await BackendApiClient.instance.setStudentParent(
-                studentId: created.id,
-                parentUserId: parentUserId,
-              );
-              if (values.shouldCreateParentLogin &&
-                  values.parentName.trim().isNotEmpty) {
-                await _createGuardianProfileForStudent(created.id, values);
+              var studentSaved = false;
+              try {
+                final created = await BackendApiClient.instance.createStudent(
+                  firstName: payload['first_name']!,
+                  lastName: payload['last_name']!,
+                  dateOfBirth: payload['date_of_birth']!,
+                  gender: payload['gender']!,
+                  admissionNumber: payload['admission_number'] ?? '',
+                  studentCode: payload['student_code'] ?? '',
+                  currentSectionId: payload['current_section_id'],
+                  parentUserId: parentUserId,
+                  requireParentLink: true,
+                  status: 'active',
+                );
+                studentSaved = true;
+                await BackendApiClient.instance.setStudentParent(
+                  studentId: created.id,
+                  parentUserId: parentUserId,
+                );
+                if (values.shouldCreateParentLogin &&
+                    values.parentName.trim().isNotEmpty) {
+                  await _createGuardianProfileForStudent(created.id, values);
+                }
+              } on Object catch (_) {
+                if (newlyCreatedParentId != null && !studentSaved) {
+                  try {
+                    await BackendApiClient.instance.deleteUser(
+                      newlyCreatedParentId,
+                      permanent: true,
+                    );
+                  } on Object catch (_) {
+                    // The original save error remains the useful feedback.
+                  }
+                }
+                rethrow;
               }
             } else {
               await _requestStudentApproval(
@@ -691,18 +711,8 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               status: s['status']?.toString() ?? 'active',
             );
             if (_isPrincipal) {
-              await BackendApiClient.instance.updateStudent(
-                (s['id'] ?? '').toString(),
-                firstName: payload['first_name']!,
-                lastName: payload['last_name']!,
-                dateOfBirth: payload['date_of_birth']!,
-                gender: payload['gender']!,
-                admissionNumber: payload['admission_number'] ?? '',
-                studentCode: payload['student_code'] ?? '',
-                currentSectionId: payload['current_section_id'],
-                status: payload['status'] ?? 'active',
-              );
               var parentUserId = values.parentUserId;
+              String? newlyCreatedParentId;
               if (values.shouldCreateParentLogin) {
                 final parent = await BackendApiClient.instance.createUser(
                   username: values.parentUsername,
@@ -714,17 +724,47 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                   isActive: true,
                 );
                 parentUserId = parent.id;
+                newlyCreatedParentId = parent.id;
               }
-              await BackendApiClient.instance.setStudentParent(
-                studentId: (s['id'] ?? '').toString(),
-                parentUserId: parentUserId,
-              );
-              if (values.shouldCreateParentLogin &&
-                  values.parentName.trim().isNotEmpty) {
-                await _createGuardianProfileForStudent(
+              var studentSaved = false;
+              try {
+                await BackendApiClient.instance.updateStudent(
                   (s['id'] ?? '').toString(),
-                  values,
+                  firstName: payload['first_name']!,
+                  lastName: payload['last_name']!,
+                  dateOfBirth: payload['date_of_birth']!,
+                  gender: payload['gender']!,
+                  admissionNumber: payload['admission_number'] ?? '',
+                  studentCode: payload['student_code'] ?? '',
+                  currentSectionId: payload['current_section_id'],
+                  parentUserId: parentUserId,
+                  requireParentLink: true,
+                  status: payload['status'] ?? 'active',
                 );
+                studentSaved = true;
+                await BackendApiClient.instance.setStudentParent(
+                  studentId: (s['id'] ?? '').toString(),
+                  parentUserId: parentUserId,
+                );
+                if (values.shouldCreateParentLogin &&
+                    values.parentName.trim().isNotEmpty) {
+                  await _createGuardianProfileForStudent(
+                    (s['id'] ?? '').toString(),
+                    values,
+                  );
+                }
+              } on Object catch (_) {
+                if (newlyCreatedParentId != null && !studentSaved) {
+                  try {
+                    await BackendApiClient.instance.deleteUser(
+                      newlyCreatedParentId,
+                      permanent: true,
+                    );
+                  } on Object catch (_) {
+                    // The original save error remains the useful feedback.
+                  }
+                }
+                rethrow;
               }
             } else {
               await _requestStudentApproval(
@@ -903,6 +943,8 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
         admissionNumber: payload['admission_number'],
         studentCode: payload['student_code'],
         currentSectionId: payload['current_section_id'],
+        parentUserId: s['parentId']?.toString(),
+        requireParentLink: payload['status'] == 'active',
         status: payload['status'] ?? 'active',
       );
       return;

@@ -39,7 +39,7 @@ extension BackendHomeworkApi on BackendApiClient {
     String sectionId = '',
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/homework/reminders/today',
         queryParameters: {
           if (sectionId.trim().isNotEmpty) 'section_id': sectionId.trim(),

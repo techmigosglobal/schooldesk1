@@ -6,6 +6,10 @@ import {
   ok,
   triggerPushProcessing,
 } from "../index.ts";
+import {
+  resolveActiveTeacherScope,
+  teacherCanAccessStudent,
+} from "./teacher_scope.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -418,6 +422,13 @@ async function parentChatContacts(
   const contacts: any[] = [];
   const addedKeys = new Set<string>();
   const leaderContexts: Record<string, unknown>[] = [];
+  const { data: subjectAssignments, error: subjectAssignmentError } = await svc
+    .from("staff_subjects")
+    .select(
+      "staff_id, section_id, grade_id, academic_year_id, subject:subjects(subject_name), teacher:staff!staff_subjects_staff_id_fkey(id, first_name, last_name, is_active)",
+    )
+    .eq("school_id", school);
+  if (subjectAssignmentError) throw new Error(subjectAssignmentError.message);
 
   for (const link of links ?? []) {
     const student = (link as any).students;
@@ -429,7 +440,7 @@ async function parentChatContacts(
 
     const { data: section } = await svc.from("sections")
       .select(
-        "id, section_name, grade:grades(grade_name), class_teacher:staff!sections_class_teacher_id_fkey(*), co_teacher:staff!sections_co_teacher_id_fkey(*)",
+        "id, grade_id, academic_year_id, section_name, grade:grades(grade_name), class_teacher:staff!sections_class_teacher_id_fkey(*), co_teacher:staff!sections_co_teacher_id_fkey(*)",
       )
       .eq("id", sectionId)
       .eq("school_id", school)
@@ -467,6 +478,38 @@ async function parentChatContacts(
             type: "parent_teacher",
           });
         }
+      }
+      for (const assignment of subjectAssignments ?? []) {
+        const matchesSection = text(assignment.section_id) === text(section.id);
+        const matchesGrade = !text(assignment.section_id) &&
+          text(assignment.grade_id) === text(section.grade_id);
+        const matchesYear = !text(assignment.academic_year_id) ||
+          text(assignment.academic_year_id) === text(section.academic_year_id);
+        if (!matchesYear || (!matchesSection && !matchesGrade)) continue;
+        const subjectTeacher = assignment.teacher as unknown as Record<
+          string,
+          unknown
+        > | null;
+        const staffId = text(assignment.staff_id ?? subjectTeacher?.id);
+        if (!staffId || subjectTeacher?.is_active === false) continue;
+        const key = `teacher:${staffId}:${student.id}`;
+        if (addedKeys.has(key)) continue;
+        addedKeys.add(key);
+        const subject = assignment.subject as unknown as Record<
+          string,
+          unknown
+        > | null;
+        contacts.push({
+          id: staffId,
+          name: [text(subjectTeacher?.first_name), text(subjectTeacher?.last_name)]
+            .filter(Boolean)
+            .join(" ") || "Teacher",
+          role: "teacher",
+          contact_role: "subject_teacher",
+          subject_name: text(subject?.subject_name),
+          ...context,
+          type: "parent_teacher",
+        });
       }
     }
   }
@@ -720,20 +763,7 @@ async function teacherIsAssignedToStudent(
   staffId: string,
   studentId: string,
 ) {
-  if (!staffId || !studentId) return false;
-  const { data: student } = await svc.from("students")
-    .select("current_section_id")
-    .eq("school_id", school)
-    .eq("id", studentId)
-    .maybeSingle();
-  const sectionId = text(student?.current_section_id);
-  if (!sectionId) return false;
-  const assignedSections = await lessonPlannerAssignedSectionIds(
-    svc,
-    school,
-    staffId,
-  );
-  return assignedSections.has(sectionId);
+  return teacherCanAccessStudent(svc, school, staffId, studentId);
 }
 
 async function canReadChatConversation(
@@ -1343,30 +1373,8 @@ async function lessonPlannerAssignedSectionIds(
   school: string,
   teacherId: string,
 ) {
-  const sectionIds = new Set<string>();
-  if (!teacherId) return sectionIds;
-
-  const { data: classSections } = await svc.from("sections")
-    .select("id, class_teacher_id, co_teacher_id")
-    .eq("school_id", school)
-    .or(`class_teacher_id.eq.${teacherId},co_teacher_id.eq.${teacherId}`);
-
-  for (const section of classSections ?? []) {
-    const id = text((section as Record<string, unknown>).id);
-    if (id) sectionIds.add(id);
-  }
-
-  const { data: subjectSections } = await svc.from("staff_subjects")
-    .select("section_id")
-    .eq("school_id", school)
-    .eq("staff_id", teacherId);
-
-  for (const section of subjectSections ?? []) {
-    const id = text((section as Record<string, unknown>).section_id);
-    if (id) sectionIds.add(id);
-  }
-
-  return sectionIds;
+  const scope = await resolveActiveTeacherScope(svc, school, teacherId);
+  return new Set(scope.sections.keys());
 }
 
 async function lessonPlannerParentSectionIds(
@@ -1430,6 +1438,16 @@ export async function handleCommunications(
   const school = sid(user);
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
 
+  // The old generic communications and message endpoints were only used by a
+  // disconnected Flutter screen.  Keep a clear failure here so an outdated
+  // client cannot silently create a second chat system alongside /chat.
+  if (
+    path === "/communications" || path === "/message-conversations" ||
+    path === "/messages" || path.startsWith("/messages/")
+  ) {
+    return fail("legacy communication endpoint retired; use /chat", 410);
+  }
+
   // ── Unified WhatsApp-style chat ────────────────────────────
   if (path === "/chat/contacts" && method === "GET") {
     const roleParam = text(url.searchParams.get("role")).toLowerCase();
@@ -1475,11 +1493,54 @@ export async function handleCommunications(
         q = q.eq("teacher_id", teacher);
       } else if (userRole == "parent") {
         q = q.eq("parent_id", user.id);
+      } else {
+        return fail("forbidden", 403);
       }
     }
     const { data, error } = await q.order("updated_at", { ascending: false });
     if (error) return fail(error.message);
-    const rows = await enrichChatConversations(svc, school, data ?? []);
+    let visible = data ?? [];
+    if (userRole === "teacher" && !canManageSchoolContent(user)) {
+      const scope = await resolveActiveTeacherScope(
+        svc,
+        school,
+        linkedStaffId(user),
+      );
+      if (!scope.isActive) return ok([]);
+      const studentIds = uniqueText(visible.map((row) => row.student_id));
+      const { data: students, error: studentError } = studentIds.length
+        ? await svc.from("students").select("id, current_section_id").eq(
+          "school_id",
+          school,
+        ).in("id", studentIds)
+        : { data: [], error: null };
+      if (studentError) return fail(studentError.message);
+      const sectionByStudent = new Map(
+        (students ?? []).map((student) => [
+          text(student.id),
+          text(student.current_section_id),
+        ]),
+      );
+      visible = visible.filter((conversation) => {
+        const studentId = text(conversation.student_id);
+        return !studentId || scope.sections.has(
+          sectionByStudent.get(studentId) ?? "",
+        );
+      });
+    } else if (userRole === "parent" && !canManageSchoolContent(user)) {
+      const { data: links, error: linkError } = await svc.from(
+        "parent_student_links",
+      ).select("student_id").eq("school_id", school).eq(
+        "parent_user_id",
+        user.id,
+      );
+      if (linkError) return fail(linkError.message);
+      const linkedStudents = new Set(uniqueText((links ?? []).map((link) => link.student_id)));
+      visible = visible.filter((conversation) =>
+        linkedStudents.has(text(conversation.student_id))
+      );
+    }
+    const rows = await enrichChatConversations(svc, school, visible);
     const ids = rows.map((row) => text(row["id"])).filter(Boolean);
     let unreadByConversation = new Map<string, number>();
     if (ids.length) {
@@ -1508,9 +1569,14 @@ export async function handleCommunications(
 
   if (path === "/chat/conversations" && method === "POST") {
     const conversationType = text(body.type) || "parent_teacher";
-    const teacherId = text(body.teacher_id);
-    const parentId = text(body.parent_id) ||
-      (role(user) == "parent" ? user.id : "");
+    const sessionRole = role(user);
+    let teacherId = text(body.teacher_id);
+    let parentId = text(body.parent_id);
+    if (sessionRole === "teacher") {
+      teacherId = linkedStaffId(user);
+      if (!teacherId) return fail("staff profile not linked", 403);
+    }
+    if (sessionRole === "parent") parentId = user.id;
     const studentId = text(body.student_id);
     const requestedLeaderId = text(body.leader_id);
     const isLeadershipUser = canManageSchoolContent(user);
@@ -1789,6 +1855,14 @@ export async function handleCommunications(
       path.slice("/announcements".length).split("/").filter(Boolean)[0];
     if (!seg && method === "GET") {
       let q = svc.from("announcements").select("*").eq("school_id", school);
+      if (!canManageSchoolContent(user)) {
+        const audience = role(user);
+        if (!audience) return fail("forbidden", 403);
+        q = q.in("audience", ["all", "everyone", audience]).eq(
+          "status",
+          "published",
+        );
+      }
       if (url.searchParams.get("status")) {
         q = q.eq("status", url.searchParams.get("status")!);
       }
@@ -1801,6 +1875,7 @@ export async function handleCommunications(
       return ok(data);
     }
     if (!seg && method === "POST") {
+      if (!canManageSchoolContent(user)) return fail("forbidden", 403);
       const payload = normalizeAnnouncementPayload(
         school,
         user,
@@ -1822,6 +1897,7 @@ export async function handleCommunications(
       return ok(data);
     }
     if (seg && method === "PATCH") {
+      if (!canManageSchoolContent(user)) return fail("forbidden", 403);
       const payload = normalizeAnnouncementPayload(
         school,
         user,
@@ -1840,10 +1916,12 @@ export async function handleCommunications(
       return ok(data);
     }
     if (seg && method === "DELETE") {
-      await svc.from("announcements").delete().eq("id", seg).eq(
+      if (!canManageSchoolContent(user)) return fail("forbidden", 403);
+      const { error } = await svc.from("announcements").delete().eq("id", seg).eq(
         "school_id",
         school,
       );
+      if (error) return fail(error.message);
       return ok({ success: true });
     }
   }
@@ -1853,6 +1931,14 @@ export async function handleCommunications(
     const seg = path.slice("/notices".length).split("/").filter(Boolean)[0];
     if (!seg && method === "GET") {
       let q = svc.from("announcements").select("*").eq("school_id", school);
+      if (!canManageSchoolContent(user)) {
+        const audience = role(user);
+        if (!audience) return fail("forbidden", 403);
+        q = q.in("audience", ["all", "everyone", audience]).eq(
+          "status",
+          "published",
+        );
+      }
       if (url.searchParams.get("target_role")) {
         q = q.eq("audience", url.searchParams.get("target_role")!);
       }
@@ -1865,6 +1951,7 @@ export async function handleCommunications(
       return ok(data ?? []);
     }
     if (!seg && method === "POST") {
+      if (!canManageSchoolContent(user)) return fail("forbidden", 403);
       const payload = {
         school_id: school,
         title: body.title,
@@ -1903,12 +1990,28 @@ export async function handleCommunications(
     // Read one extra row so an exact page multiple does not create a phantom
     // empty page at the end of the notification history.
     const to = from + pageSize;
-    const { data, error } = await svc.from("notification_logs")
+    let notificationQuery = svc.from("notification_logs")
       .select("*, student:students(photo_url)")
+      .eq("school_id", school)
       .eq("user_id", user.id)
       .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .range(from, to);
+      .order("created_at", { ascending: false });
+    if (role(user) === "parent") {
+      const { data: links, error: linksError } = await svc
+        .from("parent_student_links")
+        .select("student_id")
+        .eq("school_id", school)
+        .eq("parent_user_id", user.id);
+      if (linksError) return fail(linksError.message);
+      const linkedStudentIds = (links ?? []).map((link) => text(link.student_id))
+        .filter(Boolean);
+      notificationQuery = linkedStudentIds.length === 0
+        ? notificationQuery.is("student_id", null)
+        : notificationQuery.or(
+          `student_id.is.null,student_id.in.(${linkedStudentIds.join(",")})`,
+        );
+    }
+    const { data, error } = await notificationQuery.range(from, to);
     if (error) return fail(error.message);
     const rows = (data ?? []).slice(0, pageSize);
     const items = rows.map((row: Record<string, unknown>) => ({
@@ -2079,182 +2182,6 @@ export async function handleCommunications(
     ).eq("token", token);
     if (error) return fail(error.message);
     return ok({ success: true });
-  }
-
-  // ── PTM slots / parent-teacher meetings ───────────────────
-  if (path === "/teacher/ptm-slots" && method === "GET") {
-    const teacher = user.app_metadata?.linked_id as string | undefined;
-    let q = svc.from("parent_teacher_meetings").select(
-      "*, event:events(*), teacher:staff(*), student:students(*), guardian:guardians(*), section:sections(*, grade:grades(*))",
-    ).eq("school_id", school);
-    if (teacher) q = q.eq("teacher_id", teacher);
-    const { data, error } = await q.order("slot_date", { ascending: true })
-      .order("slot_time", { ascending: true });
-    if (error) return fail(error.message);
-    return ok(data ?? []);
-  }
-  if (path === "/teacher/ptm-slots" && method === "POST") {
-    const { data, error } = await svc.from("parent_teacher_meetings").insert({
-      school_id: school,
-      academic_year_id: body.academic_year_id ?? null,
-      event_id: body.event_id ?? null,
-      section_id: body.section_id ?? null,
-      teacher_id: body.teacher_id ?? user.app_metadata?.linked_id ?? null,
-      guardian_id: body.guardian_id ?? null,
-      student_id: body.student_id ?? null,
-      slot_date: body.slot_date,
-      slot_time: body.slot_time,
-      duration_min: body.duration_min ?? 15,
-      status: body.status ?? "available",
-      notes: body.notes ?? null,
-      created_by: user.id,
-    }).select().single();
-    if (error) return fail(error.message);
-    return ok(data);
-  }
-  if (path === "/parent-teacher-meetings" && method === "GET") {
-    let q = svc.from("parent_teacher_meetings").select(
-      "*, event:events(*), teacher:staff(*), student:students(*), guardian:guardians(*), section:sections(*, grade:grades(*))",
-    ).eq("school_id", school);
-    if (url.searchParams.get("student_id")) {
-      q = q.eq("student_id", url.searchParams.get("student_id")!);
-    }
-    if (url.searchParams.get("teacher_id")) {
-      q = q.eq("teacher_id", url.searchParams.get("teacher_id")!);
-    }
-    if (url.searchParams.get("academic_year_id")) {
-      q = q.eq("academic_year_id", url.searchParams.get("academic_year_id")!);
-    }
-    const { data, error } = await q.order("slot_date", { ascending: true })
-      .order("slot_time", { ascending: true });
-    if (error) return fail(error.message);
-    return ok(data ?? []);
-  }
-  if (path === "/parent-teacher-meetings" && method === "POST") {
-    const { data, error } = await svc.from("parent_teacher_meetings").insert({
-      school_id: school,
-      academic_year_id: body.academic_year_id ?? null,
-      event_id: body.event_id ?? null,
-      section_id: body.section_id ?? null,
-      teacher_id: body.teacher_id ?? user.app_metadata?.linked_id ?? null,
-      guardian_id: body.guardian_id ?? null,
-      student_id: body.student_id ?? null,
-      slot_date: body.slot_date,
-      slot_time: body.slot_time,
-      duration_min: body.duration_min ?? 15,
-      status: body.status ?? "available",
-      notes: body.notes ?? null,
-      created_by: user.id,
-    }).select().single();
-    if (error) return fail(error.message);
-    return ok(data);
-  }
-  const ptmMatch = path.match(
-    /^\/parent-teacher-meetings\/([^/]+)(?:\/(book))?$/,
-  );
-  if (ptmMatch && method === "PUT") {
-    const isBookAction = ptmMatch[2] === "book";
-    const payload = isBookAction
-      ? {
-        status: "booked",
-        notes: body.notes ?? "Booked by parent",
-        booked_by_parent_user_id: user.id,
-        updated_at: new Date().toISOString(),
-      }
-      : { ...body, updated_at: new Date().toISOString() };
-    const { data, error } = await svc.from("parent_teacher_meetings").update(
-      payload,
-    ).eq("id", ptmMatch[1]).eq("school_id", school).select(
-      "*, teacher:staff(first_name, last_name), student:students(first_name, last_name)",
-    ).single();
-    if (error) return fail(error.message);
-
-    // ── Notify the relevant party based on the action ──────────────────
-    try {
-      const meetingId = `${data.id ?? ""}`;
-      const slotDate = `${data.slot_date ?? ""}`.split("T")[0];
-      const slotTime = `${data.slot_time ?? ""}`.substring(0, 5); // HH:MM
-
-      if (isBookAction) {
-        // Parent booked a slot → notify the teacher
-        const staffId = `${data.teacher_id ?? ""}`.trim();
-        if (staffId) {
-          const { data: teacherUserRow } = await svc.from("users")
-            .select("id")
-            .eq("school_id", school)
-            .eq("linked_type", "staff")
-            .eq("linked_id", staffId)
-            .limit(1)
-            .maybeSingle();
-          if (teacherUserRow?.id) {
-            const teacher = data.teacher as Record<string, unknown> | null;
-            const student = data.student as Record<string, unknown> | null;
-            const studentName = student
-              ? `${student.first_name ?? ""} ${student.last_name ?? ""}`.trim()
-              : "a student";
-            const notifBody =
-              `A parent booked a PTM slot on ${slotDate} at ${slotTime} regarding ${studentName}.`;
-            const { data: ptmEvent } = await svc.from("notification_events")
-              .insert({
-                school_id: school,
-                user_id: teacherUserRow.id,
-                event_type: "ptm_booked",
-                event_data: {
-                  ptm_id: meetingId,
-                  message: notifBody,
-                  reference_type: "ptm",
-                  slot_date: slotDate,
-                  slot_time: slotTime,
-                },
-              }).select("id").maybeSingle();
-            if (ptmEvent?.id) triggerPushProcessing(ptmEvent.id);
-          }
-        }
-      } else {
-        // Teacher/principal changed status → notify the parent
-        const newStatus = `${payload.status ?? data.status ?? ""}`
-          .toLowerCase();
-        if (["confirmed", "cancelled", "rescheduled"].includes(newStatus)) {
-          const parentUserId = `${data.booked_by_parent_user_id ?? ""}`.trim();
-          if (parentUserId) {
-            const teacher = data.teacher as Record<string, unknown> | null;
-            const teacherName = teacher
-              ? `${teacher.first_name ?? ""} ${teacher.last_name ?? ""}`.trim()
-              : "your child's teacher";
-            const statusMessages: Record<string, string> = {
-              confirmed:
-                `Your PTM meeting with ${teacherName} on ${slotDate} at ${slotTime} has been confirmed.`,
-              cancelled:
-                `Your PTM meeting with ${teacherName} on ${slotDate} at ${slotTime} has been cancelled.`,
-              rescheduled:
-                `Your PTM meeting with ${teacherName} has been rescheduled. Please check new details.`,
-            };
-            const notifBody = statusMessages[newStatus] ??
-              `Your PTM meeting status has been updated to ${newStatus}.`;
-            const { data: ptmStatusEvent } = await svc.from(
-              "notification_events",
-            ).insert({
-              school_id: school,
-              user_id: parentUserId,
-              event_type: "ptm_status_updated",
-              event_data: {
-                ptm_id: meetingId,
-                status: newStatus,
-                message: notifBody,
-                reference_type: "ptm",
-                slot_date: slotDate,
-                slot_time: slotTime,
-              },
-            }).select("id").maybeSingle();
-            if (ptmStatusEvent?.id) triggerPushProcessing(ptmStatusEvent.id);
-          }
-        }
-      }
-    } catch (_) {
-      /* best-effort notifications — PTM update was already saved */
-    }
-
-    return ok(data);
   }
 
   // ── Messages ──────────────────────────────────────────────
@@ -2437,19 +2364,40 @@ export async function handleCommunications(
   // ── Diary ─────────────────────────────────────────────────
   if ((path === "/diary" || path === "/diary-entries") && method === "GET") {
     let q = svc.from("diary_entries").select("*").eq("school_id", school);
-    const staffId = url.searchParams.get("staff_id") ?? "";
-    if (
-      !canManageSchoolContent(user) && staffId &&
-      staffId !== linkedStaffId(user)
-    ) {
+    const requestedStaffId = text(url.searchParams.get("staff_id"));
+    const requestedSectionId = text(url.searchParams.get("section_id"));
+    const userRole = role(user);
+    if (userRole === "teacher") {
+      const scope = await resolveActiveTeacherScope(
+        svc,
+        school,
+        linkedStaffId(user),
+      );
+      if (!scope.isActive) return fail("staff profile not linked", 403);
+      if (requestedStaffId && requestedStaffId !== scope.staffId) {
+        return fail("forbidden", 403);
+      }
+      if (requestedSectionId && !scope.sections.has(requestedSectionId)) {
+        return fail("forbidden", 403);
+      }
+      const sectionIds = [...scope.sections.keys()];
+      if (sectionIds.length === 0) return ok([]);
+      q = q.eq("staff_id", scope.staffId).in("section_id", sectionIds);
+    } else if (userRole === "parent") {
+      if (requestedStaffId) return fail("forbidden", 403);
+      const sectionIds = [...await lessonPlannerParentSectionIds(svc, school, user)];
+      if (requestedSectionId && !sectionIds.includes(requestedSectionId)) {
+        return fail("forbidden", 403);
+      }
+      if (sectionIds.length === 0) return ok([]);
+      q = q.in("section_id", sectionIds);
+    } else if (!canManageSchoolContent(user)) {
       return fail("forbidden", 403);
+    } else if (requestedStaffId) {
+      q = q.eq("staff_id", requestedStaffId);
     }
-    if (staffId) q = q.eq("staff_id", staffId);
-    if (!staffId && !canManageSchoolContent(user) && linkedStaffId(user)) {
-      q = q.eq("staff_id", linkedStaffId(user));
-    }
-    if (url.searchParams.get("section_id")) {
-      q = q.eq("section_id", url.searchParams.get("section_id")!);
+    if (requestedSectionId) {
+      q = q.eq("section_id", requestedSectionId);
     }
     if (url.searchParams.get("date")) {
       q = q.eq("date", url.searchParams.get("date")!);
@@ -2459,17 +2407,29 @@ export async function handleCommunications(
     return ok(data);
   }
   if ((path === "/diary" || path === "/diary-entries") && method === "POST") {
-    const teacherId = linkedStaffId(user);
-    if (!canManageSchoolContent(user) && !teacherId) {
-      return fail("staff profile not linked", 400);
+    const userRole = role(user);
+    const sectionId = text(body.section_id);
+    let staffId = text(body.staff_id);
+    if (userRole === "teacher") {
+      const scope = await resolveActiveTeacherScope(
+        svc,
+        school,
+        linkedStaffId(user),
+      );
+      if (!scope.isActive) return fail("staff profile not linked", 403);
+      if (!sectionId || !scope.sections.has(sectionId)) {
+        return fail("teacher is not assigned to this class section", 403);
+      }
+      staffId = scope.staffId;
+    } else if (!canManageSchoolContent(user)) {
+      return fail("forbidden", 403);
     }
     const payload = {
       ...body,
       school_id: school,
-      staff_id: canManageSchoolContent(user) ? body.staff_id : teacherId,
-      teacher_id: canManageSchoolContent(user)
-        ? body.teacher_id ?? body.staff_id
-        : teacherId,
+      section_id: sectionId || null,
+      staff_id: staffId || null,
+      teacher_id: staffId || null,
       created_by: user.id,
     };
     const { data, error } = await svc.from("diary_entries").insert(payload)
@@ -2479,42 +2439,81 @@ export async function handleCommunications(
   }
   const diaryMatch = path.match(/^\/diary-entries\/([^/]+)$/);
   if (diaryMatch && method === "PUT") {
-    let q = svc.from("diary_entries").update(body).eq("id", diaryMatch[1]).eq(
+    const { data: existing, error: existingError } = await svc.from(
+      "diary_entries",
+    ).select("id, staff_id, section_id").eq("id", diaryMatch[1]).eq(
       "school_id",
       school,
-    );
-    if (!canManageSchoolContent(user)) {
-      const teacherId = linkedStaffId(user);
-      if (!teacherId) return fail("staff profile not linked", 400);
-      q = q.eq("staff_id", teacherId);
+    ).maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (!existing) return fail("diary entry not found", 404);
+    const isLeader = canManageSchoolContent(user);
+    let changes: Record<string, unknown> = body;
+    if (!isLeader) {
+      if (role(user) !== "teacher") return fail("forbidden", 403);
+      const scope = await resolveActiveTeacherScope(
+        svc,
+        school,
+        linkedStaffId(user),
+      );
+      const nextSectionId = text(body.section_id) || text(existing.section_id);
+      if (!scope.isActive || text(existing.staff_id) !== scope.staffId ||
+        !scope.sections.has(nextSectionId)) {
+        return fail("forbidden", 403);
+      }
+      const allowed = ["title", "content", "date", "section_id", "attachments"];
+      changes = Object.fromEntries(
+        Object.entries(body).filter(([key]) => allowed.includes(key)),
+      );
     }
-    const { data, error } = await q.select().single();
+    const { data, error } = await svc.from("diary_entries").update(changes).eq(
+      "id",
+      diaryMatch[1],
+    ).eq("school_id", school).select().single();
     if (error) return fail(error.message);
     return ok(data);
   }
   if (diaryMatch && method === "DELETE") {
-    let q = svc.from("diary_entries").delete().eq("id", diaryMatch[1]).eq(
+    const { data: existing, error: existingError } = await svc.from(
+      "diary_entries",
+    ).select("id, staff_id, section_id").eq("id", diaryMatch[1]).eq(
       "school_id",
       school,
-    );
+    ).maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (!existing) return fail("diary entry not found", 404);
     if (!canManageSchoolContent(user)) {
-      const teacherId = linkedStaffId(user);
-      if (!teacherId) return fail("staff profile not linked", 400);
-      q = q.eq("staff_id", teacherId);
+      if (role(user) !== "teacher") return fail("forbidden", 403);
+      const scope = await resolveActiveTeacherScope(
+        svc,
+        school,
+        linkedStaffId(user),
+      );
+      if (!scope.isActive || text(existing.staff_id) !== scope.staffId ||
+        !scope.sections.has(text(existing.section_id))) {
+        return fail("forbidden", 403);
+      }
     }
-    const { error } = await q;
+    const { error } = await svc.from("diary_entries").delete().eq(
+      "id",
+      diaryMatch[1],
+    ).eq("school_id", school);
     if (error) return fail(error.message);
     return ok({ success: true });
   }
 
   // ── Lesson planners ───────────────────────────────────────
   if (path === "/lesson-planners/teacher" && method === "GET") {
+    if (role(user) !== "teacher") return fail("forbidden", 403);
     const teacherId = linkedStaffId(user);
-    const sectionIds = await lessonPlannerAssignedSectionIds(
+    const scope = await resolveActiveTeacherScope(
       svc,
       school,
       teacherId,
     );
+    if (!scope.isActive) return fail("staff profile not linked", 403);
+    const sectionIds = new Set(scope.sections.keys());
+    if (sectionIds.size === 0) return ok([]);
     const { data, error } = await svc.from("frontend_records").select("*").eq(
       "school_id",
       school,
@@ -2528,14 +2527,12 @@ export async function handleCommunications(
       data ?? [],
     );
     const rows = (await enrichLessonPlannerRows(svc, school, currentRows))
-      .filter((row) =>
-        `${row.staff_id ?? ""}` === teacherId ||
-        sectionIds.has(`${row.section_id ?? ""}`)
-      );
+      .filter((row) => sectionIds.has(`${row.section_id ?? ""}`));
     return ok(rows);
   }
 
   if (path === "/lesson-planners/principal" && method === "GET") {
+    if (!canManageSchoolContent(user)) return fail("forbidden", 403);
     const { data, error } = await svc.from("frontend_records").select("*").eq(
       "school_id",
       school,
@@ -2553,6 +2550,7 @@ export async function handleCommunications(
   }
 
   if (path === "/lesson-planners/parent" && method === "GET") {
+    if (role(user) !== "parent") return fail("forbidden", 403);
     const sectionIds = await lessonPlannerParentSectionIds(svc, school, user);
     const { data, error } = await svc.from("frontend_records").select("*").eq(
       "school_id",
@@ -2576,6 +2574,7 @@ export async function handleCommunications(
   }
 
   if (path === "/lesson-planners" && method === "POST") {
+    if (role(user) !== "teacher") return fail("forbidden", 403);
     const teacherId = linkedStaffId(user);
     const sectionId = `${body.section_id ?? ""}`.trim();
     const scopeError = await ensureLessonPlannerTeacherCanPost(
@@ -2631,6 +2630,7 @@ export async function handleCommunications(
     /^\/lesson-planners\/([^/]+)\/complete$/,
   );
   if (lessonPlannerCompleteMatch && method === "POST") {
+    if (!canManageSchoolContent(user)) return fail("forbidden", 403);
     const { data: existingRows, error: loadError } = await svc.from(
       "frontend_records",
     ).select("*").eq("school_id", school).eq("table_name", "lesson_planners")

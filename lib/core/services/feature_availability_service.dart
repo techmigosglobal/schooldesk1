@@ -3,7 +3,6 @@ enum SchoolDeskFeature {
   adminStaff,
   adminFees,
   principalAnalytics,
-  teacherParentMeetings,
   parentStudentLeave,
   documents,
   reportsExports,
@@ -49,31 +48,6 @@ class FeatureAvailabilityService {
       feature: SchoolDeskFeature.principalAnalytics,
       label: 'Principal analytics',
       isAvailable: true,
-    ),
-    // ── PTM feature flag ────────────────────────────────────────────────────
-    // Flutter UI (teacher_ptm_screen, teacher_parent_interaction_screen) and
-    // the API module (communications_api.dart → createMyTeacherPtmSlot,
-    // GET /parent-teacher-meetings) are implemented and wired.
-    //
-    // Set isAvailable: true once the following are confirmed on the backend:
-    //   1. POST /teacher/ptm-slots returns 200 with a slot object.
-    //   2. GET  /parent-teacher-meetings?role=teacher returns a list.
-    //   3. GET  /parent-teacher-meetings?role=parent  returns bookable slots.
-    //   4. PATCH /parent-teacher-meetings/:id (parent booking) returns 200.
-    //
-    // Navigation items guarded by this flag:
-    //   • TeacherNav.ptm   → AppRoutes.teacherParentInteraction
-    //   • ParentNav.ptm    → AppRoutes.parentPTMBooking
-    SchoolDeskFeature.teacherParentMeetings: FeatureAvailabilityState(
-      feature: SchoolDeskFeature.teacherParentMeetings,
-      label: 'Parent-teacher meetings',
-      isAvailable: false,
-      reason:
-          'Backend PTM endpoints require release verification before enabling '
-          'for all users. UI and API client are fully implemented.',
-      recommendedAction:
-          'Verify the four backend endpoints listed above, then set '
-          'isAvailable: true in feature_availability_service.dart.',
     ),
     SchoolDeskFeature.parentStudentLeave: FeatureAvailabilityState(
       feature: SchoolDeskFeature.parentStudentLeave,

@@ -6,6 +6,9 @@ class RoleAccessService {
 
   static bool _initialized = false;
   static bool _signedOut = false;
+  static DateTime? _lastInitializedAt;
+  static Future<void>? _initializationFuture;
+  static const _scopeCacheDuration = Duration(seconds: 30);
   static List<Map<String, dynamic>> _students = [];
   static List<Map<String, dynamic>> _teachers = [];
   static List<Map<String, dynamic>> _parentChildren = [];
@@ -16,7 +19,28 @@ class RoleAccessService {
   static Map<String, dynamic> _teacherDashboard = const {};
   static List<Map<String, dynamic>> _teacherAssignedClasses = [];
 
-  static Future<void> initialize() async {
+  static Future<void> initialize() {
+    if (_signedOut) return Future<void>.value();
+    final now = DateTime.now();
+    final lastInitializedAt = _lastInitializedAt;
+    if (_initialized &&
+        lastInitializedAt != null &&
+        now.difference(lastInitializedAt) < _scopeCacheDuration) {
+      return Future<void>.value();
+    }
+    final existing = _initializationFuture;
+    if (existing != null) return existing;
+
+    final future = _initializeScope();
+    _initializationFuture = future;
+    return future.whenComplete(() {
+      if (identical(_initializationFuture, future)) {
+        _initializationFuture = null;
+      }
+    });
+  }
+
+  static Future<void> _initializeScope() async {
     if (_signedOut) return;
     final api = BackendApiClient.instance;
     if (!api.isAuthenticated) {
@@ -183,16 +207,22 @@ class RoleAccessService {
       _activeTeacher = const {};
     }
     _initialized = true;
+    _lastInitializedAt = DateTime.now();
   }
 
   static void clear() {
     _signedOut = true;
+    _initializationFuture = null;
+    _lastInitializedAt = null;
     _setEmptyScope(initialized: false);
   }
 
   /// Reset the signed-out guard so the next login can initialize fresh.
   static void resetSignOutGuard() {
     _signedOut = false;
+    _initializationFuture = null;
+    _lastInitializedAt = null;
+    _initialized = false;
   }
 
   static Map<String, dynamic> get loggedInTeacher {

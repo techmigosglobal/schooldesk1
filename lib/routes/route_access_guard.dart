@@ -57,9 +57,6 @@ class RouteAccessGuard {
     AppRoutes.reportsAnalytics: {'principal'},
     AppRoutes.academicManagement: {'principal'},
     AppRoutes.academicYearDetail: {'principal'},
-    AppRoutes.academicYearClasswiseExport: {'principal'},
-    AppRoutes.academicYearUsersExport: {'principal'},
-    AppRoutes.academicYearFeesExport: {'principal'},
     AppRoutes.academicYearForm: {'principal'},
     AppRoutes.academicSubjectForm: {'principal'},
     AppRoutes.academicClassForm: {'principal'},
@@ -99,7 +96,6 @@ class RouteAccessGuard {
     AppRoutes.teacherMyAttendance: {'teacher'},
     AppRoutes.teacherCommunication: {'teacher'},
     AppRoutes.teacherComplaints: {'teacher'},
-    AppRoutes.teacherParentInteraction: {'teacher'},
     AppRoutes.teacherLeave: {'teacher'},
     AppRoutes.teacherLeaveRequestForm: {'teacher'},
     AppRoutes.teacherHomework: {'teacher'},
@@ -123,7 +119,6 @@ class RouteAccessGuard {
     AppRoutes.parentLeave: {'parent'},
     AppRoutes.parentLeaveRequestForm: {'parent'},
     AppRoutes.parentTimetable: {'parent'},
-    AppRoutes.parentPTMBooking: {'parent'},
     AppRoutes.parentCalendar: {'parent'},
     AppRoutes.parentDocuments: {'parent'},
     AppRoutes.parentLessonPlanner: {'parent'},
@@ -269,7 +264,6 @@ class RouteAccessGuard {
       AppRoutes.legacyPrincipalFeeStructures,
       AppRoutes.legacyPrincipalCollectFee,
       AppRoutes.legacyPrincipalPaymentConfig,
-      AppRoutes.academicYearFeesExport,
     }.contains(routeName);
   }
 }

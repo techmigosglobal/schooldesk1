@@ -158,7 +158,7 @@ extension BackendTablesRawApi on BackendApiClient {
         if (response.success == true) return _asListMap(response.data);
         throw ServerException(message: 'Failed to load $path');
       }
-      final response = await _dio.get(path, queryParameters: queryParameters);
+      final response = await _get(path, queryParameters: queryParameters);
       final data = _asMap(response.data);
       if (data['success'] == true) {
         return _asListMap(data['data']);
@@ -174,7 +174,7 @@ extension BackendTablesRawApi on BackendApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
-      final response = await _dio.get(path, queryParameters: queryParameters);
+      final response = await _get(path, queryParameters: queryParameters);
       final data = _asMap(response.data);
       if (data['success'] == true) {
         return _asMap(data['data']);

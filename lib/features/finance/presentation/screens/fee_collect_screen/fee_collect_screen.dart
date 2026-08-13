@@ -485,8 +485,6 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
       await BackendApiClient.instance.recordPayment(
         PaymentRequest(
           invoiceId: inv['id'],
-          receiptNumber:
-              'RCP-${DateFormat('yyyyMMddHHmmss').format(DateTime.now())}',
           amountPaid: amount,
           paymentDate: DateFormat('yyyy-MM-dd').format(_paymentDate),
           paymentMode: _paymentMode.label.toLowerCase(),

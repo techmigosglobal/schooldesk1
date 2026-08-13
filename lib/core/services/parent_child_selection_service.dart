@@ -28,6 +28,15 @@ class ParentChildSelectionService {
     await prefs.setString(StorageKeys.parentSelectedChild, id);
   }
 
+  /// Persists a child selected by a deep link or notification. Every parent
+  /// screen resolves it against its server-authorized child list before use.
+  static Future<void> saveStudentId(String studentId) async {
+    final id = studentId.trim();
+    if (id.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(StorageKeys.parentSelectedChild, id);
+  }
+
   static String _childId(Map<String, dynamic> child) =>
       '${child['id'] ?? child['student_id'] ?? ''}'.trim();
 }

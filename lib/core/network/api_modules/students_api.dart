@@ -3,6 +3,32 @@ part of '../backend_api_client.dart';
 extension BackendStudentsApi on BackendApiClient {
   // ─── Students ───────────────────────────────────────────────────────────────
 
+  Future<Map<String, dynamic>> getStudentDirectorySummary() async {
+    try {
+      final response = await _get('/students/summary');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to get student directory summary',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getStudentParentIntegrityReport() async {
+    try {
+      final response = await _get('/students/integrity');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to get student parent integrity',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<PaginatedList<StudentModel>> getStudents({
     String? schoolId,
     String? sectionId,
@@ -19,10 +45,7 @@ extension BackendStudentsApi on BackendApiClient {
       if (sectionId != null) queryParams['section_id'] = sectionId;
       if (status != null) queryParams['status'] = status;
 
-      final response = await _dio.get(
-        '/students',
-        queryParameters: queryParams,
-      );
+      final response = await _get('/students', queryParameters: queryParams);
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return PaginatedList<StudentModel>(
@@ -42,7 +65,7 @@ extension BackendStudentsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getMyStudents({int? refreshNonce}) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/me/students',
         queryParameters: {
           if (refreshNonce != null) 'refresh_nonce': refreshNonce,
@@ -166,7 +189,7 @@ extension BackendStudentsApi on BackendApiClient {
 
   Future<StudentModel> getStudent(String id) async {
     try {
-      final response = await _dio.get('/students/$id');
+      final response = await _get('/students/$id');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return StudentModel.fromJson(data['data'] as Map<String, dynamic>);
@@ -181,7 +204,7 @@ extension BackendStudentsApi on BackendApiClient {
     String studentId,
   ) async {
     try {
-      final response = await _dio.get('/students/$studentId/enrollments');
+      final response = await _get('/students/$studentId/enrollments');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return _asListMap(data['data']);
@@ -202,6 +225,8 @@ extension BackendStudentsApi on BackendApiClient {
     String? admissionNumber,
     String? studentCode,
     String? currentSectionId,
+    String? parentUserId,
+    bool requireParentLink = false,
     String admissionDate = '2026-01-01',
     String status = 'active',
   }) async {
@@ -216,6 +241,9 @@ extension BackendStudentsApi on BackendApiClient {
           'admission_number': admissionNumber ?? '',
           'student_id_number': studentCode ?? '',
           'current_section_id': currentSectionId ?? '',
+          if ((parentUserId ?? '').trim().isNotEmpty)
+            'parent_user_id': parentUserId!.trim(),
+          'require_parent_link': requireParentLink,
           'admission_date': admissionDate,
           'status': status,
         },
@@ -244,6 +272,7 @@ extension BackendStudentsApi on BackendApiClient {
     String? filePath,
     Uint8List? fileBytes,
     String? fileName,
+    String? mimeType,
   }) async {
     try {
       final formData = FormData.fromMap({
@@ -251,6 +280,8 @@ extension BackendStudentsApi on BackendApiClient {
           filePath: filePath,
           fileBytes: fileBytes,
           fileName: fileName,
+          mimeType: mimeType,
+          imagePreset: ImageUploadPreset.portrait,
         ),
       });
       final response = await _dio.post(
@@ -275,6 +306,7 @@ extension BackendStudentsApi on BackendApiClient {
     String? filePath,
     Uint8List? fileBytes,
     String? fileName,
+    String? mimeType,
     required String docType,
   }) async {
     try {
@@ -286,6 +318,7 @@ extension BackendStudentsApi on BackendApiClient {
           filePath: filePath,
           fileBytes: fileBytes,
           fileName: fileName,
+          mimeType: mimeType,
         ),
       });
       final response = await _dio.post(
@@ -314,6 +347,8 @@ extension BackendStudentsApi on BackendApiClient {
     String? admissionNumber,
     String? studentCode,
     String? currentSectionId,
+    String? parentUserId,
+    bool requireParentLink = false,
     String? admissionDate,
     String status = 'active',
   }) async {
@@ -326,6 +361,8 @@ extension BackendStudentsApi on BackendApiClient {
         'admission_number': admissionNumber ?? '',
         'student_id_number': studentCode ?? '',
         'current_section_id': currentSectionId ?? '',
+        if (parentUserId != null) 'parent_user_id': parentUserId.trim(),
+        'require_parent_link': requireParentLink,
         'status': status,
       };
       if ((admissionDate ?? '').trim().isNotEmpty) {
@@ -355,13 +392,40 @@ extension BackendStudentsApi on BackendApiClient {
     String? filePath,
     Uint8List? fileBytes,
     String? fileName,
+    String? mimeType,
+    ImageUploadPreset imagePreset = ImageUploadPreset.content,
   }) async {
+    final sourceName = (fileName ?? filePath ?? '').trim();
+    if (ImageUploadOptimizer.isImage(sourceName, mimeType)) {
+      final optimized = fileBytes != null && fileBytes.isNotEmpty
+          ? ImageUploadOptimizer.fromBytes(
+              fileBytes,
+              filename: sourceName,
+              mimeType: mimeType,
+              preset: imagePreset,
+            )
+          : await ImageUploadOptimizer.fromPath(
+              filePath ?? '',
+              filename: sourceName,
+              mimeType: mimeType,
+              preset: imagePreset,
+            );
+      return MultipartFile.fromBytes(
+        optimized.bytes,
+        filename: optimized.filename,
+        contentType: _resolveMediaType(optimized.mimeType, optimized.filename),
+      );
+    }
     if (fileBytes != null && fileBytes.isNotEmpty) {
       return MultipartFile.fromBytes(
         fileBytes,
         filename: (fileName ?? '').trim().isEmpty
             ? 'schooldesk-upload'
             : fileName!.trim(),
+        contentType: _resolveMediaType(
+          mimeType,
+          fileName ?? 'schooldesk-upload',
+        ),
       );
     }
     final cleanPath = (filePath ?? '').trim();
@@ -371,6 +435,7 @@ extension BackendStudentsApi on BackendApiClient {
     return MultipartFile.fromFile(
       cleanPath,
       filename: (fileName ?? '').trim().isEmpty ? null : fileName!.trim(),
+      contentType: _resolveMediaType(mimeType, fileName ?? cleanPath),
     );
   }
 

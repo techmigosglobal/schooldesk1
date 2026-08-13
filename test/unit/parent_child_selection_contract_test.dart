@@ -14,13 +14,14 @@ void main() {
     expect(helper, contains('SharedPreferences.getInstance'));
     expect(helper, contains('Future<int> indexFor'));
     expect(helper, contains('Future<void> saveIndex'));
+    expect(helper, contains('Future<void> saveStudentId'));
 
     for (final path in const [
       'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
       'lib/features/attendance/presentation/screens/parent_attendance_screen/parent_attendance_screen.dart',
       'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_screen.dart',
       'lib/features/academics/presentation/screens/parent_timetable_screen/parent_timetable_screen.dart',
-      'lib/features/communication/presentation/screens/parent_ptm_booking_screen/parent_ptm_booking_screen.dart',
+      'lib/features/communication/presentation/screens/parent_teacher_chat_screen/parent_teacher_chat_screen.dart',
       'lib/features/documents/presentation/screens/parent_documents_screen/parent_documents_screen.dart',
       'lib/features/finance/presentation/screens/parent_hub/parent_fee_hub.dart',
       'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_screen.dart',

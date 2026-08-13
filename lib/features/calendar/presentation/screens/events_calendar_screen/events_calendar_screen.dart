@@ -80,20 +80,14 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         api.getEvents(
           academicYearId: selectedYearId.isEmpty ? null : selectedYearId,
         ),
-        api.getRawList(
-          '/parent-teacher-meetings',
-          queryParameters: selectedYearId.isEmpty
-              ? null
-              : {'academic_year_id': selectedYearId},
-        ),
         api.getCalendarPreferences(),
       ]);
       final rows = results[0] as List<Map<String, dynamic>>;
-      final ptmRows = results[1] as List<Map<String, dynamic>>;
-      final preferences = results[2] as Map<String, dynamic>;
+      final preferences = results[1] as Map<String, dynamic>;
       final events = [
-        ...rows.map(_PrincipalEvent.fromApi),
-        ...ptmRows.map(_PrincipalEvent.fromPtmApi),
+        ...rows
+            .where((row) => _clean(row['event_type']).toLowerCase() != 'ptm')
+            .map(_PrincipalEvent.fromApi),
         if (preferences['hide_generated_holidays'] != true)
           ..._getBuiltInHolidays(selectedYearId, years),
       ]..sort((a, b) => a.start.compareTo(b.start));
@@ -245,7 +239,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         if (_activeLegendFilter == 'Academic' && !event.isAcademicEntry) {
           return false;
         }
-        if (_activeLegendFilter == 'PTM' && !event.isPtm) return false;
         if (_activeLegendFilter == 'Approval' && !event.needsApproval) {
           return false;
         }
@@ -287,7 +280,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         if (_activeLegendFilter == 'Academic' && !event.isAcademicEntry) {
           return false;
         }
-        if (_activeLegendFilter == 'PTM' && !event.isPtm) return false;
         if (_activeLegendFilter == 'Approval' && !event.needsApproval) {
           return false;
         }
@@ -578,7 +570,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'This removes all manually created events and PTM entries for this school. School posts and academic years are not affected. Generated holidays will stay hidden until you add fresh calendar entries.',
+                'This removes all manually created events for this school. School posts and academic years are not affected. Generated holidays will stay hidden until you add fresh calendar entries.',
               ),
               const SizedBox(height: 16),
               TextField(
@@ -621,7 +613,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Calendar reset: ${result['events_deleted'] ?? 0} events and ${result['ptms_deleted'] ?? 0} PTM entries removed.',
+            'Calendar reset: ${result['events_deleted'] ?? 0} events removed.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -725,8 +717,8 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return SchoolDeskModuleScaffold(
       title: 'Academic Calendar',
       subtitle: _canManageEvents
-          ? 'Create and manage school events, holidays, PTMs, and milestones'
-          : 'School events, holidays, PTMs, and milestones',
+          ? 'Create and manage school events, holidays, and milestones'
+          : 'School events, holidays, and milestones',
       drawer: _schoolCalendarDrawer(),
       actions: _isPrincipal
           ? [
@@ -1805,7 +1797,6 @@ class _EventFormPageState extends State<_EventFormPage> {
   static const _types = [
     'event',
     'meeting',
-    'ptm',
     'academic',
     'exam',
     'holiday',
@@ -2431,59 +2422,17 @@ class _PrincipalEvent {
     );
   }
 
-  factory _PrincipalEvent.fromPtmApi(Map<String, dynamic> row) {
-    final event = row['event'] is Map<String, dynamic>
-        ? Map<String, dynamic>.from(row['event'] as Map<String, dynamic>)
-        : <String, dynamic>{};
-    final baseDate =
-        _parseDateTime(row['slot_date']) ??
-        _parseDateTime(event['start_datetime']) ??
-        DateTime.now();
-    final time = _timeFromText(_clean(row['slot_time']));
-    final start = time == null
-        ? baseDate
-        : DateTime(
-            baseDate.year,
-            baseDate.month,
-            baseDate.day,
-            time.hour,
-            time.minute,
-          );
-    final end = start.add(
-      Duration(minutes: int.tryParse(_clean(row['duration_min'])) ?? 15),
-    );
-    return _PrincipalEvent(
-      id: _clean(row['id']),
-      academicYearId: _clean(row['academic_year_id']),
-      title: _clean(
-        event['event_title'] ?? row['title'],
-        fallback: 'Parent-Teacher Meeting',
-      ),
-      type: 'ptm',
-      status: _clean(row['status'], fallback: 'scheduled').toLowerCase(),
-      description: _clean(row['notes']),
-      venue: _clean(event['location'] ?? event['venue']),
-      audienceValue: 'all',
-      isHoliday: false,
-      start: start,
-      end: end,
-    );
-  }
-
   bool get needsApproval =>
       status == 'pending' || status == 'pending_approval' || status == 'draft';
 
   bool get isCancelled => status == 'cancelled';
-
-  bool get isPtm => type == 'ptm' || type == 'meeting';
 
   bool get isAcademicEntry => type == 'academic' || type == 'exam';
 
   bool get isHolidayOrFestival =>
       isHoliday || type == 'cultural' || type == 'festival';
 
-  bool get isGeneralEvent =>
-      !isHoliday && !isPtm && !isAcademicEntry && !needsApproval;
+  bool get isGeneralEvent => !isHoliday && !isAcademicEntry && !needsApproval;
 
   bool overlapsMonth(int month) {
     var cursor = DateTime(start.year, start.month, 1);
@@ -2523,7 +2472,6 @@ class _PrincipalEvent {
     if (isHoliday) return Icons.celebration_rounded;
     return switch (type) {
       'meeting' => Icons.groups_2_rounded,
-      'ptm' => Icons.people_alt_rounded,
       'exam' => Icons.assignment_rounded,
       'academic' => Icons.school_rounded,
       'sports' => Icons.sports_soccer_rounded,
@@ -2540,7 +2488,7 @@ class _PrincipalEvent {
     return switch (type) {
       'cultural' || 'festival' => Icons.celebration_rounded,
       'academic' || 'exam' => Icons.edit_note_rounded,
-      'ptm' || 'meeting' => Icons.groups_2_rounded,
+      'meeting' => Icons.groups_2_rounded,
       _ => Icons.campaign_rounded,
     };
   }
@@ -2559,7 +2507,7 @@ class _PrincipalEvent {
     if (isHoliday) return const Color(0xFFD14343);
     if (needsApproval) return const Color(0xFF16A34A);
     return switch (type) {
-      'meeting' || 'ptm' => const Color(0xFF0F766E),
+      'meeting' => const Color(0xFF0F766E),
       'academic' || 'exam' => const Color(0xFF2563EB),
       'cultural' || 'festival' => const Color(0xFFF59E0B),
       'sports' => const Color(0xFF16A34A),
@@ -2576,7 +2524,7 @@ class _PrincipalEvent {
       'academic' => const Color(0xFFEAF4FF),
       'sports' => const Color(0xFFE9F9EF),
       'cultural' => const Color(0xFFF3ECFF),
-      'ptm' || 'meeting' => const Color(0xFFEAF0FF),
+      'meeting' => const Color(0xFFEAF0FF),
       'health' => const Color(0xFFE7FAF6),
       _ => const Color(0xFFF7FBFF),
     };
@@ -2662,7 +2610,6 @@ String _formatTimeOfDay(TimeOfDay time) {
 }
 
 String _titleCase(String value) {
-  if (value.trim().toLowerCase() == 'ptm') return 'PTM';
   return value
       .split(RegExp(r'\s+'))
       .where((part) => part.isNotEmpty)

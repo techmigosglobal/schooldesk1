@@ -3,7 +3,7 @@ part of '../backend_api_client.dart';
 extension BackendEventsApi on BackendApiClient {
   Future<Map<String, dynamic>> getCalendarPreferences() async {
     try {
-      final response = await _dio.get('/events/calendar-preferences');
+      final response = await _get('/events/calendar-preferences');
       final data = _asMap(response.data);
       if (data['success'] == true) return _asMap(data['data']);
       throw ServerException(
@@ -32,7 +32,7 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getTerms(String academicYearId) async {
     try {
-      final response = await _dio.get('/academic-years/$academicYearId/terms');
+      final response = await _get('/academic-years/$academicYearId/terms');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return _asListMap(data['data']);
@@ -128,6 +128,7 @@ extension BackendEventsApi on BackendApiClient {
   Future<String> uploadFile(
     String filePath, {
     required String filename,
+    Uint8List? fileBytes,
     String? mimeType,
     String folder = 'uploads',
     String entityType = '',
@@ -135,15 +136,37 @@ extension BackendEventsApi on BackendApiClient {
     bool private = false,
   }) async {
     try {
-      final contentType = _resolveMediaType(mimeType, filename);
+      var uploadFilename = filename;
+      var uploadMimeType = mimeType;
+      var uploadBytes = fileBytes;
+      if (ImageUploadOptimizer.isImage(filename, mimeType)) {
+        final optimized = uploadBytes != null
+            ? ImageUploadOptimizer.fromBytes(
+                uploadBytes,
+                filename: filename,
+                mimeType: mimeType,
+                preset: ImageUploadPreset.content,
+              )
+            : await ImageUploadOptimizer.fromPath(
+                filePath,
+                filename: filename,
+                mimeType: mimeType,
+                preset: ImageUploadPreset.content,
+              );
+        uploadFilename = optimized.filename;
+        uploadMimeType = optimized.mimeType;
+        uploadBytes = optimized.bytes;
+      }
+      final contentType = _resolveMediaType(uploadMimeType, uploadFilename);
       final formData = FormData.fromMap({
         'folder': folder,
         'entity_type': entityType,
         'entity_id': entityId,
         'private': private,
-        'file': await MultipartFile.fromFile(
-          filePath,
-          filename: filename,
+        'file': await _multipartUpload(
+          filePath: filePath,
+          fileBytes: uploadBytes,
+          filename: uploadFilename,
           contentType: contentType,
         ),
       });
@@ -160,7 +183,7 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getTeacherEventPosts() async {
     try {
-      final response = await _dio.get('/event-posts/teacher');
+      final response = await _get('/event-posts/teacher');
       final data = response.data;
       if (data is List) return _asListMap(data);
       final mapped = _asMap(data);
@@ -177,7 +200,7 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getPendingEventPosts() async {
     try {
-      final response = await _dio.get('/event-posts/pending');
+      final response = await _get('/event-posts/pending');
       final data = response.data;
       final rows = data is List
           ? data
@@ -196,7 +219,7 @@ extension BackendEventsApi on BackendApiClient {
   /// appeared in a school surface.
   Future<List<Map<String, dynamic>>> getPrincipalEventPosts() async {
     try {
-      final response = await _dio.get('/event-posts');
+      final response = await _get('/event-posts');
       final data = response.data;
       final rows = data is List
           ? data
@@ -220,7 +243,7 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getGalleryEventPosts() async {
     try {
-      final response = await _dio.get('/event-posts/gallery');
+      final response = await _get('/event-posts/gallery');
       final data = response.data;
       final rows = data is List
           ? data
@@ -236,7 +259,7 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getHomeFeedEventPosts() async {
     try {
-      final response = await _dio.get('/event-posts/home-feed');
+      final response = await _get('/event-posts/home-feed');
       final data = response.data;
       final rows = data is List
           ? data
@@ -256,7 +279,7 @@ extension BackendEventsApi on BackendApiClient {
     required String schoolId,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/event-posts/landing',
         queryParameters: {'school_id': schoolId},
       );
@@ -406,7 +429,7 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getTeacherLessonPlanners() async {
     try {
-      final response = await _dio.get('/lesson-planners/teacher');
+      final response = await _get('/lesson-planners/teacher');
       final data = _asMap(response.data);
       if (data['success'] == false) {
         throw ServerException(
@@ -421,7 +444,7 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getPrincipalLessonPlanners() async {
     try {
-      final response = await _dio.get('/lesson-planners/principal');
+      final response = await _get('/lesson-planners/principal');
       final data = _asMap(response.data);
       if (data['success'] == false) {
         throw ServerException(
@@ -436,7 +459,7 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getParentLessonPlanners() async {
     try {
-      final response = await _dio.get('/lesson-planners/parent');
+      final response = await _get('/lesson-planners/parent');
       final data = response.data;
       final rows = data is List
           ? data

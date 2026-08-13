@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -7,6 +9,30 @@ void main() {
 
   tearDown(() {
     api.clearAuthToken();
+  });
+
+  test('coalesces concurrent and immediately repeated profile reads', () async {
+    final adapter = _CountingAdapter({
+      'GET /auth/profile': {
+        'success': true,
+        'data': {
+          'id': 'teacher-user-1',
+          'email': 'teacher@example.test',
+          'role_name': 'teacher',
+        },
+      },
+    });
+    api.dio.httpClientAdapter = adapter;
+    api.setAuthToken('test-token');
+    api.setCurrentRole('teacher');
+    api.setCurrentUserId('teacher-user-1');
+
+    final concurrent = await Future.wait([api.getProfile(), api.getProfile()]);
+    final immediate = await api.getProfile();
+
+    expect(concurrent[0].id, 'teacher-user-1');
+    expect(immediate.id, 'teacher-user-1');
+    expect(adapter.requests, ['GET /auth/profile']);
   });
 
   test('persistent HTTP cache keys are isolated by authenticated user', () {
@@ -45,4 +71,31 @@ void main() {
       api.cacheKeyForRequest(normalRequest),
     );
   });
+}
+
+class _CountingAdapter implements HttpClientAdapter {
+  _CountingAdapter(this.routes);
+
+  final Map<String, Map<String, dynamic>> routes;
+  final List<String> requests = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final key = '${options.method.toUpperCase()} ${options.path}';
+    requests.add(key);
+    return ResponseBody.fromString(
+      jsonEncode(routes[key]),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }

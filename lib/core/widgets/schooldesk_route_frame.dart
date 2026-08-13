@@ -194,8 +194,6 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
           return TeacherNav.gallery;
         case AppRoutes.teacherCommunication:
           return TeacherNav.communication;
-        case AppRoutes.teacherParentInteraction:
-          return TeacherNav.ptm;
         case AppRoutes.teacherLeave:
           return TeacherNav.leave;
         case AppRoutes.teacherDocuments:
@@ -221,8 +219,6 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
           return ParentNav.lessonPlanner;
         case AppRoutes.parentTeacherChat:
           return ParentNav.chat;
-        case AppRoutes.parentPTMBooking:
-          return ParentNav.ptm;
         case AppRoutes.parentFees:
           return ParentNav.fees;
         case AppRoutes.parentLeave:

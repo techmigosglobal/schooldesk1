@@ -20,7 +20,7 @@ extension BackendDemoApi on BackendApiClient {
 
   Future<Map<String, dynamic>?> getDemoAccount() async {
     try {
-      final response = await _dio.get('/demo/admin');
+      final response = await _get('/demo/admin');
       final data = _asMap(response.data);
       if (data['success'] == true && data['data'] is Map) {
         return _asMap(data['data']);

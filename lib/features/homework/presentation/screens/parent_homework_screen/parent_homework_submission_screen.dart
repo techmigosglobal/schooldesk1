@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 
 @immutable
@@ -837,22 +838,41 @@ class _ParentHomeworkSubmissionScreenState
       allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: const ["pdf", "jpg", "jpeg", "png", "webp"],
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     setState(() => _uploading = true);
     try {
       for (final file in result.files) {
-        final path = file.path;
-        if (path == null || path.trim().isEmpty) continue;
+        final path = file.path ?? '';
+        final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
+        final optimized = ImageUploadOptimizer.isImage(file.name, mimeType)
+            ? (file.bytes != null
+                  ? ImageUploadOptimizer.fromBytes(
+                      file.bytes!,
+                      filename: file.name,
+                      mimeType: mimeType,
+                      preset: ImageUploadPreset.content,
+                    )
+                  : await ImageUploadOptimizer.fromPath(
+                      path,
+                      filename: file.name,
+                      mimeType: mimeType,
+                      preset: ImageUploadPreset.content,
+                    ))
+            : null;
+        if (path.trim().isEmpty && file.bytes == null) continue;
         final url = await BackendApiClient.instance.uploadFile(
           path,
-          filename: file.name,
+          filename: optimized?.filename ?? file.name,
+          fileBytes: optimized?.bytes ?? file.bytes,
+          mimeType: optimized?.mimeType ?? mimeType,
         );
         if (url.trim().isEmpty) continue;
         if (!mounted) return;
         setState(() {
           _attachmentUrls.add(url);
-          _attachmentNames.add(file.name);
+          _attachmentNames.add(optimized?.filename ?? file.name);
         });
       }
     } on Object catch (error) {

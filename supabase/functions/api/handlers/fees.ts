@@ -89,7 +89,7 @@ async function attachInvoicePaymentReceipts(
   );
   if (paymentIds.length === 0) return invoices;
   const { data, error } = await svc.from("fee_receipts").select(
-    "id, payment_id, receipt_number, amount, payment_method, transaction_ref, issued_at",
+    "id, payment_id, receipt_number, amount, payment_method, transaction_ref, issued_at, document_snapshot_id",
   ).eq("school_id", school).in("payment_id", paymentIds);
   if (error) throw error;
   const receipts = new Map<string, Record<string, unknown>>();
@@ -287,6 +287,139 @@ async function parentCanAccessStudent(
   return Boolean(data);
 }
 
+async function paymentReceiptPayload(
+  svc: SupabaseClient,
+  school: string,
+  user: User,
+  receiptId: string,
+) {
+  const { data: receipt, error: receiptError } = await svc.from(
+    "fee_receipts",
+  ).select(
+    "id, school_id, invoice_id, payment_id, receipt_number, amount, payment_method, transaction_ref, issued_at, document_snapshot_id",
+  ).eq("id", receiptId).eq("school_id", school).maybeSingle();
+  if (receiptError) throw new Error(receiptError.message);
+  if (!receipt) return null;
+
+  const { data: payment, error: paymentError } = await svc.from("payments")
+    .select(
+      "id, student_id, invoice_id, amount, payment_method, reference_number, paid_at",
+    )
+    .eq("id", receipt.payment_id).eq("school_id", school).maybeSingle();
+  if (paymentError) throw new Error(paymentError.message);
+  if (!payment) throw new Error("Receipt payment was not found");
+  if (
+    roleName(user) === "parent" &&
+    !await parentCanAccessStudent(svc, school, user, text(payment.student_id))
+  ) {
+    throw new Error("Receipt does not belong to a linked child");
+  }
+
+  const [snapshotResult, invoiceResult, studentResult, schoolResult] =
+    await Promise.all([
+      receipt.document_snapshot_id
+        ? svc.from("finance_document_snapshots").select(
+          "id, document_number, source_totals, source_snapshot, generated_at",
+        ).eq("id", receipt.document_snapshot_id).eq("school_id", school)
+          .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      svc.from("fee_invoices").select(
+        "id, invoice_number, academic_year_id, fee_type, billing_period, net_amount, paid_amount, balance, discount_amount",
+      ).eq("id", receipt.invoice_id).eq("school_id", school).maybeSingle(),
+      svc.from("students").select(
+        "id, first_name, last_name, student_id_number, admission_number, current_section:sections(id, section_name, grade:grades(id, grade_name))",
+      ).eq("id", payment.student_id).eq("school_id", school).maybeSingle(),
+      svc.from("schools").select(
+        "id, name, logo_url, address_line1, address_line2, city, state, postal_code, principal_name, authorized_signature_path",
+      ).eq("id", school).maybeSingle(),
+    ]);
+  for (
+    const result of [snapshotResult, invoiceResult, studentResult, schoolResult]
+  ) {
+    if (result.error) throw new Error(result.error.message);
+  }
+  const snapshot = record(snapshotResult.data);
+  const source = record(snapshot.source_snapshot);
+  const totals = record(snapshot.source_totals);
+  const invoice = record(invoiceResult.data);
+  const student = record(studentResult.data);
+  const schoolRow = record(schoolResult.data);
+  const currentSection = record(student.current_section);
+  const currentGrade = record(currentSection.grade);
+  const className = text(
+    source.class_name,
+    [text(currentGrade.grade_name), text(currentSection.section_name)]
+      .filter(Boolean)
+      .join(" - "),
+  );
+  return {
+    receipt: {
+      ...receipt,
+      payment_date: source.payment_date ?? payment.paid_at,
+      payment_method: source.payment_method ?? receipt.payment_method ??
+        payment.payment_method,
+      reference_number: source.reference_number ?? receipt.transaction_ref ??
+        payment.reference_number,
+    },
+    totals: {
+      total_amount: money(totals.total_amount ?? receipt.amount),
+      paid_amount: money(totals.paid_amount ?? receipt.amount),
+      balance: money(totals.balance ?? invoice.balance),
+      this_payment_amount: money(totals.this_payment_amount ?? receipt.amount),
+    },
+    student: {
+      id: payment.student_id,
+      name: text(
+        source.student_name,
+        `${text(student.first_name)} ${text(student.last_name)}`.trim(),
+      ),
+      student_id_number: text(
+        source.student_id_number,
+        text(student.student_id_number, text(student.admission_number)),
+      ),
+      admission_number: text(
+        source.admission_number,
+        text(student.admission_number),
+      ),
+      class_name: className,
+      section_name: text(
+        source.section_name,
+        text(currentSection.section_name),
+      ),
+    },
+    academic_year: text(source.academic_year),
+    fee_period: text(source.fee_period, text(invoice.billing_period)),
+    fee_items: Array.isArray(source.fee_items) && source.fee_items.length > 0
+      ? source.fee_items
+      : [{
+        description: text(invoice.fee_type, "Fee payment"),
+        amount: receipt.amount,
+      }],
+    school: {
+      name: text(source.school_name, text(schoolRow.name, "School")),
+      address: text(
+        source.school_address,
+        [
+          text(schoolRow.address_line1),
+          text(schoolRow.address_line2),
+          text(schoolRow.city),
+          text(schoolRow.state),
+          text(schoolRow.postal_code),
+        ].filter(Boolean).join(", "),
+      ),
+      logo_url: text(source.school_logo_url, text(schoolRow.logo_url)),
+      authorized_signature_path: text(
+        source.signature_path,
+        text(schoolRow.authorized_signature_path),
+      ),
+      authorized_signatory_name: text(
+        source.authorized_signatory_name,
+        text(schoolRow.principal_name),
+      ),
+    },
+  };
+}
+
 function configRecordId(scope: string, gradeId = "", sectionId = ""): string {
   return [scope || "school", gradeId, sectionId].filter(Boolean).join(":");
 }
@@ -387,7 +520,7 @@ async function attachFeeCategories(
   svc: SupabaseClient,
   school: string,
   rows: Record<string, unknown>[],
-) {
+): Promise<Record<string, unknown>[]> {
   const categoryIds = [
     ...new Set(
       rows.map((row) => text(row.fee_category_id ?? row.category_id)).filter(
@@ -429,7 +562,7 @@ async function attachStructureAssignmentStats(
   svc: SupabaseClient,
   school: string,
   rows: Record<string, unknown>[],
-) {
+): Promise<Record<string, unknown>[]> {
   const structureIds = rows.map((row) => text(row.id)).filter(Boolean);
   if (structureIds.length === 0) return rows;
 
@@ -524,36 +657,54 @@ async function attachPaymentRequestRelations(
     ...new Set(rows.map((row) => text(row.receipt_id)).filter(Boolean)),
   ];
 
-  if (invoiceIds.length) {
-    const { data, error } = await svc.from("fee_invoices").select("*")
-      .eq("school_id", school)
-      .in("id", invoiceIds);
-    if (error) throw error;
-    for (const row of data ?? []) invoicesById.set(text(row.id), row);
+  const [invoicesResult, studentsResult, parentsResult, receiptsResult] =
+    await Promise.all([
+      invoiceIds.length
+        ? svc.from("fee_invoices").select("*").eq("school_id", school).in(
+          "id",
+          invoiceIds,
+        )
+        : Promise.resolve({ data: [], error: null }),
+      studentIds.length
+        ? svc.from("students").select("*").eq("school_id", school).in(
+          "id",
+          studentIds,
+        )
+        : Promise.resolve({ data: [], error: null }),
+      parentIds.length
+        ? svc.from("users").select("*").eq("school_id", school).in(
+          "id",
+          parentIds,
+        )
+        : Promise.resolve({ data: [], error: null }),
+      receiptIds.length
+        ? svc.from("fee_receipts").select("*").eq("school_id", school).in(
+          "id",
+          receiptIds,
+        )
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+  for (
+    const result of [
+      invoicesResult,
+      studentsResult,
+      parentsResult,
+      receiptsResult,
+    ]
+  ) {
+    if (result.error) throw result.error;
   }
-
-  if (studentIds.length) {
-    const { data, error } = await svc.from("students").select("*")
-      .eq("school_id", school)
-      .in("id", studentIds);
-    if (error) throw error;
-    for (const row of data ?? []) studentsById.set(text(row.id), row);
+  for (const row of invoicesResult.data ?? []) {
+    invoicesById.set(text(row.id), row);
   }
-
-  if (parentIds.length) {
-    const { data, error } = await svc.from("users").select("*")
-      .eq("school_id", school)
-      .in("id", parentIds);
-    if (error) throw error;
-    for (const row of data ?? []) parentsById.set(text(row.id), row);
+  for (const row of studentsResult.data ?? []) {
+    studentsById.set(text(row.id), row);
   }
-
-  if (receiptIds.length) {
-    const { data, error } = await svc.from("fee_receipts").select("*")
-      .eq("school_id", school)
-      .in("id", receiptIds);
-    if (error) throw error;
-    for (const row of data ?? []) receiptsById.set(text(row.id), row);
+  for (const row of parentsResult.data ?? []) {
+    parentsById.set(text(row.id), row);
+  }
+  for (const row of receiptsResult.data ?? []) {
+    receiptsById.set(text(row.id), row);
   }
 
   return await Promise.all(rows.map(async (row) => {
@@ -1026,6 +1177,32 @@ export async function handleFees(
   const feesPath = path.replace(/^\/fees/, "");
   const isParent = roleName(user) === "parent";
 
+  const receiptMatch = feesPath.match(/^\/receipts\/([^/]+)$/);
+  if (receiptMatch && method === "GET") {
+    if (!isParent && !isAdminOrPrincipal(user)) {
+      return fail("parent or principal access required", 403);
+    }
+    try {
+      const payload = await paymentReceiptPayload(
+        svc,
+        school,
+        user,
+        decodeURIComponent(receiptMatch[1]),
+      );
+      return payload ? ok(payload) : fail("Receipt not found", 404);
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : "Failed to load receipt";
+      return fail(
+        message === "Receipt does not belong to a linked child"
+          ? message
+          : message,
+        message === "Receipt does not belong to a linked child" ? 403 : 400,
+      );
+    }
+  }
+
   // Fee setup, invoice generation, cash collection, reports, concessions and
   // payment configuration are school-finance operations. Parents only use the
   // child-scoped invoice and manual UPI proof endpoints further below.
@@ -1247,10 +1424,20 @@ export async function handleFees(
       const { data, error } = await q;
       if (error) return fail(error.message);
       try {
-        const categorized = await attachFeeCategories(svc, school, data ?? []);
-        return ok(
-          await attachStructureAssignmentStats(svc, school, categorized),
+        const rows = (data ?? []) as Record<string, unknown>[];
+        const [categorized, withStats] = await Promise.all([
+          attachFeeCategories(svc, school, rows),
+          attachStructureAssignmentStats(svc, school, rows),
+        ]);
+        const statsById = new Map<string, Record<string, unknown>>(
+          withStats.map(
+            (row) => [text(row.id), row] as [string, Record<string, unknown>],
+          ),
         );
+        return ok((categorized as Record<string, unknown>[]).map((row) => ({
+          ...row,
+          ...(statsById.get(text(row.id)) ?? {}),
+        })));
       } catch (error) {
         return fail(
           error instanceof Error
@@ -1642,7 +1829,11 @@ export async function handleFees(
 
     if (!seg && method === "GET") {
       const page = parseInt(url.searchParams.get("page") ?? "1");
-      const size = parseInt(url.searchParams.get("page_size") ?? "50");
+      const requestedSize = parseInt(url.searchParams.get("page_size") ?? "50");
+      const size = Math.min(
+        Math.max(Number.isFinite(requestedSize) ? requestedSize : 50, 1),
+        200,
+      );
       let q = svc.from("fee_invoices").select(
         "*, student:students(first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))), fee_invoice_items(*), payments(*)",
         { count: "exact" },
@@ -1892,6 +2083,129 @@ export async function handleFees(
           existingInvoiceKeys.add(invoiceKey);
           createdInvoices.push(decorateInvoice(invoice));
         }
+      }
+      // Deliver invoice generation to the actual linked, active parent
+      // accounts. The UI must never manufacture a broad parent notification,
+      // because only the server knows the invoice's student relationship.
+      try {
+        const generatedStudentIds = [
+          ...new Set(
+            createdInvoices.map((invoice) => text(invoice.student_id)).filter(
+              Boolean,
+            ),
+          ),
+        ];
+        if (generatedStudentIds.length > 0) {
+          const [
+            { data: links, error: linksError },
+            { data: parentUsers, error: usersError },
+          ] = await Promise.all([
+            svc.from("parent_student_links").select(
+              "parent_user_id, student_id",
+            )
+              .eq("school_id", school).in("student_id", generatedStudentIds),
+            svc.from("users").select("id").eq("school_id", school)
+              .eq("role_name", "parent").eq("is_active", true),
+          ]);
+          if (linksError) throw linksError;
+          if (usersError) throw usersError;
+          const activeParentIds = new Set(
+            (parentUsers ?? []).map((parent) => text(parent.id)).filter(
+              Boolean,
+            ),
+          );
+          const studentNames = new Map(
+            (students ?? []).map((student: Record<string, unknown>) => [
+              text(student.id),
+              `${text(student.first_name)} ${text(student.last_name)}`.trim() ||
+              "your child",
+            ]),
+          );
+          const parentIdsByStudent = new Map<string, Set<string>>();
+          for (const link of links ?? []) {
+            const parentId = text(link.parent_user_id);
+            const linkedStudentId = text(link.student_id);
+            if (
+              !parentId || !linkedStudentId || !activeParentIds.has(parentId)
+            ) continue;
+            const recipients = parentIdsByStudent.get(linkedStudentId) ??
+              new Set<string>();
+            recipients.add(parentId);
+            parentIdsByStudent.set(linkedStudentId, recipients);
+          }
+          const logs: Record<string, unknown>[] = [];
+          const events: Record<string, unknown>[] = [];
+          for (const invoice of createdInvoices) {
+            const invoiceId = text(invoice.id);
+            const invoiceStudentId = text(invoice.student_id);
+            if (!invoiceId || !invoiceStudentId) continue;
+            const studentName = studentNames.get(invoiceStudentId) ||
+              "your child";
+            const balance = money(invoice.balance ?? invoice.net_amount);
+            const dueDate = text(invoice.due_date).split("T")[0];
+            const message = `A new fee invoice of INR ${
+              balance.toFixed(0)
+            } was generated for ${studentName}${
+              dueDate ? `, due by ${dueDate}` : ""
+            }.`;
+            for (
+              const parentId of parentIdsByStudent.get(invoiceStudentId) ?? []
+            ) {
+              logs.push({
+                school_id: school,
+                user_id: parentId,
+                target_role: "parent",
+                title: "New Fee Invoice",
+                body: message,
+                type: "fee",
+                entity_type: "fee_invoice",
+                entity_id: invoiceId,
+                reference_type: "fee",
+                reference_id: invoiceId,
+                route: "/parent-fees-screen",
+                priority: "high",
+                student_id: invoiceStudentId,
+                is_read: false,
+              });
+              events.push({
+                school_id: school,
+                user_id: parentId,
+                event_type: "fee_invoice_generated",
+                event_data: {
+                  invoice_id: invoiceId,
+                  student_id: invoiceStudentId,
+                  balance,
+                  due_date: dueDate,
+                  message,
+                  reference_type: "fee",
+                  reference_id: invoiceId,
+                  route: "/parent-fees-screen",
+                },
+                processed: false,
+              });
+            }
+          }
+          if (logs.length > 0) {
+            const { error: logError } = await svc.from("notification_logs")
+              .insert(logs);
+            if (logError) throw logError;
+          }
+          if (events.length > 0) {
+            const { data: createdEvents, error: eventError } = await svc
+              .from("notification_events").insert(events).select("id");
+            if (eventError) throw eventError;
+            const eventIds = (createdEvents ?? []).map((event) =>
+              text(event.id)
+            )
+              .filter(Boolean);
+            if (eventIds.length > 0) triggerPushProcessing(eventIds);
+          }
+        }
+      } catch (notificationError) {
+        console.error(
+          "Invoice notifications could not be queued",
+          notificationError,
+        );
       }
       return ok({
         created,
@@ -2437,12 +2751,25 @@ export async function handleFees(
         .eq("id", pmt.invoice_id).eq("school_id", school).maybeSingle();
       if (invErr) return fail(invErr.message);
       if (!inv) return fail("Invoice not found", 404);
-      const newPaid = Math.max(0, Number(inv.paid_amount ?? 0) - Number(pmt.amount ?? 0));
+      const newPaid = Math.max(
+        0,
+        Number(inv.paid_amount ?? 0) - Number(pmt.amount ?? 0),
+      );
       const newBalance = Math.max(0, Number(inv.net_amount ?? 0) - newPaid);
-      const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
+      const newStatus = newBalance <= 0
+        ? "paid"
+        : newPaid > 0
+        ? "partial"
+        : "unpaid";
       // Delete in dependency order: snapshots → receipts → payment
-      await svc.from("finance_document_snapshots").delete().eq("payment_id", seg).eq("school_id", school);
-      await svc.from("fee_receipts").delete().eq("payment_id", seg).eq("school_id", school);
+      await svc.from("finance_document_snapshots").delete().eq(
+        "payment_id",
+        seg,
+      ).eq("school_id", school);
+      await svc.from("fee_receipts").delete().eq("payment_id", seg).eq(
+        "school_id",
+        school,
+      );
       const { error: delErr } = await svc.from("payments")
         .delete().eq("id", seg).eq("school_id", school);
       if (delErr) return fail(delErr.message);
@@ -2453,7 +2780,12 @@ export async function handleFees(
         updated_at: new Date().toISOString(),
       }).eq("id", pmt.invoice_id).eq("school_id", school);
       if (updateErr) return fail(updateErr.message);
-      return ok({ success: true, invoice_id: pmt.invoice_id, new_balance: newBalance, new_status: newStatus });
+      return ok({
+        success: true,
+        invoice_id: pmt.invoice_id,
+        new_balance: newBalance,
+        new_status: newStatus,
+      });
     }
   }
 
@@ -2480,7 +2812,11 @@ export async function handleFees(
     if (
       isParent || url.searchParams.get("include_cancelled") !== "true"
     ) {
-      invoiceQuery = invoiceQuery.not("status", "in", "(cancelled,void,voided)");
+      invoiceQuery = invoiceQuery.not(
+        "status",
+        "in",
+        "(cancelled,void,voided)",
+      );
     }
     const { data, error } = await invoiceQuery.order("invoice_date", {
       ascending: false,
@@ -2539,6 +2875,17 @@ export async function handleFees(
       if (!isAdminOrPrincipal(user) && !isParent) {
         return fail("parent or principal access required", 403);
       }
+      const page = Math.max(
+        parseInt(url.searchParams.get("page") ?? "1") || 1,
+        1,
+      );
+      const requestedSize = parseInt(
+        url.searchParams.get("page_size") ?? "100",
+      );
+      const size = Math.min(
+        Math.max(Number.isFinite(requestedSize) ? requestedSize : 100, 1),
+        200,
+      );
       let q = svc.from("parent_payment_requests").select("*").eq(
         "school_id",
         school,
@@ -2553,7 +2900,8 @@ export async function handleFees(
       if (url.searchParams.get("status")) {
         q = q.eq("status", url.searchParams.get("status")!);
       }
-      const { data, error } = await q.order("created_at", { ascending: false });
+      const { data, error } = await q.order("created_at", { ascending: false })
+        .range((page - 1) * size, page * size - 1);
       if (error) return fail(error.message);
       try {
         return ok(await attachPaymentRequestRelations(svc, school, data ?? []));
@@ -3292,7 +3640,11 @@ export async function handleFees(
           type: "fee",
           entity_type: "fee_invoices",
           entity_id: invoiceId,
+          reference_type: "fee",
+          reference_id: invoiceId,
           target_role: "parent",
+          route: "/parent-fees-screen",
+          student_id: currentStudentId,
           is_read: false,
         }));
         await svc.from("notification_logs").insert(logsToInsert);
@@ -3383,7 +3735,11 @@ export async function handleFees(
             type: "fee",
             entity_type: "fee_invoices",
             entity_id: invoice.id,
+            reference_type: "fee",
+            reference_id: invoice.id,
             target_role: "parent",
+            route: "/parent-fees-screen",
+            student_id: currentStudentId,
             is_read: false,
           }));
           await svc.from("notification_logs").insert(logsToInsert);

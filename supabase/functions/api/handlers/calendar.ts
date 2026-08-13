@@ -102,11 +102,6 @@ export async function handleCalendar(
     if (`${body.confirmation ?? ""}`.trim().toUpperCase() !== "RESET") {
       return fail("type RESET to confirm calendar reset", 400);
     }
-    const { count: ptmCount, error: ptmError } = await svc
-      .from("parent_teacher_meetings")
-      .delete({ count: "exact" })
-      .eq("school_id", sid);
-    if (ptmError) return fail(ptmError.message);
     const { count: eventCount, error: eventError } = await svc
       .from("events")
       .delete({ count: "exact" })
@@ -128,14 +123,11 @@ export async function handleCalendar(
       action: "calendar_reset",
       module: "events",
       event_type: "calendar_reset",
-      summary: `Reset calendar: removed ${eventCount ?? 0} events and ${
-        ptmCount ?? 0
-      } PTM entries; generated holidays hidden.`,
+      summary: `Reset calendar: removed ${eventCount ?? 0} events; generated holidays hidden.`,
     });
     if (auditError) console.error("Calendar reset audit failed", auditError);
     return ok({
       events_deleted: eventCount ?? 0,
-      ptms_deleted: ptmCount ?? 0,
       generated_holidays_hidden: true,
     });
   }

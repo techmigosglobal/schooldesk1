@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -1224,6 +1225,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
               'section_label': assignment.sectionLabel,
               'subject_id': assignment.subjectId,
               'subject_label': assignment.subjectLabel,
+              'assignment_role': assignment.assignmentRole,
               'is_primary': assignment.isPrimary,
             },
           )
@@ -1244,16 +1246,44 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     List<_StaffAssignmentInput> desired,
   ) async {
     final desiredClassTeacherSectionIds = desired
-        .where((item) => item.sectionId.isNotEmpty && item.subjectId.isEmpty)
+        .where(
+          (item) =>
+              item.sectionId.isNotEmpty &&
+              item.assignmentRole == 'class_teacher',
+        )
         .map((item) => item.sectionId)
         .toSet();
-    final currentTeacherSections = _sections
+    final desiredCoTeacherSectionIds = desired
+        .where(
+          (item) =>
+              item.sectionId.isNotEmpty && item.assignmentRole == 'co_teacher',
+        )
+        .map((item) => item.sectionId)
+        .toSet();
+
+    final currentClassTeacherSections = _sections
         .where((section) => section.classTeacherId == staffId)
         .toList();
+    final currentCoTeacherSections = _sections
+        .where((section) => section.coTeacherId == staffId)
+        .toList();
 
-    for (final section in currentTeacherSections) {
+    for (final section in currentClassTeacherSections) {
       if (!desiredClassTeacherSectionIds.contains(section.id)) {
-        await _updateSectionClassTeacher(section, null);
+        await _updateSectionAssignments(
+          section,
+          classTeacherId: null,
+          coTeacherId: section.coTeacherId,
+        );
+      }
+    }
+    for (final section in currentCoTeacherSections) {
+      if (!desiredCoTeacherSectionIds.contains(section.id)) {
+        await _updateSectionAssignments(
+          section,
+          classTeacherId: section.classTeacherId,
+          coTeacherId: null,
+        );
       }
     }
 
@@ -1262,8 +1292,26 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         continue;
       }
       final section = _sectionByIdInState(assignment.sectionId);
-      if (section == null || section.classTeacherId == staffId) continue;
-      await _updateSectionClassTeacher(section, staffId);
+      if (section == null) continue;
+      if (assignment.assignmentRole == 'class_teacher' &&
+          section.classTeacherId != staffId) {
+        await _updateSectionAssignments(
+          section,
+          classTeacherId: staffId,
+          coTeacherId: section.coTeacherId == staffId
+              ? null
+              : section.coTeacherId,
+        );
+      } else if (assignment.assignmentRole == 'co_teacher' &&
+          section.coTeacherId != staffId) {
+        await _updateSectionAssignments(
+          section,
+          classTeacherId: section.classTeacherId == staffId
+              ? null
+              : section.classTeacherId,
+          coTeacherId: staffId,
+        );
+      }
     }
 
     final existing = _staffSubjects
@@ -1304,16 +1352,18 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     return '${sectionId.isEmpty ? _stringValue(row['grade_id']) : sectionId}|${_stringValue(row['subject_id'])}';
   }
 
-  Future<void> _updateSectionClassTeacher(
-    api.SectionModel section,
-    String? staffId,
-  ) async {
+  Future<void> _updateSectionAssignments(
+    api.SectionModel section, {
+    required String? classTeacherId,
+    required String? coTeacherId,
+  }) async {
     await api.BackendApiClient.instance.updateRaw('/sections/${section.id}', {
       'grade_id': section.gradeId,
       'academic_year_id': section.academicYearId,
       'section_name': section.sectionName,
       'capacity': section.capacity,
-      'class_teacher_id': staffId ?? '',
+      'class_teacher_id': classTeacherId,
+      'co_teacher_id': coTeacherId,
     });
   }
 
@@ -1328,17 +1378,32 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     if (staff == null) return const [];
     final assignments = <_StaffAssignmentInput>[];
     for (final section in _sections) {
-      if (section.classTeacherId != staff.id) continue;
-      assignments.add(
-        _StaffAssignmentInput(
-          gradeId: section.gradeId,
-          gradeLabel: _gradeNameForSection(section),
-          sectionId: section.id,
-          sectionLabel: _sectionLabel(section),
-          subjectId: '',
-          subjectLabel: 'Class teacher',
-        ),
-      );
+      if (section.classTeacherId == staff.id) {
+        assignments.add(
+          _StaffAssignmentInput(
+            gradeId: section.gradeId,
+            gradeLabel: _gradeNameForSection(section),
+            sectionId: section.id,
+            sectionLabel: _sectionLabel(section),
+            subjectId: '',
+            subjectLabel: 'Class teacher',
+            assignmentRole: 'class_teacher',
+          ),
+        );
+      }
+      if (section.coTeacherId == staff.id) {
+        assignments.add(
+          _StaffAssignmentInput(
+            gradeId: section.gradeId,
+            gradeLabel: _gradeNameForSection(section),
+            sectionId: section.id,
+            sectionLabel: _sectionLabel(section),
+            subjectId: '',
+            subjectLabel: 'Co-teacher',
+            assignmentRole: 'co_teacher',
+          ),
+        );
+      }
     }
     for (final row in _staffSubjects) {
       if (_stringValue(row['staff_id']) != staff.id) continue;
@@ -1359,6 +1424,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
               : _sectionLabel(section),
           subjectId: subjectId,
           subjectLabel: _subjectLabel(row, subjectId, _subjects),
+          assignmentRole: 'subject',
           isPrimary: row['is_primary'] == true,
           recordId: _stringValue(row['id']),
         ),
@@ -1780,6 +1846,7 @@ class _StaffAssignmentInput {
   final String sectionLabel;
   final String subjectId;
   final String subjectLabel;
+  final String assignmentRole;
   final bool isPrimary;
   final String? recordId;
 
@@ -1790,19 +1857,24 @@ class _StaffAssignmentInput {
     this.sectionLabel = '',
     required this.subjectId,
     required this.subjectLabel,
+    this.assignmentRole = 'subject',
     this.isPrimary = false,
     this.recordId,
   });
 
   String get key =>
-      '${sectionId.isEmpty ? gradeId : sectionId}|${subjectId.isEmpty ? 'class_teacher' : subjectId}';
+      '${sectionId.isEmpty ? gradeId : sectionId}|${subjectId.isEmpty ? assignmentRole : subjectId}';
 
   String get staffSubjectKey =>
       '${sectionId.isEmpty ? gradeId : sectionId}|$subjectId';
 
   String get displayLabel {
     final classLabel = sectionLabel.isNotEmpty ? sectionLabel : gradeLabel;
-    return subjectId.isEmpty ? classLabel : '$classLabel - $subjectLabel';
+    if (subjectId.isNotEmpty) return '$classLabel - $subjectLabel';
+    final roleLabel = assignmentRole == 'co_teacher'
+        ? 'Co-teacher'
+        : 'Class teacher';
+    return '$classLabel - $roleLabel';
   }
 }
 
@@ -1887,6 +1959,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
   String _documentType = _documentTypes.first;
   String? _selectedSectionId;
   String? _selectedSubjectId;
+  String _selectedAssignmentRole = 'class_teacher';
   XFile? _photoFile;
   late List<_StaffAssignmentInput> _assignments;
   final List<_StaffDocumentInput> _documents = [];
@@ -2010,7 +2083,9 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
 
   void _addAssignment() {
     final sectionId = _selectedSectionId;
-    final subjectId = _selectedSubjectId;
+    final subjectId = _selectedAssignmentRole == 'subject'
+        ? _selectedSubjectId
+        : null;
     if (sectionId == null) {
       setState(() => _error = 'Select class and section before adding');
       return;
@@ -2020,7 +2095,14 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       setState(() => _error = 'Selected section is not available');
       return;
     }
-    final assignmentKey = '$sectionId|${subjectId ?? 'class_teacher'}';
+    if (_selectedAssignmentRole == 'subject' &&
+        (subjectId == null || subjectId.isEmpty)) {
+      setState(
+        () => _error = 'Select a subject for a subject-teacher assignment',
+      );
+      return;
+    }
+    final assignmentKey = '$sectionId|${subjectId ?? _selectedAssignmentRole}';
     if (_assignments.any((item) => item.key == assignmentKey)) {
       setState(() => _error = 'This section assignment already exists');
       return;
@@ -2035,8 +2117,13 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
           sectionLabel: _sectionNameById(section.id),
           subjectId: subjectId ?? '',
           subjectLabel: subjectId == null || subjectId.isEmpty
-              ? 'Class teacher'
+              ? (_selectedAssignmentRole == 'co_teacher'
+                    ? 'Co-teacher'
+                    : 'Class teacher')
               : _subjectNameById(subjectId),
+          assignmentRole: subjectId == null || subjectId.isEmpty
+              ? _selectedAssignmentRole
+              : 'subject',
           isPrimary: _assignments.isEmpty,
         ),
       );
@@ -2068,6 +2155,24 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       setState(() => _error = 'Password must be at least 6 characters');
       return;
     }
+    final assignmentRoles = <String, Set<String>>{};
+    for (final assignment in _assignments.where(
+      (item) => item.sectionId.isNotEmpty && item.subjectId.isEmpty,
+    )) {
+      assignmentRoles
+          .putIfAbsent(assignment.sectionId, () => <String>{})
+          .add(assignment.assignmentRole);
+    }
+    if (assignmentRoles.values.any(
+      (roles) =>
+          roles.contains('class_teacher') && roles.contains('co_teacher'),
+    )) {
+      setState(
+        () => _error =
+            'A teacher cannot be both class teacher and co-teacher in the same section',
+      );
+      return;
+    }
     final designation = _resolvedDesignation;
     if (designation == null) {
       setState(() => _error = 'Designation is required');
@@ -2083,6 +2188,14 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       final photoBytes = _photoFile == null
           ? null
           : await _photoFile!.readAsBytes();
+      final optimizedPhoto = photoBytes == null
+          ? null
+          : ImageUploadOptimizer.fromBytes(
+              photoBytes,
+              filename: _photoFile?.name ?? 'staff-photo.jpg',
+              mimeType: 'image/jpeg',
+              preset: ImageUploadPreset.portrait,
+            );
       await widget.onSubmit(
         _StaffProfileInput(
           staffId: widget.initialStaff?.id,
@@ -2100,8 +2213,8 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
           password: _passwordCtrl.text.trim(),
           createLogin: _loginEnabled,
           photoPath: _photoFile?.path,
-          photoBytes: photoBytes,
-          photoName: _photoFile?.name,
+          photoBytes: optimizedPhoto?.bytes,
+          photoName: optimizedPhoto?.filename,
           assignments: List<_StaffAssignmentInput>.from(_assignments),
           documents: List<_StaffDocumentInput>.from(_documents),
         ),
@@ -2137,6 +2250,8 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
                     _personalDetailsCard(),
                     const SizedBox(height: 14),
                     _employmentDetailsCard(),
+                    const SizedBox(height: 14),
+                    _assignmentCard(),
                     const SizedBox(height: 14),
                     _loginAccessCard(),
                     const SizedBox(height: 14),
@@ -2413,7 +2528,6 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
     );
   }
 
-  // ignore: unused_element
   Widget _assignmentCard() {
     return _FormCard(
       title: 'Teaching Assignment',
@@ -2428,6 +2542,26 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
           _ResponsiveFieldRow(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _LabeledField(
+                label: 'Assignment type',
+                child: _DropdownInput<String>(
+                  value: _selectedAssignmentRole,
+                  enabled: !_saving,
+                  hint: 'Select assignment type',
+                  items: const ['class_teacher', 'co_teacher', 'subject'],
+                  labelBuilder: (value) => switch (value) {
+                    'class_teacher' => 'Class teacher',
+                    'co_teacher' => 'Co-teacher',
+                    _ => 'Subject teacher',
+                  },
+                  onChanged: (value) => setState(() {
+                    _selectedAssignmentRole = value ?? 'class_teacher';
+                    if (_selectedAssignmentRole != 'subject') {
+                      _selectedSubjectId = null;
+                    }
+                  }),
+                ),
+              ),
               _LabeledField(
                 label: 'Class / Section',
                 child: _DropdownInput<String>(
@@ -2444,8 +2578,13 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
                 label: 'Subject',
                 child: _DropdownInput<String>(
                   value: _selectedSubjectId,
-                  enabled: !_saving && widget.subjects.isNotEmpty,
-                  hint: widget.subjects.isEmpty
+                  enabled:
+                      !_saving &&
+                      _selectedAssignmentRole == 'subject' &&
+                      widget.subjects.isNotEmpty,
+                  hint: _selectedAssignmentRole != 'subject'
+                      ? 'Not needed for class role'
+                      : widget.subjects.isEmpty
                       ? 'Optional subject unavailable'
                       : 'Optional subject',
                   items: [
@@ -2705,6 +2844,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       _accountRole = staff?.accountRole ?? 'Teacher';
       _selectedSectionId = null;
       _selectedSubjectId = null;
+      _selectedAssignmentRole = 'class_teacher';
       _photoFile = null;
       _documents.clear();
       _assignments = List<_StaffAssignmentInput>.from(

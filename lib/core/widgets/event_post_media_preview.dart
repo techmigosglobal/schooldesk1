@@ -223,9 +223,7 @@ class EventPostImagePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final requestUrl = thumbnail
-        ? optimizedImageUrl(url, width: 900, height: 900, quality: 72)
-        : url;
+    final requestUrl = resolveOriginalImageUrl(url);
     return FutureBuilder<Uint8List>(
       future: MediaCache.load(requestUrl),
       builder: (context, snapshot) {

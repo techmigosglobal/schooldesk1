@@ -1,6 +1,16 @@
 // handlers/homework.ts — homework assignments, parent submissions, teacher review
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
+import {
+  claimDailyOperation,
+  DailyClaimConflict,
+  loadDailyClaim,
+  sectionAcademicYear,
+  teacherCanUseSection,
+  todayDate,
+  wasDailyClaimCreatedByThisRequest,
+} from "./daily_claims.ts";
+import { teacherCanUseSubject, resolveActiveTeacherScope } from "./teacher_scope.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -29,13 +39,17 @@ function payload(row: Record<string, unknown>): Record<string, unknown> {
 async function parentCanAccessStudent(
   svc: SupabaseClient,
   user: User,
+  school: string,
   studentId: string,
 ) {
-  if (role(user) !== "parent") return true;
+  if (role(user) !== "parent") return false;
   if (!studentId) return false;
   const { data, error } = await svc.from("parent_student_links").select(
     "student_id",
-  ).eq("parent_user_id", user.id).eq("student_id", studentId).maybeSingle();
+  ).eq("school_id", school).eq("parent_user_id", user.id).eq(
+    "student_id",
+    studentId,
+  ).maybeSingle();
   if (error) throw error;
   return Boolean(data);
 }
@@ -51,6 +65,27 @@ async function studentSectionId(
   ).eq("id", studentId).eq("school_id", school).maybeSingle();
   if (error) throw error;
   return text(data?.current_section_id);
+}
+
+async function studentBelongsToSection(
+  svc: SupabaseClient,
+  school: string,
+  studentId: string,
+  sectionId: string,
+): Promise<boolean> {
+  if (!studentId || !sectionId) return false;
+  const { data, error } = await svc.from("students").select("id").eq(
+    "school_id",
+    school,
+  ).eq("id", studentId).eq("current_section_id", sectionId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data?.id);
+}
+
+function isSchoolLeader(user: User): boolean {
+  return ["admin", "principal", "coordinator", "super_admin"].includes(
+    role(user),
+  );
 }
 
 async function loadHomework(
@@ -129,18 +164,59 @@ export async function handleHomework(
   if (path === "/homework") {
     if (method === "GET") {
       const studentId = text(url.searchParams.get("student_id"));
-      if (studentId && !(await parentCanAccessStudent(svc, user, studentId))) {
+      if (studentId && role(user) === "parent" &&
+        !(await parentCanAccessStudent(svc, user, school, studentId))) {
         return fail("student not linked to parent", 403);
       }
       let query = svc.from("frontend_records").select("*", { count: "exact" })
         .eq("school_id", school).eq("table_name", "homework");
-      const { data, error, count } = await query.order("updated_at", {
+      const { data, error } = await query.order("updated_at", {
         ascending: false,
       });
       if (error) return fail(error.message);
       let rows = (data ?? []).map((row) =>
         payload(row as Record<string, unknown>)
       );
+
+      if (role(user) === "teacher") {
+        const linkedStaffId = text(user.app_metadata?.linked_id);
+        const sectionId = text(url.searchParams.get("section_id"));
+        const scope = await resolveActiveTeacherScope(
+          svc,
+          school,
+          linkedStaffId,
+        );
+        const allowedSections = new Set(scope.sections.keys());
+        if (sectionId && !allowedSections.has(sectionId)) return fail("forbidden", 403);
+        rows = rows.filter((row) => {
+          const rowSection = text(row.section_id);
+          const assignment = scope.sections.get(rowSection);
+          if (!assignment) return false;
+          return assignment.isClassTeacher || assignment.isCoTeacher ||
+            assignment.subjectIds.has(text(row.subject_id));
+        });
+      }
+
+      if (role(user) === "parent") {
+        const { data: links, error: linksError } = await svc.from(
+          "parent_student_links",
+        ).select("student_id, student:students(current_section_id)").eq(
+          "school_id",
+          school,
+        ).eq("parent_user_id", user.id);
+        if (linksError) return fail(linksError.message);
+        const studentIds = new Set((links ?? []).map((link) => text(link.student_id))
+          .filter(Boolean));
+        const sectionIds = new Set((links ?? []).map((link: any) =>
+          text(link.student?.current_section_id)
+        ).filter(Boolean));
+        rows = rows.filter((row) => {
+          const rowStudentId = text(row.student_id);
+          return rowStudentId
+            ? studentIds.has(rowStudentId)
+            : sectionIds.has(text(row.section_id));
+        });
+      }
 
       // Resolve teacher UUIDs to names
       const staffIds = [
@@ -185,27 +261,99 @@ export async function handleHomework(
       if (sectionId) {
         rows = rows.filter((row) => text(row.section_id) === sectionId);
       }
-      if (staffId) rows = rows.filter((row) => text(row.staff_id) === staffId);
+      if (staffId && role(user) !== "teacher") {
+        rows = rows.filter((row) => text(row.staff_id) === staffId);
+      }
       if (status) rows = rows.filter((row) => text(row.status) === status);
+      rows = await Promise.all(rows.map(async (row) => ({
+        ...row,
+        daily_claim: text(row.section_id) && text(row.assigned_date || row.created_at)
+          ? await loadDailyClaim(
+            svc,
+            school,
+            text(row.academic_year_id),
+            text(row.section_id),
+            "homework",
+            text(row.assigned_date || row.created_at).split("T")[0],
+          )
+          : null,
+      })));
       return cors({
         success: true,
         data: rows,
-        total: count ?? rows.length,
+        total: rows.length,
         page: 1,
         page_size: rows.length,
       });
     }
 
     if (method === "POST") {
+      const teacher = role(user) === "teacher";
+      const linkedStaffId = text(user.app_metadata?.linked_id);
+      const sectionId = text(body.section_id);
+      if (teacher) {
+        if (!linkedStaffId) return fail("staff profile not linked", 400);
+        if (!sectionId || !await teacherCanUseSection(svc, school, linkedStaffId, sectionId)) {
+          return fail("forbidden", 403);
+        }
+        if (!await teacherCanUseSubject(
+          svc,
+          school,
+          linkedStaffId,
+          sectionId,
+          text(body.subject_id),
+        )) return fail("teacher is not assigned to this subject", 403);
+        if (text(body.staff_id) && text(body.staff_id) !== linkedStaffId) {
+          return fail("forbidden", 403);
+        }
+        const studentId = text(body.student_id);
+        if (studentId && !await studentBelongsToSection(
+          svc,
+          school,
+          studentId,
+          sectionId,
+        )) return fail("student does not belong to the selected section", 422);
+      }
+      const academicYearId = sectionId
+        ? await sectionAcademicYear(svc, school, sectionId, text(body.academic_year_id))
+        : "";
+      if (teacher && !academicYearId) return fail("section and academic year do not match", 422);
+      const operationDate = text(body.assigned_date || todayDate()).split("T")[0];
+      let claim: Record<string, unknown> | null = null;
+      if (teacher) {
+        try {
+          claim = await claimDailyOperation({
+            svc,
+            school,
+            sectionId,
+            academicYearId,
+            operation: "homework",
+            operationDate,
+            staffId: linkedStaffId,
+          });
+        } catch (error) {
+          if (error instanceof DailyClaimConflict) {
+            return cors({
+              success: false,
+              error: "homework is already claimed by another teacher",
+              daily_claim: error.claim,
+            }, 409);
+          }
+          return fail(error instanceof Error ? error.message : "failed to claim homework", 409);
+        }
+      }
       const id = crypto.randomUUID();
       const record = {
         ...body,
         id,
         homework_id: id,
         status: text(body.status, "pending"),
-        assigned_date: body.assigned_date ?? new Date().toISOString(),
         due_date: body.due_date ?? body.submission_date ?? null,
         created_by: user.id,
+        staff_id: teacher ? linkedStaffId : text(body.staff_id),
+        academic_year_id: academicYearId || text(body.academic_year_id),
+        assigned_date: operationDate,
+        daily_claim_id: claim?.id ?? null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -215,12 +363,17 @@ export async function handleHomework(
         record_id: id,
         data: record,
       }).select().single();
-      if (error) return fail(error.message);
+      if (error) {
+        if (claim && wasDailyClaimCreatedByThisRequest(claim)) {
+          await svc.from("class_daily_operation_claims").delete().eq("id", claim.id)
+            .eq("school_id", school).eq("claimed_by_staff_id", linkedStaffId);
+        }
+        return fail(error.message);
+      }
 
       // Notify the linked parent for every assigned child.  A teacher can
       // target one student or a whole section; both paths need the same
       // in-app and push notification contract.
-      const sectionId = text(body.section_id);
       const assignedStudentIds = new Set<string>();
       const individualStudentId = text(body.student_id);
       if (individualStudentId) assignedStudentIds.add(individualStudentId);
@@ -228,7 +381,8 @@ export async function handleHomework(
         const { data: students } = await svc.from("students")
           .select("id")
           .eq("school_id", school)
-          .eq("current_section_id", sectionId);
+          .eq("current_section_id", sectionId)
+          .eq("status", "active");
         for (const student of students ?? []) {
           const studentId = text(student.id);
           if (studentId) assignedStudentIds.add(studentId);
@@ -310,16 +464,28 @@ export async function handleHomework(
         }
       }
 
-      return ok(payload(data as Record<string, unknown>));
+      return ok({
+        ...payload(data as Record<string, unknown>),
+        daily_claim: claim,
+      });
     }
   }
 
   const reminderPath = path === "/homework/reminders/today" ||
     path === "/homework/reminders/today/skip";
   if (reminderPath) {
+    const sectionId = text(url.searchParams.get("section_id") ?? body.section_id);
+    if (role(user) === "teacher" &&
+      (!text(user.app_metadata?.linked_id) || !sectionId ||
+        !await teacherCanUseSection(
+          svc,
+          school,
+          text(user.app_metadata?.linked_id),
+          sectionId,
+        ))) return fail("forbidden", 403);
     return ok({
       status: path.endsWith("/skip") ? "skipped" : "pending",
-      section_id: text(url.searchParams.get("section_id") ?? body.section_id),
+      section_id: sectionId,
     });
   }
 
@@ -331,9 +497,67 @@ export async function handleHomework(
   if (!suffix && (method === "PUT" || method === "PATCH")) {
     const existing = await loadHomework(svc, school, homeworkId);
     if (!existing) return fail("not found", 404);
+    if (role(user) === "teacher") {
+      const linkedStaffId = text(user.app_metadata?.linked_id);
+      const sectionId = text(existing.section_id);
+      if (!linkedStaffId || !sectionId ||
+          !await teacherCanUseSection(svc, school, linkedStaffId, sectionId)) {
+        return fail("forbidden", 403);
+      }
+      if (!await teacherCanUseSubject(
+        svc,
+        school,
+        linkedStaffId,
+        sectionId,
+        text(body.subject_id ?? existing.subject_id),
+      )) return fail("teacher is not assigned to this subject", 403);
+      const operationDate = text(existing.assigned_date || existing.created_at).split("T")[0];
+      try {
+        const claim = await claimDailyOperation({
+          svc,
+          school,
+          sectionId,
+          academicYearId: text(existing.academic_year_id) ||
+            await sectionAcademicYear(svc, school, sectionId),
+          operation: "homework",
+          operationDate,
+          staffId: linkedStaffId,
+        });
+        if (text(claim.claimed_by_staff_id) !== linkedStaffId) {
+          return fail("homework is claimed by another teacher", 409);
+        }
+      } catch (error) {
+        if (error instanceof DailyClaimConflict) {
+          return cors({
+            success: false,
+            error: error.message,
+            daily_claim: error.claim,
+          }, 409);
+        }
+        return fail(error instanceof Error ? error.message : "failed to claim homework", 409);
+      }
+    }
+    const teacherMutableBody = role(user) === "teacher"
+      ? Object.fromEntries(
+        Object.entries(body).filter(([key]) => ![
+          "id",
+          "homework_id",
+          "school_id",
+          "staff_id",
+          "teacher_id",
+          "section_id",
+          "academic_year_id",
+          "assigned_date",
+          "daily_claim_id",
+          "student_id",
+          "created_by",
+          "created_at",
+        ].includes(key)),
+      )
+      : body;
     const next = {
       ...existing,
-      ...body,
+      ...teacherMutableBody,
       id: homeworkId,
       homework_id: homeworkId,
       updated_at: new Date().toISOString(),
@@ -350,6 +574,27 @@ export async function handleHomework(
   }
 
   if (!suffix && method === "DELETE") {
+    if (role(user) === "teacher") {
+      const existing = await loadHomework(svc, school, homeworkId);
+      if (!existing) return fail("not found", 404);
+      const linkedStaffId = text(user.app_metadata?.linked_id);
+      const sectionId = text(existing.section_id);
+      if (!linkedStaffId || !sectionId || text(existing.staff_id) !== linkedStaffId ||
+          !await teacherCanUseSection(svc, school, linkedStaffId, sectionId)) {
+        return fail("forbidden", 403);
+      }
+      const claim = await loadDailyClaim(
+        svc,
+        school,
+        text(existing.academic_year_id),
+        sectionId,
+        "homework",
+        text(existing.assigned_date || existing.created_at).split("T")[0],
+      );
+      if (claim && text(claim.claimed_by_staff_id) !== linkedStaffId) {
+        return fail("homework is claimed by another teacher", 409);
+      }
+    }
     await svc.from("homework_submissions").delete().eq("school_id", school).eq(
       "homework_id",
       homeworkId,
@@ -363,6 +608,26 @@ export async function handleHomework(
   }
 
   if (suffix === "submissions" && method === "GET") {
+    const homework = await loadHomework(svc, school, homeworkId);
+    if (!homework) return fail("not found", 404);
+    const linkedStaffId = text(user.app_metadata?.linked_id);
+    if (role(user) === "teacher") {
+      const sectionId = text(homework.section_id);
+      if (!sectionId || !await teacherCanUseSection(
+        svc,
+        school,
+        linkedStaffId,
+        sectionId,
+      ) || !await teacherCanUseSubject(
+        svc,
+        school,
+        linkedStaffId,
+        sectionId,
+        text(homework.subject_id),
+      )) return fail("forbidden", 403);
+    } else if (role(user) !== "parent" && !isSchoolLeader(user)) {
+      return fail("forbidden", 403);
+    }
     let query = svc.from("homework_submissions").select(
       "*, students (first_name, last_name)",
     ).eq(
@@ -370,10 +635,27 @@ export async function handleHomework(
       school,
     ).eq("homework_id", homeworkId);
     const studentId = text(url.searchParams.get("student_id"));
-    if (studentId) {
-      if (!(await parentCanAccessStudent(svc, user, studentId))) {
+    if (role(user) === "parent") {
+      const { data: links, error: linksError } = await svc.from(
+        "parent_student_links",
+      ).select("student_id").eq("school_id", school).eq(
+        "parent_user_id",
+        user.id,
+      );
+      if (linksError) return fail(linksError.message);
+      const linkedStudentIds = (links ?? []).map((link) => text(link.student_id))
+        .filter(Boolean);
+      if (studentId && !linkedStudentIds.includes(studentId)) {
         return fail("student not linked to parent", 403);
       }
+      if (studentId) {
+        query = query.eq("student_id", studentId);
+      } else if (linkedStudentIds.length > 0) {
+        query = query.in("student_id", linkedStudentIds);
+      } else {
+        return ok({ submissions: [], total: 0 });
+      }
+    } else if (studentId) {
       query = query.eq("student_id", studentId);
     }
     const { data, error } = await query.order("created_at", {
@@ -395,8 +677,15 @@ export async function handleHomework(
 
   if (suffix === "submissions" && method === "POST") {
     const studentId = text(body.student_id);
-    if (!(await parentCanAccessStudent(svc, user, studentId))) {
+    if (!(await parentCanAccessStudent(svc, user, school, studentId))) {
       return fail("student not linked to parent", 403);
+    }
+    const homework = await loadHomework(svc, school, homeworkId);
+    if (!homework) return fail("homework not found", 404);
+    const studentSection = await studentSectionId(svc, school, studentId);
+    if (text(homework.student_id) && text(homework.student_id) !== studentId ||
+      !text(homework.student_id) && text(homework.section_id) !== studentSection) {
+      return fail("homework is not assigned to this student", 403);
     }
     const fileUrls = Array.isArray(body.attachment_urls)
       ? body.attachment_urls.map((value) => text(value)).filter(Boolean)
@@ -500,6 +789,34 @@ export async function handleHomework(
 
   const reviewMatch = suffix.match(/^submissions\/([^/]+)\/review$/);
   if (reviewMatch && (method === "PUT" || method === "PATCH")) {
+    const homework = await loadHomework(svc, school, homeworkId);
+    if (!homework) return fail("homework not found", 404);
+    if (role(user) === "teacher") {
+      const linkedStaffId = text(user.app_metadata?.linked_id);
+      const sectionId = text(homework.section_id);
+      if (!linkedStaffId || !sectionId ||
+        !await teacherCanUseSection(svc, school, linkedStaffId, sectionId) ||
+        !await teacherCanUseSubject(
+          svc,
+          school,
+          linkedStaffId,
+          sectionId,
+          text(homework.subject_id),
+        )) return fail("forbidden", 403);
+      const claim = await loadDailyClaim(
+        svc,
+        school,
+        text(homework.academic_year_id),
+        sectionId,
+        "homework",
+        text(homework.assigned_date || homework.created_at).split("T")[0],
+      );
+      if (!claim || text(claim.claimed_by_staff_id) !== linkedStaffId) {
+        return fail("homework is claimed by another teacher", 409);
+      }
+    } else if (!isSchoolLeader(user)) {
+      return fail("forbidden", 403);
+    }
     const reviewStatus = text(body.status, "reviewed");
     const reviewRemarks = text(body.remarks);
     if (reviewStatus === "reviewed" && !reviewRemarks) {

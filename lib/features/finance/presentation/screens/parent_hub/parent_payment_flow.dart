@@ -4,8 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 class ParentPaymentFlow extends StatefulWidget {
@@ -32,6 +32,8 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
 
   String? _proofName;
   String? _proofPath;
+  Uint8List? _proofBytes;
+  String? _proofMimeType;
   String? _configError;
 
   List<Map<String, dynamic>> get _fees => widget.args.fees
@@ -208,9 +210,15 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         maxHeight: 2048,
       );
       if (image != null) {
+        final optimized = await ImageUploadOptimizer.fromXFile(
+          image,
+          preset: ImageUploadPreset.content,
+        );
         setState(() {
-          _proofName = image.name;
+          _proofName = optimized.filename;
           _proofPath = image.path;
+          _proofBytes = optimized.bytes;
+          _proofMimeType = optimized.mimeType;
         });
       }
     } on Object catch (e) {
@@ -241,6 +249,8 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           transactionRef: _utrController.text.trim(),
           screenshotPath: _proofPath!,
           screenshotName: _proofName!,
+          screenshotBytes: _proofBytes,
+          screenshotMimeType: _proofMimeType,
           remarks: _remarksController.text.trim(),
         );
       } else {
@@ -253,25 +263,12 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           transactionRef: _utrController.text.trim(),
           screenshotPath: _proofPath!,
           screenshotName: _proofName!,
+          screenshotBytes: _proofBytes,
+          screenshotMimeType: _proofMimeType,
           remarks: _remarksController.text.trim(),
         );
       }
       if (!mounted) return;
-      try {
-        final studentName = _text(
-          widget.args.student?['name'],
-          fallback: 'A student',
-        );
-        final amount = _totalAmount.toString();
-        NotificationService.getInstance().then(
-          (s) => s.triggerFeePaymentAlert(
-            studentName: studentName,
-            amount: amount,
-            paymentMode: 'UPI',
-          ),
-        );
-      } on Object catch (_) {}
-
       setState(() {
         _submitting = false;
         _currentStep = 3;

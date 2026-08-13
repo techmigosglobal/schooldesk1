@@ -190,7 +190,6 @@ void main() {
         'teacherDocuments',
         'schoolGallery',
         'teacherCommunication',
-        'teacherParentInteraction',
         'teacherLeave',
         'notificationCenter',
         'profileScreen',
@@ -217,11 +216,6 @@ void main() {
         isNot(contains('AppRoutes.teacherReports')),
       );
 
-      expect(
-        teacherNavigationSource,
-        isNot(contains('AppRoutes.teacherPTM')),
-        reason: 'TeacherPTM is no longer part of Teacher navigation',
-      );
       final routes = File('lib/routes/app_routes.dart').readAsStringSync();
       final guard = File(
         'lib/routes/route_access_guard.dart',
@@ -234,23 +228,23 @@ void main() {
       ).readAsStringSync();
       expect(
         routes,
-        isNot(contains('teacherPTM')),
-        reason: 'TeacherParentInteraction is the canonical PTM route',
+        isNot(contains('teacherParentInteraction')),
+        reason: 'PTM must not expose a teacher route',
       );
       expect(
         guard,
-        isNot(contains('teacherPTM')),
-        reason: 'Duplicate TeacherPTM route should not stay guard-active',
+        isNot(contains('teacherParentInteraction')),
+        reason: 'PTM must not stay guard-active',
       );
       expect(
         registry,
-        isNot(contains('/teacher-ptm-screen')),
-        reason: 'Duplicate PTM screen metadata should be retired',
+        isNot(contains('parent-ptm-booking-screen')),
+        reason: 'PTM screen metadata should be retired',
       );
       expect(
         communicationBarrel,
-        isNot(contains('teacher_ptm_screen.dart')),
-        reason: 'Duplicate PTM screen should not be exported',
+        isNot(contains('ptm_')),
+        reason: 'PTM screens should not be exported',
       );
       for (final removedRouteName in [
         'teacherStudyMaterials',

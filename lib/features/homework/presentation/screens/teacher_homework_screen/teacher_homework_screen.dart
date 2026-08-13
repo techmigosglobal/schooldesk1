@@ -1,5 +1,6 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -10,6 +11,7 @@ import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 import 'package:schooldesk1/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_form_screens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 
 class TeacherHomeworkScreen extends StatefulWidget {
   const TeacherHomeworkScreen({super.key});
@@ -28,6 +30,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
   Map<String, int> _submissionCounts = const {};
   bool _skippedToday = false;
   String _reminderStatus = 'pending';
+  String _selectedSectionId = '';
 
   @override
   void initState() {
@@ -49,10 +52,15 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
     });
     try {
       await RoleAccessService.initialize();
-      final staffId = RoleAccessService.teacherStaffId;
-      final rows = await BackendApiClient.instance.getHomework(
-        teacherId: staffId.isEmpty ? null : staffId,
-      );
+      if (_selectedSectionId.isEmpty) {
+        final assigned = RoleAccessService.assignedTeacherClasses;
+        _selectedSectionId = assigned.isNotEmpty
+            ? teacherFlowText(
+                assigned.first['section_id'] ?? assigned.first['id'],
+              )
+            : RoleAccessService.teacherClassId;
+      }
+      final rows = await BackendApiClient.instance.getHomework();
       final reminder = await _loadReminderStatus();
       final counts = <String, int>{};
       for (final row in rows.take(12)) {
@@ -89,7 +97,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
   Future<Map<String, dynamic>> _loadReminderStatus() async {
     try {
       return await BackendApiClient.instance.getTodayHomeworkReminderStatus(
-        sectionId: RoleAccessService.teacherClassId,
+        sectionId: _selectedSectionId,
       );
     } on Object catch (_) {
       return const {};
@@ -100,7 +108,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
     try {
       final reminder = await BackendApiClient.instance
           .skipTodayHomeworkReminder(
-            sectionId: RoleAccessService.teacherClassId,
+            sectionId: _selectedSectionId,
             reason: 'Teacher skipped homework assignment for today',
           );
       if (!mounted) return;
@@ -249,7 +257,11 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
                   submissionCounts: _submissionCounts,
                   skippedToday: _skippedToday,
                   isHomeworkAssignedToday: _isHomeworkSubmittedToday(),
+                  dailyLockedByOther: _isHomeworkClaimedByOther(),
                   onSkipToday: _skipToday,
+                  onSectionChanged: (sectionId) {
+                    setState(() => _selectedSectionId = sectionId);
+                  },
                   onDelete: _deleteHomework,
                   isDueSoon: _isDueSoon,
                   homeworkId: _homeworkId,
@@ -306,6 +318,32 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
     }
     return false;
   }
+
+  bool _isHomeworkClaimedByOther() {
+    final staffId = RoleAccessService.teacherStaffId;
+    final assignedSectionIds = RoleAccessService.assignedTeacherClasses
+        .map((row) => teacherFlowText(row['section_id'] ?? row['id']))
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final today = DateTime.now();
+    return _homework.any((row) {
+      if (teacherFlowText(row['section_id']) != _selectedSectionId ||
+          !assignedSectionIds.contains(_selectedSectionId)) {
+        return false;
+      }
+      final claim = row['daily_claim'];
+      if (claim is! Map) return false;
+      final date = DateTime.tryParse(
+        teacherFlowDateOnly(row['assigned_date'] ?? row['created_at']),
+      );
+      return date != null &&
+          date.year == today.year &&
+          date.month == today.month &&
+          date.day == today.day &&
+          teacherFlowText(claim['status']) == 'claimed' &&
+          teacherFlowText(claim['claimed_by_staff_id']) != staffId;
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -316,7 +354,9 @@ class _AssignHomeworkTab extends StatefulWidget {
   final Map<String, int> submissionCounts;
   final bool skippedToday;
   final bool isHomeworkAssignedToday;
+  final bool dailyLockedByOther;
   final VoidCallback onSkipToday;
+  final ValueChanged<String> onSectionChanged;
   final void Function(Map<String, dynamic>) onDelete;
   final bool Function(Map<String, dynamic>) isDueSoon;
   final String Function(Map<String, dynamic>) homeworkId;
@@ -327,7 +367,9 @@ class _AssignHomeworkTab extends StatefulWidget {
     required this.submissionCounts,
     required this.skippedToday,
     required this.isHomeworkAssignedToday,
+    required this.dailyLockedByOther,
     required this.onSkipToday,
+    required this.onSectionChanged,
     required this.onDelete,
     required this.isDueSoon,
     required this.homeworkId,
@@ -349,6 +391,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
   bool _saving = false;
   bool _uploading = false;
   String? _formError;
+  String _selectedSectionId = '';
 
   // Attachments: can be multiple files (images or PDFs)
   final List<_AttachmentItem> _attachments = [];
@@ -364,10 +407,12 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
 
   List<String> get _subjectOptions {
     final classes = RoleAccessService.teacherAssignedClasses;
-    final targetClassId = RoleAccessService.teacherClassId;
+    final targetClassId = _selectedSectionId.isNotEmpty
+        ? _selectedSectionId
+        : RoleAccessService.teacherClassId;
     if (classes.isNotEmpty) {
       final row = classes.firstWhere(
-        (c) => c['section_id'] == targetClassId,
+        (c) => teacherFlowText(c['section_id'] ?? c['id']) == targetClassId,
         orElse: () => classes.first,
       );
       final subjects = row['subjects'];
@@ -416,37 +461,56 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
       allowMultiple: true,
-      withData: false,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
 
     for (final file in result.files) {
-      final path = file.path;
-      if (path == null || path.trim().isEmpty) continue;
-      await _uploadFile(path, file.name);
+      final path = file.path ?? '';
+      final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
+      final isImage = ImageUploadOptimizer.isImage(file.name, mimeType);
+      final optimized = isImage
+          ? (file.bytes != null
+                ? ImageUploadOptimizer.fromBytes(
+                    file.bytes!,
+                    filename: file.name,
+                    mimeType: mimeType,
+                    preset: ImageUploadPreset.content,
+                  )
+                : await ImageUploadOptimizer.fromPath(
+                    path,
+                    filename: file.name,
+                    mimeType: mimeType,
+                    preset: ImageUploadPreset.content,
+                  ))
+          : null;
+      if (path.trim().isEmpty && file.bytes == null) continue;
+      await _uploadFile(
+        path,
+        optimized?.filename ?? file.name,
+        fileBytes: optimized?.bytes ?? file.bytes,
+        mimeType: optimized?.mimeType ?? mimeType,
+      );
     }
   }
 
-  Future<void> _uploadFile(String path, String name) async {
+  Future<void> _uploadFile(
+    String path,
+    String name, {
+    Uint8List? fileBytes,
+    String? mimeType,
+  }) async {
     setState(() {
       _uploading = true;
       _formError = null;
     });
     try {
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(path, filename: name),
-      });
-      final response = await BackendApiClient.instance.dio.post(
-        '/uploads',
-        data: formData,
+      final url = await BackendApiClient.instance.uploadFile(
+        path,
+        filename: name,
+        fileBytes: fileBytes,
+        mimeType: mimeType,
       );
-      final data = response.data;
-      var url = '';
-      if (data is Map) {
-        url = teacherFlowText(data['url']);
-        final nested = data['data'];
-        if (url.isEmpty && nested is Map) url = teacherFlowText(nested['url']);
-      }
       if (url.isEmpty) throw Exception('Upload completed but no URL returned.');
       if (!mounted) return;
       setState(() {
@@ -480,8 +544,10 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
     try {
       await RoleAccessService.initialize();
       final staffId = RoleAccessService.teacherStaffId;
-      final sectionId = RoleAccessService.teacherClassId;
-      final className = RoleAccessService.teacherClassName;
+      final sectionId = _selectedSectionId.isNotEmpty
+          ? _selectedSectionId
+          : RoleAccessService.teacherClassId;
+      final className = _classLabelForSection(sectionId);
       final attachmentUrl = _attachments.map((a) => a.url).join(',');
 
       await BackendApiClient.instance.createHomework(
@@ -540,20 +606,74 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
     }
   }
 
+  String _classLabelForSection(String sectionId) {
+    final rows = RoleAccessService.assignedTeacherClasses;
+    for (final row in rows) {
+      if (teacherFlowText(row['section_id'] ?? row['id']) == sectionId) {
+        return teacherFlowText(
+          row['label'] ?? row['section_name'],
+          fallback: RoleAccessService.teacherClassName,
+        );
+      }
+    }
+    return RoleAccessService.teacherClassName;
+  }
+
   @override
   Widget build(BuildContext context) {
     final subjects = _subjectOptions;
+    final assignedSections = RoleAccessService.assignedTeacherClasses;
+    final selectedSectionId = _selectedSectionId.isNotEmpty
+        ? _selectedSectionId
+        : RoleAccessService.teacherClassId;
 
     return TeacherFlowScrollView(
       children: [
         // ── Class Info ───────────────────────────────────────────
         TeacherCurrentClassCard(
           greeting: 'Assign Dairy',
-          classLabel: RoleAccessService.teacherClassName,
-          subject: RoleAccessService.teacherSubject,
+          classLabel: _classLabelForSection(selectedSectionId),
+          subject: subjects.join(', '),
           timeLabel: 'Create dairy for your class',
           actions: const [],
         ),
+        if (assignedSections.length > 1) ...[
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            value: selectedSectionId.isEmpty ? null : selectedSectionId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Class / Section',
+              prefixIcon: Icon(Icons.class_rounded),
+            ),
+            items: assignedSections
+                .map(
+                  (row) => DropdownMenuItem<String>(
+                    value: teacherFlowText(row['section_id'] ?? row['id']),
+                    child: Text(
+                      teacherFlowText(
+                        row['label'] ?? row['section_name'],
+                        fallback: 'Class / Section',
+                      ),
+                    ),
+                  ),
+                )
+                .where((item) => item.value?.isNotEmpty == true)
+                .toList(),
+            onChanged: widget.dailyLockedByOther
+                ? null
+                : (value) {
+                    if (value == null || value == _selectedSectionId) return;
+                    setState(() {
+                      _selectedSectionId = value;
+                      _selectedSubjects
+                        ..clear()
+                        ..add(_subjectOptions.first);
+                    });
+                    widget.onSectionChanged(value);
+                  },
+          ),
+        ],
 
         // ── Pending reminder banner ──────────────────────────────
         if (!widget.isHomeworkAssignedToday && !widget.skippedToday)
@@ -580,6 +700,16 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
         const SizedBox(height: 20),
 
         // ── Inline Assignment Form ───────────────────────────────
+        if (widget.dailyLockedByOther)
+          const TeacherFlowCard(
+            icon: Icons.lock_rounded,
+            title: 'Dairy locked for today',
+            subtitle:
+                'The other assigned teacher has already shared today\'s dairy. A principal must reopen it before changes are allowed.',
+            status: 'Read only',
+            statusColor: Colors.orange,
+          ),
+        if (widget.dailyLockedByOther) const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -846,7 +976,10 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
 
                 // ── Submit Button ─────────────────────────────────
                 FilledButton.icon(
-                  onPressed: (_saving || _uploading) ? null : _submit,
+                  onPressed:
+                      (_saving || _uploading || widget.dailyLockedByOther)
+                      ? null
+                      : _submit,
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF0F9F8E),
                     shape: RoundedRectangleBorder(

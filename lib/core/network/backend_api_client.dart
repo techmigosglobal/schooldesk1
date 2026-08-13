@@ -19,6 +19,7 @@ import 'package:schooldesk1/core/network/schooldesk_api.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 
 export 'package:schooldesk1/features/shared/data/models/backend_models.dart';
 
@@ -45,10 +46,35 @@ part 'api_modules/notifications_api.dart';
 part 'api_modules/help_api.dart';
 part 'api_modules/issues_api.dart';
 part 'api_modules/demo_api.dart';
+part 'api_modules/request_coalescing.dart';
 
 typedef ApiErrorReporter = void Function(DioException error);
 
 const _forceRefreshCacheExtraKey = 'schooldesk_force_refresh_cache';
+
+Future<MultipartFile> _multipartUpload({
+  String? filePath,
+  Uint8List? fileBytes,
+  required String filename,
+  DioMediaType? contentType,
+}) async {
+  if (fileBytes != null && fileBytes.isNotEmpty) {
+    return MultipartFile.fromBytes(
+      fileBytes,
+      filename: filename,
+      contentType: contentType,
+    );
+  }
+  final path = (filePath ?? '').trim();
+  if (path.isEmpty) {
+    throw const ServerException(message: 'Upload file is required');
+  }
+  return MultipartFile.fromFile(
+    path,
+    filename: filename,
+    contentType: contentType,
+  );
+}
 
 /// Backend API client for school-desk backend
 /// Handles all HTTP communication with the FastAPI backend.
@@ -89,7 +115,6 @@ class BackendApiClient {
   }
 
   String get baseUrl => _dio.options.baseUrl;
-
   static Future<void> initialize() async {
     final client = instance;
     await client.installPersistentCache();
@@ -109,12 +134,12 @@ class BackendApiClient {
   String? _currentUserId;
   String? _activeBranchId;
   UserResponse? _cachedProfile;
-
+  Map<String, dynamic>? _cachedCurrentSchool;
+  final Map<String, Map<String, dynamic>> _cachedDashboards = {};
   UserResponse? get cachedProfile => _cachedProfile;
   String? get currentRoleName => _currentRoleName;
   String? get currentUserId => _currentUserId;
   String? get activeBranchId => _activeBranchId;
-
   void setAuthToken(String token) {
     _authToken = token;
   }
@@ -135,6 +160,9 @@ class BackendApiClient {
       // Never retain an in-memory profile across account changes on a shared
       // device. The persistent response cache is independently user-scoped.
       _cachedProfile = null;
+      _cachedCurrentSchool = null;
+      _cachedDashboards.clear();
+      _clearCoalescedGets();
     }
     _currentUserId = nextUserId;
   }
@@ -150,6 +178,9 @@ class BackendApiClient {
       _dio.options.headers['x-schooldesk-branch-id'] = _activeBranchId;
       await TokenStorageService.saveSchoolId(_activeBranchId!);
     }
+    _cachedCurrentSchool = null;
+    _cachedDashboards.clear();
+    _clearCoalescedGets();
     await invalidateCachedReads();
   }
 
@@ -158,6 +189,9 @@ class BackendApiClient {
     _currentRoleName = null;
     _currentUserId = null;
     _cachedProfile = null;
+    _cachedCurrentSchool = null;
+    _cachedDashboards.clear();
+    _clearCoalescedGets();
     _activeBranchId = null;
     _dio.options.headers.remove('x-schooldesk-branch-id');
   }
@@ -177,7 +211,6 @@ class BackendApiClient {
   }
 
   bool get isAuthenticated => _authToken != null;
-
   Future<void> installPersistentCache() async {
     if (_cacheInstalled) return;
     try {
@@ -206,13 +239,20 @@ class BackendApiClient {
   }
 
   Future<void> invalidateAcademicSetupCache() =>
-      _deleteCachedPaths(const [r'/academic-years', r'/dashboard/']);
-
+      _invalidateReadMemoryAndDisk(const [r'/academic-years', r'/dashboard/']);
   Future<void> invalidateStudentCache() =>
-      _deleteCachedPaths(const [r'/students', r'/dashboard/']);
-
+      _invalidateReadMemoryAndDisk(const [r'/students', r'/dashboard/']);
   Future<void> invalidateCachedReads() async {
+    _cachedCurrentSchool = null;
+    _cachedDashboards.clear();
+    _clearCoalescedGets();
     await _cacheOptions?.store?.clean();
+  }
+
+  Future<void> _invalidateReadMemoryAndDisk(List<String> pathPatterns) async {
+    _cachedDashboards.clear();
+    _clearCoalescedGets();
+    await _deleteCachedPaths(pathPatterns);
   }
 
   Future<void> _deleteCachedPaths(List<String> pathPatterns) async {

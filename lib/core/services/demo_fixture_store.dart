@@ -120,9 +120,6 @@ class DemoFixtureStore {
     if (clean.startsWith('/notifications')) return _ok(_list('notifications'));
     if (clean.startsWith('/documents') || clean.endsWith('/documents'))
       return _ok(_list('documents'));
-    if (clean.startsWith('/parent-teacher-meetings') ||
-        clean.startsWith('/teacher/ptm'))
-      return _ok(_list('ptm'));
     if (clean.startsWith('/chat/contacts')) return _ok(_contacts(role));
     if (clean.startsWith('/chat/conversations/') && clean.endsWith('/messages'))
       return _ok(_list('messages'));
@@ -732,15 +729,6 @@ class DemoFixtureStore {
           'description': 'Fictional parent feedback record.',
           'status': 'open',
           'created_at': now,
-        },
-      ],
-      'ptm': [
-        {
-          'id': 'ptm-1',
-          'student_id': 'student-1',
-          'teacher_id': 'staff-1',
-          'starts_at': '2026-07-31T10:00:00Z',
-          'status': 'booked',
         },
       ],
       'documents': [

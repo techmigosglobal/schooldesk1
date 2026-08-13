@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
@@ -179,9 +180,18 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         maxSize: 900,
       );
       if (croppedPath == null || !mounted) return;
+      final optimized = await ImageUploadOptimizer.fromPath(
+        croppedPath,
+        filename: croppedPath.split('/').last,
+        preset: ImageUploadPreset.branding,
+        mimeType: ImageUploadOptimizer.mimeTypeForFilename(croppedPath),
+      );
       setState(() => _saving = true);
       final logoPath = await BackendApiClient.instance.uploadCurrentSchoolLogo(
         croppedPath,
+        fileBytes: optimized.bytes,
+        fileName: optimized.filename,
+        mimeType: optimized.mimeType,
       );
       if (!mounted) return;
       setState(() {
@@ -204,9 +214,18 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         imageQuality: 90,
       );
       if (picked == null) return;
+      final optimized = await ImageUploadOptimizer.fromXFile(
+        picked,
+        preset: ImageUploadPreset.branding,
+      );
       setState(() => _saving = true);
       final signatureUrl = await BackendApiClient.instance
-          .uploadCurrentSchoolSignature(picked.path);
+          .uploadCurrentSchoolSignature(
+            picked.path,
+            fileBytes: optimized.bytes,
+            fileName: optimized.filename,
+            mimeType: optimized.mimeType,
+          );
       if (!mounted) return;
       setState(() {
         _signatureUrl = signatureUrl;
@@ -224,13 +243,9 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
 
   String _assetUrl(String path) {
     if (path.startsWith('http://') || path.startsWith('https://')) {
-      return optimizedImageUrl(path, width: 900, height: 900);
+      return resolveOriginalImageUrl(path);
     }
-    return optimizedImageUrl(
-      '${EnvConfig.apiOrigin}$path',
-      width: 900,
-      height: 900,
-    );
+    return resolveOriginalImageUrl('${EnvConfig.apiOrigin}$path');
   }
 
   void _showSnack(String message, {bool isError = false}) {

@@ -202,9 +202,16 @@ extension BackendAuthApi on BackendApiClient {
     TokenStorageService.saveRoleName(roleName);
   }
 
-  Future<UserResponse> getProfile() async {
+  Future<UserResponse> getProfile({bool forceRefresh = false}) async {
     try {
-      final response = await _dio.get('/auth/profile');
+      final cached = _cachedProfile;
+      if (cached != null && !forceRefresh) return cached;
+      final response = await _get(
+        '/auth/profile',
+        queryParameters: forceRefresh
+            ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
+            : null,
+      );
       final data = _asMap(response.data);
       if (data['success'] == true) {
         final profile = UserResponse.fromJson(
@@ -238,10 +245,22 @@ extension BackendAuthApi on BackendApiClient {
     }
   }
 
-  Future<String> uploadProfileAvatar(String filePath) async {
+  Future<String> uploadProfileAvatar(
+    String filePath, {
+    Uint8List? fileBytes,
+    String? fileName,
+    String? mimeType,
+  }) async {
     try {
       final formData = FormData.fromMap({
-        'avatar': await MultipartFile.fromFile(filePath),
+        'avatar': await _multipartUpload(
+          filePath: filePath,
+          fileBytes: fileBytes,
+          filename: (fileName ?? '').trim().isEmpty
+              ? 'profile-avatar.jpg'
+              : fileName!.trim(),
+          contentType: _resolveMediaType(mimeType, fileName ?? filePath),
+        ),
       });
       final response = await _dio.post('/auth/profile/avatar', data: formData);
       final data = response.data as Map<String, dynamic>;

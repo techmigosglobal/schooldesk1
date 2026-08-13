@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'backend_api_sources.dart';
 
 void main() {
-  test('parent calendar renders backend events holidays and PTM rows', () {
+  test('parent calendar renders backend events and holidays only', () {
     final source = File(
       'lib/features/calendar/presentation/screens/parent_calendar_screen/parent_calendar_screen.dart',
     ).readAsStringSync();
@@ -13,7 +13,10 @@ void main() {
 
     expect(source, contains('BackendApiClient.instance'));
     expect(source, contains('api.getEvents()'));
-    expect(source, contains("api.getRawList('/parent-teacher-meetings')"));
+    expect(
+      source,
+      isNot(contains("api.getRawList('/parent-teacher-meetings')")),
+    );
     expect(source, isNot(contains('api.getExams()')));
     expect(source, isNot(contains("Tab(text: 'Exams')")));
     expect(source, contains("api.getRawMap('/academic-years/"));

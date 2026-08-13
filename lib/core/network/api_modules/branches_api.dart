@@ -3,7 +3,7 @@ part of '../backend_api_client.dart';
 extension BackendBranchesApi on BackendApiClient {
   Future<List<Map<String, dynamic>>> getBranches() async {
     try {
-      final response = await _dio.get('/branches');
+      final response = await _get('/branches');
       final data = _asMap(response.data);
       if (data['success'] != true) {
         throw ServerException(
@@ -77,7 +77,7 @@ extension BackendBranchesApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getBranchOverview() async {
     try {
-      final response = await _dio.get('/branches/overview');
+      final response = await _get('/branches/overview');
       final data = _asMap(response.data);
       if (data['success'] != true) {
         throw ServerException(

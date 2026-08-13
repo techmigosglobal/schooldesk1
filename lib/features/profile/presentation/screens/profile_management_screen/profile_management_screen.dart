@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
@@ -202,9 +203,16 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         imageQuality: 85,
       );
       if (picked == null) return;
+      final optimized = await ImageUploadOptimizer.fromXFile(
+        picked,
+        preset: ImageUploadPreset.portrait,
+      );
       setState(() => _saving = true);
       final avatarPath = await BackendApiClient.instance.uploadProfileAvatar(
         picked.path,
+        fileBytes: optimized.bytes,
+        fileName: optimized.filename,
+        mimeType: optimized.mimeType,
       );
       final profile = await BackendApiClient.instance.getProfile();
       if (!mounted) return;
@@ -470,13 +478,9 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
 
   String _avatarUrl(String avatar) {
     if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
-      return optimizedImageUrl(avatar, width: 256, height: 256);
+      return resolveOriginalImageUrl(avatar);
     }
-    return optimizedImageUrl(
-      '${EnvConfig.apiOrigin}$avatar',
-      width: 256,
-      height: 256,
-    );
+    return resolveOriginalImageUrl('${EnvConfig.apiOrigin}$avatar');
   }
 
   Widget _buildSection({

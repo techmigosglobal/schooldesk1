@@ -1,7 +1,17 @@
 // handlers/attendance.ts — sessions, mark, summary, staff, QR, corrections
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok, triggerPushProcessing } from "../index.ts";
+import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
 import { queueReportExport } from "./uploads.ts";
+import {
+  claimDailyOperation,
+  DailyClaimConflict,
+  loadDailyClaim,
+  sectionAcademicYear,
+  teacherCanUseSection,
+  todayDate,
+  wasDailyClaimCreatedByThisRequest,
+} from "./daily_claims.ts";
+import { teacherCanAccessStudent } from "./teacher_scope.ts";
 
 /**
  * Notify parents when a student is marked absent. Each notification is stored
@@ -23,41 +33,42 @@ async function notifyParentsOfAbsence(
       .in("student_id", absentStudentIds);
     if (!links || links.length === 0) return;
 
-    // Build per-parent events: deduplicate if parent has multiple absent children
-    const parentEventMap = new Map<
-      string,
-      { studentIds: string[]; parentUserId: string }
-    >();
-    for (const link of links) {
-      const parentId = `${link.parent_user_id ?? ""}`.trim();
+    // A parent with several children receives one separately routable alert
+    // per absent child. This avoids an ambiguous notification that cannot open
+    // the correct child context in the parent app.
+    const parentIds = [...new Set(
+      links.map((link) => `${link.parent_user_id ?? ""}`.trim()).filter(Boolean),
+    )];
+    const { data: activeParents, error: parentError } = parentIds.length === 0
+      ? { data: [], error: null }
+      : await svc.from("users").select("id").eq("school_id", school)
+        .eq("role_name", "parent").eq("is_active", true).in("id", parentIds);
+    if (parentError) throw parentError;
+    const activeParentIds = new Set(
+      (activeParents ?? []).map((parent) => `${parent.id ?? ""}`.trim()),
+    );
+    const deliveryKeys = new Set<string>();
+    const deliveries = links.map((link) => {
+      const userId = `${link.parent_user_id ?? ""}`.trim();
       const studentId = `${link.student_id ?? ""}`.trim();
-      if (!parentId || !studentId) continue;
-      if (!parentEventMap.has(parentId)) {
-        parentEventMap.set(parentId, {
-          parentUserId: parentId,
-          studentIds: [],
-        });
-      }
-      parentEventMap.get(parentId)!.studentIds.push(studentId);
-    }
-
-    const deliveries = Array.from(parentEventMap.values()).map((
-      { parentUserId, studentIds },
-    ) => {
-      const sortedStudentIds = [...new Set(studentIds)].sort();
-      const entityId = `absence:${attendanceDate}:${
-        sortedStudentIds.join(",")
-      }`;
-      const message = sortedStudentIds.length === 1
-        ? `Your child was marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`
-        : `Your children were marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`;
+      if (!userId || !studentId || !activeParentIds.has(userId)) return null;
+      const entityId = `absence:${attendanceDate}:${studentId}`;
+      const key = `${userId}:${entityId}`;
+      if (deliveryKeys.has(key)) return null;
+      deliveryKeys.add(key);
       return {
-        userId: parentUserId,
-        studentIds: sortedStudentIds,
+        userId,
+        studentId,
         entityId,
-        message,
+        message:
+          `Your child was marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`,
       };
-    });
+    }).filter((delivery): delivery is {
+      userId: string;
+      studentId: string;
+      entityId: string;
+      message: string;
+    } => delivery !== null);
 
     // Prevent a retry or a re-submitted attendance session from duplicating a
     // parent's in-app alert for the same students and date.
@@ -92,9 +103,7 @@ async function notifyParentsOfAbsence(
           entity_id: delivery.entityId,
           route: "/parent-attendance-screen",
           priority: "high",
-          student_id: delivery.studentIds.length === 1
-            ? delivery.studentIds[0]
-            : null,
+          student_id: delivery.studentId,
           is_read: false,
         })),
       );
@@ -107,10 +116,7 @@ async function notifyParentsOfAbsence(
       event_type: "attendance_marked",
       dedupe_key: `attendance:${delivery.userId}:${delivery.entityId}`,
       event_data: {
-        student_ids: delivery.studentIds,
-        student_id: delivery.studentIds.length === 1
-          ? delivery.studentIds[0]
-          : "",
+        student_id: delivery.studentId,
         status: "absent",
         date: attendanceDate,
         message: delivery.message,
@@ -202,10 +208,6 @@ function attendanceSummaryFromRows(rows: Array<Record<string, unknown>>) {
 }
 const staffQRRefreshSeconds = 7;
 const staffQRScanGraceSeconds = 10;
-
-function todayDate() {
-  return indiaDateParts(new Date()).date;
-}
 
 function indiaDateParts(value: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -345,31 +347,6 @@ function staffAttendanceCsv(rows: Array<Record<string, unknown>>) {
   return [header.join(","), ...lines].join("\n");
 }
 
-async function teacherCanUseSection(
-  svc: SupabaseClient,
-  school: string,
-  staffId: string,
-  sectionId: string,
-) {
-  if (!staffId || !sectionId) return false;
-  const section = await svc.from("sections").select("id").eq(
-    "school_id",
-    school,
-  )
-    .eq("id", sectionId)
-    .or(`class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`)
-    .maybeSingle();
-  if (section.error) throw new Error(section.error.message);
-  if (section.data) return true;
-
-  const subject = await svc.from("staff_subjects").select("id").eq(
-    "school_id",
-    school,
-  ).eq("staff_id", staffId).eq("section_id", sectionId).limit(1);
-  if (subject.error) throw new Error(subject.error.message);
-  return (subject.data ?? []).length > 0;
-}
-
 async function loadAttendanceSession(
   svc: SupabaseClient,
   school: string,
@@ -381,7 +358,26 @@ async function loadAttendanceSession(
   return data as Record<string, unknown> | null;
 }
 
-function canUseAttendanceSession(
+async function attendanceStudentsBelongToSection(
+  svc: SupabaseClient,
+  school: string,
+  sectionId: string,
+  studentIds: string[],
+): Promise<boolean> {
+  const uniqueIds = [...new Set(studentIds.map((id) => `${id ?? ""}`.trim()))]
+    .filter(Boolean);
+  if (!sectionId || uniqueIds.length !== studentIds.length || uniqueIds.length === 0) {
+    return false;
+  }
+  const { data, error } = await svc.from("students").select("id").eq(
+    "school_id",
+    school,
+  ).eq("current_section_id", sectionId).eq("status", "active").in("id", uniqueIds);
+  if (error) throw new Error(error.message);
+  return (data ?? []).length === uniqueIds.length;
+}
+
+async function canUseAttendanceSession(
   svc: SupabaseClient,
   school: string,
   roleName: string,
@@ -390,13 +386,25 @@ function canUseAttendanceSession(
 ) {
   if (canManageAttendance(roleName)) return true;
   if (!linkedStaffId) return false;
-  if (`${session.staff_id ?? ""}` !== linkedStaffId) return false;
-  return teacherCanUseSection(
+  if (!await teacherCanUseSection(
     svc,
     school,
     linkedStaffId,
     `${session.section_id ?? ""}`,
+  )) return false;
+  const claim = await loadDailyClaim(
+    svc,
+    school,
+    `${session.academic_year_id ?? ""}`,
+    `${session.section_id ?? ""}`,
+    "attendance",
+    `${session.date ?? ""}`.split("T")[0],
   );
+  if (claim && `${claim.status ?? ""}` === "claimed") {
+    return `${claim.claimed_by_staff_id ?? ""}` === linkedStaffId;
+  }
+  if (claim && `${claim.status ?? ""}` === "reopened") return true;
+  return `${session.staff_id ?? ""}` === linkedStaffId;
 }
 
 export async function handleAttendance(
@@ -415,6 +423,7 @@ export async function handleAttendance(
   const roleName = role(user);
 
   if (path === "/attendance/reports/exports" && method === "POST") {
+    if (!canManageAttendance(roleName)) return fail("forbidden", 403);
     try {
       const data = await queueReportExport(
         svc,
@@ -439,14 +448,18 @@ export async function handleAttendance(
       "*, section:sections(*), staff:staff(*), subject:subjects(*), student_attendances(*)",
     ).eq("school_id", school);
     const sectionId = url.searchParams.get("section_id") ?? "";
-    if (!canManageAttendance(roleName) && linkedStaffId) {
+    if (!canManageAttendance(roleName)) {
+      if (!linkedStaffId) return fail("forbidden", 403);
       if (
         sectionId &&
         !await teacherCanUseSection(svc, school, linkedStaffId, sectionId)
       ) {
         return fail("forbidden", 403);
       }
-      q = q.eq("staff_id", linkedStaffId);
+      // A co-teacher must be able to read the class teacher's shared session.
+      // The teacher screen supplies section_id; retain staff-scoped history
+      // only for unscoped legacy callers.
+      if (!sectionId) q = q.eq("staff_id", linkedStaffId);
     }
     if (sectionId) {
       q = q.eq("section_id", sectionId);
@@ -468,15 +481,23 @@ export async function handleAttendance(
     }
     const { data, error } = await q.order("date", { ascending: false });
     if (error) return fail(error.message);
-    const mapped = (data ?? []).map((sess: any) => {
+    const mapped = await Promise.all((data ?? []).map(async (sess: any) => {
       if (Array.isArray(sess.student_attendances)) {
         sess.student_attendances = sess.student_attendances.map((row: any) => ({
           ...row,
           marked_at: row.created_at || row.updated_at,
         }));
       }
+      sess.daily_claim = await loadDailyClaim(
+        svc,
+        school,
+        `${sess.academic_year_id ?? ""}`,
+        `${sess.section_id ?? ""}`,
+        "attendance",
+        `${sess.date ?? ""}`.split("T")[0],
+      );
       return sess;
-    });
+    }));
     return ok(mapped);
   }
 
@@ -487,6 +508,8 @@ export async function handleAttendance(
     >;
     const sectionId = `${body.section_id ?? ""}`.trim();
     const staffId = `${body.staff_id ?? ""}`.trim();
+    const operationDate = `${body.date ?? todayDate()}`
+      .split("T")[0];
     if (!sectionId) return fail("section_id required");
     if (!canManageAttendance(roleName)) {
       if (!linkedStaffId) return fail("staff profile not linked", 400);
@@ -495,35 +518,153 @@ export async function handleAttendance(
         return fail("forbidden", 403);
       }
     }
+    const academicYearId = await sectionAcademicYear(
+      svc,
+      school,
+      sectionId,
+      `${body.academic_year_id ?? ""}`.trim(),
+    );
+    if (!academicYearId) return fail("section and academic year do not match", 422);
+    const claimingStaffId = canManageAttendance(roleName)
+      ? staffId || linkedStaffId
+      : linkedStaffId;
+    if (!claimingStaffId) return fail("staff profile not linked", 400);
+    const periodNumber = body.period_number ?? body.period_no ?? 1;
+    const existingSession = await svc.from("attendance_sessions").select("*")
+      .eq("school_id", school).eq("section_id", sectionId)
+      .eq("academic_year_id", academicYearId).eq("date", operationDate)
+      .eq("period_number", periodNumber).limit(1).maybeSingle();
+    if (existingSession.error) return fail(existingSession.error.message);
+    if (existingSession.data) {
+      const existingClaim = await loadDailyClaim(
+        svc,
+        school,
+        academicYearId,
+        sectionId,
+        "attendance",
+        operationDate,
+      );
+      if (!canManageAttendance(roleName) &&
+        `${existingClaim?.status ?? ""}`.trim() === "reopened") {
+        try {
+          const reassignedClaim = await claimDailyOperation({
+            svc,
+            school,
+            sectionId,
+            academicYearId,
+            operation: "attendance",
+            operationDate,
+            staffId: linkedStaffId,
+          });
+          return ok({ ...existingSession.data, daily_claim: reassignedClaim });
+        } catch (error) {
+          if (error instanceof DailyClaimConflict) {
+            return cors({
+              success: false,
+              error: "attendance is already claimed by another teacher",
+              daily_claim: error.claim,
+            }, 409);
+          }
+          return fail(
+            error instanceof Error ? error.message : "failed to reassign attendance",
+            409,
+          );
+        }
+      }
+      if (!canManageAttendance(roleName) &&
+        `${existingClaim?.claimed_by_staff_id ?? existingSession.data.staff_id ?? ""}`
+            .trim() !== linkedStaffId) {
+        return cors({
+          success: false,
+          error: "attendance is already claimed by another teacher",
+          daily_claim: existingClaim,
+          session: existingSession.data,
+        }, 409);
+      }
+      return ok({ ...existingSession.data, daily_claim: existingClaim });
+    }
+    let claim: Record<string, unknown>;
+    try {
+      claim = await claimDailyOperation({
+        svc,
+        school,
+        sectionId,
+        academicYearId,
+        operation: "attendance",
+        operationDate,
+        staffId: claimingStaffId,
+      });
+    } catch (error) {
+      if (error instanceof DailyClaimConflict) {
+        return cors({
+          success: false,
+          error: "attendance is already claimed by another teacher",
+          daily_claim: error.claim,
+        }, 409);
+      }
+      return fail(
+        error instanceof Error ? error.message : "failed to claim attendance",
+        409,
+      );
+    }
+
     const payload = {
       ...rest,
       school_id: school,
+      date: operationDate,
+      academic_year_id: academicYearId,
       subject_id: `${body.subject_id ?? ""}`.trim() || null,
       timetable_slot_id: `${body.timetable_slot_id ?? ""}`.trim() || null,
       staff_id: canManageAttendance(roleName) ? body.staff_id : linkedStaffId,
-      period_number: body.period_number ?? body.period_no ?? null,
+      period_number: periodNumber,
       status: "draft",
     };
     const { data, error } = await svc.from("attendance_sessions").insert(
       payload,
     ).select().single();
-    if (error) return fail(error.message);
-    return ok(data);
+    if (error) {
+      if (wasDailyClaimCreatedByThisRequest(claim)) {
+        await svc.from("class_daily_operation_claims").delete().eq(
+          "id",
+          claim.id,
+        ).eq("school_id", school).eq(
+          "claimed_by_staff_id",
+          claimingStaffId,
+        );
+      }
+      return fail(error.message);
+    }
+    return ok({ ...data, daily_claim: claim });
   }
 
   const sessionMatch = path.match(/^\/attendance\/sessions\/([^/]+)$/);
   if (sessionMatch && method === "GET") {
     const { data, error } = await svc.from("attendance_sessions").select(
       "*, student_attendances(*, student:students(*)), section:sections(*, grade:grades(*)), staff:staff(*)",
-    ).eq("id", sessionMatch[1]).single();
+    ).eq("id", sessionMatch[1]).eq("school_id", school).maybeSingle();
     if (error) return fail(error.message);
+    if (!data) return fail("session not found", 404);
     if (data && Array.isArray(data.student_attendances)) {
       data.student_attendances = data.student_attendances.map((row: any) => ({
         ...row,
         marked_at: row.created_at || row.updated_at,
       }));
     }
-    return ok(data);
+    if (!canManageAttendance(roleName)) {
+      if (!linkedStaffId) return fail("forbidden", 403);
+      if (!await teacherCanUseSection(svc, school, linkedStaffId, `${data.section_id ?? ""}`)) {
+        return fail("forbidden", 403);
+      }
+    }
+    const claim = await loadDailyClaim(
+      svc,
+      school,
+      `${data.academic_year_id ?? ""}`,
+      `${data.section_id ?? ""}`,
+      "attendance",
+      `${data.date ?? ""}`.split("T")[0],
+    );
+    return ok({ ...data, daily_claim: claim });
   }
 
   const sessionMarkMatch = path.match(
@@ -554,6 +695,34 @@ export async function handleAttendance(
     if (session.is_finalized === true) {
       return fail("attendance session is finalized", 409);
     }
+    if (!canManageAttendance(roleName)) {
+      try {
+        const claim = await claimDailyOperation({
+          svc,
+          school,
+          sectionId: `${session.section_id ?? ""}`,
+          academicYearId: `${session.academic_year_id ?? ""}`,
+          operation: "attendance",
+          operationDate: `${session.date ?? ""}`.split("T")[0],
+          staffId: linkedStaffId,
+        });
+        if (`${claim.claimed_by_staff_id ?? ""}` !== linkedStaffId) {
+          return fail("attendance is claimed by another teacher", 409);
+        }
+      } catch (error) {
+        if (error instanceof DailyClaimConflict) {
+          return cors({
+            success: false,
+            error: "attendance is claimed by another teacher",
+            daily_claim: error.claim,
+          }, 409);
+        }
+        return fail(
+          error instanceof Error ? error.message : "failed to claim attendance",
+          409,
+        );
+      }
+    }
     const attendances = Array.isArray(body.attendances)
       ? body.attendances
       : body.attendance_records;
@@ -569,13 +738,19 @@ export async function handleAttendance(
       marked_at: now,
       updated_at: now,
     }));
+    if (!await attendanceStudentsBelongToSection(
+      svc,
+      school,
+      `${session.section_id ?? ""}`,
+      records.map((record) => `${record.student_id ?? ""}`),
+    )) return fail("attendance records must belong to the active session section", 422);
     const { data, error } = await svc.from("student_attendances").upsert(
       records,
       { onConflict: "session_id,student_id" },
     ).select();
     if (error) return fail(error.message);
     if (body.finalize != false) {
-      await svc.from("attendance_sessions").update({
+      const { error: finalizeError } = await svc.from("attendance_sessions").update({
         is_finalized: true,
         status: "submitted",
         submitted_at: new Date().toISOString(),
@@ -584,11 +759,13 @@ export async function handleAttendance(
         correction_asked_at: null,
         updated_at: new Date().toISOString(),
       }).eq("id", sessionId).eq("school_id", school);
+      if (finalizeError) return fail(finalizeError.message);
     } else {
-      await svc.from("attendance_sessions").update({
+      const { error: draftError } = await svc.from("attendance_sessions").update({
         status: "draft",
         updated_at: new Date().toISOString(),
       }).eq("id", sessionId).eq("school_id", school);
+      if (draftError) return fail(draftError.message);
     }
     // Notify parents of absent students via FCM push
     const absentIds = (data ?? []).filter(
@@ -597,7 +774,7 @@ export async function handleAttendance(
     ).map((r: Record<string, unknown>) => `${r.student_id ?? ""}`.trim())
       .filter(Boolean);
     const attendanceDate = `${
-      session.date ?? new Date().toISOString().split("T")[0]
+      session.date ?? todayDate()
     }`;
     await notifyParentsOfAbsence(svc, school, absentIds, attendanceDate);
     return ok({ marked: data?.length ?? 0, attendances: data ?? [] });
@@ -646,17 +823,24 @@ export async function handleAttendance(
       marked_at: now,
       updated_at: now,
     }));
+    if (!await attendanceStudentsBelongToSection(
+      svc,
+      school,
+      `${session.section_id ?? ""}`,
+      records.map((record) => `${record.student_id ?? ""}`),
+    )) return fail("attendance records must belong to the active session section", 422);
     const { data, error } = await svc.from("student_attendances").upsert(
       records,
       { onConflict: "session_id,student_id" },
     ).select();
     if (error) return fail(error.message);
-    await svc.from("attendance_sessions").update({
+    const { error: finalizeLegacyError } = await svc.from("attendance_sessions").update({
       is_finalized: true,
       status: "submitted",
       submitted_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq("id", sessionId).eq("school_id", school);
+    if (finalizeLegacyError) return fail(finalizeLegacyError.message);
     // Notify parents of absent students via FCM push (legacy bulk mark path)
     const absentIdsLegacy = (data ?? []).filter(
       (r: Record<string, unknown>) =>
@@ -664,7 +848,7 @@ export async function handleAttendance(
     ).map((r: Record<string, unknown>) => `${r.student_id ?? ""}`.trim())
       .filter(Boolean);
     const legacyDate = `${
-      session.date ?? new Date().toISOString().split("T")[0]
+      session.date ?? todayDate()
     }`;
     await notifyParentsOfAbsence(svc, school, absentIdsLegacy, legacyDate);
     return ok({ marked: data?.length ?? 0, attendances: data ?? [] });
@@ -719,21 +903,44 @@ export async function handleAttendance(
       updated_at: new Date().toISOString(),
     }).eq("id", reopenMatch[1]).eq("school_id", school).select().single();
     if (error) return fail(error.message);
+    if (data) {
+      await svc.from("class_daily_operation_claims").update({
+        status: "reopened",
+        reopened_at: new Date().toISOString(),
+        reopened_by: user.id,
+        reopen_reason: body.reason ?? null,
+        updated_at: new Date().toISOString(),
+      }).eq("school_id", school).eq("section_id", `${data.section_id ?? ""}`)
+        .eq("operation", "attendance").eq(
+          "operation_date",
+          `${data.date ?? ""}`.split("T")[0],
+        );
+    }
     return ok(data);
   }
 
   // ── Summary ───────────────────────────────────────────────
   if (path === "/attendance/summary" && method === "GET") {
     const requestedStudentId = url.searchParams.get("student_id") ?? "";
-    if (
-      requestedStudentId && !(await parentCanAccessStudent(
+    if (roleName === "parent" &&
+      (!requestedStudentId || !(await parentCanAccessStudent(
         svc,
         user,
         school,
         requestedStudentId,
-      ))
-    ) {
+      )))) {
       return fail("student not linked to parent", 403);
+    }
+    if (!canManageAttendance(roleName) && roleName !== "parent") {
+      if (!linkedStaffId || !requestedStudentId ||
+        !(await teacherCanAccessStudent(
+          svc,
+          school,
+          linkedStaffId,
+          requestedStudentId,
+        ))) {
+        return fail("forbidden", 403);
+      }
     }
     let q = svc.from("attendance_summaries").select("*, student:students(*)")
       .eq("school_id", school);
@@ -1099,15 +1306,23 @@ export async function handleAttendance(
     /^\/attendance\/students\/([^/]+)$/,
   );
   if (studentAttendanceMatch && method === "GET") {
-    if (
+    const requestedStudentId = studentAttendanceMatch[1];
+    if (roleName === "parent" &&
       !(await parentCanAccessStudent(
         svc,
         user,
         school,
-        studentAttendanceMatch[1],
-      ))
-    ) {
+        requestedStudentId,
+      ))) {
       return fail("student not linked to parent", 403);
+    }
+    if (!canManageAttendance(roleName) && roleName !== "parent") {
+      if (!linkedStaffId || !await teacherCanAccessStudent(
+        svc,
+        school,
+        linkedStaffId,
+        requestedStudentId,
+      )) return fail("forbidden", 403);
     }
     let q = svc.from("student_attendances").select(
       "*, session:attendance_sessions!inner(*)",

@@ -7,6 +7,7 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 
@@ -756,6 +757,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   }
 
   Future<void> _openNotification(AppNotification notif) async {
+    if (widget.role.trim().toLowerCase() == 'parent') {
+      await ParentChildSelectionService.saveStudentId(notif.studentId);
+    }
     final target = NotificationRouteResolver.resolve(
       data: notif.routingData,
       currentRole: widget.role,
@@ -861,26 +865,26 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                               shape: BoxShape.circle,
                             ),
                           ),
-                        if (!notif.isRead) ...[
-                          const SizedBox(height: 6),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton.icon(
-                              onPressed: () => _markAsRead(notif),
-                              icon: const Icon(Icons.done_rounded, size: 16),
-                              label: const Text('Mark as read'),
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
+                    if (!notif.isRead) ...[
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => _markAsRead(notif),
+                          icon: const Icon(Icons.done_rounded, size: 16),
+                          label: const Text('Mark as read'),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
                       notif.body,

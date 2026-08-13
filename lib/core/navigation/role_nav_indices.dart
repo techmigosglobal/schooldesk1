@@ -9,7 +9,6 @@ class ParentNav {
   static const lessonPlanner = 5;
   static const notices = 6;
   static const chat = 7;
-  static const ptm = 8;
   static const homeworkFeedback = 9;
   static const fees = 10;
   static const receipts = 11;
@@ -36,7 +35,6 @@ class TeacherNav {
   static const lessonPlanner = 9;
   static const gallery = 11;
   static const communication = 12;
-  static const ptm = 13;
   static const leave = 14;
   static const documents = 15;
   static const homework = 16;

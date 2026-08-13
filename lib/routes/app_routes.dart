@@ -69,12 +69,6 @@ class AppRoutes {
   static const String academicManagement = '/academic-management-screen';
   static const String academicYearDetail =
       '/academic-management-screen/year/detail';
-  static const String academicYearClasswiseExport =
-      '/academic-management-screen/year/classwise-export';
-  static const String academicYearUsersExport =
-      '/academic-management-screen/year/users-export';
-  static const String academicYearFeesExport =
-      '/academic-management-screen/year/fees-export';
   static const String academicYearForm = '/academic-management-screen/year';
   static const String academicSubjectForm =
       '/academic-management-screen/subject';
@@ -129,8 +123,6 @@ class AppRoutes {
   static const String teacherMyAttendance = '/teacher-my-attendance-screen';
   static const String teacherCommunication = '/teacher-communication-screen';
   static const String teacherComplaints = '/teacher-complaints-screen';
-  static const String teacherParentInteraction =
-      '/teacher-parent-interaction-screen';
   static const String teacherLeave = '/teacher-leave-screen';
   static const String teacherLeaveRequestForm = '/teacher-leave-screen/request';
   static const String teacherHomework = '/teacher-homework-screen';
@@ -178,7 +170,6 @@ class AppRoutes {
   static const String teacherCalendar = '/teacher-calendar-screen';
   static const String parentDocuments = '/parent-documents-screen';
   static const String parentTimetable = '/parent-timetable-screen';
-  static const String parentPTMBooking = '/parent-ptm-booking-screen';
   static const String parentHealth = '/parent-health-screen';
   static const String parentLessonPlanner = '/parent-lesson-planner-screen';
 
@@ -252,13 +243,6 @@ class AppRoutes {
     academicYearDetail: (context) => PrincipalAcademicYearDetailScreen(
       args: _academicYearRouteArgs(context),
     ),
-    academicYearClasswiseExport: (context) => AcademicYearClasswiseExportScreen(
-      args: _academicYearRouteArgs(context),
-    ),
-    academicYearUsersExport: (context) =>
-        AcademicYearUsersExportScreen(args: _academicYearRouteArgs(context)),
-    academicYearFeesExport: (context) =>
-        AcademicYearFeesExportScreen(args: _academicYearRouteArgs(context)),
     academicYearForm: (context) =>
         AcademicYearFormScreen(args: _academicYearFormArgs(context)),
     academicSubjectForm: (context) =>
@@ -328,8 +312,6 @@ class AppRoutes {
     teacherCommunication: (context) => const TeacherCommunicationScreen(),
     teacherComplaints: (context) =>
         const IssueScreen(role: IssueScreenRole.teacher),
-    teacherParentInteraction: (context) =>
-        const TeacherParentInteractionScreen(),
     teacherLeave: (context) => const TeacherLeaveScreen(),
     teacherLeaveRequestForm: (context) =>
         TeacherLeaveRequestFormScreen(args: _teacherLeaveFormArgs(context)),
@@ -376,7 +358,6 @@ class AppRoutes {
         const EventsCalendarScreen(portal: SchoolCalendarPortal.parent),
     parentDocuments: (context) => const ParentDocumentsScreen(),
     parentTimetable: (context) => const ParentTimetableScreen(),
-    parentPTMBooking: (context) => const ParentPTMBookingScreen(),
     parentHealth: (context) => const ParentHealthUpdateScreen(),
     parentLessonPlanner: (context) => const ParentLessonPlannerScreen(),
 

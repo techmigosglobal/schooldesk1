@@ -14,6 +14,7 @@ import { handleAcademics } from "./handlers/academics.ts";
 import { handleCalendar } from "./handlers/calendar.ts";
 import { handlePrincipal } from "./handlers/principal.ts";
 import { handleStaff } from "./handlers/staff.ts";
+import { handleDailyClaims } from "./handlers/daily_claims.ts";
 import { handleGuardians, handleStudents } from "./handlers/students.ts";
 import { handleUsers } from "./handlers/users.ts";
 import { handleApprovals } from "./handlers/approvals.ts";
@@ -509,6 +510,15 @@ Deno.serve(async (req: Request) => {
   if (path.startsWith("/dashboard")) {
     return handleDashboard(req, path, method, url, client, svc, user);
   }
+  if (path.startsWith("/class-daily-claims")) {
+    return auditedResponse(
+      handleDailyClaims(req, path, method, url, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
+  }
   if (path === "/admission-inquiries" && method === "GET") {
     return handleAdmissionInquiries(svc, user);
   }
@@ -696,8 +706,6 @@ Deno.serve(async (req: Request) => {
     path.startsWith("/announcements") || path.startsWith("/notices") ||
     path.startsWith("/message") ||
     path.startsWith("/communications") ||
-    path.startsWith("/parent-teacher-meetings") ||
-    path.startsWith("/teacher/ptm-slots") ||
     path.startsWith("/lesson-planners") ||
     path.startsWith("/diary-entries") ||
     path === "/notifications" ||

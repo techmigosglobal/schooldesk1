@@ -43,9 +43,8 @@ function buildTeacherAssignments(
   subjectRows: Array<Record<string, unknown>>,
   classTeacherSections: Array<Record<string, unknown>>,
   coTeacherSections: Array<Record<string, unknown>>,
+  schoolSections: Array<Record<string, unknown>>,
   gradeSubjects: Array<Record<string, unknown>>,
-  staffSubjects: Array<Record<string, unknown>>,
-  timetableSlots: Array<Record<string, unknown>>,
 ) {
   const assignments = new Map<string, Record<string, unknown>>();
 
@@ -97,29 +96,39 @@ function buildTeacherAssignments(
   for (const row of subjectRows) {
     const section = asRecord(row.section);
     const subject = asRecord(row.subject);
-    const entry = ensureSection(section, "subject_teacher", row);
-    if (!entry) continue;
     const subjectId = text(subject?.id ?? row.subject_id);
     const subjectName = text(subject?.subject_name ?? row.subject_name);
-    const subjects = entry.subjects as Array<Record<string, unknown>>;
-    if (
-      subjectId &&
-      !subjects.some((item) => text(item.id ?? item.subject_id) === subjectId)
-    ) {
-      subjects.push({
-        id: subjectId,
-        subject_id: subjectId,
-        subject_name: subjectName,
-      });
-    }
-    if (!text(entry.subject_id) && subjectId) {
-      entry.subject_id = subjectId;
-    }
-    if (!text(entry.subject_name) && subjectName) {
-      entry.subject_name = subjectName;
-    }
-    if (!text(entry.assignment_id)) {
-      entry.assignment_id = text(row.id);
+    const assignmentGradeId = text(row.grade_id);
+    const assignmentYearId = text(row.academic_year_id);
+    const matchingSections = section
+      ? [section]
+      : schoolSections.filter((candidate) =>
+        text(candidate.grade_id) === assignmentGradeId &&
+        (!assignmentYearId || text(candidate.academic_year_id) === assignmentYearId)
+      );
+    for (const matchingSection of matchingSections) {
+      const entry = ensureSection(matchingSection, "subject_teacher", row);
+      if (!entry) continue;
+      const subjects = entry.subjects as Array<Record<string, unknown>>;
+      if (
+        subjectId &&
+        !subjects.some((item) => text(item.id ?? item.subject_id) === subjectId)
+      ) {
+        subjects.push({
+          id: subjectId,
+          subject_id: subjectId,
+          subject_name: subjectName,
+        });
+      }
+      if (!text(entry.subject_id) && subjectId) {
+        entry.subject_id = subjectId;
+      }
+      if (!text(entry.subject_name) && subjectName) {
+        entry.subject_name = subjectName;
+      }
+      if (!text(entry.assignment_id)) {
+        entry.assignment_id = text(row.id);
+      }
     }
   }
 
@@ -145,20 +154,23 @@ function buildTeacherAssignments(
     }
   }
 
-  // Populate all matching subjects from grade_subjects, staff_subjects, and timetable_slots tables
-  for (const entry of assignments.values()) {
+    // Class and co-teachers receive the class hub's subject list. A
+    // subject-only teacher retains only their explicit subject assignments.
+    for (const entry of assignments.values()) {
     const sectionId = text(entry.section_id);
     const gradeId = text(entry.grade_id);
     const sectionYear = text(entry.academic_year_id);
     const subjects = entry.subjects as Array<Record<string, unknown>>;
-    // Clear out any subjects assigned directly to the teacher so we ONLY show Class Hub subjects
+    if (!entry.is_class_teacher && !entry.is_co_teacher) continue;
     subjects.length = 0;
-    // 1. Match from grade_subjects — match by section_id OR grade_id
+    // Match by section or grade, always within the section's academic year.
     const matchingGradeSubjects = gradeSubjects.filter((gs) => {
       const gsSectionId = text(gs.section_id);
       const gsGradeId = text(gs.grade_id);
-      return gsSectionId === sectionId ||
-        (gradeId !== "" && gsGradeId === gradeId);
+      const gsYear = text(gs.academic_year_id);
+      return (gsSectionId === sectionId ||
+        (gradeId !== "" && gsGradeId === gradeId)) &&
+        (!gsYear || gsYear === sectionYear);
     });
 
     for (const gs of matchingGradeSubjects) {
@@ -176,12 +188,305 @@ function buildTeacherAssignments(
         });
       }
     }
-
-    // The class hub (grade_subjects) is the single source of truth for the subjects available to a class.
-    // Removed legacy merging from other teachers (staff_subjects) and timetable slots (timetable_slots).
   }
 
   return [...assignments.values()];
+}
+
+async function teacherDashboardResponse(
+  svc: SupabaseClient,
+  school: string,
+  user: User,
+): Promise<Response> {
+  const { data: userRow, error: userError } = await svc.from("users").select(
+    "linked_id",
+  ).eq("school_id", school).eq("id", user.id).maybeSingle();
+  if (userError) return fail(userError.message);
+  const staffId = text(userRow?.linked_id);
+  if (!staffId) {
+    return ok({
+      staff_id: "",
+      assigned_classes: [],
+      total_students: 0,
+      total_sections: 0,
+      recent_announcements: [],
+      metrics: {
+        total_students: 0,
+        total_classes: 0,
+        homework_due: 0,
+        unread_messages: 0,
+      },
+    });
+  }
+
+  const [
+    staffResult,
+    staffSubjectsResult,
+    classTeacherSectionsResult,
+    coTeacherSectionsResult,
+    schoolSectionsResult,
+    gradeSubjectsResult,
+    announcementsResult,
+  ] = await Promise.all([
+    svc.from("staff").select("id").eq("school_id", school).eq(
+      "id",
+      staffId,
+    ).eq("is_active", true).maybeSingle(),
+    svc.from("staff_subjects").select(
+      "*, section:sections(*, grade:grades(*)), subject:subjects(*), grade:grades(*)",
+    ).eq("staff_id", staffId).eq("school_id", school),
+    svc.from("sections").select("*, grade:grades(*)").eq(
+      "class_teacher_id",
+      staffId,
+    ).eq("school_id", school),
+    svc.from("sections").select("*, grade:grades(*)").eq(
+      "co_teacher_id",
+      staffId,
+    ).eq("school_id", school),
+    svc.from("sections").select("*, grade:grades(*)").eq(
+      "school_id",
+      school,
+    ),
+    svc.from("grade_subjects").select("*, subject:subjects(*)").eq(
+      "school_id",
+      school,
+    ),
+    svc.from("announcements").select("id, title, published_at, priority")
+      .eq("school_id", school).eq("status", "published").in(
+        "audience",
+        ["all", "everyone", "teacher"],
+      ).order("published_at", { ascending: false }).limit(5),
+  ]);
+  for (
+    const result of [
+      staffResult,
+      staffSubjectsResult,
+      classTeacherSectionsResult,
+      coTeacherSectionsResult,
+      schoolSectionsResult,
+      gradeSubjectsResult,
+      announcementsResult,
+    ]
+  ) {
+    if (result.error) return fail(result.error.message);
+  }
+  if (!staffResult.data) return fail("staff profile is not active", 403);
+
+  const assigned = buildTeacherAssignments(
+    (staffSubjectsResult.data ?? []) as Array<Record<string, unknown>>,
+    (classTeacherSectionsResult.data ?? []) as Array<Record<string, unknown>>,
+    (coTeacherSectionsResult.data ?? []) as Array<Record<string, unknown>>,
+    (schoolSectionsResult.data ?? []) as Array<Record<string, unknown>>,
+    (gradeSubjectsResult.data ?? []) as Array<Record<string, unknown>>,
+  );
+  const sectionIds = assigned.map((section) => text(section.section_id)).filter(
+    Boolean,
+  );
+  const studentsResult = sectionIds.length === 0
+    ? { count: 0, error: null }
+    : await svc.from("students").select("id", { count: "exact", head: true })
+      .eq("school_id", school).eq("status", "active").in(
+        "current_section_id",
+        sectionIds,
+      );
+  if (studentsResult.error) return fail(studentsResult.error.message);
+  const studentCount = studentsResult.count ?? 0;
+
+  return ok({
+    staff_id: staffId,
+    assigned_classes: assigned,
+    total_students: studentCount,
+    total_sections: sectionIds.length,
+    recent_announcements: announcementsResult.data ?? [],
+    metrics: {
+      total_students: studentCount,
+      total_classes: sectionIds.length,
+      homework_due: 0,
+      unread_messages: 0,
+    },
+  });
+}
+
+async function parentDashboardResponse(
+  svc: SupabaseClient,
+  school: string,
+  user: User,
+): Promise<Response> {
+  const { data: links, error: linksError } = await svc
+    .from("parent_student_links")
+    .select("student_id, student:students(*, section:sections(*, grade:grades(*)))")
+    .eq("school_id", school)
+    .eq("parent_user_id", user.id);
+  if (linksError) return fail(linksError.message);
+
+  const linkedStudents = (links ?? []).map((link: Record<string, unknown>) =>
+    asRecord(link.student)
+  ).filter((student): student is Record<string, unknown> =>
+    student !== null && text(student.school_id) === school &&
+      text(student.status).toLowerCase() === "active"
+  );
+  const studentIds = linkedStudents.map((student) => text(student.id)).filter(
+    Boolean,
+  );
+  if (studentIds.length === 0) {
+    return ok({
+      children: [],
+      metrics: { total_children: 0, unread_messages: 0 },
+      recent_announcements: [],
+    });
+  }
+
+  const [
+    attendanceResult,
+    invoiceResult,
+    homeworkResult,
+    submissionResult,
+    conversationResult,
+    announcementsResult,
+  ] = await Promise.all([
+    svc.from("attendance_summaries").select("student_id, percentage, updated_at")
+      .eq("school_id", school).in("student_id", studentIds)
+      .order("updated_at", { ascending: false }),
+    svc.from("fee_invoices").select(
+      "student_id, balance, net_amount, paid_amount, status",
+    ).eq("school_id", school).in("student_id", studentIds),
+    svc.from("frontend_records").select("id, record_id, data")
+      .eq("school_id", school).eq("table_name", "homework"),
+    svc.from("homework_submissions").select(
+      "homework_id, student_id, status, updated_at",
+    ).eq("school_id", school).in("student_id", studentIds)
+      .order("updated_at", { ascending: false }),
+    svc.from("message_conversations").select("id, student_id")
+      .eq("school_id", school).eq("parent_id", user.id),
+    svc.from("announcements").select("id, title, published_at, priority")
+      .eq("school_id", school).eq("status", "published")
+      .in("audience", ["all", "everyone", "parent", "parents"])
+      .order("published_at", { ascending: false }).limit(5),
+  ]);
+  for (
+    const result of [
+      attendanceResult,
+      invoiceResult,
+      homeworkResult,
+      submissionResult,
+      conversationResult,
+      announcementsResult,
+    ]
+  ) {
+    if (result.error) return fail(result.error.message);
+  }
+
+  const conversationStudentIds = new Map<string, string>();
+  for (const row of conversationResult.data ?? []) {
+    const conversationId = text(row.id);
+    const studentId = text(row.student_id);
+    if (conversationId && studentIds.includes(studentId)) {
+      conversationStudentIds.set(conversationId, studentId);
+    }
+  }
+  const conversationIds = [...conversationStudentIds.keys()];
+  const messageResult = conversationIds.length === 0
+    ? { data: [], error: null }
+    : await svc.from("messages").select("conversation_id, sender_id, read_by")
+      .eq("school_id", school).in("conversation_id", conversationIds);
+  if (messageResult.error) return fail(messageResult.error.message);
+
+  const attendanceByStudent = new Map<string, number>();
+  for (const row of attendanceResult.data ?? []) {
+    const studentId = text(row.student_id);
+    if (studentId && !attendanceByStudent.has(studentId)) {
+      attendanceByStudent.set(studentId, number(row.percentage));
+    }
+  }
+  const feeBalanceByStudent = new Map<string, number>();
+  for (const row of invoiceResult.data ?? []) {
+    if (["cancelled", "canceled", "void"].includes(text(row.status).toLowerCase())) {
+      continue;
+    }
+    const studentId = text(row.student_id);
+    const balance = Math.max(
+      0,
+      number(row.balance) || (number(row.net_amount) - number(row.paid_amount)),
+    );
+    feeBalanceByStudent.set(
+      studentId,
+      (feeBalanceByStudent.get(studentId) ?? 0) + balance,
+    );
+  }
+  const newestSubmissionByHomeworkAndStudent = new Map<string, string>();
+  for (const row of submissionResult.data ?? []) {
+    const key = `${text(row.homework_id)}:${text(row.student_id)}`;
+    if (key !== ":" && !newestSubmissionByHomeworkAndStudent.has(key)) {
+      newestSubmissionByHomeworkAndStudent.set(key, text(row.status));
+    }
+  }
+  const homeworkDueByStudent = new Map<string, number>();
+  for (const rawRow of homeworkResult.data ?? []) {
+    const row = homeworkRow(rawRow as Record<string, unknown>);
+    const homeworkId = text(row.homework_id);
+    const targetStudentId = text(row.student_id);
+    const targetSectionId = text(row.section_id);
+    for (const student of linkedStudents) {
+      const studentId = text(student.id);
+      const sectionId = text(
+        student.current_section_id ?? asRecord(student.section)?.id,
+      );
+      if (
+        !studentId || (targetStudentId !== studentId &&
+          (targetStudentId || !targetSectionId || targetSectionId !== sectionId))
+      ) continue;
+      const submissionStatus = newestSubmissionByHomeworkAndStudent.get(
+        `${homeworkId}:${studentId}`,
+      );
+      if (submissionStatus !== "submitted" && submissionStatus !== "reviewed") {
+        homeworkDueByStudent.set(
+          studentId,
+          (homeworkDueByStudent.get(studentId) ?? 0) + 1,
+        );
+      }
+    }
+  }
+  const unreadMessagesByStudent = new Map<string, number>();
+  for (const row of messageResult.data ?? []) {
+    if (text(row.sender_id) === user.id) continue;
+    const readBy = Array.isArray(row.read_by) ? row.read_by : [];
+    if (readBy.map((value) => text(value)).includes(user.id)) continue;
+    const studentId = conversationStudentIds.get(text(row.conversation_id));
+    if (studentId) {
+      unreadMessagesByStudent.set(
+        studentId,
+        (unreadMessagesByStudent.get(studentId) ?? 0) + 1,
+      );
+    }
+  }
+  const unreadMessages = [...unreadMessagesByStudent.values()].reduce(
+    (total, count) => total + count,
+    0,
+  );
+
+  return ok({
+    children: linkedStudents.map((student) => {
+      const section = asRecord(student.section);
+      const grade = asRecord(section?.grade);
+      const studentId = text(student.id);
+      return {
+        ...student,
+        name: studentName(student),
+        class: text(grade?.grade_name),
+        section: text(section?.section_name),
+        photo_url: text(student.photo_url ?? student.photo ?? student.avatar),
+        attendance_pct: attendanceByStudent.get(studentId) ?? null,
+        homework_due: homeworkDueByStudent.get(studentId) ?? 0,
+        pending_fee_balance: feeBalanceByStudent.get(studentId) ?? 0,
+        unread_messages: unreadMessagesByStudent.get(studentId) ?? 0,
+      };
+    }),
+    metrics: {
+      total_children: linkedStudents.length,
+      unread_messages: unreadMessages,
+    },
+    recent_announcements: announcementsResult.data ?? [],
+  });
 }
 
 export async function handleDashboard(
@@ -195,9 +500,21 @@ export async function handleDashboard(
 ): Promise<Response> {
   const school = sid(user);
   const role = (user.app_metadata?.role_name as string ?? "").toLowerCase();
-  const dashRole = url.searchParams.get("role") ?? role;
+  const requestedRole = text(
+    url.searchParams.get("role") ?? path.split("/").filter(Boolean)[1],
+  ).toLowerCase();
+  if (requestedRole && requestedRole !== role) {
+    return fail("dashboard role does not match session", 403);
+  }
+  const dashRole = role;
 
   if (path === "/dashboard" || path.startsWith("/dashboard")) {
+    if (dashRole === "teacher") {
+      return teacherDashboardResponse(svc, school, user);
+    }
+    if (dashRole === "parent") {
+      return parentDashboardResponse(svc, school, user);
+    }
     const today = new Date();
     const todayStart = new Date(
       today.getFullYear(),
@@ -372,188 +689,15 @@ export async function handleDashboard(
           (coTeacherSectionsResult.data ?? []) as Array<
             Record<string, unknown>
           >,
+          (classTeacherSectionsResult.data ?? []) as Array<
+            Record<string, unknown>
+          >,
           (gradeSubjectsResult.data ?? []) as Array<
-            Record<string, unknown>
-          >,
-          (allStaffSubjectsResult.data ?? []) as Array<
-            Record<string, unknown>
-          >,
-          (timetableSlotsResult.data ?? []) as Array<
             Record<string, unknown>
           >,
         );
       }
       return ok({ ...base, assigned_classes: assigned, staff_id: staffId });
-    }
-
-    if (dashRole === "parent") {
-      const { data: links, error: linksError } = await svc.from(
-        "parent_student_links",
-      ).select(
-        "student:students(*, section:sections(*, grade:grades(*)))",
-      ).eq("parent_user_id", user.id);
-      if (linksError) return fail(linksError.message);
-
-      const linkedStudents = (links ?? []).map((
-        link: Record<string, unknown>,
-      ) => asRecord(link.student)).filter((
-        student,
-      ): student is Record<string, unknown> => student !== null);
-      const studentIds = linkedStudents.map((student) => text(student.id))
-        .filter(
-          Boolean,
-        );
-      if (studentIds.length === 0) {
-        return ok({
-          ...base,
-          metrics: { ...base.metrics, unread_messages: 0 },
-          children: [],
-        });
-      }
-
-      const [
-        attendanceResult,
-        invoiceResult,
-        homeworkResult,
-        submissionResult,
-        conversationResult,
-      ] = await Promise.all([
-        svc.from("attendance_summaries").select(
-          "student_id, percentage, updated_at",
-        ).eq("school_id", school).in("student_id", studentIds).order(
-          "updated_at",
-          { ascending: false },
-        ),
-        svc.from("fee_invoices").select(
-          "student_id, balance, net_amount, paid_amount",
-        )
-          .eq("school_id", school).in("student_id", studentIds),
-        svc.from("frontend_records").select("id, record_id, data")
-          .eq("school_id", school).eq("table_name", "homework"),
-        svc.from("homework_submissions").select(
-          "homework_id, student_id, status, updated_at",
-        ).eq("school_id", school).in("student_id", studentIds).order(
-          "updated_at",
-          { ascending: false },
-        ),
-        svc.from("message_conversations").select("id").eq(
-          "school_id",
-          school,
-        ).eq("parent_id", user.id),
-      ]);
-      for (
-        const result of [
-          attendanceResult,
-          invoiceResult,
-          homeworkResult,
-          submissionResult,
-          conversationResult,
-        ]
-      ) {
-        if (result.error) return fail(result.error.message);
-      }
-
-      const conversationIds = (conversationResult.data ?? []).map((row) =>
-        text(row.id)
-      ).filter(Boolean);
-      const messageResult = conversationIds.length === 0
-        ? { data: [], error: null }
-        : await svc.from("messages").select("sender_id, read_by").eq(
-          "school_id",
-          school,
-        ).in("conversation_id", conversationIds);
-      if (messageResult.error) return fail(messageResult.error.message);
-
-      const attendanceByStudent = new Map<string, number>();
-      for (const row of attendanceResult.data ?? []) {
-        const id = text(row.student_id);
-        if (id && !attendanceByStudent.has(id)) {
-          attendanceByStudent.set(id, number(row.percentage));
-        }
-      }
-      const feeBalanceByStudent = new Map<string, number>();
-      for (const row of invoiceResult.data ?? []) {
-        const id = text(row.student_id);
-        const balance = Math.max(
-          0,
-          number(row.balance) ||
-            (number(row.net_amount) - number(row.paid_amount)),
-        );
-        feeBalanceByStudent.set(
-          id,
-          (feeBalanceByStudent.get(id) ?? 0) + balance,
-        );
-      }
-      const newestSubmissionByHomeworkAndStudent = new Map<string, string>();
-      for (const row of submissionResult.data ?? []) {
-        const key = `${text(row.homework_id)}:${text(row.student_id)}`;
-        if (key !== ":" && !newestSubmissionByHomeworkAndStudent.has(key)) {
-          newestSubmissionByHomeworkAndStudent.set(key, text(row.status));
-        }
-      }
-      const homeworkDueByStudent = new Map<string, number>();
-      for (const rawRow of homeworkResult.data ?? []) {
-        const row = homeworkRow(rawRow as Record<string, unknown>);
-        const homeworkId = text(row.homework_id);
-        const targetStudentId = text(row.student_id);
-        const targetSectionId = text(row.section_id);
-        for (const student of linkedStudents) {
-          const studentId = text(student.id);
-          const sectionId = text(
-            student.current_section_id ?? asRecord(student.section)?.id,
-          );
-          if (
-            !studentId || (targetStudentId !== studentId &&
-              (targetStudentId || !targetSectionId ||
-                targetSectionId !== sectionId))
-          ) {
-            continue;
-          }
-          const submissionStatus = newestSubmissionByHomeworkAndStudent.get(
-            `${homeworkId}:${studentId}`,
-          );
-          const isSubmitted = submissionStatus &&
-            submissionStatus !== "needs_revision";
-          if (!isSubmitted) {
-            homeworkDueByStudent.set(
-              studentId,
-              (homeworkDueByStudent.get(studentId) ?? 0) + 1,
-            );
-          }
-        }
-      }
-
-      let unreadMessages = 0;
-      for (const row of messageResult.data ?? []) {
-        if (text(row.sender_id) === user.id) continue;
-        const readBy = Array.isArray(row.read_by) ? row.read_by : [];
-        if (!readBy.map((value) => text(value)).includes(user.id)) {
-          unreadMessages++;
-        }
-      }
-
-      return ok({
-        ...base,
-        metrics: { ...base.metrics, unread_messages: unreadMessages },
-        children: linkedStudents.map((student) => {
-          const section = asRecord(student.section);
-          const grade = asRecord(section?.grade);
-          const studentId = text(student.id);
-          const attendancePct = attendanceByStudent.get(studentId);
-          return {
-            ...student,
-            name: studentName(student),
-            class: text(grade?.grade_name),
-            section: text(section?.section_name),
-            photo_url: text(
-              student.photo_url ?? student.photo ?? student.avatar,
-            ),
-            attendance_pct: attendancePct ?? null,
-            homework_due: homeworkDueByStudent.get(studentId) ?? 0,
-            pending_fee_balance: feeBalanceByStudent.get(studentId) ?? 0,
-          };
-        }),
-      });
     }
 
     if (dashRole === "super_admin") {

@@ -55,7 +55,7 @@ void main() {
     ).readAsStringSync();
 
     expect(teacherNav, contains("label: 'Communication'"));
-    expect(teacherNav, contains("label: 'PTM Slots'"));
+    expect(teacherNav, isNot(contains('PTM')));
     expect(teacherFlow, contains('showBackButton: false'));
     expect(principalNav, isNot(contains("label: 'Broadcasts & Notices'")));
     expect(principalNav, contains("label: 'Messages & Chats'"));
@@ -86,9 +86,7 @@ void main() {
     );
     expect(
       teacherAttendance,
-      contains(
-        'Please contact Admin/Principal to set your class teacher assignment.',
-      ),
+      contains('You are not assigned to any class section.'),
     );
     expect(teacherAttendance, contains('Request Correction'));
     expect(principalNav, contains("label: 'School Posts'"));

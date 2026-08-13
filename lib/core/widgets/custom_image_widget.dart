@@ -155,16 +155,12 @@ class CustomImageWidget extends StatelessWidget {
             semanticLabel: semanticLabel,
           );
         case ImageType.network:
-          final optimizedUrl = optimizedImageUrl(
-            imageUrl!,
-            width: decodeWidth ?? 900,
-            height: decodeHeight ?? 900,
-          );
+          final originalUrl = resolveOriginalImageUrl(imageUrl!);
           return CachedNetworkImage(
             height: height,
             width: width,
             fit: fit,
-            imageUrl: optimizedUrl,
+            imageUrl: originalUrl,
             color: color,
             memCacheWidth: decodeWidth,
             memCacheHeight: decodeHeight,

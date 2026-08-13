@@ -7,7 +7,11 @@ extension BackendPrincipalApi on BackendApiClient {
   }) async {
     final safeRole = role.trim().toLowerCase();
     try {
-      final response = await _dio.get(
+      final cached = _cachedDashboards[safeRole];
+      if (cached != null && !forceRefresh) {
+        return Map<String, dynamic>.from(cached);
+      }
+      final response = await _get(
         '/dashboard/$safeRole',
         queryParameters: forceRefresh
             ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
@@ -15,7 +19,9 @@ extension BackendPrincipalApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
-        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        final dashboard = Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        _cachedDashboards[safeRole] = dashboard;
+        return Map<String, dynamic>.from(dashboard);
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to load dashboard',
@@ -29,7 +35,7 @@ extension BackendPrincipalApi on BackendApiClient {
     bool forceRefresh = false,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/principal/classes',
         queryParameters: forceRefresh
             ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
@@ -219,7 +225,7 @@ extension BackendPrincipalApi on BackendApiClient {
 
   Future<Map<String, dynamic>> getPrincipalSubjectsOverview() async {
     try {
-      final response = await _dio.get('/principal/subjects');
+      final response = await _get('/principal/subjects');
       final data = _asMap(response.data);
       if (data['success'] == true) {
         return _asMap(data['data']);
@@ -306,7 +312,7 @@ extension BackendPrincipalApi on BackendApiClient {
 
   Future<Map<String, dynamic>> getPrincipalTimetableOverview() async {
     try {
-      final response = await _dio.get('/principal/timetable');
+      final response = await _get('/principal/timetable');
       final data = _asMap(response.data);
       if (data['success'] == true) {
         return _asMap(data['data']);
@@ -379,7 +385,7 @@ extension BackendPrincipalApi on BackendApiClient {
     int limit = 20,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/principal/bulk-import/history',
         queryParameters: {
           if (importType != null) 'import_type': importType,

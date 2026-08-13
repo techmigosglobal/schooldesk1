@@ -97,7 +97,6 @@ void main() {
     for (final path in [
       '/academic-years/year-1',
       '/holidays',
-      '/parent-teacher-meetings',
       '/fees/reminders',
       '/fees/daycare-plans',
       '/fees/daycare-eligible-students',

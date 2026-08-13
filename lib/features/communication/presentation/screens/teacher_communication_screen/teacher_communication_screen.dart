@@ -9,7 +9,7 @@ import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/chat_message_merge.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide UserResponse;
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/features/communication/data/chat_models.dart';
@@ -79,7 +79,9 @@ class _TeacherCommunicationScreenState
       },
     );
     if (!mounted || request != _realtimeRequest) {
-      if (channel != null) await Supabase.instance.client.removeChannel(channel);
+      if (channel != null) {
+        await Supabase.instance.client.removeChannel(channel);
+      }
       return;
     }
     _realtimeChannel = channel;
@@ -107,16 +109,22 @@ class _TeacherCommunicationScreenState
     try {
       await RoleAccessService.initialize();
       final api = BackendApiClient.instance;
-      final profile = await api.getProfile();
-      final parentConversations = await api.getUnifiedChatConversations(
-        type: 'parent_teacher',
-        teacherId: RoleAccessService.teacherStaffId,
-      );
-      final principalConversations = await api.getUnifiedChatConversations(
-        type: 'principal_teacher',
-        teacherId: RoleAccessService.teacherStaffId,
-      );
-      final contacts = await api.getUnifiedChatContacts(role: 'teacher');
+      final bootstrap = await Future.wait<Object>([
+        api.getProfile(),
+        api.getUnifiedChatConversations(
+          teacherId: RoleAccessService.teacherStaffId,
+        ),
+        api.getUnifiedChatContacts(role: 'teacher'),
+      ]);
+      final profile = bootstrap[0] as UserResponse;
+      final allConversations = bootstrap[1] as List<Map<String, dynamic>>;
+      final parentConversations = allConversations
+          .where((row) => _text(row['type']) == 'parent_teacher')
+          .toList();
+      final principalConversations = allConversations
+          .where((row) => _text(row['type']) == 'principal_teacher')
+          .toList();
+      final contacts = bootstrap[2] as List<Map<String, dynamic>>;
       final conversations =
           _mergeConversationsWithContacts(
             parentConversations: parentConversations,
@@ -189,16 +197,26 @@ class _TeacherCommunicationScreenState
     try {
       final api = BackendApiClient.instance;
       final convId = _text(selected['id']);
-      // Always refresh conversation list (unread counts, last_message previews).
-      final parentConversations = await api.getUnifiedChatConversations(
-        type: 'parent_teacher',
-        teacherId: RoleAccessService.teacherStaffId,
-      );
-      final principalConversations = await api.getUnifiedChatConversations(
-        type: 'principal_teacher',
-        teacherId: RoleAccessService.teacherStaffId,
-      );
-      final contacts = await api.getUnifiedChatContacts(role: 'teacher');
+      // Refresh the canonical conversation list once, contacts once, and only
+      // the active conversation's new messages.
+      final refreshed = await Future.wait<Object>([
+        api.getUnifiedChatConversations(
+          teacherId: RoleAccessService.teacherStaffId,
+        ),
+        api.getUnifiedChatContacts(role: 'teacher'),
+        api.getUnifiedChatMessages(
+          conversationId: convId,
+          sentAfter: _messagesCursor,
+        ),
+      ]);
+      final allConversations = refreshed[0] as List<Map<String, dynamic>>;
+      final parentConversations = allConversations
+          .where((row) => _text(row['type']) == 'parent_teacher')
+          .toList();
+      final principalConversations = allConversations
+          .where((row) => _text(row['type']) == 'principal_teacher')
+          .toList();
+      final contacts = refreshed[1] as List<Map<String, dynamic>>;
       final conversations =
           _mergeConversationsWithContacts(
             parentConversations: parentConversations,
@@ -214,11 +232,7 @@ class _TeacherCommunicationScreenState
             if (timeCompare != 0) return timeCompare;
             return _conversationTitle(a).compareTo(_conversationTitle(b));
           });
-      // Fetch only messages newer than the current cursor.
-      final newMessages = await api.getUnifiedChatMessages(
-        conversationId: convId,
-        sentAfter: _messagesCursor,
-      );
+      final newMessages = refreshed[2] as List<Map<String, dynamic>>;
       if (!mounted) return;
       setState(() {
         _conversations = conversations;
@@ -498,8 +512,9 @@ class _TeacherCommunicationScreenState
                 );
                 final senderRole = _text(
                   message['sender_role'],
-                  fallback: mine ? 'Teacher' : _text(conversation['type']) ==
-                          'principal_teacher'
+                  fallback: mine
+                      ? 'Teacher'
+                      : _text(conversation['type']) == 'principal_teacher'
                       ? 'School leadership'
                       : 'Parent',
                 );
@@ -663,10 +678,7 @@ String _conversationSubtitle(Map<String, dynamic> row) {
   }
   final context = ChatContext.fromMap(row);
   final student = context.studentName.isEmpty
-      ? _name(
-          _map(row['student']),
-          fallback: 'Parent contact',
-        )
+      ? _name(_map(row['student']), fallback: 'Parent contact')
       : context.studentName;
   final classLabel = context.classLabel;
   final classContext = classLabel.isEmpty ? '' : '$classLabel - ';

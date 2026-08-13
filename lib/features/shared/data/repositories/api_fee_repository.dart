@@ -70,7 +70,6 @@ class ApiFeeRepository implements FeeRepository {
       await _api.recordPayment(
         PaymentRequest(
           invoiceId: feeRecordId,
-          receiptNumber: 'RCPT-${DateTime.now().millisecondsSinceEpoch}',
           amountPaid: amount,
           paymentDate: _dateString(DateTime.now()),
           paymentMode: paymentMode,

@@ -3,7 +3,7 @@ part of '../backend_api_client.dart';
 extension BackendTimetableApi on BackendApiClient {
   Future<List<int>> getTimetableWorkingDays() async {
     try {
-      final response = await _dio.get('/timetable/working-days');
+      final response = await _get('/timetable/working-days');
       final data = _asMap(response.data);
       if (data['success'] != true) {
         throw ServerException(
@@ -70,7 +70,7 @@ extension BackendTimetableApi on BackendApiClient {
       if (staffId != null) {
         queryParams['staff_id'] = staffId;
       }
-      final response = await _dio.get(
+      final response = await _get(
         '/timetable/slots',
         queryParameters: queryParams,
       );
@@ -162,7 +162,7 @@ extension BackendTimetableApi on BackendApiClient {
     String? academicYearId,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/timetable/templates',
         queryParameters: {
           if (academicYearId != null && academicYearId.trim().isNotEmpty)
@@ -486,7 +486,7 @@ extension BackendTimetableApi on BackendApiClient {
       if (originalStaffId != null) {
         queryParams['original_staff_id'] = originalStaffId;
       }
-      final response = await _dio.get(
+      final response = await _get(
         '/timetable/substitutions',
         queryParameters: queryParams,
       );
@@ -506,9 +506,7 @@ extension BackendTimetableApi on BackendApiClient {
     required String sectionId,
   }) async {
     try {
-      final response = await _dio.get(
-        '/timetable/pre-primary/section/$sectionId',
-      );
+      final response = await _get('/timetable/pre-primary/section/$sectionId');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return PrePrimaryTimetableTemplateDto.fromJson(_asMap(data['data']));

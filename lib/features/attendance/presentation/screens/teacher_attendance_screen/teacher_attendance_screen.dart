@@ -77,19 +77,27 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                   ));
       if (sectionId.isEmpty) {
         throw Exception(
-          'You are not assigned as a class teacher to any section.\n'
-          'Please contact Admin/Principal to set your class teacher assignment.',
+          'You are not assigned to any class section.\n'
+          'Please contact Admin/Principal to set your teacher assignment.',
         );
       }
 
-      String effectiveAcademicYearId = '';
+      final assignedRow = classOptions.firstWhere(
+        (row) => _sectionIdFromClassRow(row) == sectionId,
+        orElse: () => const {},
+      );
+      String effectiveAcademicYearId = teacherFlowText(
+        assignedRow['academic_year_id'],
+      );
       try {
-        final years = await api.getAcademicYears();
-        final active = years.where((y) => y.isCurrent);
-        if (active.isNotEmpty) {
-          effectiveAcademicYearId = active.first.id;
-        } else if (years.isNotEmpty) {
-          effectiveAcademicYearId = years.first.id;
+        if (effectiveAcademicYearId.isEmpty) {
+          final years = await api.getAcademicYears();
+          final active = years.where((y) => y.isCurrent);
+          if (active.isNotEmpty) {
+            effectiveAcademicYearId = active.first.id;
+          } else if (years.isNotEmpty) {
+            effectiveAcademicYearId = years.first.id;
+          }
         }
       } on Object catch (_) {
         // If we can't get academic year, proceed with empty — backend may still accept.
@@ -179,7 +187,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }
 
   Future<void> _saveAttendance({required bool finalize}) async {
-    if (_session?.isFinalized ?? false) {
+    if (_isLockedByAnotherTeacher || (_session?.isFinalized ?? false)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text(
@@ -314,7 +322,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }
 
   void _markAll(String status) {
-    if (_session?.isFinalized ?? false) return;
+    if (_isLockedByAnotherTeacher || (_session?.isFinalized ?? false)) return;
     setState(() {
       _students = _students
           .map((student) => student.copyWith(status: status, reason: ''))
@@ -347,7 +355,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }
 
   Future<void> _markOne(_AttendanceStudent student, String status) async {
-    if (_session?.isFinalized ?? false) return;
+    if (_isLockedByAnotherTeacher || (_session?.isFinalized ?? false)) return;
     setState(() {
       _students = _students
           .map(
@@ -359,13 +367,21 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     });
   }
 
+  bool get _isLockedByAnotherTeacher {
+    final claim = _session?.dailyClaim ?? const <String, dynamic>{};
+    if (claim['status']?.toString() != 'claimed') return false;
+    final owner = claim['claimed_by_staff_id']?.toString().trim() ?? '';
+    return owner.isNotEmpty && owner != RoleAccessService.teacherStaffId;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final locked = _session?.isFinalized ?? false;
+    final locked =
+        _isLockedByAnotherTeacher || (_session?.isFinalized ?? false);
     final unmarkedCount = _unmarkedStudents.length;
     return TeacherFlowScaffold(
       title: 'Student Attendance',
-      subtitle: 'Class teacher attendance',
+      subtitle: 'Assigned class attendance',
       selectedIndex: TeacherNav.attendance,
       loading: _loading,
       error: _error,
@@ -712,8 +728,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }
 
   List<Map<String, dynamic>> get _attendanceClassOptions {
-    final classTeacherClasses = RoleAccessService.teacherClassTeacherClasses;
-    if (classTeacherClasses.isNotEmpty) return classTeacherClasses;
     return RoleAccessService.assignedTeacherClasses;
   }
 

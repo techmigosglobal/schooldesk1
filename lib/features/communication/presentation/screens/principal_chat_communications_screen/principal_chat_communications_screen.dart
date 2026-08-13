@@ -100,7 +100,9 @@ class _PrincipalChatCommunicationsScreenState
       },
     );
     if (!mounted || request != _realtimeRequest) {
-      if (channel != null) await Supabase.instance.client.removeChannel(channel);
+      if (channel != null) {
+        await Supabase.instance.client.removeChannel(channel);
+      }
       return;
     }
     _realtimeChannel = channel;
@@ -127,31 +129,21 @@ class _PrincipalChatCommunicationsScreenState
       final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
         api.getProfile(),
-        _safeChatRows(
-          () => api.getUnifiedChatConversations(
-            type: 'parent_teacher',
-            monitor: true,
-          ),
-        ),
-        _safeChatRows(
-          () => api.getUnifiedChatConversations(
-            type: 'principal_teacher',
-            monitor: true,
-          ),
-        ),
-        _safeChatRows(
-          () => api.getUnifiedChatConversations(
-            type: 'principal_parent',
-            monitor: true,
-          ),
-        ),
+        _safeChatRows(() => api.getUnifiedChatConversations(monitor: true)),
         _safeChatRows(() => api.getUnifiedChatContacts(role: _leadershipRole)),
       ]);
       final profile = results[0] as dynamic;
-      final monitor = results[1] as List<Map<String, dynamic>>;
-      final directTeacher = results[2] as List<Map<String, dynamic>>;
-      final directParent = results[3] as List<Map<String, dynamic>>;
-      final contacts = results[4] as List<Map<String, dynamic>>;
+      final allConversations = results[1] as List<Map<String, dynamic>>;
+      final monitor = allConversations
+          .where((row) => _text(row['type']) == 'parent_teacher')
+          .toList();
+      final directTeacher = allConversations
+          .where((row) => _text(row['type']) == 'principal_teacher')
+          .toList();
+      final directParent = allConversations
+          .where((row) => _text(row['type']) == 'principal_parent')
+          .toList();
+      final contacts = results[2] as List<Map<String, dynamic>>;
       final teacherContacts = contacts
           .where((row) => _text(row['role']).toLowerCase() == 'teacher')
           .toList();
@@ -248,30 +240,20 @@ class _PrincipalChatCommunicationsScreenState
       final convId = _text(selected['id']);
       // Refresh conversation lists for unread count updates.
       final results = await Future.wait<Object>([
-        _safeChatRows(
-          () => api.getUnifiedChatConversations(
-            type: 'parent_teacher',
-            monitor: true,
-          ),
-        ),
-        _safeChatRows(
-          () => api.getUnifiedChatConversations(
-            type: 'principal_teacher',
-            monitor: true,
-          ),
-        ),
-        _safeChatRows(
-          () => api.getUnifiedChatConversations(
-            type: 'principal_parent',
-            monitor: true,
-          ),
-        ),
+        _safeChatRows(() => api.getUnifiedChatConversations(monitor: true)),
         _safeChatRows(() => api.getUnifiedChatContacts(role: _leadershipRole)),
       ]);
-      final monitor = results[0] as List<Map<String, dynamic>>;
-      final directTeacher = results[1] as List<Map<String, dynamic>>;
-      final directParent = results[2] as List<Map<String, dynamic>>;
-      final contacts = results[3] as List<Map<String, dynamic>>;
+      final allConversations = results[0] as List<Map<String, dynamic>>;
+      final monitor = allConversations
+          .where((row) => _text(row['type']) == 'parent_teacher')
+          .toList();
+      final directTeacher = allConversations
+          .where((row) => _text(row['type']) == 'principal_teacher')
+          .toList();
+      final directParent = allConversations
+          .where((row) => _text(row['type']) == 'principal_parent')
+          .toList();
+      final contacts = results[1] as List<Map<String, dynamic>>;
       final teacherContacts = contacts
           .where((row) => _text(row['role']).toLowerCase() == 'teacher')
           .toList();
@@ -737,8 +719,10 @@ class _PrincipalChatCommunicationsScreenState
                     value: _monitorClassFilter,
                     options: {
                       for (final row in _monitorConversations)
-                        _text(row['class_label']):
-                            _text(row['class_label'], fallback: 'Class'),
+                        _text(row['class_label']): _text(
+                          row['class_label'],
+                          fallback: 'Class',
+                        ),
                     },
                     onChanged: (value) =>
                         setState(() => _monitorClassFilter = value),
@@ -1200,14 +1184,14 @@ class _PrincipalChatCommunicationsScreenState
           ),
         ),
         if (canSend)
-        ChatInputBar(
-          controller: _messageController,
-          isSending: _sending,
-          onSend: _send,
-          placeholder: monitorMode
-              ? 'Reply in this class chat'
-              : 'Type a direct message',
-        ),
+          ChatInputBar(
+            controller: _messageController,
+            isSending: _sending,
+            onSend: _send,
+            placeholder: monitorMode
+                ? 'Reply in this class chat'
+                : 'Type a direct message',
+          ),
       ],
     );
   }
@@ -1250,10 +1234,7 @@ class _PrincipalChatCommunicationsScreenState
         .toSet();
     final existingParentKeys = rows
         .where((row) => _text(row['type']) == 'principal_parent')
-        .map(
-          (row) =>
-              '${_text(row['parent_id'])}_${_text(row['student_id'])}',
-        )
+        .map((row) => '${_text(row['parent_id'])}_${_text(row['student_id'])}')
         .where((id) => id != '_')
         .toSet();
 
@@ -1287,7 +1268,9 @@ class _PrincipalChatCommunicationsScreenState
       final id = _contactId(contact);
       final studentId = contact is Map ? _text(contact['student_id']) : '';
       final parentKey = '${id}_$studentId';
-      if (id.isEmpty || studentId.isEmpty || existingParentKeys.contains(parentKey)) {
+      if (id.isEmpty ||
+          studentId.isEmpty ||
+          existingParentKeys.contains(parentKey)) {
         continue;
       }
       final name = _contactName(contact);
@@ -1456,8 +1439,10 @@ class _PrincipalChatCommunicationsScreenState
     final student = _map(row['student']);
     return _name(
       student,
-      fallback: _text(row['student_name'],
-          fallback: _text(row['student_id'], fallback: 'Student')),
+      fallback: _text(
+        row['student_name'],
+        fallback: _text(row['student_id'], fallback: 'Student'),
+      ),
     );
   }
 

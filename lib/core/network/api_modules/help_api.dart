@@ -26,7 +26,7 @@ extension HelpApi on BackendApiClient {
 
   Future<String> getHelpTutorialPlaybackUrl(String helpContentId) async {
     try {
-      final response = await _dio.get('/help/$helpContentId/video');
+      final response = await _get('/help/$helpContentId/video');
       final data = _asMap(response.data);
       final payload = _asMap(data['data']);
       final url = '${payload['url'] ?? ''}'.trim();
@@ -41,7 +41,7 @@ extension HelpApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getHelpContent(String role) async {
     try {
-      final response = await _dio.get('/help', queryParameters: {'role': role});
+      final response = await _get('/help', queryParameters: {'role': role});
       final data = _asMap(response.data);
       if (data['success'] == true) {
         final list = data['data'] as List?;

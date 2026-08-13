@@ -16,7 +16,7 @@ extension BackendAttendanceApi on BackendApiClient {
       if (startDate != null) queryParams['start_date'] = startDate;
       if (endDate != null) queryParams['end_date'] = endDate;
 
-      final response = await _dio.get(
+      final response = await _get(
         '/attendance/sessions',
         queryParameters: queryParams,
       );
@@ -152,7 +152,7 @@ extension BackendAttendanceApi on BackendApiClient {
         queryParams['term_id'] = termId;
       }
 
-      final response = await _dio.get(
+      final response = await _get(
         '/attendance/summary',
         queryParameters: queryParams,
       );
@@ -194,7 +194,7 @@ extension BackendAttendanceApi on BackendApiClient {
 
   Future<StaffQrTokenModel> getStaffQrToken({String? nonce}) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/attendance/staff/qr-token',
         queryParameters: {'refresh_nonce': nonce},
         options: Options(
@@ -256,7 +256,7 @@ extension BackendAttendanceApi on BackendApiClient {
     String? date,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/attendance/staff/daily-summary',
         queryParameters: {if (date != null && date.isNotEmpty) 'date': date},
       );
@@ -274,7 +274,7 @@ extension BackendAttendanceApi on BackendApiClient {
 
   Future<StaffAttendanceModel?> getMyStaffAttendanceToday() async {
     try {
-      final response = await _dio.get('/attendance/staff/me/today');
+      final response = await _get('/attendance/staff/me/today');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         final payload = data['data'];
@@ -336,7 +336,7 @@ extension BackendAttendanceApi on BackendApiClient {
         queryParams['end_date'] = endDate;
       }
 
-      final response = await _dio.get(
+      final response = await _get(
         '/attendance/staff',
         queryParameters: queryParams,
       );

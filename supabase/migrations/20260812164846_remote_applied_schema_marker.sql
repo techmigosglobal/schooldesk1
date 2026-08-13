@@ -1,0 +1,2 @@
+-- Reconciliation marker: this migration was already applied to production.
+-- The original source is unavailable in this checkout; intentionally no-op.

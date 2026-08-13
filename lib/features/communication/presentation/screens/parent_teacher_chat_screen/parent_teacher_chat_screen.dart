@@ -11,9 +11,10 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide UserResponse;
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
@@ -79,7 +80,9 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       },
     );
     if (!mounted || request != _realtimeRequest) {
-      if (channel != null) await Supabase.instance.client.removeChannel(channel);
+      if (channel != null) {
+        await Supabase.instance.client.removeChannel(channel);
+      }
       return;
     }
     _realtimeChannel = channel;
@@ -104,28 +107,38 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
     }
     try {
       final api = BackendApiClient.instance;
-      final profile = await api.getProfile();
-      final children = (await api.getMyStudents())
+      final initial = await Future.wait<Object>([
+        api.getProfile(),
+        api.getMyStudents(),
+      ]);
+      final profile = initial[0] as UserResponse;
+      final children = (initial[1] as List)
           .whereType<Map>()
           .map((row) => Map<String, dynamic>.from(row))
           .toList();
-      final selectedStudent = _selectedStudentId.isNotEmpty
+      final savedChildIndex = await ParentChildSelectionService.indexFor(
+        children,
+        fallback: 0,
+      );
+      final selectedStudent =
+          _selectedStudentId.isNotEmpty &&
+              children.any((child) => _text(child['id']) == _selectedStudentId)
           ? _selectedStudentId
-          : children.isNotEmpty
-          ? _text(children.first['id'])
-          : '';
-      final conversations = await api.getUnifiedChatConversations(
-        type: 'parent_teacher',
-        studentId: selectedStudent,
-      );
-      final principalConversations = await api.getUnifiedChatConversations(
-        type: 'principal_parent',
-        studentId: selectedStudent,
-      );
-      final contacts = await api.getUnifiedChatContacts(
-        role: 'parent',
-        studentId: selectedStudent,
-      );
+          : children.isEmpty
+          ? ''
+          : _text(children[savedChildIndex]['id']);
+      final chatData = await Future.wait<Object>([
+        api.getUnifiedChatConversations(studentId: selectedStudent),
+        api.getUnifiedChatContacts(role: 'parent', studentId: selectedStudent),
+      ]);
+      final allConversations = chatData[0] as List<Map<String, dynamic>>;
+      final conversations = allConversations
+          .where((row) => _text(row['type']) == 'parent_teacher')
+          .toList();
+      final principalConversations = allConversations
+          .where((row) => _text(row['type']) == 'principal_parent')
+          .toList();
+      final contacts = chatData[1] as List<Map<String, dynamic>>;
       final teacherRows = contacts
           .where((c) => _text(c['role']) == 'teacher')
           .map((c) {
@@ -212,18 +225,18 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       final api = BackendApiClient.instance;
       final convId = thread.conversationId;
       final selectedStudent = _selectedStudentId;
-      final conversations = await api.getUnifiedChatConversations(
-        type: 'parent_teacher',
-        studentId: selectedStudent,
-      );
-      final principalConversations = await api.getUnifiedChatConversations(
-        type: 'principal_parent',
-        studentId: selectedStudent,
-      );
-      final contacts = await api.getUnifiedChatContacts(
-        role: 'parent',
-        studentId: selectedStudent,
-      );
+      final chatData = await Future.wait<Object>([
+        api.getUnifiedChatConversations(studentId: selectedStudent),
+        api.getUnifiedChatContacts(role: 'parent', studentId: selectedStudent),
+      ]);
+      final allConversations = chatData[0] as List<Map<String, dynamic>>;
+      final conversations = allConversations
+          .where((row) => _text(row['type']) == 'parent_teacher')
+          .toList();
+      final principalConversations = allConversations
+          .where((row) => _text(row['type']) == 'principal_parent')
+          .toList();
+      final contacts = chatData[1] as List<Map<String, dynamic>>;
       final teacherRows = contacts
           .where((c) => _text(c['role']) == 'teacher')
           .map((c) {
@@ -334,10 +347,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         threadKey: 'principal:$id',
         teacherId: 'principal:$id',
         teacherName: _name(_map(row['leader']), fallback: 'School leadership'),
-        subtitle: _text(
-          row['class_label'],
-          fallback: 'School leadership',
-        ),
+        subtitle: _text(row['class_label'], fallback: 'School leadership'),
         studentId: _text(row['student_id'], fallback: studentId),
         studentName: _childName(
           children.firstWhere(
@@ -367,7 +377,8 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         threadKey: 'leader-contact:$leaderId',
         teacherId: '',
         teacherName: _text(user['name'], fallback: leaderLabel),
-        subtitle: '${_text(user['class_label'], fallback: 'School leadership')} - tap to start direct chat',
+        subtitle:
+            '${_text(user['class_label'], fallback: 'School leadership')} - tap to start direct chat',
         studentId: _text(user['student_id'], fallback: studentId),
         studentName: _text(user['student_name']),
         conversationType: 'principal_parent',
@@ -552,6 +563,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
           _selectedThread = null;
           _clearMessages();
         });
+        unawaited(ParentChildSelectionService.saveIndex(_children, index));
         _load();
       },
     );

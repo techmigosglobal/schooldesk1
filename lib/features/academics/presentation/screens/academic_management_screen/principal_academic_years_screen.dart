@@ -122,7 +122,7 @@ class _PrincipalAcademicYearsScreenState
               const _EmptyPanel(
                 icon: Icons.calendar_month_outlined,
                 title: 'No academic years found',
-                body: 'Create an academic year to enable exports.',
+                body: 'Create an academic year to begin yearly setup.',
               )
             else
               for (final year in _filteredYears) ...[
@@ -215,14 +215,56 @@ class _PrincipalAcademicYearsScreenState
   }
 }
 
-class PrincipalAcademicYearDetailScreen extends StatelessWidget {
+class PrincipalAcademicYearDetailScreen extends StatefulWidget {
   final AcademicYearRouteArgs args;
 
   const PrincipalAcademicYearDetailScreen({super.key, required this.args});
 
   @override
+  State<PrincipalAcademicYearDetailScreen> createState() =>
+      _PrincipalAcademicYearDetailScreenState();
+}
+
+class _PrincipalAcademicYearDetailScreenState
+    extends State<PrincipalAcademicYearDetailScreen> {
+  bool _loading = true;
+  String? _error;
+  Map<String, dynamic> _summary = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSummary();
+  }
+
+  Future<void> _loadSummary() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final id = '${widget.args.year['id'] ?? ''}'.trim();
+      if (id.isEmpty) throw StateError('Academic year id is missing');
+      final summary = await BackendApiClient.instance.getAcademicYearSummary(
+        id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _summary = summary;
+        _loading = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = '$error';
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final year = args.year;
+    final year = widget.args.year;
     return _AyPageShell(
       title: _yearLabel(year),
       child: ListView(
@@ -230,44 +272,232 @@ class PrincipalAcademicYearDetailScreen extends StatelessWidget {
         children: [
           _YearHeroCard(year: year, centered: true),
           const SizedBox(height: 30),
-          Text('Export Data', style: _titleStyle(22)),
-          const SizedBox(height: 18),
-          _ExportHubCard(
-            icon: Icons.co_present_rounded,
-            iconColor: _ayBlue,
-            title: 'Classwise Data Export',
-            subtitle:
-                'Classes, sections, students, subjects, timetable summary',
-            onTap: () => Navigator.pushNamed(
-              context,
-              AppRoutes.academicYearClasswiseExport,
-              arguments: args,
+          Row(
+            children: [
+              Expanded(child: Text('Year summary', style: _titleStyle(22))),
+              IconButton(
+                tooltip: 'Refresh summary',
+                onPressed: _loading ? null : _loadSummary,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 70),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_error != null)
+            _EmptyPanel(
+              icon: Icons.cloud_off_rounded,
+              title: 'Summary unavailable',
+              body: _error!,
+            )
+          else
+            _AcademicYearSummaryPanel(summary: _summary),
+        ],
+      ),
+    );
+  }
+}
+
+class _AcademicYearSummaryPanel extends StatelessWidget {
+  final Map<String, dynamic> summary;
+
+  const _AcademicYearSummaryPanel({required this.summary});
+
+  int _count(String key) => (summary[key] as num?)?.toInt() ?? 0;
+
+  List<Map<String, dynamic>> _classes() {
+    final value = summary['classes'];
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
+  List<String> _strings(String key) {
+    final value = summary[key];
+    if (value is! List) return const [];
+    return value
+        .map((item) => '$item'.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final classes = _classes();
+    final subjects = _strings('subject_names');
+    final fees = _strings('fee_structure_names');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _SummaryMetric(
+              icon: Icons.groups_rounded,
+              label: 'Active students',
+              value: '${_count('active_student_count')}',
+              color: _ayBlue,
+            ),
+            _SummaryMetric(
+              icon: Icons.meeting_room_outlined,
+              label: 'Classes / sections',
+              value: '${_count('class_count')}',
+              color: const Color(0xFF7C3AED),
+            ),
+            _SummaryMetric(
+              icon: Icons.menu_book_outlined,
+              label: 'Subjects',
+              value: '${_count('subject_count')}',
+              color: _ayGreen,
+            ),
+            _SummaryMetric(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Fee structures',
+              value: '${_count('fee_structure_count')}',
+              color: _ayOrange,
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        _SummaryListCard(
+          title: 'Classes and sections',
+          emptyText: 'No classes or sections are configured for this year.',
+          children: classes
+              .map(
+                (row) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.class_outlined, color: _ayBlue),
+                  title: Text(
+                    [
+                      '${row['grade_name'] ?? ''}'.trim(),
+                      '${row['section_name'] ?? ''}'.trim(),
+                    ].where((part) => part.isNotEmpty).join(' / '),
+                  ),
+                  trailing: Text(
+                    '${(row['student_count'] as num?)?.toInt() ?? 0} students',
+                    style: _mutedStyle(12),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 14),
+        _SummaryListCard(
+          title: 'Subjects',
+          emptyText: 'No active subjects are mapped for this year.',
+          children: [
+            if (subjects.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: subjects
+                      .map((subject) => Chip(label: Text(subject)))
+                      .toList(),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _SummaryListCard(
+          title: 'Fee structures',
+          emptyText: 'No fee structures are configured for this year.',
+          children: [
+            if (fees.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: fees.map((fee) => Chip(label: Text(fee))).toList(),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryMetric extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _SummaryMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 210,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _ayBorder),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: color.withAlpha(22),
+            foregroundColor: color,
+            child: Icon(icon),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value, style: _titleStyle(22)),
+                Text(label, style: _mutedStyle(12)),
+              ],
             ),
           ),
-          const SizedBox(height: 18),
-          _ExportHubCard(
-            icon: Icons.groups_rounded,
-            iconColor: const Color(0xFF7C3AED),
-            title: 'Users-wise Data Export',
-            subtitle: 'Principal, teachers, class teachers, parents',
-            onTap: () => Navigator.pushNamed(
-              context,
-              AppRoutes.academicYearUsersExport,
-              arguments: args,
-            ),
-          ),
-          const SizedBox(height: 18),
-          _ExportHubCard(
-            icon: Icons.request_quote_rounded,
-            iconColor: _ayGreen,
-            title: 'Fees Data Export',
-            subtitle: 'Fee structure, invoices, paid, pending, due reports',
-            onTap: () => Navigator.pushNamed(
-              context,
-              AppRoutes.academicYearFeesExport,
-              arguments: args,
-            ),
-          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryListCard extends StatelessWidget {
+  final String title;
+  final String emptyText;
+  final List<Widget> children;
+
+  const _SummaryListCard({
+    required this.title,
+    required this.emptyText,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasContent = children.any((child) => child is! SizedBox);
+    return _AyCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: _titleStyle(16)),
+          const SizedBox(height: 8),
+          if (hasContent)
+            ...children
+          else
+            Text(emptyText, style: _mutedStyle(13)),
         ],
       ),
     );
@@ -957,7 +1187,7 @@ class _AyPageShell extends StatelessWidget {
           children: [
             PrincipalDirectoryHeader(
               title: title,
-              subtitle: 'Academic sessions, exports, and yearly setup',
+              subtitle: 'Academic sessions, summaries, and yearly setup',
               actions: actions,
             ),
             Expanded(
@@ -1155,67 +1385,15 @@ class _YearChip extends StatelessWidget {
   }
 }
 
-class _ExportHubCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _ExportHubCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _AyCard(
-      padding: const EdgeInsets.all(20),
-      child: InkWell(
-        onTap: onTap,
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: iconColor.withAlpha(22),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: iconColor, size: 27),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: _titleStyle(15)),
-                  const SizedBox(height: 4),
-                  Text(subtitle, style: _mutedStyle(12)),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: _ayBlue, size: 24),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _AyCard extends StatelessWidget {
   final Widget child;
-  final EdgeInsets padding;
 
-  const _AyCard({required this.child, this.padding = const EdgeInsets.all(14)});
+  const _AyCard({required this.child});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: padding,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),

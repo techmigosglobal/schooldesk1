@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 
 class SchoolPostsRouteArgs {
@@ -195,7 +197,16 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     );
     if (picked.isEmpty) return;
     for (final xfile in picked) {
-      await _uploadFile(xfile.path, xfile.name, mimeType: xfile.mimeType);
+      final optimized = await ImageUploadOptimizer.fromXFile(
+        xfile,
+        preset: ImageUploadPreset.content,
+      );
+      await _uploadFile(
+        xfile.path,
+        optimized.filename,
+        mimeType: optimized.mimeType,
+        fileBytes: optimized.bytes,
+      );
     }
   }
 
@@ -205,12 +216,18 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     await _uploadFile(video.path, video.name, mimeType: video.mimeType);
   }
 
-  Future<void> _uploadFile(String path, String name, {String? mimeType}) async {
+  Future<void> _uploadFile(
+    String path,
+    String name, {
+    String? mimeType,
+    Uint8List? fileBytes,
+  }) async {
     setState(() => _uploading = true);
     try {
       final url = await BackendApiClient.instance.uploadFile(
         path,
         filename: name,
+        fileBytes: fileBytes,
         mimeType: mimeType,
       );
       if (url.isNotEmpty && mounted) {

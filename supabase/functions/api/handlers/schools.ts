@@ -148,13 +148,15 @@ export async function handleSchools(
     ).single();
     if (error) return fail(error.message);
     const organizationId = `${school.organization_id ?? ""}`.trim();
-    const { data: organization } = organizationId
-      ? await svc.from("organizations").select("name").eq(
-        "id",
-        organizationId,
-      ).maybeSingle()
-      : { data: null };
-    const profileSchool = await withAuthorizedSignatureUrl(svc, school);
+    const [{ data: organization }, profileSchool] = await Promise.all([
+      organizationId
+        ? svc.from("organizations").select("name").eq(
+          "id",
+          organizationId,
+        ).maybeSingle()
+        : Promise.resolve({ data: null }),
+      withAuthorizedSignatureUrl(svc, school),
+    ]);
     // The database column is registration_no. Keep the legacy response alias
     // during the mobile rollout, but never write it back as a phantom column.
     return ok({

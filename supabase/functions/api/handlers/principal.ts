@@ -347,6 +347,31 @@ async function resolveStaffId(
   return "";
 }
 
+async function validateSectionTeachers(
+  svc: SupabaseClient,
+  school: string,
+  classTeacherId: string,
+  coTeacherId: string,
+) {
+  if (classTeacherId && classTeacherId === coTeacherId) {
+    throw new Error(
+      "class teacher and co-teacher must be different staff members",
+    );
+  }
+  const ids = [classTeacherId, coTeacherId].filter(Boolean);
+  if (ids.length === 0) return;
+  const result = await svc.from("staff").select("id").eq(
+    "school_id",
+    school,
+  ).eq("is_active", true).in("id", ids);
+  if (result.error) throw new Error(result.error.message);
+  if ((result.data ?? []).length !== new Set(ids).size) {
+    throw new Error(
+      "class teacher and co-teacher must be active staff in this school",
+    );
+  }
+}
+
 async function resolveSubjectId(
   svc: SupabaseClient,
   school: string,
@@ -1435,6 +1460,10 @@ export async function handlePrincipal(
         body.class_teacher_id,
       );
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
+      await validateSectionTeachers(svc, school, classTeacherId, coTeacherId);
+      if (!classTeacherId) {
+        return fail("an operational class requires a class teacher", 422);
+      }
       const academicYearId = await resolveAcademicYearId(
         svc,
         school,
@@ -1544,6 +1573,10 @@ export async function handlePrincipal(
         body.class_teacher_id,
       );
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
+      await validateSectionTeachers(svc, school, classTeacherId, coTeacherId);
+      if (!classTeacherId) {
+        return fail("an operational class requires a class teacher", 422);
+      }
       const academicYearId = await resolveAcademicYearId(
         svc,
         school,

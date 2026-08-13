@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -18,7 +19,7 @@ class ParentCalendarScreen extends StatefulWidget {
 
 class _ParentCalendarScreenState extends State<ParentCalendarScreen>
     with SingleTickerProviderStateMixin {
-  int _selectedNavIndex = 8;
+  int _selectedNavIndex = ParentNav.calendar;
   late TabController _tabController;
   bool _loading = true;
   String? _error;
@@ -45,7 +46,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       final api = BackendApiClient.instance;
       final academicYears = await api.getAcademicYears();
       final events = await api.getEvents();
-      final ptms = await api.getRawList('/parent-teacher-meetings');
       final holidayRows = <Map<String, dynamic>>[];
       for (final year
           in academicYears.where((year) => year.isCurrent).take(1)) {
@@ -56,9 +56,12 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       setState(() {
         _events = [
           ...events
-              .where((event) => event['is_holiday'] != true)
+              .where(
+                (event) =>
+                    event['is_holiday'] != true &&
+                    _text(event['event_type']).toLowerCase() != 'ptm',
+              )
               .map(_eventCalendarRow),
-          ...ptms.map(_ptmCalendarRow),
         ]..sort(_sortByDate);
         _holidays = [
           ...events
@@ -90,7 +93,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'Calendar',
-      subtitle: 'See school events, holidays, and PTM schedules',
+      subtitle: 'See school events and holidays',
       drawer: ParentDrawer(
         selectedIndex: _selectedNavIndex,
         onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
@@ -126,7 +129,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
     return _calendarTab(
       rows: _events,
       emptyTitle: 'No events',
-      emptyMessage: 'School events and PTM slots will appear here.',
+      emptyMessage: 'Published school events will appear here.',
       itemBuilder: _eventCard,
     );
   }
@@ -536,30 +539,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
     };
   }
 
-  Map<String, dynamic> _ptmCalendarRow(Map<String, dynamic> meeting) {
-    final event = _map(meeting['event']);
-    final slotDate =
-        _dateTime(meeting['slot_date']) ?? _dateTime(event['start_datetime']);
-    final eventTitle = _text(
-      event['event_title'],
-      fallback: 'Parent-Teacher Meeting',
-    );
-    final slotTime = _text(meeting['slot_time']);
-    // Backend integration: PTM venue should come from the event/meeting API.
-    // Leave it empty until a real location is published.
-    return {
-      'title': eventTitle,
-      'type': 'PTM',
-      'time': slotTime.isEmpty ? _timeRange(slotDate, null) : slotTime,
-      'venue': _text(event['location']),
-      'dateSort': slotDate,
-      'dateDay': _dayNumber(slotDate),
-      'dateMonth': _monthShort(slotDate),
-      'day': _weekday(slotDate),
-      'color': const Color(0xFF1B4F72),
-    };
-  }
-
   Map<String, dynamic> _holidayFromEvent(Map<String, dynamic> event) {
     final start = _dateTime(event['start_datetime']);
     final type = _eventType(event['event_type']);
@@ -604,9 +583,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
         .toList();
   }
 
-  Map<String, dynamic> _map(dynamic value) =>
-      value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
-
   DateTime? _dateTime(dynamic value) {
     final raw = _text(value);
     if (raw.isEmpty) return null;
@@ -615,7 +591,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
 
   String _eventType(dynamic value) {
     final raw = _text(value, fallback: 'event').toLowerCase();
-    if (raw.contains('ptm') || raw.contains('parent')) return 'PTM';
     if (raw.contains('exam') || raw.contains('test')) return 'Exam';
     if (raw.contains('holiday')) return 'School';
     return _title(raw);
@@ -623,8 +598,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
 
   Color _eventColor(String type) {
     switch (type.toLowerCase()) {
-      case 'ptm':
-        return const Color(0xFF1B4F72);
       case 'exam':
         return context.appTheme.info;
       case 'school':

@@ -116,11 +116,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
       organizationLogo: _schoolLogo.isEmpty
           ? null
           : Image.network(
-              optimizedImageUrl(
-                _assetUrl(_schoolLogo),
-                width: 256,
-                height: 256,
-              ),
+              resolveOriginalImageUrl(_assetUrl(_schoolLogo)),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) =>
                   const Icon(Icons.account_balance_rounded),
@@ -131,11 +127,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
       userAvatar: _userAvatar.isEmpty
           ? null
           : Image.network(
-              optimizedImageUrl(
-                _assetUrl(_userAvatar),
-                width: 256,
-                height: 256,
-              ),
+              resolveOriginalImageUrl(_assetUrl(_userAvatar)),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
             ),
@@ -440,12 +432,10 @@ class _PrincipalShellBottomBarState extends State<PrincipalShellBottomBar> {
         child: avatar.startsWith('assets/')
             ? Image.asset(avatar, fit: BoxFit.cover)
             : Image.network(
-                optimizedImageUrl(
+                resolveOriginalImageUrl(
                   avatar.startsWith('http')
                       ? avatar
                       : '${EnvConfig.apiOrigin}$avatar',
-                  width: 128,
-                  height: 128,
                 ),
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => Icon(
@@ -660,11 +650,7 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
       organizationLogo: _schoolLogo.isEmpty
           ? null
           : Image.network(
-              optimizedImageUrl(
-                _assetUrl(_schoolLogo),
-                width: 256,
-                height: 256,
-              ),
+              resolveOriginalImageUrl(_assetUrl(_schoolLogo)),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const Icon(Icons.security_rounded),
             ),
@@ -674,11 +660,7 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
       userAvatar: _userAvatar.isEmpty
           ? null
           : Image.network(
-              optimizedImageUrl(
-                _assetUrl(_userAvatar),
-                width: 256,
-                height: 256,
-              ),
+              resolveOriginalImageUrl(_assetUrl(_userAvatar)),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
             ),
@@ -879,12 +861,10 @@ class _SuperAdminShellBottomBarState extends State<SuperAdminShellBottomBar> {
         child: avatar.startsWith('assets/')
             ? Image.asset(avatar, fit: BoxFit.cover)
             : Image.network(
-                optimizedImageUrl(
+                resolveOriginalImageUrl(
                   avatar.startsWith('http')
                       ? avatar
                       : '${EnvConfig.apiOrigin}$avatar',
-                  width: 128,
-                  height: 128,
                 ),
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => Icon(

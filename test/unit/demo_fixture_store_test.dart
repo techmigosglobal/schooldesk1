@@ -18,7 +18,6 @@ void main() {
       '/chat/conversations',
       '/event-posts/home-feed',
       '/documents',
-      '/parent-teacher-meetings',
     ]) {
       expect(
         store.respond(path: path, method: 'GET', role: role)['success'],

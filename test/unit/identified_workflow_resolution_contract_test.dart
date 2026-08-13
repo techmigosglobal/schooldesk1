@@ -114,9 +114,8 @@ void main() {
     expect(handler, contains('triggerPushProcessing(ids)'));
   });
 
-  test('legacy homework messages push and leave decisions are idempotent', () {
+  test('canonical chat notifications and leave decisions are idempotent', () {
     final chat = source('supabase/functions/api/handlers/communications.ts');
-    final messaging = source('lib/core/services/messaging_service.dart');
     final leave = source('supabase/functions/api/handlers/leave.ts');
     final approvals = source(
       'lib/features/people/presentation/screens/approval_center_screen/'
@@ -129,7 +128,7 @@ void main() {
 
     expect(chat, contains('New homework message'));
     expect(chat, contains('resolveChatNotificationTarget'));
-    expect(messaging, isNot(contains('_triggerNotification')));
+    expect(chat, contains('/chat/conversations'));
     expect(parentChat, isNot(contains('Desktop view coming soon')));
     expect(approvals, isNot(contains('triggerLeaveStatusAlert')));
     expect(leave, contains('.eq("status", "pending")'));

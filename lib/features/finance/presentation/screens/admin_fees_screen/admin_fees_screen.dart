@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +14,7 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 
 enum _FinanceView { structures, invoices, payments, concessions, reports }
 
@@ -1929,22 +1929,34 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.single;
-    final path = file.path;
-    if (path == null || path.isEmpty) return;
+    final path = file.path ?? '';
+    final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
+    final optimized = file.bytes != null
+        ? ImageUploadOptimizer.fromBytes(
+            file.bytes!,
+            filename: file.name,
+            mimeType: mimeType,
+            preset: ImageUploadPreset.branding,
+          )
+        : await ImageUploadOptimizer.fromPath(
+            path,
+            filename: file.name,
+            mimeType: mimeType,
+            preset: ImageUploadPreset.branding,
+          );
+    if (path.isEmpty && file.bytes == null) return;
     setState(() => _uploadingQr = true);
     try {
-      final response = await BackendApiClient.instance.dio.post(
-        '/fees/payment-config/qr',
-        data: FormData.fromMap({
-          'file': await MultipartFile.fromFile(path, filename: file.name),
-        }),
+      final data = await BackendApiClient.instance.uploadPaymentQr(
+        path: path,
+        fileName: optimized.filename,
+        fileBytes: optimized.bytes,
+        mimeType: optimized.mimeType,
       );
-      final responseData = response.data;
-      final data = responseData is Map ? responseData['data'] : null;
-      if (data is! Map) throw Exception('QR upload did not return settings');
       if (!mounted) return;
       final config = Map<String, dynamic>.from(data);
       setState(() => _paymentConfig = config);

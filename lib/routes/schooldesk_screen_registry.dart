@@ -488,13 +488,6 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-parent-interaction-screen',
-      title: 'Parent Interaction',
-      module: 'Communication',
-      portal: 'teacher',
-      feature: SchoolDeskFeature.teacherParentMeetings,
-    ),
-    SchoolDeskScreenMetadata(
       route: '/teacher-leave-screen',
       title: 'Leave',
       module: 'Management',
@@ -568,10 +561,9 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/parent-teacher-chat-screen',
-      title: 'Teacher Chat & PTM',
+      title: 'Teacher Chat',
       module: 'Communication',
       portal: 'parent',
-      feature: SchoolDeskFeature.teacherParentMeetings,
     ),
     SchoolDeskScreenMetadata(
       route: '/parent-fees-screen',
@@ -663,13 +655,6 @@ class SchoolDeskScreenRegistry {
       portal: 'parent',
     ),
 
-    SchoolDeskScreenMetadata(
-      route: '/parent-ptm-booking-screen',
-      title: 'PTM Booking',
-      module: 'Communication',
-      portal: 'parent',
-      feature: SchoolDeskFeature.teacherParentMeetings,
-    ),
     SchoolDeskScreenMetadata(
       route: '/teacher-event-posts-screen',
       title: 'Event Posts',

@@ -99,6 +99,112 @@ function canManageStudents(user: User) {
   return isSchoolLeader(user);
 }
 
+async function validateStudentSection(
+  svc: SupabaseClient,
+  school: string,
+  sectionId: string,
+) {
+  if (!sectionId) return null;
+  const { data, error } = await svc.from("sections").select(
+    "id, school_id, academic_year_id",
+  ).eq("id", sectionId).eq("school_id", school).maybeSingle();
+  if (error) throw error;
+  return data as Record<string, unknown> | null;
+}
+
+async function validateParentAccount(
+  svc: SupabaseClient,
+  school: string,
+  parentUserId: string,
+) {
+  if (!parentUserId) return null;
+  const { data, error } = await svc.from("users").select(
+    "id, school_id, role_name, is_active",
+  ).eq("id", parentUserId).eq("school_id", school).ilike(
+    "role_name",
+    "parent",
+  ).eq("is_active", true).maybeSingle();
+  if (error) throw error;
+  return data as Record<string, unknown> | null;
+}
+
+async function studentHasValidParentLink(
+  svc: SupabaseClient,
+  school: string,
+  studentId: string,
+) {
+  const links = await svc.from("parent_student_links").select(
+    "parent_user_id",
+  ).eq("school_id", school).eq("student_id", studentId);
+  if (links.error) throw links.error;
+  const parentIds = (links.data ?? []).map((row) => text(row.parent_user_id))
+    .filter(
+      Boolean,
+    );
+  if (parentIds.length === 0) return false;
+  const parents = await svc.from("users").select("id").eq(
+    "school_id",
+    school,
+  ).in("id", parentIds).ilike("role_name", "parent").eq("is_active", true);
+  if (parents.error) throw parents.error;
+  return (parents.data ?? []).length > 0;
+}
+
+async function ensureStudentIdentifiersAvailable(
+  svc: SupabaseClient,
+  school: string,
+  body: Record<string, unknown>,
+  excludeId = "",
+) {
+  const admissionNumber = text(body.admission_number);
+  const studentIdNumber = text(body.student_id_number || body.student_code);
+  const checks = [
+    admissionNumber
+      ? svc.from("students").select("id").eq("school_id", school).eq(
+        "admission_number",
+        admissionNumber,
+      )
+      : null,
+    studentIdNumber
+      ? svc.from("students").select("id").eq("school_id", school).eq(
+        "student_id_number",
+        studentIdNumber,
+      )
+      : null,
+  ];
+  const results = await Promise.all(
+    checks.filter(Boolean).map((query) =>
+      excludeId ? query!.neq("id", excludeId) : query!
+    ),
+  );
+  for (const result of results) {
+    if (result.error) throw result.error;
+    if ((result.data ?? []).length > 0) {
+      throw new Error(
+        "admission number and student ID must be unique within this school",
+      );
+    }
+  }
+}
+
+async function replaceStudentParentLink(
+  svc: SupabaseClient,
+  school: string,
+  studentId: string,
+  parentUserId: string,
+) {
+  const parent = await validateParentAccount(svc, school, parentUserId);
+  if (!parent) throw new Error("active parent account is required");
+  // Linking a new parent must not erase other valid parent links. The caller
+  // may explicitly clear all links only through the dedicated unlink path.
+  const { error: insertError } = await svc.from("parent_student_links").upsert({
+    school_id: school,
+    parent_user_id: parentUserId,
+    student_id: studentId,
+  }, { onConflict: "parent_user_id,student_id" });
+  if (insertError) throw insertError;
+}
+
 function photoUploadError(file: File) {
   const allowedTypes = new Set([
     "image/jpeg",
@@ -152,8 +258,9 @@ async function attachParentAccounts(
       }));
       const parentAccounts = hydratedLinks
         .map((link) => link.parent)
-        .filter((parent) => Boolean(parent && typeof parent === "object")) as
-        Record<string, unknown>[];
+        .filter((parent) =>
+          Boolean(parent && typeof parent === "object")
+        ) as Record<string, unknown>[];
       return {
         ...student,
         parent_user_id: text(links[0]?.parent_user_id) || null,
@@ -171,7 +278,11 @@ async function attachClassDetails(
   students: Record<string, unknown>[],
 ) {
   const sectionIds = [
-    ...new Set(students.map((student) => text(student.current_section_id)).filter(Boolean)),
+    ...new Set(
+      students.map((student) => text(student.current_section_id)).filter(
+        Boolean,
+      ),
+    ),
   ];
   if (sectionIds.length === 0) return { data: students, error: null };
 
@@ -179,7 +290,9 @@ async function attachClassDetails(
     .select("*").eq("school_id", school).in("id", sectionIds);
   if (sectionError) return { data: students, error: sectionError };
   const gradeIds = [
-    ...new Set((sections ?? []).map((section) => text(section.grade_id)).filter(Boolean)),
+    ...new Set(
+      (sections ?? []).map((section) => text(section.grade_id)).filter(Boolean),
+    ),
   ];
   const { data: grades, error: gradeError } = gradeIds.length > 0
     ? await svc.from("grades").select("*").eq("school_id", school).in(
@@ -237,12 +350,21 @@ async function attachFeeSummaries(
       pending_invoices: 0,
       overdue_invoices: 0,
     };
-    const totalAmount = Number(prev.total_amount) + Number(inv.total_amount ?? 0);
-    const discountAmount = Number(prev.discount_amount) + Number(inv.discount_amount ?? 0);
+    const totalAmount = Number(prev.total_amount) +
+      Number(inv.total_amount ?? 0);
+    const discountAmount = Number(prev.discount_amount) +
+      Number(inv.discount_amount ?? 0);
     const paidAmount = Number(prev.paid_amount) + Number(inv.paid_amount ?? 0);
-    const balance = Number(prev.balance) + Math.max(0, Number(inv.balance ?? 0) || (Number(inv.net_amount ?? 0) - Number(inv.paid_amount ?? 0)));
-    const pending = Number(prev.pending_invoices) + (inv.status !== "paid" ? 1 : 0);
-    const overdue = Number(prev.overdue_invoices) + (inv.status === "overdue" ? 1 : 0);
+    const balance = Number(prev.balance) +
+      Math.max(
+        0,
+        Number(inv.balance ?? 0) ||
+          (Number(inv.net_amount ?? 0) - Number(inv.paid_amount ?? 0)),
+      );
+    const pending = Number(prev.pending_invoices) +
+      (inv.status !== "paid" ? 1 : 0);
+    const overdue = Number(prev.overdue_invoices) +
+      (inv.status === "overdue" ? 1 : 0);
     summaryById.set(sid, {
       total_amount: totalAmount,
       discount_amount: discountAmount,
@@ -279,9 +401,35 @@ async function hydrateStudentDirectory(
 ) {
   const classDetails = await attachClassDetails(svc, school, students);
   if (classDetails.error) return classDetails;
-  const withParents = await attachParentAccounts(svc, school, classDetails.data);
+  // Parent and fee hydration are independent once section details are known.
+  // Running them together removes two avoidable sequential database waits from
+  // the directory endpoint without changing the response contract.
+  const [withParents, withFees] = await Promise.all([
+    attachParentAccounts(svc, school, classDetails.data),
+    attachFeeSummaries(svc, school, classDetails.data),
+  ]);
   if (withParents.error) return withParents;
-  return await attachFeeSummaries(svc, school, withParents.data);
+  if (withFees.error) return withFees;
+  const feeByStudentId = new Map<string, unknown>(
+    withFees.data.map(
+      (student) => [text(student.id), student.fee_summary] as [string, unknown],
+    ),
+  );
+  return {
+    data: withParents.data.map((student) => ({
+      ...student,
+      fee_summary: feeByStudentId.get(text(student.id)) ?? {
+        total_amount: 0,
+        discount_amount: 0,
+        paid_amount: 0,
+        balance: 0,
+        pending_invoices: 0,
+        overdue_invoices: 0,
+        status: "clear",
+      },
+    })),
+    error: null,
+  };
 }
 
 export async function handleGuardians(
@@ -307,7 +455,12 @@ export async function handleGuardians(
 
   if (!id && method === "POST") {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    if (!text(body.student_id)) return fail("student_id required");
+    const studentId = text(body.student_id);
+    if (!studentId) return fail("student_id required");
+    const student = await svc.from("students").select("id").eq("id", studentId)
+      .eq("school_id", school).maybeSingle();
+    if (student.error) return fail(student.error.message);
+    if (!student.data) return fail("student not found", 404);
     const { data, error } = await svc.from("guardians").insert(
       guardianPayload(body, school),
     ).select().single();
@@ -317,6 +470,14 @@ export async function handleGuardians(
 
   if (id && (method === "PATCH" || method === "PUT")) {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (text(body.student_id)) {
+      const student = await svc.from("students").select("id").eq(
+        "id",
+        text(body.student_id),
+      ).eq("school_id", school).maybeSingle();
+      if (student.error) return fail(student.error.message);
+      if (!student.data) return fail("student not found", 404);
+    }
     const payload = {
       ...guardianPayload(body, school),
       updated_at: new Date().toISOString(),
@@ -375,6 +536,69 @@ export async function handleStudents(
   const id = parseId(path, "/students");
   const sub = id ? subPath(path, "/students") : "";
 
+  if (path === "/students/integrity" && method === "GET") {
+    const [studentsResult, linksResult, usersResult] = await Promise.all([
+      svc.from("students").select(
+        "id, first_name, last_name, current_section_id",
+      )
+        .eq("school_id", school).eq("status", "active").eq(
+          "is_test_account",
+          false,
+        ),
+      svc.from("parent_student_links").select("student_id, parent_user_id")
+        .eq("school_id", school),
+      svc.from("users").select("id, is_active, role_name").eq(
+        "school_id",
+        school,
+      )
+        .ilike("role_name", "parent").eq("is_active", true),
+    ]);
+    if (studentsResult.error) return fail(studentsResult.error.message);
+    if (linksResult.error) return fail(linksResult.error.message);
+    if (usersResult.error) return fail(usersResult.error.message);
+    const validParents = new Set(
+      (usersResult.data ?? []).map((row) => text(row.id)),
+    );
+    const validStudentLinks = new Set(
+      (linksResult.data ?? [])
+        .filter((row) => validParents.has(text(row.parent_user_id)))
+        .map((row) => text(row.student_id)),
+    );
+    const unlinked = (studentsResult.data ?? []).filter(
+      (student) => !validStudentLinks.has(text(student.id)),
+    );
+    return ok({
+      active_student_count: studentsResult.data?.length ?? 0,
+      valid_linked_student_count: validStudentLinks.size,
+      unlinked_active_students: unlinked,
+      unlinked_active_student_count: unlinked.length,
+    });
+  }
+
+  if (path === "/students/summary" && method === "GET") {
+    const [sectionsResult, studentsResult] = await Promise.all([
+      svc.from("sections").select(
+        "id, grade_id, section_name, grade:grades(grade_name)",
+      )
+        .eq("school_id", school),
+      svc.from("students").select("id, current_section_id").eq(
+        "school_id",
+        school,
+      ).eq("status", "active").eq("is_test_account", false),
+    ]);
+    if (sectionsResult.error) return fail(sectionsResult.error.message);
+    if (studentsResult.error) return fail(studentsResult.error.message);
+    const counts = new Map<string, number>();
+    for (const student of studentsResult.data ?? []) {
+      const sectionId = text(student.current_section_id);
+      if (sectionId) counts.set(sectionId, (counts.get(sectionId) ?? 0) + 1);
+    }
+    return ok({
+      active_student_count: studentsResult.data?.length ?? 0,
+      active_students_by_section: Object.fromEntries(counts),
+    });
+  }
+
   if (id && sub === "photo" && method === "POST") {
     const form = await req.formData();
     const file = form.get("photo") as File;
@@ -387,15 +611,16 @@ export async function handleStudents(
     if (!student) return fail("student not found", 404);
     const filename = file.name.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
     const p = `students/${school}/${id}/${Date.now()}-${filename || "photo"}`;
-    const { error: uploadError } = await svc.storage.from("school-assets").upload(
-      p,
-      file,
-      {
-        upsert: true,
-        contentType: file.type || "application/octet-stream",
-        cacheControl: "31536000",
-      },
-    );
+    const { error: uploadError } = await svc.storage.from("school-assets")
+      .upload(
+        p,
+        file,
+        {
+          upsert: true,
+          contentType: file.type || "application/octet-stream",
+          cacheControl: "31536000",
+        },
+      );
     if (uploadError) return fail(uploadError.message);
     const { data: { publicUrl } } = svc.storage.from("school-assets")
       .getPublicUrl(p);
@@ -457,17 +682,30 @@ export async function handleStudents(
   if (id && sub === "parent" && method === "PUT") {
     const body = await req.json().catch(() => ({}));
     const parentUserId = `${body.parent_user_id ?? ""}`.trim();
-    const { error: deleteError } = await svc.from("parent_student_links")
-      .delete().eq("school_id", school).eq("student_id", id);
-    if (deleteError) return fail(deleteError.message);
-    if (parentUserId.length > 0) {
-      const { error: insertError } = await svc.from("parent_student_links")
-        .insert({
-          school_id: school,
-          parent_user_id: parentUserId,
-          student_id: id,
-        });
-      if (insertError) return fail(insertError.message);
+    const student = await svc.from("students").select("id, status").eq(
+      "id",
+      id,
+    ).eq("school_id", school).maybeSingle();
+    if (student.error) return fail(student.error.message);
+    if (!student.data) return fail("student not found", 404);
+    if (!parentUserId && `${student.data.status ?? "active"}` === "active") {
+      return fail("active students must have an active parent login", 422);
+    }
+    if (parentUserId) {
+      try {
+        await replaceStudentParentLink(svc, school, id, parentUserId);
+      } catch (error) {
+        return fail(
+          error instanceof Error ? error.message : "invalid parent account",
+          422,
+        );
+      }
+    } else {
+      const { error } = await svc.from("parent_student_links").delete().eq(
+        "school_id",
+        school,
+      ).eq("student_id", id);
+      if (error) return fail(error.message);
     }
     return ok({ success: true, parent_user_id: parentUserId });
   }
@@ -476,6 +714,18 @@ export async function handleStudents(
     const body = await req.json().catch(() => ({}));
     const guardianId = `${body.guardian_id ?? ""}`.trim();
     if (guardianId.length === 0) return fail("guardian_id required");
+    const student = await svc.from("students").select("id").eq("id", id).eq(
+      "school_id",
+      school,
+    ).maybeSingle();
+    if (student.error) return fail(student.error.message);
+    if (!student.data) return fail("student not found", 404);
+    const guardian = await svc.from("guardians").select("id, student_id")
+      .eq("id", guardianId).eq("school_id", school).maybeSingle();
+    if (guardian.error) return fail(guardian.error.message);
+    if (!guardian.data || text(guardian.data.student_id) !== id) {
+      return fail("guardian is not linked to this student", 422);
+    }
     const existing = await svc.from("student_guardians").select("*").eq(
       "student_id",
       id,
@@ -523,7 +773,11 @@ export async function handleStudents(
 
   if (!id && method === "GET") {
     const page = parseInt(url.searchParams.get("page") ?? "1");
-    const size = parseInt(url.searchParams.get("page_size") ?? "50");
+    const requestedSize = parseInt(url.searchParams.get("page_size") ?? "50");
+    const size = Math.min(
+      Math.max(Number.isFinite(requestedSize) ? requestedSize : 50, 1),
+      200,
+    );
     const search = url.searchParams.get("search") ?? "";
     let q = svc.from("students").select(studentDirectorySelect, {
       count: "exact",
@@ -561,10 +815,70 @@ export async function handleStudents(
 
   if (!id && method === "POST") {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const { data, error } = await svc.from("students").insert(
-      studentPayload(body, school),
-    ).select().single();
+    const parentUserId = text(body.parent_user_id);
+    const requireParentLink = body.require_parent_link === true;
+    const status = normaliseStatus(body.status);
+    const sectionId = text(body.current_section_id);
+    if (status === "active" && !sectionId) {
+      return fail("active students must be assigned to a class section", 422);
+    }
+    if (sectionId && !await validateStudentSection(svc, school, sectionId)) {
+      return fail(
+        "selected class section is not available in this school",
+        422,
+      );
+    }
+    if (requireParentLink && !parentUserId) {
+      return fail("an active parent login is required", 422);
+    }
+    if (status === "active" && !parentUserId) {
+      return fail("active students must have an active parent login", 422);
+    }
+    if (
+      parentUserId && !await validateParentAccount(svc, school, parentUserId)
+    ) {
+      return fail(
+        "parent account must be active and belong to this school",
+        422,
+      );
+    }
+    try {
+      await ensureStudentIdentifiersAvailable(svc, school, body);
+    } catch (error) {
+      return fail(
+        error instanceof Error
+          ? error.message
+          : "student identifiers must be unique",
+        409,
+      );
+    }
+    const payload = studentPayload(body, school);
+    delete payload.parent_user_id;
+    delete payload.require_parent_link;
+    const { data, error } = await svc.from("students").insert(payload)
+      .select().single();
     if (error) return fail(error.message);
+    if (parentUserId) {
+      try {
+        await replaceStudentParentLink(
+          svc,
+          school,
+          text(data.id),
+          parentUserId,
+        );
+      } catch (linkError) {
+        await svc.from("students").delete().eq("id", data.id).eq(
+          "school_id",
+          school,
+        );
+        return fail(
+          linkError instanceof Error
+            ? linkError.message
+            : "failed to link parent",
+          422,
+        );
+      }
+    }
     return ok(data);
   }
 
@@ -593,10 +907,84 @@ export async function handleStudents(
 
   if (id && (method === "PATCH" || method === "PUT")) {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const { data, error } = await svc.from("students").update(
-      studentPatch(body),
-    ).eq("id", id).eq("school_id", school).select().single();
+    const existing = await svc.from("students").select(
+      "id, status, current_section_id",
+    ).eq("id", id).eq("school_id", school).maybeSingle();
+    if (existing.error) return fail(existing.error.message);
+    if (!existing.data) return fail("student not found", 404);
+    const parentUserId = body.parent_user_id === null
+      ? ""
+      : text(body.parent_user_id);
+    const requireParentLink = body.require_parent_link === true;
+    const status = "status" in body
+      ? normaliseStatus(body.status)
+      : normaliseStatus(existing.data.status);
+    const sectionId = "current_section_id" in body
+      ? text(body.current_section_id)
+      : text(existing.data.current_section_id);
+    if (status === "active" && !sectionId) {
+      return fail("active students must be assigned to a class section", 422);
+    }
+    if (sectionId && !await validateStudentSection(svc, school, sectionId)) {
+      return fail(
+        "selected class section is not available in this school",
+        422,
+      );
+    }
+    if (
+      parentUserId && !await validateParentAccount(svc, school, parentUserId)
+    ) {
+      return fail(
+        "parent account must be active and belong to this school",
+        422,
+      );
+    }
+    if (requireParentLink && !parentUserId) {
+      return fail("an active parent login is required", 422);
+    }
+    if (status === "active" && !parentUserId) {
+      try {
+        if (!await studentHasValidParentLink(svc, school, id)) {
+          return fail("active students must have an active parent login", 422);
+        }
+      } catch (error) {
+        return fail(
+          error instanceof Error
+            ? error.message
+            : "failed to validate parent link",
+        );
+      }
+    }
+    try {
+      await ensureStudentIdentifiersAvailable(svc, school, body, id);
+    } catch (error) {
+      return fail(
+        error instanceof Error
+          ? error.message
+          : "student identifiers must be unique",
+        409,
+      );
+    }
+    const payload = studentPatch(body);
+    delete payload.parent_user_id;
+    delete payload.require_parent_link;
+    const { data, error } = await svc.from("students").update(payload).eq(
+      "id",
+      id,
+    ).eq("school_id", school).select().single();
     if (error) return fail(error.message);
+    if (parentUserId) {
+      try {
+        await replaceStudentParentLink(svc, school, id, parentUserId);
+      } catch (linkError) {
+        return fail(
+          linkError instanceof Error
+            ? linkError.message
+            : "failed to link parent",
+          422,
+        );
+      }
+    }
     return ok(data);
   }
 

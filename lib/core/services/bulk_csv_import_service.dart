@@ -353,6 +353,18 @@ class BulkCsvImportService {
             gradeName: row.value('class'),
             sectionName: row.value('section'),
           );
+    final parentId = row.value('parent_user_id').isNotEmpty
+        ? row.value('parent_user_id')
+        : lookup.parentIdFor(
+            email: row.value('parent_email'),
+            username: row.value('parent_username'),
+          );
+    final status = row.value('status', fallback: 'active');
+    if (status.toLowerCase() == 'active' && parentId.isEmpty) {
+      throw const FormatException(
+        'active student rows require parent_user_id or parent login details',
+      );
+    }
     final student = await api.createStudent(
       firstName: firstName,
       lastName: lastName,
@@ -363,15 +375,11 @@ class BulkCsvImportService {
           ? row.value('student_id_number')
           : row.value('student_code'),
       currentSectionId: sectionId,
+      parentUserId: parentId.isEmpty ? null : parentId,
+      requireParentLink: status.toLowerCase() == 'active',
       admissionDate: _date(row.value('admission_date'), '2026-01-01'),
-      status: row.value('status', fallback: 'active'),
+      status: status,
     );
-    final parentId = row.value('parent_user_id').isNotEmpty
-        ? row.value('parent_user_id')
-        : lookup.parentIdFor(
-            email: row.value('parent_email'),
-            username: row.value('parent_username'),
-          );
     if (parentId.isNotEmpty) {
       await api.setStudentParent(studentId: student.id, parentUserId: parentId);
     }

@@ -22,7 +22,7 @@ extension BackendLeaveApi on BackendApiClient {
       if (forceRefresh) {
         queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
       }
-      final response = await _dio.get(
+      final response = await _get(
         '/student-leave/applications',
         queryParameters: queryParams,
       );
@@ -143,7 +143,7 @@ extension BackendLeaveApi on BackendApiClient {
         queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
       }
 
-      final response = await _dio.get(
+      final response = await _get(
         '/leave/applications',
         queryParameters: queryParams,
       );

@@ -103,7 +103,7 @@ extension BackendCommunicationsApi on BackendApiClient {
       if (forceRefresh) {
         queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
       }
-      final response = await _dio.get(
+      final response = await _get(
         '/announcements',
         queryParameters: queryParams,
       );
@@ -153,7 +153,7 @@ extension BackendCommunicationsApi on BackendApiClient {
     int pageSize = 50,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/notifications',
         queryParameters: {'page': page, 'page_size': pageSize},
       );
@@ -196,123 +196,6 @@ extension BackendCommunicationsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getNotifications() async {
     return (await getNotificationsPage()).items;
-  }
-
-  Future<List<Map<String, dynamic>>> getCommunications({
-    String? counterpartId,
-    String? role,
-  }) async {
-    final queryParams = <String, dynamic>{};
-    if (counterpartId != null && counterpartId.trim().isNotEmpty) {
-      queryParams['counterpart_id'] = counterpartId.trim();
-    }
-    if (role != null && role.trim().isNotEmpty) {
-      queryParams['receiver_role'] = role.trim().toLowerCase();
-    }
-    final rows = await getTablesMDRows(
-      'communications',
-      queryParameters: queryParams.isEmpty ? null : queryParams,
-    );
-    return rows.map(_normalizeCommunicationRow).toList();
-  }
-
-  Future<Map<String, dynamic>> sendCommunication({
-    required String receiverId,
-    required String messageContent,
-    String receiverRole = '',
-    String studentId = '',
-    String priority = 'medium',
-  }) async {
-    final payload = <String, dynamic>{
-      'receiver_id': receiverId.trim(),
-      'message_content': messageContent.trim(),
-      'message_type': 'direct',
-      if (receiverRole.trim().isNotEmpty)
-        'receiver_role': receiverRole.trim().toLowerCase(),
-      if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
-      if (priority.trim().isNotEmpty) 'priority': priority.trim(),
-    };
-    final row = await createTablesMDRow('communications', payload);
-    return _normalizeCommunicationRow(row);
-  }
-
-  Future<Map<String, dynamic>> markCommunicationRead(
-    String communicationId,
-  ) async {
-    final row = await updateTablesMDRow('communications', communicationId, {
-      'is_read': true,
-    });
-    return _normalizeCommunicationRow(row);
-  }
-
-  Map<String, dynamic> _normalizeCommunicationRow(Map<String, dynamic> row) {
-    final normalized = Map<String, dynamic>.from(row);
-    normalized['id'] ??= normalized['message_id'];
-    normalized['message_id'] ??= normalized['id'];
-    normalized['body'] ??= normalized['message_content'];
-    normalized['message'] ??= normalized['message_content'];
-    normalized['sent_at'] ??= normalized['created_at'];
-    return normalized;
-  }
-
-  Future<List<Map<String, dynamic>>> getMessageConversations({
-    int? pageSize,
-    Map<String, dynamic>? queryParameters,
-  }) {
-    final params = <String, dynamic>{...?queryParameters};
-    if (pageSize != null) params['page_size'] = pageSize;
-    return getRawList(
-      '/message-conversations',
-      queryParameters: params.isEmpty ? null : params,
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> getChatMessages({
-    String? conversationId,
-    int? pageSize,
-    DateTime? sentAfter,
-    Map<String, dynamic>? queryParameters,
-  }) {
-    final params = <String, dynamic>{...?queryParameters};
-    if (conversationId != null && conversationId.trim().isNotEmpty) {
-      params['conversation_id'] = conversationId.trim();
-    }
-    if (pageSize != null) params['page_size'] = pageSize;
-    if (sentAfter != null) {
-      params['sent_after'] = sentAfter.toUtc().toIso8601String();
-    }
-    return getRawList(
-      '/messages',
-      queryParameters: params.isEmpty ? null : params,
-    );
-  }
-
-  Future<Map<String, dynamic>> sendChatMessage({
-    required String conversationId,
-    required String senderId,
-    required String senderRole,
-    required String body,
-    String senderName = '',
-    DateTime? sentAt,
-  }) {
-    final text = body.trim();
-    return createRaw('/messages', {
-      'conversation_id': conversationId,
-      'sender_id': senderId,
-      'sender_role': senderRole,
-      if (senderName.trim().isNotEmpty) 'sender_name': senderName.trim(),
-      'message': text,
-      'body': text,
-      'is_read': false,
-      'sent_at': (sentAt ?? DateTime.now()).toUtc().toIso8601String(),
-    });
-  }
-
-  Future<Map<String, dynamic>> markChatMessageRead(String messageId) {
-    return updateRaw('/messages/$messageId', {
-      'is_read': true,
-      'read_at': DateTime.now().toIso8601String(),
-    });
   }
 
   Future<void> markNotificationRead(String notificationId) async {
@@ -481,40 +364,6 @@ extension BackendCommunicationsApi on BackendApiClient {
     );
   }
 
-  Future<Map<String, dynamic>> bookParentTeacherMeeting(
-    String id, {
-    String notes = 'Booked by parent',
-  }) async {
-    try {
-      final response = await _dio.put(
-        '/parent-teacher-meetings/$id/book',
-        data: {'notes': notes},
-      );
-      final data = _asMap(response.data);
-      if (data['success'] == true) {
-        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
-      }
-      throw ServerException(
-        message: data['error'] ?? 'Failed to book PTM slot',
-      );
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getMyTeacherPtmSlots() async {
-    try {
-      final response = await _dio.get('/teacher/ptm-slots');
-      final data = _asMap(response.data);
-      if (data['success'] == true) return _asListMap(data['data']);
-      throw ServerException(
-        message: data['error'] ?? 'Failed to load teacher PTM slots',
-      );
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
-  }
-
   // ─── Birthday Alerts ──────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> triggerBirthdayAlerts() async {
@@ -547,38 +396,6 @@ extension BackendCommunicationsApi on BackendApiClient {
     } on Object catch (_) {
       // Fire-and-forget: never crash or clear shared auth state.
       return <String, dynamic>{};
-    }
-  }
-
-  Future<Map<String, dynamic>> createMyTeacherPtmSlot({
-    required String sectionId,
-    required String slotDate,
-    required String slotTime,
-    int durationMin = 15,
-    String eventId = '',
-    String studentId = '',
-    String guardianId = '',
-  }) async {
-    try {
-      final response = await _dio.post(
-        '/teacher/ptm-slots',
-        data: {
-          if (eventId.trim().isNotEmpty) 'event_id': eventId.trim(),
-          'section_id': sectionId.trim(),
-          'slot_date': slotDate.trim(),
-          'slot_time': slotTime.trim(),
-          'duration_min': durationMin,
-          if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
-          if (guardianId.trim().isNotEmpty) 'guardian_id': guardianId.trim(),
-        },
-      );
-      final data = _asMap(response.data);
-      if (data['success'] == true) return _asMap(data['data']);
-      throw ServerException(
-        message: data['error'] ?? 'Failed to create teacher PTM slot',
-      );
-    } on DioException catch (e) {
-      throw _handleError(e);
     }
   }
 }

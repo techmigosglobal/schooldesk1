@@ -14,7 +14,7 @@ Uri? resolveAttachmentUrl(String value) {
     if (uri.path.startsWith('/uploads/')) {
       return _apiUploadUri(base, uri.path);
     }
-    return Uri.tryParse(optimizedImageUrl(uri.toString())) ?? uri;
+    return Uri.tryParse(resolveOriginalImageUrl(uri.toString())) ?? uri;
   }
 
   final origin = Uri(
@@ -26,7 +26,9 @@ Uri? resolveAttachmentUrl(String value) {
     return _apiUploadUri(base, raw);
   }
   final path = raw.startsWith('/') ? raw.substring(1) : raw;
-  return Uri.tryParse(optimizedImageUrl(origin.resolve(path).toString())) ??
+  return Uri.tryParse(
+        resolveOriginalImageUrl(origin.resolve(path).toString()),
+      ) ??
       origin.resolve(path);
 }
 

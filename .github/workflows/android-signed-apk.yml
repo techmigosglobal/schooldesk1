@@ -95,7 +95,9 @@ jobs:
             test/unit/arishville_fee_receipt_contract_test.dart \
             test/widget/fee_receipt_pdf_generation_test.dart \
             test/unit/supabase_fees_contract_test.dart \
-            test/unit/automatic_receipt_snapshot_contract_test.dart
+            test/unit/automatic_receipt_snapshot_contract_test.dart \
+            test/unit/image_upload_optimizer_test.dart \
+            test/unit/image_media_url_contract_test.dart
 
       - name: Build and verify signed APK
         env:

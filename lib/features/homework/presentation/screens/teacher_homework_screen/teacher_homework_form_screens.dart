@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -10,6 +9,7 @@ import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 
 @immutable
 class TeacherHomeworkFormArgs {
@@ -159,33 +159,39 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
         'png',
         'webp',
       ],
-      withData: false,
+      withData: true,
     );
     final file = result?.files.single;
-    final path = file?.path;
-    if (file == null || path == null || path.trim().isEmpty) return;
+    final path = file?.path ?? '';
+    if (file == null || (path.trim().isEmpty && file.bytes == null)) return;
 
     setState(() {
       _uploadingAttachment = true;
       _error = null;
     });
     try {
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(path, filename: file.name),
-      });
-      final response = await BackendApiClient.instance.dio.post(
-        '/uploads',
-        data: formData,
+      final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
+      final optimized = ImageUploadOptimizer.isImage(file.name, mimeType)
+          ? (file.bytes != null
+                ? ImageUploadOptimizer.fromBytes(
+                    file.bytes!,
+                    filename: file.name,
+                    mimeType: mimeType,
+                    preset: ImageUploadPreset.content,
+                  )
+                : await ImageUploadOptimizer.fromPath(
+                    path,
+                    filename: file.name,
+                    mimeType: mimeType,
+                    preset: ImageUploadPreset.content,
+                  ))
+          : null;
+      final url = await BackendApiClient.instance.uploadFile(
+        path,
+        filename: optimized?.filename ?? file.name,
+        fileBytes: optimized?.bytes ?? file.bytes,
+        mimeType: optimized?.mimeType ?? mimeType,
       );
-      final data = response.data;
-      var url = '';
-      if (data is Map) {
-        url = teacherFlowText(data['url']);
-        final nested = data['data'];
-        if (url.isEmpty && nested is Map) {
-          url = teacherFlowText(nested['url']);
-        }
-      }
       if (url.isEmpty) {
         throw Exception('Upload completed but no file URL was returned.');
       }
@@ -714,9 +720,7 @@ class _TeacherHomeworkSubmissionsScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Dairy marked done and feedback sent to parent',
-            ),
+            content: Text('Dairy marked done and feedback sent to parent'),
             behavior: SnackBarBehavior.floating,
           ),
         );

@@ -45,7 +45,6 @@ class BackendDataService {
   static const String kParentHomework = 'parent_homework';
   static const String kSharedLeaveRequests = 'shared_leave_requests';
   static const String kSharedSchoolNotices = 'shared_school_notices';
-  static const String kSharedPtmMeetings = 'shared_ptm_meetings';
   static const String kSharedParentLeaveRequests =
       'shared_parent_leave_requests';
   static const String kRuntimeNotifications = 'app_notifications';
@@ -274,8 +273,6 @@ class BackendDataService {
       case kTeacherNotes:
       case kTeacherWeeklyPlan:
         return await _api.getRawList('/diary-entries');
-      case kSharedPtmMeetings:
-        return await _api.getRawList('/parent-teacher-meetings');
       case kSharedLeaveRequests:
       case kSharedParentLeaveRequests:
       case kParentLeaveRequests:
@@ -420,9 +417,6 @@ class BackendDataService {
           targetAudience: '${latest['target_audience'] ?? 'all'}',
           isUrgent: latest['urgent'] == true || latest['is_urgent'] == true,
         );
-        return;
-      case kSharedPtmMeetings:
-        await _api.createRaw('/parent-teacher-meetings', latest);
         return;
       case kTeacherNotes:
       case kTeacherWeeklyPlan:

@@ -3,7 +3,7 @@ part of '../backend_api_client.dart';
 extension BackendUsersApi on BackendApiClient {
   Future<Map<String, dynamic>> getAccessPermissions() async {
     try {
-      final response = await _dio.get('/access/permissions');
+      final response = await _get('/access/permissions');
       final data = _asMap(response.data);
       if (data['success'] == true) return _asMap(data['data']);
       throw ServerException(
@@ -33,7 +33,7 @@ extension BackendUsersApi on BackendApiClient {
         queryParams['status'] = status.trim();
       }
 
-      final response = await _dio.get('/users', queryParameters: queryParams);
+      final response = await _get('/users', queryParameters: queryParams);
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return PaginatedList<UserAccountModel>(
@@ -138,11 +138,21 @@ extension BackendUsersApi on BackendApiClient {
 
   Future<String> uploadUserAvatar({
     required String userId,
-    required String filePath,
+    String filePath = '',
+    Uint8List? fileBytes,
+    String? fileName,
+    String? mimeType,
   }) async {
     try {
       final formData = FormData.fromMap({
-        'avatar': await MultipartFile.fromFile(filePath),
+        'avatar': await _multipartUpload(
+          filePath: filePath,
+          fileBytes: fileBytes,
+          filename: (fileName ?? '').trim().isEmpty
+              ? 'parent-avatar.jpg'
+              : fileName!.trim(),
+          contentType: _resolveMediaType(mimeType, fileName ?? filePath),
+        ),
       });
       final response = await _dio.post('/users/$userId/avatar', data: formData);
       final data = response.data as Map<String, dynamic>;
@@ -205,7 +215,7 @@ extension BackendUsersApi on BackendApiClient {
     required String parentUserId,
   }) async {
     try {
-      final response = await _dio.get('/parents/$parentUserId/students');
+      final response = await _get('/parents/$parentUserId/students');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         final payload = data['data'];

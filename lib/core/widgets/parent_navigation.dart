@@ -7,7 +7,6 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/services/feature_availability_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/text_utils.dart';
 import 'package:schooldesk1/core/utils/media_url.dart';
@@ -113,11 +112,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
       organizationLogo: _schoolLogo.isEmpty
           ? null
           : Image.network(
-              optimizedImageUrl(
-                _assetUrl(_schoolLogo),
-                width: 256,
-                height: 256,
-              ),
+              resolveOriginalImageUrl(_assetUrl(_schoolLogo)),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) =>
                   const Icon(Icons.family_restroom_rounded),
@@ -128,11 +123,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
       userAvatar: _userAvatar.isEmpty
           ? null
           : Image.network(
-              optimizedImageUrl(
-                _assetUrl(_userAvatar),
-                width: 256,
-                height: 256,
-              ),
+              resolveOriginalImageUrl(_assetUrl(_userAvatar)),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const Icon(Icons.person_rounded),
             ),
@@ -193,34 +184,23 @@ class _ParentDrawerState extends State<ParentDrawer> {
             ),
           ],
         ),
-        SchoolDeskNavigationSection(
+        const SchoolDeskNavigationSection(
           label: 'Communication',
           items: [
-            const SchoolDeskNavigationItem(
+            SchoolDeskNavigationItem(
               index: ParentNav.chat,
               icon: Icons.chat_outlined,
               activeIcon: Icons.chat_rounded,
               label: 'Messages',
               route: AppRoutes.parentTeacherChat,
             ),
-            const SchoolDeskNavigationItem(
+            SchoolDeskNavigationItem(
               index: ParentNav.complaints,
               icon: Icons.support_agent_outlined,
               activeIcon: Icons.support_agent_rounded,
               label: 'Raise an Issue',
               route: AppRoutes.parentComplaints,
             ),
-            // Show PTM only when backend feature is available
-            if (FeatureAvailabilityService.stateFor(
-              SchoolDeskFeature.teacherParentMeetings,
-            ).isAvailable)
-              const SchoolDeskNavigationItem(
-                index: ParentNav.ptm,
-                icon: Icons.event_available_outlined,
-                activeIcon: Icons.event_available_rounded,
-                label: 'PTM Slots',
-                route: AppRoutes.parentPTMBooking,
-              ),
           ],
         ),
         const SchoolDeskNavigationSection(

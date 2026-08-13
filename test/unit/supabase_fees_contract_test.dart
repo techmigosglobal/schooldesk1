@@ -119,8 +119,9 @@ void main() {
     ).readAsStringSync();
 
     expect(source, contains('include_cancelled'));
-    expect(source, contains('q.not("status", "in", "(cancelled,void,voided)")'));
-    expect(source, contains('invoiceQuery.not("status", "in", "(cancelled,void,voided)")'));
+    expect(source, contains('q.not('));
+    expect(source, contains('invoiceQuery = invoiceQuery.not('));
+    expect(source, contains('"(cancelled,void,voided)"'));
   });
 
   test(
@@ -155,7 +156,9 @@ void main() {
     expect(source, contains('deleteFeeStructureWorkflowRows'));
     expect(source, contains('archived_at'));
     expect(source, contains('Financial history is immutable'));
-    final workflowStart = source.indexOf('async function deleteFeeStructureWorkflowRows');
+    final workflowStart = source.indexOf(
+      'async function deleteFeeStructureWorkflowRows',
+    );
     final workflowEnd = source.indexOf('export async function handleFees');
     expect(workflowStart, isNonNegative);
     expect(workflowEnd, greaterThan(workflowStart));
@@ -355,7 +358,10 @@ void main() {
           ? source.substring(start, end)
           : source;
 
-      expect(section, contains('payment amount cannot exceed the remaining balance'));
+      expect(
+        section,
+        contains('payment amount cannot exceed the remaining balance'),
+      );
       expect(section, contains('payment amount must be greater than zero'));
       expect(section, isNot(contains('selected_months')));
     },
@@ -405,27 +411,24 @@ void main() {
     },
   );
 
-  test(
-    'DELETE fee structure handler archives the selected structure',
-    () {
-      final source = File(
-        'supabase/functions/api/handlers/fees.ts',
-      ).readAsStringSync();
+  test('DELETE fee structure handler archives the selected structure', () {
+    final source = File(
+      'supabase/functions/api/handlers/fees.ts',
+    ).readAsStringSync();
 
-      // Find the DELETE handler section
-      final structuresStart = source.indexOf(
-        'const base = path.startsWith("/fee-structures")',
-      );
-      final deleteStart = source.indexOf(
-        'if (seg && method === "DELETE") {',
-        structuresStart,
-      );
-      expect(deleteStart, isPositive);
-      final section = source.substring(deleteStart, deleteStart + 500);
-      expect(section, contains('deleteFeeStructureWorkflowRows'));
-      expect(section, contains('archive fee structure'));
-    },
-  );
+    // Find the DELETE handler section
+    final structuresStart = source.indexOf(
+      'const base = path.startsWith("/fee-structures")',
+    );
+    final deleteStart = source.indexOf(
+      'if (seg && method === "DELETE") {',
+      structuresStart,
+    );
+    expect(deleteStart, isPositive);
+    final section = source.substring(deleteStart, deleteStart + 500);
+    expect(section, contains('deleteFeeStructureWorkflowRows'));
+    expect(section, contains('archive fee structure'));
+  });
 
   test(
     'dashboard handler queries paid_amount not amount_paid for totalPaid',

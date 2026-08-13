@@ -5,7 +5,7 @@ extension BackendSchoolApi on BackendApiClient {
 
   Future<List<SchoolModel>> getSchools() async {
     try {
-      final response = await _dio.get('/schools');
+      final response = await _get('/schools');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return (data['data'] as List)
@@ -18,12 +18,25 @@ extension BackendSchoolApi on BackendApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> getCurrentSchool() async {
+  Future<Map<String, dynamic>> getCurrentSchool({
+    bool forceRefresh = false,
+  }) async {
     try {
-      final response = await _dio.get('/schools/current');
+      final cached = _cachedCurrentSchool;
+      if (cached != null && !forceRefresh) {
+        return Map<String, dynamic>.from(cached);
+      }
+      final response = await _get(
+        '/schools/current',
+        queryParameters: forceRefresh
+            ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
+            : null,
+      );
       final data = _asMap(response.data);
       if (data['success'] == true) {
-        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        final school = Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        _cachedCurrentSchool = school;
+        return Map<String, dynamic>.from(school);
       }
       throw ServerException(message: data['error'] ?? 'Failed to get school');
     } on DioException catch (e) {
@@ -38,7 +51,9 @@ extension BackendSchoolApi on BackendApiClient {
       final response = await _dio.patch('/schools/current', data: payload);
       final data = _asMap(response.data);
       if (data['success'] == true) {
-        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        final school = Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        _cachedCurrentSchool = school;
+        return school;
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to update school',
@@ -48,10 +63,22 @@ extension BackendSchoolApi on BackendApiClient {
     }
   }
 
-  Future<String> uploadCurrentSchoolLogo(String filePath) async {
+  Future<String> uploadCurrentSchoolLogo(
+    String filePath, {
+    Uint8List? fileBytes,
+    String? fileName,
+    String? mimeType,
+  }) async {
     try {
       final formData = FormData.fromMap({
-        'logo': await MultipartFile.fromFile(filePath),
+        'logo': await _multipartUpload(
+          filePath: filePath,
+          fileBytes: fileBytes,
+          filename: (fileName ?? '').trim().isEmpty
+              ? 'school-logo.png'
+              : fileName!.trim(),
+          contentType: _resolveMediaType(mimeType, fileName ?? filePath),
+        ),
       });
       final response = await _dio.post('/schools/current/logo', data: formData);
       final data = _asMap(response.data);
@@ -67,10 +94,22 @@ extension BackendSchoolApi on BackendApiClient {
     }
   }
 
-  Future<String> uploadCurrentSchoolSignature(String filePath) async {
+  Future<String> uploadCurrentSchoolSignature(
+    String filePath, {
+    Uint8List? fileBytes,
+    String? fileName,
+    String? mimeType,
+  }) async {
     try {
       final formData = FormData.fromMap({
-        'signature': await MultipartFile.fromFile(filePath),
+        'signature': await _multipartUpload(
+          filePath: filePath,
+          fileBytes: fileBytes,
+          filename: (fileName ?? '').trim().isEmpty
+              ? 'school-signature.png'
+              : fileName!.trim(),
+          contentType: _resolveMediaType(mimeType, fileName ?? filePath),
+        ),
       });
       final response = await _dio.post(
         '/schools/current/signature',
@@ -102,7 +141,7 @@ extension BackendSchoolApi on BackendApiClient {
         queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
       }
 
-      final response = await _dio.get(
+      final response = await _get(
         '/academic-years',
         queryParameters: queryParams.isEmpty ? null : queryParams,
       );
@@ -114,6 +153,23 @@ extension BackendSchoolApi on BackendApiClient {
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to get academic years',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getAcademicYearSummary(
+    String academicYearId,
+  ) async {
+    try {
+      final response = await _get('/academic-years/$academicYearId/summary');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to get academic year summary',
       );
     } on DioException catch (e) {
       throw _handleError(e);
@@ -201,7 +257,7 @@ extension BackendSchoolApi on BackendApiClient {
         queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
       }
 
-      final response = await _dio.get(
+      final response = await _get(
         '/grades',
         queryParameters: queryParams.isEmpty ? null : queryParams,
       );
@@ -226,7 +282,7 @@ extension BackendSchoolApi on BackendApiClient {
         queryParams['department_id'] = departmentId.trim();
       }
 
-      final response = await _dio.get(
+      final response = await _get(
         '/subjects',
         queryParameters: queryParams.isEmpty ? null : queryParams,
       );
@@ -257,7 +313,7 @@ extension BackendSchoolApi on BackendApiClient {
         queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
       }
 
-      final response = await _dio.get(
+      final response = await _get(
         '/sections',
         queryParameters: queryParams.isEmpty ? null : queryParams,
       );
@@ -275,7 +331,7 @@ extension BackendSchoolApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getRooms() async {
     try {
-      final response = await _dio.get('/rooms');
+      final response = await _get('/rooms');
       final data = _asMap(response.data);
       if (data['success'] == true) {
         return _asListMap(data['data']);

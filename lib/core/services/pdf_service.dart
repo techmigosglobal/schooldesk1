@@ -257,7 +257,7 @@ class PdfService {
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.fromLTRB(28, 24, 28, 22),
+          margin: const pw.EdgeInsets.all(14),
           build: (_) => _buildStructuredPaymentReceipt(
             receiptNo: receiptNo,
             studentName: studentName,
@@ -561,6 +561,65 @@ class PdfService {
     return pdf.save();
   }
 
+  /// Renders the single server-authorized payment-receipt payload returned by
+  /// `/fees/receipts/:id`.  Keeping this mapping here prevents every role from
+  /// reinterpreting a receipt from mutable invoice rows.
+  Future<Uint8List> generatePaymentReceiptFromPayload(
+    Map<String, dynamic> payload, {
+    Uint8List? schoolLogo,
+    Uint8List? authorizedSignature,
+  }) async {
+    Map<String, dynamic> mapAt(String key) => payload[key] is Map
+        ? Map<String, dynamic>.from(payload[key] as Map)
+        : const <String, dynamic>{};
+    final receipt = mapAt('receipt');
+    final totals = mapAt('totals');
+    final student = mapAt('student');
+    final school = mapAt('school');
+    final rawItems = payload['fee_items'] is List
+        ? (payload['fee_items'] as List)
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList()
+        : const <Map<String, dynamic>>[];
+    final amount = _numberValue(
+      totals['this_payment_amount'] ?? receipt['amount'],
+    );
+    return generateFeeReceipt(
+      documentKind: FeeDocumentKind.paymentReceipt,
+      receiptNo: _textValue(receipt['receipt_number'], fallback: 'Receipt'),
+      studentName: _textValue(student['name'], fallback: 'Student'),
+      className: _textValue(student['class_name'], fallback: '—'),
+      rollNo: _textValue(student['student_id_number']),
+      parentName: '',
+      feeItems: rawItems.isEmpty
+          ? [
+              {'description': 'Fee payment', 'amount': amount},
+            ]
+          : rawItems,
+      totalAmount: amount,
+      paidAmount: _numberValue(totals['paid_amount'] ?? amount),
+      balance: _numberValue(totals['balance']),
+      paymentMode: _textValue(receipt['payment_method']),
+      paymentDate:
+          DateTime.tryParse(_textValue(receipt['payment_date'])) ??
+          DateTime.now(),
+      schoolName: _textValue(school['name'], fallback: 'School'),
+      schoolAddress: _textValue(school['address']),
+      schoolLogo: schoolLogo,
+      authorizedSignature: authorizedSignature,
+      authorizedSignatoryName: _textValue(school['authorized_signatory_name']),
+      transactionReference: _textValue(receipt['reference_number']),
+      thisPaymentAmount: amount,
+      admissionNo: _textValue(
+        student['admission_number'],
+        fallback: _textValue(student['student_id_number']),
+      ),
+      academicYear: _textValue(payload['academic_year']),
+      feePeriod: _textValue(payload['fee_period']),
+    );
+  }
+
   pw.Widget _buildStructuredPaymentReceipt({
     required String receiptNo,
     required String studentName,
@@ -586,7 +645,6 @@ class PdfService {
     required String bankName,
     required double concessionAmount,
   }) {
-    final cashPayment = _isCashPayment(paymentMode);
     final normalizedItems = feeItems.isEmpty
         ? [
             <String, dynamic>{
@@ -595,259 +653,268 @@ class PdfService {
             },
           ]
         : feeItems;
-    final metadataRows = <List<String>>[
-      [
-        'Receipt No.',
-        receiptNo,
-        'Date',
-        DateFormat('dd/MM/yyyy').format(paymentDate),
-      ],
-      ['Admission No.', admissionNo, 'Academic Year', academicYear],
-      ['Student Name', studentName, 'Class / Section', className],
-    ];
-    if (feePeriod.trim().isNotEmpty || counterNo.trim().isNotEmpty) {
-      metadataRows.add(['Fee Period', feePeriod, 'Counter No.', counterNo]);
-    }
+    pw.Widget detailTable(List<List<String>> rows) => pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.black, width: 0.65),
+      columnWidths: const {
+        0: pw.FlexColumnWidth(1.15),
+        1: pw.FlexColumnWidth(1.85),
+      },
+      children: rows
+          .map(
+            (row) => pw.TableRow(
+              children: [
+                _structuredCell(row[0], label: true),
+                _structuredCell(row[1]),
+              ],
+            ),
+          )
+          .toList(),
+    );
 
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-      children: [
-        pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(3),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.black, width: 1.2),
+      ),
+      child: pw.Container(
+        padding: const pw.EdgeInsets.fromLTRB(22, 20, 22, 24),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.black, width: 0.65),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            if (schoolLogo != null)
-              pw.Image(
-                pw.MemoryImage(schoolLogo),
-                width: 58,
-                height: 58,
-                fit: pw.BoxFit.contain,
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.SizedBox(
+                  width: 92,
+                  child: schoolLogo != null
+                      ? pw.Image(
+                          pw.MemoryImage(schoolLogo),
+                          height: 78,
+                          fit: pw.BoxFit.contain,
+                        )
+                      : pw.SizedBox(height: 78),
+                ),
+                pw.SizedBox(width: 12),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        schoolName.trim().isEmpty
+                            ? 'School'
+                            : schoolName.trim(),
+                        style: pw.TextStyle(
+                          fontSize: 27,
+                          fontWeight: pw.FontWeight.bold,
+                          color: _darkText,
+                        ),
+                      ),
+                      if (schoolAddress.trim().isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 4),
+                          child: pw.Text(
+                            schoolAddress.trim(),
+                            style: const pw.TextStyle(
+                              fontSize: 10,
+                              color: _darkText,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            pw.Divider(color: PdfColors.black, thickness: 0.75),
+            pw.SizedBox(height: 14),
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Expanded(
+                  child: pw.Divider(color: PdfColors.black, thickness: 0.65),
+                ),
+                pw.Container(
+                  margin: const pw.EdgeInsets.symmetric(horizontal: 12),
+                  child: pw.Text(
+                    'FEE RECEIPT',
+                    style: pw.TextStyle(
+                      fontSize: 22,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _darkText,
+                    ),
+                  ),
+                ),
+                pw.Expanded(
+                  child: pw.Divider(color: PdfColors.black, thickness: 0.65),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 14),
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: detailTable([
+                    ['Receipt No.', receiptNo],
+                    ['Student Name', studentName],
+                    ['Class / Section', className],
+                    ['Fee Period', feePeriod.isEmpty ? '—' : feePeriod],
+                  ]),
+                ),
+                pw.Expanded(
+                  child: detailTable([
+                    ['Date', DateFormat('dd/MM/yyyy').format(paymentDate)],
+                    [
+                      'Academic Year',
+                      academicYear.isEmpty ? '—' : academicYear,
+                    ],
+                    ['Student ID', admissionNo.isEmpty ? rollNo : admissionNo],
+                    ['Counter No.', counterNo.isEmpty ? '—' : counterNo],
+                  ]),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey500, width: 0.5),
+              columnWidths: const {
+                0: pw.FlexColumnWidth(0.55),
+                1: pw.FlexColumnWidth(4.2),
+                2: pw.FlexColumnWidth(1.35),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                  children: [
+                    _structuredCell('S.No.', label: true),
+                    _structuredCell('Description', label: true),
+                    _structuredCell(
+                      'Amount (₹)',
+                      label: true,
+                      align: pw.TextAlign.right,
+                    ),
+                  ],
+                ),
+                ...normalizedItems.asMap().entries.map((entry) {
+                  final item = entry.value;
+                  final amount = _numberValue(
+                    item['paid_amount'] ?? item['amount'] ?? item['total'],
+                  );
+                  final description = _textValue(
+                    item['description'] ??
+                        item['fee_item_name'] ??
+                        item['category_name'],
+                    fallback: 'Fee payment',
+                  );
+                  return pw.TableRow(
+                    children: [
+                      _structuredCell('${entry.key + 1}'),
+                      _structuredCell(description),
+                      _structuredCell(
+                        _formatReceiptAmount(amount),
+                        align: pw.TextAlign.right,
+                      ),
+                    ],
+                  );
+                }),
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    _structuredCell(''),
+                    _structuredCell(
+                      'Total',
+                      label: true,
+                      align: pw.TextAlign.right,
+                    ),
+                    _structuredCell(
+                      _formatReceiptAmount(totalAmount),
+                      label: true,
+                      align: pw.TextAlign.right,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (concessionAmount > 0) ...[
+              pw.SizedBox(height: 3),
+              pw.Align(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Text(
+                  'Concession: ${_formatReceiptAmount(concessionAmount)}',
+                  style: const pw.TextStyle(fontSize: 8, color: _mutedText),
+                ),
               ),
+            ],
+            pw.SizedBox(height: 10),
             pw.Text(
-              schoolName.trim().isEmpty ? 'School' : schoolName.trim(),
-              textAlign: pw.TextAlign.center,
+              'PAYMENT INFORMATION',
               style: pw.TextStyle(
-                fontSize: 15,
+                fontSize: 9,
                 fontWeight: pw.FontWeight.bold,
                 color: _darkText,
               ),
             ),
-            if (schoolAddress.trim().isNotEmpty)
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 2),
-                child: pw.Text(
-                  schoolAddress.trim(),
-                  textAlign: pw.TextAlign.center,
-                  style: const pw.TextStyle(fontSize: 8, color: _mutedText),
-                ),
-              ),
-          ],
-        ),
-        pw.SizedBox(height: 10),
-        pw.Container(
-          width: double.infinity,
-          color: PdfColors.grey300,
-          padding: const pw.EdgeInsets.symmetric(vertical: 5),
-          child: pw.Text(
-            'FEE RECEIPT',
-            textAlign: pw.TextAlign.center,
-            style: pw.TextStyle(
-              fontSize: 10,
-              fontWeight: pw.FontWeight.bold,
-              color: _darkText,
-            ),
-          ),
-        ),
-        pw.SizedBox(height: 8),
-        pw.Table(
-          border: pw.TableBorder.all(color: PdfColors.grey500, width: 0.5),
-          columnWidths: const {
-            0: pw.FlexColumnWidth(1.05),
-            1: pw.FlexColumnWidth(1.5),
-            2: pw.FlexColumnWidth(1.05),
-            3: pw.FlexColumnWidth(1.5),
-          },
-          children: metadataRows
-              .map(
-                (row) => pw.TableRow(
+            pw.SizedBox(height: 3),
+            detailTable([
+              ['Payment Mode', paymentMode.isEmpty ? '—' : paymentMode],
+              [
+                'Transaction Reference',
+                transactionReference.isEmpty ? '—' : transactionReference,
+              ],
+              ['Bank Name', bankName.isEmpty ? '—' : bankName],
+              [
+                'Amount in Words',
+                'Rupees ${_amountInWords(paymentAmount)} only',
+              ],
+            ]),
+            pw.SizedBox(height: 7),
+            pw.SizedBox(height: 126),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.SizedBox(),
+                pw.Column(
                   children: [
-                    _structuredCell(row[0], label: true),
-                    _structuredCell(row[1]),
-                    _structuredCell(row[2], label: true),
-                    _structuredCell(row[3]),
+                    if (authorizedSignature != null)
+                      pw.Image(
+                        pw.MemoryImage(authorizedSignature),
+                        width: 96,
+                        height: 32,
+                        fit: pw.BoxFit.contain,
+                      )
+                    else
+                      pw.SizedBox(
+                        width: 96,
+                        height: 28,
+                        child: pw.Divider(
+                          color: PdfColors.grey700,
+                          thickness: 0.7,
+                        ),
+                      ),
+                    if (authorizedSignatoryName.trim().isNotEmpty)
+                      pw.Text(
+                        authorizedSignatoryName.trim(),
+                        style: const pw.TextStyle(fontSize: 7),
+                      ),
+                    pw.Text(
+                      'Authorised Signatory',
+                      style: pw.TextStyle(
+                        fontSize: 8,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
-              )
-              .toList(),
-        ),
-        pw.SizedBox(height: 10),
-        pw.Table(
-          border: pw.TableBorder.all(color: PdfColors.grey500, width: 0.5),
-          columnWidths: const {
-            0: pw.FlexColumnWidth(0.55),
-            1: pw.FlexColumnWidth(4.2),
-            2: pw.FlexColumnWidth(1.35),
-          },
-          children: [
-            pw.TableRow(
-              decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-              children: [
-                _structuredCell('S.No.', label: true),
-                _structuredCell('Description', label: true),
-                _structuredCell(
-                  'Amount (₹)',
-                  label: true,
-                  align: pw.TextAlign.right,
-                ),
-              ],
-            ),
-            ...normalizedItems.asMap().entries.map((entry) {
-              final item = entry.value;
-              final amount = _numberValue(
-                item['paid_amount'] ?? item['amount'] ?? item['total'],
-              );
-              final description = _textValue(
-                item['description'] ??
-                    item['fee_item_name'] ??
-                    item['category_name'],
-                fallback: 'Fee payment',
-              );
-              return pw.TableRow(
-                children: [
-                  _structuredCell('${entry.key + 1}'),
-                  _structuredCell(description),
-                  _structuredCell(
-                    _formatReceiptAmount(amount),
-                    align: pw.TextAlign.right,
-                  ),
-                ],
-              );
-            }),
-            pw.TableRow(
-              decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-              children: [
-                _structuredCell(''),
-                _structuredCell(
-                  'Total',
-                  label: true,
-                  align: pw.TextAlign.right,
-                ),
-                _structuredCell(
-                  _formatReceiptAmount(totalAmount),
-                  label: true,
-                  align: pw.TextAlign.right,
-                ),
               ],
             ),
           ],
         ),
-        if (concessionAmount > 0) ...[
-          pw.SizedBox(height: 3),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Text(
-              'Concession: ${_formatReceiptAmount(concessionAmount)}',
-              style: const pw.TextStyle(fontSize: 8, color: _mutedText),
-            ),
-          ),
-        ],
-        pw.SizedBox(height: 10),
-        pw.Text(
-          'PAYMENT INFORMATION',
-          style: pw.TextStyle(
-            fontSize: 9,
-            fontWeight: pw.FontWeight.bold,
-            color: _darkText,
-          ),
-        ),
-        pw.SizedBox(height: 3),
-        pw.Table(
-          border: pw.TableBorder.all(color: PdfColors.grey500, width: 0.5),
-          columnWidths: const {
-            0: pw.FlexColumnWidth(1.1),
-            1: pw.FlexColumnWidth(1.35),
-            2: pw.FlexColumnWidth(1.1),
-            3: pw.FlexColumnWidth(1.35),
-          },
-          children: [
-            pw.TableRow(
-              children: [
-                _structuredCell('Pay Mode', label: true),
-                _structuredCell(paymentMode),
-                _structuredCell('Date', label: true),
-                _structuredCell(DateFormat('dd/MM/yyyy').format(paymentDate)),
-              ],
-            ),
-            pw.TableRow(
-              children: [
-                _structuredCell('Amount Received', label: true),
-                _structuredCell(_formatReceiptAmount(paymentAmount)),
-                _structuredCell('Balance Due', label: true),
-                _structuredCell(_formatReceiptAmount(balance)),
-              ],
-            ),
-            if (!cashPayment &&
-                (bankName.trim().isNotEmpty ||
-                    transactionReference.trim().isNotEmpty))
-              pw.TableRow(
-                children: [
-                  _structuredCell('Bank Name', label: true),
-                  _structuredCell(bankName),
-                  _structuredCell('Reference / Cheque No.', label: true),
-                  _structuredCell(transactionReference),
-                ],
-              ),
-          ],
-        ),
-        pw.SizedBox(height: 7),
-        pw.Text(
-          'Amount in words: ${_amountInWords(paymentAmount)} only.',
-          style: pw.TextStyle(
-            fontSize: 8.5,
-            fontWeight: pw.FontWeight.bold,
-            color: _darkText,
-          ),
-        ),
-        pw.SizedBox(height: 16),
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: pw.CrossAxisAlignment.end,
-          children: [
-            pw.Text(
-              'Parent Copy',
-              style: const pw.TextStyle(fontSize: 8, color: _mutedText),
-            ),
-            pw.Column(
-              children: [
-                if (authorizedSignature != null)
-                  pw.Image(
-                    pw.MemoryImage(authorizedSignature),
-                    width: 96,
-                    height: 32,
-                    fit: pw.BoxFit.contain,
-                  )
-                else
-                  pw.SizedBox(
-                    width: 96,
-                    height: 28,
-                    child: pw.Divider(color: PdfColors.grey700, thickness: 0.7),
-                  ),
-                if (authorizedSignatoryName.trim().isNotEmpty)
-                  pw.Text(
-                    authorizedSignatoryName.trim(),
-                    style: const pw.TextStyle(fontSize: 7),
-                  ),
-                pw.Text(
-                  'Authorised Signatory',
-                  style: pw.TextStyle(
-                    fontSize: 8,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
@@ -1379,14 +1446,6 @@ class PdfService {
   }
 
   String _formatReceiptAmount(double amount) => '₹${amount.toStringAsFixed(2)}';
-
-  bool _isCashPayment(String paymentMode) {
-    final normalized = paymentMode.toLowerCase().replaceAll(
-      RegExp(r'[^a-z]'),
-      '',
-    );
-    return normalized.contains('cash');
-  }
 
   pw.Widget _buildReceiptHeader(
     String schoolName,

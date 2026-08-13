@@ -16,7 +16,7 @@ extension MonitoringApi on BackendApiClient {
     int pageSize = 20,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/monitoring/error-events',
         queryParameters: {
           'page': page,
@@ -43,7 +43,7 @@ extension MonitoringApi on BackendApiClient {
 
   Future<Map<String, dynamic>> getErrorEvent(String id) async {
     try {
-      final response = await _dio.get('/monitoring/error-events/$id');
+      final response = await _get('/monitoring/error-events/$id');
       final data = _asMap(response.data);
       if (data['success'] == true) return _asMap(data['data']);
       throw ServerException(
@@ -75,7 +75,7 @@ extension MonitoringApi on BackendApiClient {
 
   Future<Map<String, dynamic>> getErrorRetentionMetrics() async {
     try {
-      final response = await _dio.get('/monitoring/error-events/retention');
+      final response = await _get('/monitoring/error-events/retention');
       final data = _asMap(response.data);
       if (data['success'] == true) return _asMap(data['data']);
       throw ServerException(
@@ -176,7 +176,7 @@ extension MonitoringApi on BackendApiClient {
 
   Future<Map<String, dynamic>> backupDatabase() async {
     try {
-      final response = await _dio.get('/monitoring/database/backup');
+      final response = await _get('/monitoring/database/backup');
       final data = _asMap(response.data);
       if (data['success'] == true) return _asMap(data['data']);
       throw ServerException(

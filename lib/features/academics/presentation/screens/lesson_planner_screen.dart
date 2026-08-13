@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -6,6 +7,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -119,16 +121,37 @@ class _TeacherLessonPlannerScreenState
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
       allowMultiple: true,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     for (final file in result.files) {
-      final path = file.path;
-      if (path == null) continue;
+      final path = file.path ?? '';
+      final isImage = ImageUploadOptimizer.isImage(
+        file.name,
+        _mimeTypeForName(file.name),
+      );
+      final optimized = isImage
+          ? (file.bytes != null
+                ? ImageUploadOptimizer.fromBytes(
+                    file.bytes!,
+                    filename: file.name,
+                    mimeType: _mimeTypeForName(file.name),
+                    preset: ImageUploadPreset.content,
+                  )
+                : await ImageUploadOptimizer.fromPath(
+                    path,
+                    filename: file.name,
+                    mimeType: _mimeTypeForName(file.name),
+                    preset: ImageUploadPreset.content,
+                  ))
+          : null;
+      if (path.isEmpty && file.bytes == null) continue;
       await _uploadFile(
         path,
-        file.name,
-        size: file.size,
-        mimeType: _mimeTypeForName(file.name),
+        optimized?.filename ?? file.name,
+        size: optimized?.optimizedSize ?? file.size,
+        mimeType: optimized?.mimeType ?? _mimeTypeForName(file.name),
+        fileBytes: optimized?.bytes ?? file.bytes,
       );
     }
   }
@@ -142,11 +165,16 @@ class _TeacherLessonPlannerScreenState
       maxHeight: 2048,
     );
     if (image == null) return;
+    final optimized = await ImageUploadOptimizer.fromXFile(
+      image,
+      preset: ImageUploadPreset.content,
+    );
     await _uploadFile(
       image.path,
-      image.name,
-      size: await image.length(),
-      mimeType: _mimeTypeForName(image.name),
+      optimized.filename,
+      size: optimized.optimizedSize,
+      mimeType: optimized.mimeType,
+      fileBytes: optimized.bytes,
     );
   }
 
@@ -155,12 +183,15 @@ class _TeacherLessonPlannerScreenState
     String name, {
     int size = 0,
     String mimeType = '',
+    Uint8List? fileBytes,
   }) async {
     setState(() => _uploading = true);
     try {
       final url = await BackendApiClient.instance.uploadFile(
         path,
         filename: name,
+        fileBytes: fileBytes,
+        mimeType: mimeType,
       );
       if (!mounted || url.isEmpty) return;
       setState(() {

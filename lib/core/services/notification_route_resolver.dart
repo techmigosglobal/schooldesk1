@@ -64,7 +64,6 @@ class NotificationRouteResolver {
       'homework' => _homeworkRouteFor(role, data),
       'fee' => _feeRouteFor(role),
       'exam' || 'exam_schedule' => _examRouteFor(role),
-      'ptm' || 'parent_teacher_meeting' => _ptmRouteFor(role),
       'event' || 'event_post' => _eventRouteFor(role),
       'approval' => AppRoutes.approvalCenter,
       'leave' || 'student_leave' => _leaveRouteFor(role),
@@ -117,6 +116,15 @@ class NotificationRouteResolver {
                 '')
             .toString()
             .trim();
+    final studentId = (data['student_id'] ?? data['studentId'] ?? '')
+        .toString()
+        .trim();
+    final parentChildContext = role == 'parent' && studentId.isNotEmpty
+        ? <String, dynamic>{
+            'student_id': studentId,
+            'selected_student_id': studentId,
+          }
+        : const <String, dynamic>{};
     if (route == AppRoutes.approvalCenter || referenceType == 'approval') {
       final isLeave =
           referenceType == 'leave' || referenceType == 'student_leave';
@@ -126,7 +134,9 @@ class NotificationRouteResolver {
         'initialTab': isLeave ? 'leave' : 'approvals',
       };
     }
-    if (referenceId.isEmpty) return null;
+    if (referenceId.isEmpty) {
+      return parentChildContext.isEmpty ? null : parentChildContext;
+    }
     if (route == AppRoutes.principalEventApprovals &&
         (referenceType == 'event_post' || referenceType == 'event')) {
       return {
@@ -157,14 +167,13 @@ class NotificationRouteResolver {
         'reference_id': referenceId,
         'id': referenceId,
         'homework_id': referenceId,
-        if ((data['student_id'] ?? '').toString().trim().isNotEmpty)
-          'student_id': data['student_id'].toString().trim(),
+        ...parentChildContext,
         if ((data['student_name'] ?? '').toString().trim().isNotEmpty)
           'student_name': data['student_name'].toString().trim(),
         if (route == AppRoutes.parentHomeworkSubmit) 'open_feedback': true,
       };
     }
-    return null;
+    return parentChildContext.isEmpty ? null : parentChildContext;
   }
 
   static String _communicationRouteFor(String role) {
@@ -228,14 +237,6 @@ class NotificationRouteResolver {
 
   static String _examRouteFor(String role) {
     return AppRoutes.notificationCenter;
-  }
-
-  static String _ptmRouteFor(String role) {
-    return switch (role) {
-      'parent' => AppRoutes.parentPTMBooking,
-      'teacher' => AppRoutes.teacherParentInteraction,
-      _ => AppRoutes.notificationCenter,
-    };
   }
 
   static String _eventRouteFor(String role) {

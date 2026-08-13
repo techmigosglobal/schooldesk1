@@ -131,6 +131,37 @@ function subjectPayload(payload: Record<string, unknown>, includeName = true) {
   return clean;
 }
 
+async function sectionPayload(
+  svc: SupabaseClient,
+  school: string,
+  body: Record<string, unknown>,
+) {
+  const payload: Record<string, unknown> = { ...body };
+  const classTeacherId = "class_teacher_id" in payload
+    ? text(payload.class_teacher_id) || null
+    : undefined;
+  const coTeacherId = "co_teacher_id" in payload
+    ? text(payload.co_teacher_id) || null
+    : undefined;
+  if (classTeacherId !== undefined) payload.class_teacher_id = classTeacherId;
+  if (coTeacherId !== undefined) payload.co_teacher_id = coTeacherId;
+  if (classTeacherId && coTeacherId && classTeacherId === coTeacherId) {
+    throw new Error("class teacher and co-teacher must be different staff members");
+  }
+  const teacherIds = [classTeacherId, coTeacherId].filter(
+    (value): value is string => Boolean(value),
+  );
+  if (teacherIds.length > 0) {
+    const result = await svc.from("staff").select("id").eq("school_id", school)
+      .eq("is_active", true).in("id", teacherIds);
+    if (result.error) throw new Error(result.error.message);
+    if ((result.data ?? []).length !== new Set(teacherIds).size) {
+      throw new Error("class teacher and co-teacher must be active staff in this school");
+    }
+  }
+  return payload;
+}
+
 export async function handleAcademics(
   req: Request,
   path: string,
@@ -148,6 +179,102 @@ export async function handleAcademics(
   // ── Academic Years ─────────────────────────────────────────
   if (path.startsWith("/academic-years")) {
     const id = parseId(path, "/academic-years");
+    if (id && path.endsWith("/summary") && method === "GET") {
+      const yearId = id;
+      const year = await svc.from("academic_years").select("id, school_id, year_label")
+        .eq("id", yearId).eq("school_id", sid).maybeSingle();
+      if (year.error) return fail(year.error.message);
+      if (!year.data) return fail("academic year not found", 404);
+
+      const [sectionsResult, subjectLinksResult, feeStructuresResult] = await Promise.all([
+        svc.from("sections").select(
+          "id, grade_id, section_name, grade:grades(grade_name)",
+        ).eq("school_id", sid).eq("academic_year_id", yearId).order(
+          "section_name",
+        ),
+        svc.from("grade_subjects").select(
+          "subject_id, subject:subjects(id, subject_name, is_active)",
+        ).eq("school_id", sid).eq("academic_year_id", yearId),
+        svc.from("fee_structures").select(
+          "id, grade_id, section_id, category_id, amount, frequency, fee_categories(name)",
+        ).eq("school_id", sid).eq("academic_year_id", yearId).eq(
+          "is_active",
+          true,
+        ),
+      ]);
+      if (sectionsResult.error) return fail(sectionsResult.error.message);
+      if (subjectLinksResult.error) return fail(subjectLinksResult.error.message);
+      if (feeStructuresResult.error) return fail(feeStructuresResult.error.message);
+
+      const sections = (sectionsResult.data ?? []) as Array<Record<string, unknown>>;
+      const sectionIds = sections.map((row) => text(row.id)).filter(Boolean);
+      let students: Array<Record<string, unknown>> = [];
+      if (sectionIds.length > 0) {
+        const result = await svc.from("students").select(
+          "id, current_section_id, status, is_test_account",
+        ).eq("school_id", sid).eq("status", "active").eq(
+          "is_test_account",
+          false,
+        ).in("current_section_id", sectionIds);
+        if (result.error) return fail(result.error.message);
+        students = (result.data ?? []) as Array<Record<string, unknown>>;
+      }
+
+      const studentCountBySection = new Map<string, number>();
+      for (const student of students) {
+        const sectionId = text(student.current_section_id);
+        if (!sectionId) continue;
+        studentCountBySection.set(
+          sectionId,
+          (studentCountBySection.get(sectionId) ?? 0) + 1,
+        );
+      }
+
+      const classRows = sections.map((section) => {
+        const grade = section.grade && typeof section.grade === "object"
+          ? section.grade as Record<string, unknown>
+          : {};
+        return {
+          section_id: text(section.id),
+          grade_id: text(section.grade_id),
+          grade_name: text(grade.grade_name),
+          section_name: text(section.section_name),
+          student_count: studentCountBySection.get(text(section.id)) ?? 0,
+        };
+      });
+
+      const subjects = new Map<string, string>();
+      for (const link of (subjectLinksResult.data ?? []) as Array<Record<string, unknown>>) {
+        const subject = link.subject && typeof link.subject === "object"
+          ? link.subject as Record<string, unknown>
+          : {};
+        if (subject.is_active === false) continue;
+        const subjectId = text(link.subject_id || subject.id);
+        const subjectName = text(subject.subject_name);
+        if (subjectId && subjectName) subjects.set(subjectId, subjectName);
+      }
+
+      const feeStructures = (feeStructuresResult.data ?? []) as Array<Record<string, unknown>>;
+      const feeNames = feeStructures.map((row) => {
+        const category = row.fee_categories && typeof row.fee_categories === "object"
+          ? row.fee_categories as Record<string, unknown>
+          : {};
+        const name = text(category.name);
+        return name || `${text(row.frequency) || "Fee"} · ${row.amount ?? 0}`;
+      });
+
+      return ok({
+        academic_year_id: yearId,
+        year_label: text(year.data.year_label),
+        active_student_count: students.length,
+        class_count: classRows.length,
+        classes: classRows,
+        subject_count: subjects.size,
+        subject_names: [...subjects.values()].sort(),
+        fee_structure_count: feeStructures.length,
+        fee_structure_names: feeNames,
+      });
+    }
     if (path.endsWith("/terms") && id) {
       const { data, error } = await svc.from("terms").select("*").eq("academic_year_id", id);
       if (error) return fail(error.message);
@@ -159,7 +286,28 @@ export async function handleAcademics(
       return ok(data);
     }
     if (!id && method === "POST") {
-      const { data, error } = await svc.from("academic_years").insert({ ...body, school_id: sid }).select().single();
+      const yearLabel = text(body.year_label || body.year);
+      if (!yearLabel) return fail("year_label required", 422);
+      const duplicate = await svc.from("academic_years").select("id").eq(
+        "school_id",
+        sid,
+      ).ilike("year_label", yearLabel).limit(1);
+      if (duplicate.error) return fail(duplicate.error.message);
+      if ((duplicate.data ?? []).length > 0) {
+        return fail("academic year label already exists for this school", 409);
+      }
+      if (body.is_current === true) {
+        const clearCurrent = await svc.from("academic_years").update({
+          is_current: false,
+          updated_at: new Date().toISOString(),
+        }).eq("school_id", sid).eq("is_current", true);
+        if (clearCurrent.error) return fail(clearCurrent.error.message);
+      }
+      const { data, error } = await svc.from("academic_years").insert({
+        ...body,
+        year_label: yearLabel,
+        school_id: sid,
+      }).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -169,7 +317,35 @@ export async function handleAcademics(
       return ok(data);
     }
     if (id && (method === "PATCH" || method === "PUT")) {
-      const { data, error } = await svc.from("academic_years").update({ ...body, updated_at: new Date().toISOString() }).eq("id", id).eq("school_id", sid).select().single();
+      const yearLabel = text(body.year_label || body.year);
+      if (!yearLabel) return fail("year_label required", 422);
+      const existingYear = await svc.from("academic_years").select(
+        "id, year_label",
+      ).eq("id", id).eq("school_id", sid).maybeSingle();
+      if (existingYear.error) return fail(existingYear.error.message);
+      if (!existingYear.data) return fail("academic year not found", 404);
+      if (text(existingYear.data.year_label).toLowerCase() !== yearLabel.toLowerCase()) {
+        const duplicate = await svc.from("academic_years").select("id").eq(
+          "school_id",
+          sid,
+        ).ilike("year_label", yearLabel).neq("id", id).limit(1);
+        if (duplicate.error) return fail(duplicate.error.message);
+        if ((duplicate.data ?? []).length > 0) {
+          return fail("academic year label already exists for this school", 409);
+        }
+      }
+      if (body.is_current === true) {
+        const clearCurrent = await svc.from("academic_years").update({
+          is_current: false,
+          updated_at: new Date().toISOString(),
+        }).eq("school_id", sid).eq("is_current", true).neq("id", id);
+        if (clearCurrent.error) return fail(clearCurrent.error.message);
+      }
+      const { data, error } = await svc.from("academic_years").update({
+        ...body,
+        year_label: yearLabel,
+        updated_at: new Date().toISOString(),
+      }).eq("id", id).eq("school_id", sid).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -222,12 +398,24 @@ export async function handleAcademics(
       return ok(data);
     }
     if (!id && method === "POST") {
-      const { data, error } = await svc.from("sections").insert({ ...body, school_id: sid }).select().single();
+      let payload: Record<string, unknown>;
+      try {
+        payload = await sectionPayload(svc, sid, body);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "invalid teacher assignment", 422);
+      }
+      const { data, error } = await svc.from("sections").insert({ ...payload, school_id: sid }).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
-    if (id && method === "PATCH") {
-      const { data, error } = await svc.from("sections").update({ ...body, updated_at: new Date().toISOString() }).eq("id", id).eq("school_id", sid).select().single();
+    if (id && (method === "PATCH" || method === "PUT")) {
+      let payload: Record<string, unknown>;
+      try {
+        payload = await sectionPayload(svc, sid, body);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "invalid teacher assignment", 422);
+      }
+      const { data, error } = await svc.from("sections").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", id).eq("school_id", sid).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }

@@ -18,6 +18,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> schoolDeskFirebaseMessagingBackgroundHandler(
@@ -388,7 +389,9 @@ class PushNotificationService {
     final body = notification?.body ?? message.data['body'] ?? '';
     try {
       await _localNotifications.show(
-        id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
+        id:
+            message.messageId?.hashCode ??
+            DateTime.now().millisecondsSinceEpoch,
         title: title,
         body: body,
         notificationDetails: NotificationDetails(
@@ -501,6 +504,14 @@ class PushNotificationService {
       data: data,
       currentRole: BackendApiClient.instance.currentRoleName,
     );
+    if ((BackendApiClient.instance.currentRoleName ?? '')
+            .trim()
+            .toLowerCase() ==
+        'parent') {
+      await ParentChildSelectionService.saveStudentId(
+        (data['student_id'] ?? data['studentId'] ?? '').toString(),
+      );
+    }
     navigator.pushNamed(target.route, arguments: target.arguments);
   }
 

@@ -492,35 +492,23 @@ function getNotificationTemplate(
         },
       };
 
-    case "ptm_booked":
+    case "fee_invoice_generated":
       return {
-        title: "📅 PTM Slot Booked",
+        title: "New Fee Invoice",
         body: String(
-          eventData.message ||
-            "A parent has booked a PTM meeting slot with you.",
+          eventData.message || "A new fee invoice is available for your child.",
         ),
         data: {
-          event_type: "ptm_booked",
-          reference_type: "ptm",
-          ptm_id: String(eventData.ptm_id || ""),
-          slot_date: String(eventData.slot_date || ""),
-          slot_time: String(eventData.slot_time || ""),
-        },
-      };
-
-    case "ptm_status_updated":
-      return {
-        title: "📅 PTM Meeting Update",
-        body: String(
-          eventData.message || "Your PTM meeting status has been updated.",
-        ),
-        data: {
-          event_type: "ptm_status_updated",
-          reference_type: "ptm",
-          ptm_id: String(eventData.ptm_id || ""),
-          status: String(eventData.status || ""),
-          slot_date: String(eventData.slot_date || ""),
-          slot_time: String(eventData.slot_time || ""),
+          event_type: "fee_invoice_generated",
+          reference_type: "fee",
+          invoice_id: String(eventData.invoice_id || ""),
+          reference_id: String(
+            eventData.reference_id || eventData.invoice_id || "",
+          ),
+          student_id: String(eventData.student_id || ""),
+          balance: String(eventData.balance || ""),
+          due_date: String(eventData.due_date || ""),
+          route: String(eventData.route || "/parent-fees-screen"),
         },
       };
 
@@ -918,8 +906,7 @@ function preferenceKeysForEvent(eventType: string): string[] {
   ) return ["academics"];
   if (
     type.includes("event") ||
-    type.includes("calendar") ||
-    type.includes("ptm")
+    type.includes("calendar")
   ) return ["events"];
   if (
     type.includes("message") ||
@@ -1083,6 +1070,21 @@ async function processNotificationEvent(
   event: NotificationEvent,
 ): Promise<EventProcessResult> {
   try {
+    // PTM is retired. Do not deliver historical events that were queued before
+    // the feature was removed; retain the audit row but mark it handled.
+    if (
+      event.event_type.startsWith("ptm_") ||
+      eventValue(event.event_data, "reference_type") === "ptm"
+    ) {
+      await markEventProcessed(event.id);
+      return {
+        processed: true,
+        sentCount: 0,
+        invalidTokenCount: 0,
+        transientFailureCount: 0,
+        reason: "retired_ptm_feature",
+      };
+    }
     // Immediate API processing and pg_cron may overlap. Atomically transition
     // the row out of the pending set before contacting FCM; only one worker can
     // claim a given event. Transient failures release it for a later retry.

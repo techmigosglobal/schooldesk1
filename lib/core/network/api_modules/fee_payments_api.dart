@@ -1,7 +1,7 @@
 part of '../backend_api_client.dart';
 
 extension BackendFeePaymentsApi on BackendApiClient {
-  Future<void> recordPayment(PaymentRequest request) async {
+  Future<Map<String, dynamic>> recordPayment(PaymentRequest request) async {
     try {
       final response = await _dio.post(
         '/fees/payments',
@@ -13,6 +13,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
           message: data['error'] ?? 'Failed to record payment',
         );
       }
+      return Map<String, dynamic>.from(data['data'] as Map? ?? {});
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -45,7 +46,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
     int? refreshNonce,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/parent/students/${studentId.trim()}/fees',
         queryParameters: {
           if (refreshNonce != null) 'refresh_nonce': refreshNonce,
@@ -100,6 +101,8 @@ extension BackendFeePaymentsApi on BackendApiClient {
     required String transactionRef,
     required String screenshotPath,
     required String screenshotName,
+    Uint8List? screenshotBytes,
+    String? screenshotMimeType,
     String remarks = '',
   }) async {
     try {
@@ -115,9 +118,11 @@ extension BackendFeePaymentsApi on BackendApiClient {
           'payment_method': paymentMethod.trim(),
           'transaction_ref': transactionRef.trim(),
           if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
-          'screenshot': await MultipartFile.fromFile(
-            screenshotPath,
+          'screenshot': await _multipartUpload(
+            filePath: screenshotPath,
+            fileBytes: screenshotBytes,
             filename: screenshotName,
+            contentType: _resolveMediaType(screenshotMimeType, screenshotName),
           ),
         }),
       );
@@ -138,6 +143,8 @@ extension BackendFeePaymentsApi on BackendApiClient {
     required String transactionRef,
     required String screenshotPath,
     required String screenshotName,
+    Uint8List? screenshotBytes,
+    String? screenshotMimeType,
     String remarks = '',
   }) async {
     try {
@@ -146,9 +153,11 @@ extension BackendFeePaymentsApi on BackendApiClient {
         data: FormData.fromMap({
           'transaction_ref': transactionRef.trim(),
           if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
-          'screenshot': await MultipartFile.fromFile(
-            screenshotPath,
+          'screenshot': await _multipartUpload(
+            filePath: screenshotPath,
+            fileBytes: screenshotBytes,
             filename: screenshotName,
+            contentType: _resolveMediaType(screenshotMimeType, screenshotName),
           ),
         }),
       );
@@ -169,7 +178,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
     int? refreshNonce,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/fees/payment-config',
         queryParameters: {
           if (invoiceId.trim().isNotEmpty) 'invoice_id': invoiceId.trim(),
@@ -209,7 +218,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
       if (status != null && status.trim().isNotEmpty) {
         queryParams['status'] = status.trim();
       }
-      final response = await _dio.get(
+      final response = await _get(
         '/fees/payment-requests',
         queryParameters: queryParams,
       );
@@ -288,12 +297,19 @@ extension BackendFeePaymentsApi on BackendApiClient {
   Future<Map<String, dynamic>> uploadPaymentQr({
     required String path,
     required String fileName,
+    Uint8List? fileBytes,
+    String? mimeType,
   }) async {
     try {
       final response = await _dio.post(
         '/fees/payment-config/qr',
         data: FormData.fromMap({
-          'file': await MultipartFile.fromFile(path, filename: fileName),
+          'file': await _multipartUpload(
+            filePath: path,
+            fileBytes: fileBytes,
+            filename: fileName,
+            contentType: _resolveMediaType(mimeType, fileName),
+          ),
         }),
       );
       final data = response.data as Map<String, dynamic>;
@@ -310,7 +326,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getPaymentConfigs() async {
     try {
-      final response = await _dio.get('/fees/payment-configs');
+      final response = await _get('/fees/payment-configs');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) return _asListMap(data['data']);
       throw ServerException(
@@ -406,12 +422,19 @@ extension BackendFeePaymentsApi on BackendApiClient {
     required String id,
     required String path,
     required String fileName,
+    Uint8List? fileBytes,
+    String? mimeType,
   }) async {
     try {
       final response = await _dio.post(
         '/fees/payment-configs/${id.trim()}/qr',
         data: FormData.fromMap({
-          'file': await MultipartFile.fromFile(path, filename: fileName),
+          'file': await _multipartUpload(
+            filePath: path,
+            fileBytes: fileBytes,
+            filename: fileName,
+            contentType: _resolveMediaType(mimeType, fileName),
+          ),
         }),
       );
       final data = response.data as Map<String, dynamic>;

@@ -3,28 +3,28 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('principal academic years support safe delete and export download', () {
-    final source = File(
-      'lib/features/academics/presentation/screens/academic_management_screen/principal_academic_years_screen.dart',
-    ).readAsStringSync();
-    final api = File(
-      'lib/core/network/api_modules/communications_api.dart',
-    ).readAsStringSync();
+  test(
+    'principal academic years support safe delete and selected-year summary',
+    () {
+      final source = File(
+        'lib/features/academics/presentation/screens/academic_management_screen/principal_academic_years_screen.dart',
+      ).readAsStringSync();
 
-    expect(source, contains('_confirmAcademicYearDelete'));
-    expect(source, contains('_confirmAcademicYearFinalDelete'));
-    expect(source, contains('deleteAcademicYear('));
-    expect(source, contains('cascadeConfirmed: true'));
+      expect(source, contains('_confirmAcademicYearDelete'));
+      expect(source, contains('_confirmAcademicYearFinalDelete'));
+      expect(source, contains('deleteAcademicYear('));
+      expect(source, contains('cascadeConfirmed: true'));
 
-    expect(source, contains("static const String _format = 'pdf'"));
-    expect(source, contains("Text('PDF report')"));
-    expect(source, isNot(contains("values: const ['csv', 'xlsx', 'pdf']")));
-
-    expect(source, contains('PdfService.getInstance().previewDocument'));
-    expect(source, contains('downloadReportExport'));
-    expect(api, contains('Future<Uint8List> downloadReportExport'));
-    expect(api, contains('EnvConfig.apiOrigin'));
-  });
+      expect(source, contains('getAcademicYearSummary'));
+      expect(source, contains('active_student_count'));
+    expect(source, contains('fee_structure_names'));
+      expect(source, isNot(contains('Export Data')));
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      expect(routes, isNot(contains('academicYearClasswiseExport')));
+      expect(routes, isNot(contains('academicYearUsersExport')));
+      expect(routes, isNot(contains('academicYearFeesExport')));
+    },
+  );
 
   test('academic year delete clears linked finance workflow rows first', () {
     final screen = File(

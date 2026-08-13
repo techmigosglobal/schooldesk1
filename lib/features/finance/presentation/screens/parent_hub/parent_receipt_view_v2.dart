@@ -21,6 +21,7 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
   bool _sharing = false;
   String? _error;
   Map<String, dynamic> _receiptData = const {};
+  Map<String, dynamic> _receiptPayload = const {};
   Map<String, dynamic> _school = const {};
   String _parentName = '';
 
@@ -67,6 +68,51 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
           _loading = false;
         });
         return;
+      }
+
+      final receiptId = _text(receipt['id'] ?? pr['receipt_id']);
+      if (receiptId.isNotEmpty) {
+        try {
+          final payload = await BackendApiClient.instance.getFeeReceiptPayload(
+            receiptId,
+          );
+          final canonicalReceipt = payload['receipt'] is Map
+              ? Map<String, dynamic>.from(payload['receipt'] as Map)
+              : const <String, dynamic>{};
+          final totals = payload['totals'] is Map
+              ? Map<String, dynamic>.from(payload['totals'] as Map)
+              : const <String, dynamic>{};
+          final canonicalStudent = payload['student'] is Map
+              ? Map<String, dynamic>.from(payload['student'] as Map)
+              : const <String, dynamic>{};
+          final canonicalSchool = payload['school'] is Map
+              ? Map<String, dynamic>.from(payload['school'] as Map)
+              : const <String, dynamic>{};
+          if (!mounted) return;
+          setState(() {
+            _receiptPayload = payload;
+            _receiptData = {
+              'receipt_no': canonicalReceipt['receipt_number'],
+              'school_name': canonicalSchool['name'],
+              'amount': totals['this_payment_amount'],
+              'invoice_total': totals['total_amount'],
+              'cumulative_paid': totals['paid_amount'],
+              'balance': totals['balance'],
+              'payment_mode': canonicalReceipt['payment_method'],
+              'paid_at': canonicalReceipt['payment_date'],
+              'student_name': canonicalStudent['name'],
+              'admission_no': canonicalStudent['admission_number'],
+              'academic_year': payload['academic_year'],
+              'fee_period': payload['fee_period'],
+              'fee_component': 'Fee payment',
+              'transaction_ref': canonicalReceipt['reference_number'],
+            };
+            _loading = false;
+          });
+          return;
+        } on Object {
+          // Old receipts without a usable snapshot retain the safe local view.
+        }
       }
 
       setState(() {
@@ -368,6 +414,31 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
     setState(() => _sharing = true);
     try {
       final receiptNo = _text(_receiptData['receipt_no'], fallback: 'receipt');
+      if (_receiptPayload.isNotEmpty) {
+        final payloadSchool = _receiptPayload['school'] is Map
+            ? Map<String, dynamic>.from(_receiptPayload['school'] as Map)
+            : const <String, dynamic>{};
+        final assets = await Future.wait([
+          _networkImageBytes(_text(payloadSchool['logo_url'])),
+          _networkImageBytes(_text(payloadSchool['authorized_signature_url'])),
+        ]);
+        final pdf = await PdfService.getInstance()
+            .generatePaymentReceiptFromPayload(
+              _receiptPayload,
+              schoolLogo: assets[0],
+              authorizedSignature: assets[1],
+            );
+        if (!mounted) return;
+        await const ShareExportService().shareBytes(
+          bytes: pdf,
+          fileName: 'Receipt_${_receiptFileToken(receiptNo)}.pdf',
+          mimeType: 'application/pdf',
+          title: 'Payment Receipt',
+          subject: 'Payment receipt $receiptNo',
+          context: context,
+        );
+        return;
+      }
       final amount = (_receiptData['amount'] as num?)?.toDouble() ?? 0.0;
       final student = widget.args.student ?? const <String, dynamic>{};
       final className = _text(

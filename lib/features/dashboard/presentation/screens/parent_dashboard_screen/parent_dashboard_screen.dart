@@ -90,12 +90,6 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
       final api = BackendApiClient.instance;
       final futures = <Future<dynamic>>[
         api.getDashboard('parent', forceRefresh: forceRefresh),
-        api.getMyStudents(
-          refreshNonce: forceRefresh
-              ? DateTime.now().millisecondsSinceEpoch
-              : null,
-        ),
-        api.getCurrentSchool().catchError((_) => const <String, dynamic>{}),
       ];
       if (includeFeedPosts) {
         futures.add(
@@ -113,28 +107,23 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
               .map((row) => Map<String, dynamic>.from(row))
               .toList() ??
           const <Map<String, dynamic>>[];
-      final linkedChildren = (results[1] as List)
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList();
-      final children = dashboardChildren.isNotEmpty
-          ? dashboardChildren
-          : linkedChildren;
       final selectedChildIndex = await ParentChildSelectionService.indexFor(
-        children,
+        dashboardChildren,
         fallback: _activeChildIndex,
       );
       final feedItems = includeFeedPosts
-          ? _mapFeedItems(results[3] as List)
+          ? _mapFeedItems(results[1] as List)
           : _eventPosts
                 .whereType<Map>()
                 .map((row) => Map<String, dynamic>.from(row))
                 .toList();
       setState(() {
         _dashboard = dashboard;
-        _children = children;
+        _children = dashboardChildren;
         _eventPosts = feedItems;
-        _schoolName = 'Arish Ville Preschool';
+        _schoolName = (dashboard['school_name'] ?? _schoolName)
+            .toString()
+            .trim();
         _activeChildIndex = selectedChildIndex;
         _loading = false;
       });
@@ -1434,9 +1423,6 @@ class _ParentSummaryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final metrics = dashboard['metrics'] is Map
-        ? Map<String, dynamic>.from(dashboard['metrics'] as Map)
-        : const <String, dynamic>{};
     final cards = <Widget>[
       _StatCard(
         icon: Icons.how_to_reg_rounded,
@@ -1455,16 +1441,14 @@ class _ParentSummaryGrid extends StatelessWidget {
       _StatCard(
         icon: Icons.account_balance_wallet_rounded,
         label: 'Fees Due',
-        value: _money(
-          child['pending_fee_balance'] ?? metrics['pending_fee_balance'],
-        ),
+        value: _money(child['pending_fee_balance']),
         gradientColors: const [Color(0xFFEA580C), Color(0xFFFB923C)],
         route: AppRoutes.parentFees,
       ),
       _StatCard(
         icon: Icons.chat_bubble_rounded,
         label: 'Unread Messages',
-        value: _metricNumber(metrics['unread_messages']),
+        value: _metricNumber(child['unread_messages']),
         gradientColors: const [Color(0xFF1D4ED8), Color(0xFF60A5FA)],
         route: AppRoutes.parentTeacherChat,
       ),

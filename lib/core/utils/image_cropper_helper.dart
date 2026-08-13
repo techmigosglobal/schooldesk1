@@ -17,7 +17,9 @@ class SchoolDeskImageCropper {
       maxWidth: maxSize,
       maxHeight: maxSize,
       aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-      compressFormat: ImageCompressFormat.jpg,
+      compressFormat: sourcePath.toLowerCase().endsWith('.png')
+          ? ImageCompressFormat.png
+          : ImageCompressFormat.jpg,
       compressQuality: 88,
       uiSettings: [
         AndroidUiSettings(

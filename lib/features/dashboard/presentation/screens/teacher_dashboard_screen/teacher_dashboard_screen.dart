@@ -77,7 +77,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       await RoleAccessService.initialize();
       final api = BackendApiClient.instance;
       final results = await Future.wait([
-        api.getDashboard('teacher', forceRefresh: forceRefresh),
         api.getAnnouncements(forceRefresh: forceRefresh),
         _loadMyAttendanceSafely(api),
         _loadUnreadNotificationsCount(),
@@ -95,11 +94,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               (row) => teacherFlowText(row['done']).toLowerCase() != 'true',
             )
             .length;
-        _myAttendance = results[2] as StaffAttendanceModel?;
-        _announcements = (results[1] as List)
+        _myAttendance = results[1] as StaffAttendanceModel?;
+        _announcements = (results[0] as List)
             .whereType<AnnouncementModel>()
             .toList();
-        _unreadNotifications = results[3] as int? ?? 0;
+        _unreadNotifications = results[2] as int? ?? 0;
         _loading = false;
       });
     } on Object catch (_) {
@@ -442,7 +441,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         color: Colors.indigo,
         route: AppRoutes.teacherAttendance,
       ),
-      // PTM review removed from today's required actions per request
       _teacherActionItem(
         context,
         time: 'Admin',

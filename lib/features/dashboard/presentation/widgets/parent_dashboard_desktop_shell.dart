@@ -39,9 +39,7 @@ class ParentDashboardDesktopBody extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final isWide = DesktopBreakpoints.isWideWidth(width);
-        final useTwoPane = DesktopBreakpoints.isTwoPaneWidth(
-          width,
-        );
+        final useTwoPane = DesktopBreakpoints.isTwoPaneWidth(width);
         final sidebarWidth = isWide ? 360.0 : 300.0;
         final isNarrow = !useTwoPane;
 
@@ -89,7 +87,9 @@ class ParentDashboardDesktopBody extends StatelessWidget {
                         SizedBox(height: tokens.spacing.lg),
                         const TodaysHighlightsCard(role: 'parent'),
                         SizedBox(height: tokens.spacing.lg),
-                        _ParentQuickAccessDesktopPanel(parentColor: parentColor),
+                        _ParentQuickAccessDesktopPanel(
+                          parentColor: parentColor,
+                        ),
                       ],
                     ),
                   ),
@@ -520,16 +520,9 @@ class _ChildOverviewPanel extends StatelessWidget {
           child['section_name'] ??
           child['class'],
     );
-    final attendancePct = _double(
-      child['attendance_percent'] ?? dashboard['attendance_percent'],
-    );
-    final feeBalance = _double(
-      child['fee_balance'] ?? dashboard['fee_balance'],
-    );
-    final homeworkPending =
-        (child['homework_pending'] as int?) ??
-        (dashboard['homework_pending'] as int?) ??
-        0;
+    final attendancePct = _double(child['attendance_pct']);
+    final feeBalance = _double(child['pending_fee_balance']);
+    final homeworkPending = (child['homework_due'] as int?) ?? 0;
 
     return Container(
       decoration: BoxDecoration(

@@ -29,7 +29,7 @@ extension NotificationsApi on BackendApiClient {
   /// Get notification preferences for current user
   Future<Map<String, dynamic>> getNotificationPreferences() async {
     try {
-      final response = await _dio.get('/notifications/preferences');
+      final response = await _get('/notifications/preferences');
       final data = _asMap(response.data);
       if (data['success'] == true) {
         return _asMap(data['data'] ?? {});

@@ -3,9 +3,22 @@ part of '../backend_api_client.dart';
 extension BackendFeesApi on BackendApiClient {
   // ─── Fees ───────────────────────────────────────────────────────────────────
 
+  Future<Map<String, dynamic>> getFeeReceiptPayload(String receiptId) async {
+    try {
+      final response = await _get('/fees/receipts/${receiptId.trim()}');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(message: data['error'] ?? 'Failed to load receipt');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<FeeInvoiceModel>> getStudentFees(String studentId) async {
     try {
-      final response = await _dio.get('/students/$studentId/fees');
+      final response = await _get('/students/$studentId/fees');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return (data['data'] as List)
@@ -34,7 +47,7 @@ extension BackendFeesApi on BackendApiClient {
       if (sectionId != null) {
         queryParams['section_id'] = sectionId;
       }
-      final response = await _dio.get(
+      final response = await _get(
         '/fees/structures',
         queryParameters: queryParams,
       );
@@ -52,7 +65,7 @@ extension BackendFeesApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getFeeCategories() async {
     try {
-      final response = await _dio.get('/fees/categories');
+      final response = await _get('/fees/categories');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return _asListMap(data['data']);
@@ -361,7 +374,7 @@ extension BackendFeesApi on BackendApiClient {
       if (sectionId != null) queryParams['section_id'] = sectionId;
       if (termId != null) queryParams['term_id'] = termId;
       if (refreshNonce != null) queryParams['refresh_nonce'] = refreshNonce;
-      final response = await _dio.get(
+      final response = await _get(
         '/fees/invoices',
         queryParameters: queryParams,
       );
@@ -382,7 +395,7 @@ extension BackendFeesApi on BackendApiClient {
 
   Future<Map<String, dynamic>> getInvoiceDetail(String invoiceId) async {
     try {
-      final response = await _dio.get('/fees/invoices/${invoiceId.trim()}');
+      final response = await _get('/fees/invoices/${invoiceId.trim()}');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return Map<String, dynamic>.from(data['data'] as Map? ?? {});

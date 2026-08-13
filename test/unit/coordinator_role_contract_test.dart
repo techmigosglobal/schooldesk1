@@ -27,12 +27,11 @@ void main() {
       );
     });
 
-    test('cannot enter finance routes, including fee exports', () {
+    test('cannot enter finance routes', () {
       for (final route in [
         AppRoutes.feeMonitoring,
         AppRoutes.principalPaymentRequests,
         AppRoutes.principalFees,
-        AppRoutes.academicYearFeesExport,
       ]) {
         expect(
           RouteAccessGuard.isRoleAllowedFor(

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -92,17 +93,35 @@ class _IssueScreenState extends State<IssueScreen>
     if (draft == null) return;
     setState(() => _loading = true);
     try {
+      final files = <Map<String, dynamic>>[];
+      for (final file in draft.files) {
+        final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
+        final isImage = ImageUploadOptimizer.isImage(file.name, mimeType);
+        final optimized = isImage
+            ? (file.bytes != null
+                  ? ImageUploadOptimizer.fromBytes(
+                      file.bytes!,
+                      filename: file.name,
+                      mimeType: mimeType,
+                      preset: ImageUploadPreset.content,
+                    )
+                  : await ImageUploadOptimizer.fromPath(
+                      file.path ?? '',
+                      filename: file.name,
+                      mimeType: mimeType,
+                      preset: ImageUploadPreset.content,
+                    ))
+            : null;
+        files.add({
+          'name': optimized?.filename ?? file.name,
+          'path': file.path,
+          'bytes': optimized?.bytes ?? file.bytes,
+          'mime_type': optimized?.mimeType ?? mimeType,
+        });
+      }
       await BackendApiClient.instance.createIssueWithAttachments(
         draft.payload,
-        draft.files
-            .map(
-              (file) => {
-                'name': file.name,
-                'path': file.path,
-                'bytes': file.bytes,
-              },
-            )
-            .toList(),
+        files,
       );
       await _load();
       if (mounted) {

@@ -3,7 +3,7 @@ part of '../backend_api_client.dart';
 extension IssuesApi on BackendApiClient {
   Future<List<Map<String, dynamic>>> getIssues({String? status}) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/issues',
         queryParameters: {
           if (status != null && status.isNotEmpty) 'status': status,
@@ -43,10 +43,23 @@ extension IssuesApi on BackendApiClient {
         final name = '${file['name'] ?? 'attachment'}';
         final bytes = file['bytes'];
         final path = '${file['path'] ?? ''}'.trim();
+        final mimeType = '${file['mime_type'] ?? ''}'.trim();
         if (bytes is Uint8List) {
-          attachments.add(MultipartFile.fromBytes(bytes, filename: name));
+          attachments.add(
+            MultipartFile.fromBytes(
+              bytes,
+              filename: name,
+              contentType: _resolveMediaType(mimeType, name),
+            ),
+          );
         } else if (path.isNotEmpty) {
-          attachments.add(await MultipartFile.fromFile(path, filename: name));
+          attachments.add(
+            await MultipartFile.fromFile(
+              path,
+              filename: name,
+              contentType: _resolveMediaType(mimeType, name),
+            ),
+          );
         } else {
           throw const ServerException(
             message: 'Attachment data is unavailable. Please choose it again.',
@@ -70,13 +83,20 @@ extension IssuesApi on BackendApiClient {
   Future<Map<String, dynamic>> uploadIssueAttachment(
     String issueId,
     String path,
-    String filename,
-  ) async {
+    String filename, {
+    Uint8List? fileBytes,
+    String? mimeType,
+  }) async {
     try {
       final response = await _dio.post(
         '/issues/$issueId/attachments',
         data: FormData.fromMap({
-          'file': await MultipartFile.fromFile(path, filename: filename),
+          'file': await _multipartUpload(
+            filePath: path,
+            fileBytes: fileBytes,
+            filename: filename,
+            contentType: _resolveMediaType(mimeType, filename),
+          ),
         }),
       );
       final data = _asMap(response.data);
@@ -92,7 +112,7 @@ extension IssuesApi on BackendApiClient {
 
   Future<String> issueAttachmentUrl(String issueId, String attachmentId) async {
     try {
-      final response = await _dio.get(
+      final response = await _get(
         '/issues/$issueId/attachments/$attachmentId/url',
       );
       final data = _asMap(response.data);

@@ -11,6 +11,7 @@ import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 
 String _parentFacingRelationship(String value) {
   final normalized = value.trim().toLowerCase();
@@ -869,9 +870,18 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     }
 
     if ((input.photoPath ?? '').isNotEmpty) {
+      final optimized = await ImageUploadOptimizer.fromPath(
+        input.photoPath!,
+        filename: 'parent-avatar.jpg',
+        preset: ImageUploadPreset.portrait,
+        mimeType: 'image/jpeg',
+      );
       await client.uploadUserAvatar(
         userId: parent.id,
         filePath: input.photoPath!,
+        fileBytes: optimized.bytes,
+        fileName: optimized.filename,
+        mimeType: optimized.mimeType,
       );
     }
 

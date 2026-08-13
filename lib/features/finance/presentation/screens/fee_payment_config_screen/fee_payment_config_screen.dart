@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_widgets.dart';
 
@@ -261,16 +262,33 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.single;
-    final path = file.path;
-    if (path == null || path.isEmpty) return;
+    final path = file.path ?? '';
+    final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
+    final optimized = file.bytes != null
+        ? ImageUploadOptimizer.fromBytes(
+            file.bytes!,
+            filename: file.name,
+            mimeType: mimeType,
+            preset: ImageUploadPreset.branding,
+          )
+        : await ImageUploadOptimizer.fromPath(
+            path,
+            filename: file.name,
+            mimeType: mimeType,
+            preset: ImageUploadPreset.branding,
+          );
+    if (path.isEmpty && file.bytes == null) return;
     setState(() => _uploading = true);
     try {
       final config = await BackendApiClient.instance.uploadPaymentQr(
         path: path,
-        fileName: file.name,
+        fileName: optimized.filename,
+        fileBytes: optimized.bytes,
+        mimeType: optimized.mimeType,
       );
       if (!mounted) return;
       setState(() {

@@ -17,7 +17,7 @@ extension BackendStaffApi on BackendApiClient {
       if (schoolId != null) queryParams['school_id'] = schoolId;
       if (status != null) queryParams['status'] = status;
 
-      final response = await _dio.get('/staff', queryParameters: queryParams);
+      final response = await _get('/staff', queryParameters: queryParams);
       final data = _asMap(response.data);
       if (data['success'] == true) {
         final payload = _asMap(data['data']);
@@ -50,7 +50,7 @@ extension BackendStaffApi on BackendApiClient {
 
   Future<StaffModel> getStaffMember(String id) async {
     try {
-      final response = await _dio.get('/staff/$id');
+      final response = await _get('/staff/$id');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return StaffModel.fromJson(data['data'] as Map<String, dynamic>);
@@ -122,6 +122,7 @@ extension BackendStaffApi on BackendApiClient {
     String? filePath,
     Uint8List? fileBytes,
     String? fileName,
+    String? mimeType,
   }) async {
     try {
       final formData = FormData.fromMap({
@@ -129,6 +130,8 @@ extension BackendStaffApi on BackendApiClient {
           filePath: filePath,
           fileBytes: fileBytes,
           fileName: fileName,
+          mimeType: mimeType,
+          imagePreset: ImageUploadPreset.portrait,
         ),
       });
       final response = await _dio.post('/staff/$staffId/photo', data: formData);
@@ -150,6 +153,7 @@ extension BackendStaffApi on BackendApiClient {
     String? filePath,
     Uint8List? fileBytes,
     String? fileName,
+    String? mimeType,
     required String documentType,
   }) async {
     try {
@@ -161,6 +165,7 @@ extension BackendStaffApi on BackendApiClient {
           filePath: filePath,
           fileBytes: fileBytes,
           fileName: fileName,
+          mimeType: mimeType,
         ),
       });
       final response = await _dio.post(

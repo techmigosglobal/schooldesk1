@@ -777,6 +777,7 @@ class AttendanceSessionModel {
   final String correctionAskedAt;
   final String correctedAt;
   final List<Map<String, dynamic>> studentAttendances;
+  final Map<String, dynamic> dailyClaim;
 
   const AttendanceSessionModel({
     required this.id,
@@ -800,6 +801,7 @@ class AttendanceSessionModel {
     this.correctionAskedAt = '',
     this.correctedAt = '',
     this.studentAttendances = const [],
+    this.dailyClaim = const {},
   });
 
   factory AttendanceSessionModel.fromJson(Map<String, dynamic> json) =>
@@ -835,6 +837,7 @@ class AttendanceSessionModel {
                 .map((item) => Map<String, dynamic>.from(item))
                 .toList() ??
             const [],
+        dailyClaim: _attendanceAsMap(json['daily_claim']),
       );
 }
 
@@ -846,6 +849,12 @@ String _attendanceNestedText(Object? value, List<String> keys) {
     if (text.isNotEmpty && text != 'null') return text;
   }
   return '';
+}
+
+Map<String, dynamic> _attendanceAsMap(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return const {};
 }
 
 String _attendanceStaffName(Object? value) {
@@ -1296,7 +1305,7 @@ class PaymentRequest {
 
   const PaymentRequest({
     required this.invoiceId,
-    required this.receiptNumber,
+    this.receiptNumber = '',
     required this.amountPaid,
     required this.paymentDate,
     required this.paymentMode,
@@ -1307,13 +1316,13 @@ class PaymentRequest {
 
   Map<String, dynamic> toJson() => {
     'invoice_id': invoiceId,
-    'receipt_number': receiptNumber,
+    if (receiptNumber.trim().isNotEmpty) 'receipt_number': receiptNumber,
     'amount': amountPaid,
     'amount_paid': amountPaid,
     'payment_date': paymentDate,
     'payment_method': paymentMode,
     'payment_mode': paymentMode,
-    'reference_number': transactionId ?? receiptNumber,
+    if (transactionId != null) 'reference_number': transactionId,
     if (transactionId != null) 'transaction_id': transactionId,
     if (transactionId != null) 'transaction_ref': transactionId,
     if (proofUrl != null) 'proof_url': proofUrl,
