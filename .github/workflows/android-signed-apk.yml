@@ -1,0 +1,151 @@
+name: Build signed Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_name:
+        description: Optional Android version name (for example, 1.0.19)
+        required: false
+        type: string
+      build_number:
+        description: Optional Android version code; must be higher than the prior Play release
+        required: false
+        type: string
+      run_quality_checks:
+        description: Run Flutter analysis and the focused release tests before building
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signed-android-apk-production
+  cancel-in-progress: false
+
+jobs:
+  build-signed-apk:
+    name: Build signed production APK
+    runs-on: ubuntu-24.04
+    environment: android-release
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.0
+          channel: stable
+          cache: true
+
+      - name: Restore release-only configuration
+        env:
+          SCHOOLDESK_RELEASE_ENV_BASE64: ${{ secrets.SCHOOLDESK_RELEASE_ENV_BASE64 }}
+          SCHOOLDESK_ANDROID_KEYSTORE_BASE64: ${{ secrets.SCHOOLDESK_ANDROID_KEYSTORE_BASE64 }}
+          SCHOOLDESK_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.SCHOOLDESK_ANDROID_KEYSTORE_PASSWORD }}
+          SCHOOLDESK_ANDROID_KEY_ALIAS: ${{ secrets.SCHOOLDESK_ANDROID_KEY_ALIAS }}
+          SCHOOLDESK_ANDROID_KEY_PASSWORD: ${{ secrets.SCHOOLDESK_ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for secret_name in \
+            SCHOOLDESK_RELEASE_ENV_BASE64 \
+            SCHOOLDESK_ANDROID_KEYSTORE_BASE64 \
+            SCHOOLDESK_ANDROID_KEYSTORE_PASSWORD \
+            SCHOOLDESK_ANDROID_KEY_ALIAS \
+            SCHOOLDESK_ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "::error::Missing required GitHub environment secret: ${secret_name}"
+              exit 1
+            fi
+          done
+
+          env_file="$RUNNER_TEMP/schooldesk-production.env.json"
+          keystore_file="$RUNNER_TEMP/schooldesk-release.keystore"
+          printf '%s' "$SCHOOLDESK_RELEASE_ENV_BASE64" | base64 --decode > "$env_file"
+          printf '%s' "$SCHOOLDESK_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_file"
+          chmod 600 "$env_file" "$keystore_file"
+
+          printf 'SCHOOLDESK_ENV_FILE=%s\n' "$env_file" >> "$GITHUB_ENV"
+          printf 'ANDROID_KEYSTORE_PATH=%s\n' "$keystore_file" >> "$GITHUB_ENV"
+          printf 'ANDROID_KEYSTORE_PASSWORD=%s\n' "$SCHOOLDESK_ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          printf 'ANDROID_KEY_ALIAS=%s\n' "$SCHOOLDESK_ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          printf 'ANDROID_KEY_PASSWORD=%s\n' "$SCHOOLDESK_ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Run release quality checks
+        if: ${{ inputs.run_quality_checks }}
+        run: |
+          set -Eeuo pipefail
+          flutter analyze
+          flutter test --concurrency=1 \
+            test/unit/arishville_fee_receipt_contract_test.dart \
+            test/widget/fee_receipt_pdf_generation_test.dart \
+            test/unit/supabase_fees_contract_test.dart \
+            test/unit/automatic_receipt_snapshot_contract_test.dart
+
+      - name: Build and verify signed APK
+        env:
+          BUILD_NAME: ${{ inputs.build_name }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          flutter_args=()
+          if [[ -n "$BUILD_NAME" ]]; then
+            flutter_args+=(--build-name="$BUILD_NAME")
+          fi
+          if [[ -n "$BUILD_NUMBER" ]]; then
+            [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
+              echo "::error::build_number must be a positive integer."
+              exit 1
+            }
+            flutter_args+=(--build-number="$BUILD_NUMBER")
+          fi
+
+          scripts/build-android-supabase.sh apk \
+            --env-file "$SCHOOLDESK_ENV_FILE" \
+            -- "${flutter_args[@]}"
+
+          apk_file="build/app/outputs/flutter-apk/app-release.apk"
+          [[ -s "$apk_file" ]] || {
+            echo "::error::Expected signed APK was not produced."
+            exit 1
+          }
+          apksigner_file="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          [[ -n "$apksigner_file" ]] || {
+            echo "::error::Android apksigner was not found."
+            exit 1
+          }
+          "$apksigner_file" verify --verbose "$apk_file"
+          sha256sum "$apk_file" > build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - name: Upload signed APK and symbol files
+        uses: actions/upload-artifact@v4
+        with:
+          name: schooldesk-signed-apk-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha256
+            build/debug-info/android/apk/
+
+      - name: Remove release material
+        if: always()
+        shell: bash
+        run: |
+          rm -f "${SCHOOLDESK_ENV_FILE:-}" "${ANDROID_KEYSTORE_PATH:-}"
