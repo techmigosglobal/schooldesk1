@@ -79,6 +79,7 @@ class ParentFeesRemoteDataSourceImpl implements ParentFeesRemoteDataSource {
       ...payment,
       'receipt_id': receipt['id'] ?? payment['id'] ?? '',
       'receipt_no':
+          receipt['display_receipt_number'] ??
           receipt['receipt_number'] ??
           payment['receipt_number'] ??
           payment['reference_number'] ??

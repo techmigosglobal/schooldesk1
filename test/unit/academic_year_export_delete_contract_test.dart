@@ -17,7 +17,7 @@ void main() {
 
       expect(source, contains('getAcademicYearSummary'));
       expect(source, contains('active_student_count'));
-    expect(source, contains('fee_structure_names'));
+      expect(source, contains('fee_structure_names'));
       expect(source, isNot(contains('Export Data')));
       final routes = File('lib/routes/app_routes.dart').readAsStringSync();
       expect(routes, isNot(contains('academicYearClasswiseExport')));
@@ -26,7 +26,7 @@ void main() {
     },
   );
 
-  test('academic year delete clears linked finance workflow rows first', () {
+  test('academic year delete archives linked finance workflow rows first', () {
     final screen = File(
       'lib/features/academics/presentation/screens/academic_management_screen/academic_management_screen.dart',
     ).readAsStringSync();
@@ -41,12 +41,19 @@ void main() {
 
     expect(academics, contains('deleteAcademicYearWorkflowRows'));
     expect(academics, contains('deleteInvoiceWorkflowRows'));
-    expect(academics, contains('svc.from("fee_receipts").delete()'));
-    expect(academics, contains('svc.from("parent_payment_requests").delete()'));
-    expect(academics, contains('svc.from("payments").delete()'));
-    expect(academics, contains('svc.from("fee_invoices").delete()'));
-    expect(academics, contains('svc.from("fee_concessions").delete()'));
-    expect(academics, contains('deleted_invoices'));
+    expect(academics, contains('archived_academic_year'));
+    expect(academics, contains('retained_invoices'));
+    expect(academics, contains('cancelled_invoices'));
+    expect(academics, contains('reversed_requests'));
+    expect(academics, contains('status: "archived"'));
+    expect(academics, isNot(contains('svc.from("fee_receipts").delete()')));
+    expect(
+      academics,
+      isNot(contains('svc.from("parent_payment_requests").delete()')),
+    );
+    expect(academics, isNot(contains('svc.from("payments").delete()')));
+    expect(academics, isNot(contains('svc.from("fee_invoices").delete()')));
+    expect(academics, isNot(contains('svc.from("fee_concessions").delete()')));
   });
 
   test('principal academic year screens use adaptive text sizing', () {

@@ -44,7 +44,7 @@ void main() {
 
     expect(paymentFlow, contains('double get _remainingBalance'));
     expect(paymentFlow, contains('amount > _remainingBalance'));
-    expect(paymentFlow, contains('createFeePaymentIntent'));
+    expect(paymentFlow, contains('submitParentPaymentRequestProof'));
     expect(handler, contains('billing_mode'));
   });
 

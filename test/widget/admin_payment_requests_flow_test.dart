@@ -56,6 +56,21 @@ void main() {
             studentName: 'Diya Verification',
           ),
           _requestRow(
+            id: 'req-resubmitted',
+            status: 'resubmitted',
+            studentName: 'Mira Resubmitted',
+          ),
+          _requestRow(
+            id: 'req-submitted',
+            status: 'submitted',
+            studentName: 'Rohan Submitted',
+          ),
+          _requestRow(
+            id: 'req-initiated',
+            status: 'initiated',
+            studentName: 'Nia Draft',
+          ),
+          _requestRow(
             id: 'req-clarify',
             status: 'clarification_required',
             studentName: 'Kabir Clarification',
@@ -80,7 +95,17 @@ void main() {
 
       expect(find.text('Aarav Pending'), findsOneWidget);
       expect(find.text('Diya Verification'), findsOneWidget);
+      expect(find.text('Mira Resubmitted'), findsOneWidget);
+      expect(find.text('Rohan Submitted'), findsOneWidget);
+      expect(find.text('Nia Draft'), findsNothing);
       expect(find.textContaining('Kabir'), findsNothing);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'All'));
+      await tester.pumpAndSettle();
+      _drainExpectedOverflow(tester);
+
+      expect(find.text('Nia Draft'), findsOneWidget);
+      expect(find.text('Awaiting Proof'), findsOneWidget);
 
       await tester.tap(find.widgetWithText(ChoiceChip, 'Clarification'));
       await tester.pumpAndSettle();

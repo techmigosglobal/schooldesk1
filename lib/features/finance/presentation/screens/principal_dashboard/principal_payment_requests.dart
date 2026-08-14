@@ -72,12 +72,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   List<Map<String, dynamic>> get _visibleRequests {
     if (_statusFilter == 'all') return _requests;
     if (_statusFilter == 'pending') {
-      return _requests.where((r) {
-        final status = _text(r['status']).toLowerCase();
-        return status == 'pending' ||
-            status == 'pending_verification' ||
-            status == 'submitted';
-      }).toList();
+      return _requests.where(_isReviewableRequest).toList();
     }
     return _requests
         .where((r) => _text(r['status']).toLowerCase() == _statusFilter)
@@ -187,10 +182,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   }
 
   Widget _buildSummaryCards() {
-    final pending = _requests.where((r) {
-      final s = _text(r['status']).toLowerCase();
-      return s == 'pending' || s == 'pending_verification' || s == 'submitted';
-    }).length;
+    final pending = _requests.where(_isReviewableRequest).length;
     final approved = _requests
         .where((r) => _text(r['status']).toLowerCase() == 'approved')
         .length;
@@ -313,10 +305,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   Widget _buildRequestCard(Map<String, dynamic> r) {
     final id = '${r['id'] ?? ''}';
     final status = _text(r['status']).toLowerCase();
-    final isPending =
-        status == 'pending' ||
-        status == 'pending_verification' ||
-        status == 'submitted';
+    final isPending = _isReviewableStatus(status);
     final invoice = r['invoice'] is Map
         ? Map<String, dynamic>.from(r['invoice'] as Map)
         : const <String, dynamic>{};
@@ -599,8 +588,11 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   String _statusLabel(String status) {
     switch (status) {
       case 'pending_verification':
+      case 'resubmitted':
       case 'submitted':
         return 'Pending Review';
+      case 'initiated':
+        return 'Awaiting Proof';
       case 'clarification_required':
         return 'Clarification Required';
       case 'approved':
@@ -680,4 +672,14 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
     if (text.isEmpty || text == 'null') return '${fallback ?? ''}'.trim();
     return text;
   }
+
+  bool _isReviewableRequest(Map<String, dynamic> request) =>
+      _isReviewableStatus(_text(request['status']).toLowerCase());
+
+  bool _isReviewableStatus(String status) => const {
+    'pending',
+    'pending_verification',
+    'resubmitted',
+    'submitted',
+  }.contains(status);
 }

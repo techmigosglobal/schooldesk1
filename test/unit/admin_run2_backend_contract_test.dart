@@ -171,8 +171,7 @@ void main() {
     expect(parentFees, isNot(contains('_showPaymentDialog')));
     expect(parentFees, isNot(contains('showDialog(')));
     expect(paymentForm, contains('class ParentPaymentFlow'));
-    expect(paymentForm, contains('createFeePaymentIntent'));
-    expect(paymentForm, contains('submitFeePaymentProof'));
+    expect(paymentForm, contains('submitParentPaymentRequestProof'));
     expect(paymentForm, contains('resubmitFeePaymentProof'));
     expect(paymentForm, contains('Confirm'));
     expect(paymentForm, contains('Submit Verification Request'));

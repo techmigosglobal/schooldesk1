@@ -159,31 +159,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       return;
     }
 
-    setState(() => _creatingIntent = true);
-    try {
-      final intent = await BackendApiClient.instance.createFeePaymentIntent(
-        invoiceId: '${_selectedFee['id']}',
-        paymentMethod: 'upi',
-        amount: amount,
-        remarks: _remarksController.text.trim(),
-      );
-      if (!mounted) return;
-      setState(() {
-        _paymentIntent = intent;
-        _creatingIntent = false;
-        _currentStep = 2;
-      });
-    } on Object catch (error) {
-      if (mounted) {
-        setState(() => _creatingIntent = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error preparing payment: $error'),
-            backgroundColor: context.appTheme.error,
-          ),
-        );
-      }
-    }
+    setState(() => _currentStep = 2);
   }
 
   Future<void> _copyUpiId() async {
@@ -239,12 +215,21 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       );
       return;
     }
+    if (_utrController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the UTR / transaction reference.'),
+        ),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
       final api = BackendApiClient.instance;
+      Map<String, dynamic> submittedRequest;
       if (_isClarificationResubmit) {
-        await api.resubmitFeePaymentProof(
+        submittedRequest = await api.resubmitFeePaymentProof(
           id: _text(_resubmissionRequest['id']),
           transactionRef: _utrController.text.trim(),
           screenshotPath: _proofPath!,
@@ -254,12 +239,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           remarks: _remarksController.text.trim(),
         );
       } else {
-        await api.submitFeePaymentProof(
-          studentFeeId: _text(_selectedFee['id']),
-          paymentRequestId: _intentId,
-          requestReference: _intentReference,
+        submittedRequest = await api.submitParentPaymentRequestProof(
+          invoiceId: _text(_selectedFee['id']),
           amount: _totalAmount,
-          paymentMethod: 'upi',
           transactionRef: _utrController.text.trim(),
           screenshotPath: _proofPath!,
           screenshotName: _proofName!,
@@ -270,6 +252,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       }
       if (!mounted) return;
       setState(() {
+        _paymentIntent = submittedRequest;
         _submitting = false;
         _currentStep = 3;
       });
@@ -773,7 +756,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         TextFormField(
           controller: _utrController,
           decoration: InputDecoration(
-            labelText: 'UTR / Transaction Reference (Optional)',
+            labelText: 'UTR / Transaction Reference *',
             hintText: 'Enter 12-digit UPI reference number',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             prefixIcon: const Icon(Icons.bookmark_added_rounded),
@@ -847,6 +830,8 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                       setState(() {
                         _proofPath = null;
                         _proofName = null;
+                        _proofBytes = null;
+                        _proofMimeType = null;
                       });
                     },
                     icon: const Icon(

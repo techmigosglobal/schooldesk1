@@ -169,13 +169,7 @@ class _AdminPaymentRequestsScreenState
   List<Map<String, dynamic>> get _visibleRequests {
     if (_statusFilter == 'all') return _requests;
     if (_statusFilter == 'pending') {
-      return _requests.where((request) {
-        final status = _text(
-          request['status'],
-          fallback: 'pending',
-        ).toLowerCase();
-        return status == 'pending' || status == 'pending_verification';
-      }).toList();
+      return _requests.where(_isReviewableRequest).toList();
     }
     return _requests
         .where(
@@ -214,8 +208,7 @@ class _AdminPaymentRequestsScreenState
   }
 
   Widget _buildSummary() {
-    final pending =
-        _countByStatus('pending') + _countByStatus('pending_verification');
+    final pending = _requests.where(_isReviewableRequest).length;
     final clarification = _countByStatus('clarification_required');
     final approved = _countByStatus('approved');
     final rejected = _countByStatus('rejected');
@@ -390,15 +383,12 @@ class _AdminPaymentRequestsScreenState
               Expanded(
                 flex: 2,
                 child: FilledButton.icon(
-                  onPressed:
-                      (status == 'pending' ||
-                              status == 'pending_verification') &&
-                          requestID.isNotEmpty
+                  onPressed: _isReviewableStatus(status) && requestID.isNotEmpty
                       ? () => _openDecision(request)
                       : null,
                   icon: const Icon(Icons.rate_review_rounded, size: 16),
                   label: Text(
-                    (status == 'pending' || status == 'pending_verification')
+                    _isReviewableStatus(status)
                         ? 'Review'
                         : status == 'clarification_required'
                         ? 'Waiting Parent'
@@ -466,6 +456,16 @@ class _AdminPaymentRequestsScreenState
       )
       .length;
 
+  bool _isReviewableRequest(Map<String, dynamic> request) =>
+      _isReviewableStatus(_text(request['status']).toLowerCase());
+
+  bool _isReviewableStatus(String status) => const {
+    'pending',
+    'pending_verification',
+    'resubmitted',
+    'submitted',
+  }.contains(status);
+
   Map<String, dynamic> _map(dynamic value) =>
       value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
 
@@ -488,9 +488,12 @@ class _AdminPaymentRequestsScreenState
 
   String _title(String value) => switch (value) {
     'pending_verification' => 'Pending Verification',
+    'resubmitted' => 'Pending Verification',
+    'submitted' => 'Pending Verification',
     'clarification_required' => 'Clarification',
     'approved' => 'Approved',
     'rejected' => 'Rejected',
+    'initiated' => 'Awaiting Proof',
     'pending' => 'Pending',
     _ => value.isEmpty ? value : value[0].toUpperCase() + value.substring(1),
   };

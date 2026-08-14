@@ -28,6 +28,17 @@ function money(value: unknown) {
   return Math.round((Number.isFinite(parsed) ? parsed : 0) * 100) / 100;
 }
 
+const reviewablePaymentRequestStatuses = new Set([
+  "pending",
+  "pending_verification",
+  "resubmitted",
+  "submitted",
+]);
+
+function isReviewablePaymentRequestStatus(value: unknown) {
+  return reviewablePaymentRequestStatuses.has(text(value).toLowerCase());
+}
+
 function normalizeFrequency(value: unknown) {
   const raw = text(value, "term").toLowerCase().replaceAll("-", "_").replaceAll(
     " ",
@@ -89,7 +100,7 @@ async function attachInvoicePaymentReceipts(
   );
   if (paymentIds.length === 0) return invoices;
   const { data, error } = await svc.from("fee_receipts").select(
-    "id, payment_id, receipt_number, amount, payment_method, transaction_ref, issued_at, document_snapshot_id",
+    "id, payment_id, receipt_number, display_receipt_number, amount, payment_method, transaction_ref, issued_at, document_snapshot_id",
   ).eq("school_id", school).in("payment_id", paymentIds);
   if (error) throw error;
   const receipts = new Map<string, Record<string, unknown>>();
@@ -126,7 +137,11 @@ async function attachInvoicePaymentReceipts(
           ...row,
           receipt,
           receipt_snapshot: snapshot,
-          receipt_number: text(receipt?.receipt_number ?? row.receipt_number),
+          receipt_number: text(
+            receipt?.display_receipt_number ??
+              receipt?.receipt_number ??
+              row.receipt_number,
+          ),
         };
       })
       : [],
@@ -296,7 +311,7 @@ async function paymentReceiptPayload(
   const { data: receipt, error: receiptError } = await svc.from(
     "fee_receipts",
   ).select(
-    "id, school_id, invoice_id, payment_id, receipt_number, amount, payment_method, transaction_ref, issued_at, document_snapshot_id",
+    "id, school_id, invoice_id, payment_id, receipt_number, display_receipt_number, amount, payment_method, transaction_ref, issued_at, document_snapshot_id",
   ).eq("id", receiptId).eq("school_id", school).maybeSingle();
   if (receiptError) throw new Error(receiptError.message);
   if (!receipt) return null;
@@ -330,7 +345,7 @@ async function paymentReceiptPayload(
         "id, first_name, last_name, student_id_number, admission_number, current_section:sections(id, section_name, grade:grades(id, grade_name))",
       ).eq("id", payment.student_id).eq("school_id", school).maybeSingle(),
       svc.from("schools").select(
-        "id, name, logo_url, address_line1, address_line2, city, state, postal_code, principal_name, authorized_signature_path",
+        "id, name, branch_code, logo_url, address_line1, address_line2, city, state, postal_code, principal_name, authorized_signature_path",
       ).eq("id", school).maybeSingle(),
     ]);
   for (
@@ -346,6 +361,14 @@ async function paymentReceiptPayload(
   const schoolRow = record(schoolResult.data);
   const currentSection = record(student.current_section);
   const currentGrade = record(currentSection.grade);
+  const publicReceiptNumber = text(
+    receipt.display_receipt_number,
+    text(receipt.receipt_number),
+  );
+  const legacyReceiptNumber =
+    publicReceiptNumber !== text(receipt.receipt_number)
+      ? text(receipt.receipt_number)
+      : text(source.legacy_receipt_number);
   const className = text(
     source.class_name,
     [text(currentGrade.grade_name), text(currentSection.section_name)]
@@ -355,6 +378,11 @@ async function paymentReceiptPayload(
   return {
     receipt: {
       ...receipt,
+      receipt_number: publicReceiptNumber,
+      legacy_receipt_number: legacyReceiptNumber,
+      display_receipt_number: text(receipt.display_receipt_number),
+      branch_code: text(source.branch_code, text(schoolRow.branch_code)),
+      receipt_month: text(source.receipt_month),
       payment_date: source.payment_date ?? payment.paid_at,
       payment_method: source.payment_method ?? receipt.payment_method ??
         payment.payment_method,
@@ -747,6 +775,38 @@ async function uploadPrivatePaymentProof(
   );
   if (error) throw error;
   return `payment-proofs/${path}`;
+}
+
+function paymentProofStoragePath(value: unknown) {
+  const raw = text(value);
+  return raw.startsWith("payment-proofs/")
+    ? raw.slice("payment-proofs/".length)
+    : raw;
+}
+
+async function removePrivatePaymentProof(
+  svc: SupabaseClient,
+  proofUrl: unknown,
+) {
+  const proofPath = paymentProofStoragePath(proofUrl);
+  if (!proofPath) return;
+  await svc.storage.from("payment-proofs").remove([proofPath]);
+}
+
+async function ensureReceiptSnapshot(
+  svc: SupabaseClient,
+  school: string,
+  receiptId: string,
+) {
+  const { data, error } = await svc.from("fee_receipts").select(
+    "id, receipt_number, display_receipt_number, document_snapshot_id",
+  ).eq("id", receiptId).eq("school_id", school).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Receipt was not generated");
+  if (!text(data.document_snapshot_id)) {
+    throw new Error("Receipt snapshot was not generated");
+  }
+  return data as Record<string, unknown>;
 }
 
 async function invoiceIdsForFeeStructure(
@@ -2734,6 +2794,19 @@ export async function handleFees(
       }).single();
       if (error) return fail(error.message);
       const atomicPayment = payment as Record<string, unknown>;
+      try {
+        await ensureReceiptSnapshot(
+          svc,
+          school,
+          text(atomicPayment.receipt_id),
+        );
+      } catch (snapshotError) {
+        return fail(
+          snapshotError instanceof Error
+            ? snapshotError.message
+            : "Receipt snapshot was not generated",
+        );
+      }
       return ok({
         ...atomicPayment,
       });
@@ -2746,33 +2819,66 @@ export async function handleFees(
         .eq("id", seg).eq("school_id", school).maybeSingle();
       if (pmtErr) return fail(pmtErr.message);
       if (!pmt) return fail("Payment not found", 404);
+      if (text(pmt.status).toLowerCase() === "reversed") {
+        return fail("Payment has already been reversed", 409);
+      }
       const { data: inv, error: invErr } = await svc.from("fee_invoices")
         .select("id, paid_amount, net_amount, balance")
         .eq("id", pmt.invoice_id).eq("school_id", school).maybeSingle();
       if (invErr) return fail(invErr.message);
       if (!inv) return fail("Invoice not found", 404);
-      const newPaid = Math.max(
-        0,
-        Number(inv.paid_amount ?? 0) - Number(pmt.amount ?? 0),
+      const reason = text(
+        body.reversal_reason ?? body.reason,
+        "Payment reversed by principal",
       );
+      const nowIso = new Date().toISOString();
+      const { error: reverseError } = await svc.from("payments").update({
+        status: "reversed",
+        reversed_at: nowIso,
+        reversed_by: user.id,
+        reversal_reason: reason,
+        updated_at: nowIso,
+      }).eq("id", seg).eq("school_id", school);
+      if (reverseError) return fail(reverseError.message);
+      const { error: voidReceiptError } = await svc.from("fee_receipts")
+        .update({
+          voided_at: nowIso,
+          voided_by: user.id,
+          void_reason: reason,
+        })
+        .eq("payment_id", seg)
+        .eq("school_id", school);
+      if (voidReceiptError) return fail(voidReceiptError.message);
+      const { error: requestReverseError } = await svc.from(
+        "parent_payment_requests",
+      )
+        .update({
+          status: "reversed",
+          admin_remarks: reason,
+          updated_at: nowIso,
+        })
+        .eq("payment_id", seg)
+        .eq("school_id", school);
+      if (requestReverseError) return fail(requestReverseError.message);
+      const { data: remainingPayments, error: remainingError } = await svc.from(
+        "payments",
+      ).select("amount, status")
+        .eq("invoice_id", pmt.invoice_id)
+        .eq("school_id", school);
+      if (remainingError) return fail(remainingError.message);
+      const newPaid = (remainingPayments ?? []).reduce((sum, payment) => {
+        const status = text(payment.status).toLowerCase();
+        if (["reversed", "void", "voided", "cancelled"].includes(status)) {
+          return sum;
+        }
+        return sum + money(payment.amount);
+      }, 0);
       const newBalance = Math.max(0, Number(inv.net_amount ?? 0) - newPaid);
       const newStatus = newBalance <= 0
         ? "paid"
         : newPaid > 0
         ? "partial"
         : "unpaid";
-      // Delete in dependency order: snapshots → receipts → payment
-      await svc.from("finance_document_snapshots").delete().eq(
-        "payment_id",
-        seg,
-      ).eq("school_id", school);
-      await svc.from("fee_receipts").delete().eq("payment_id", seg).eq(
-        "school_id",
-        school,
-      );
-      const { error: delErr } = await svc.from("payments")
-        .delete().eq("id", seg).eq("school_id", school);
-      if (delErr) return fail(delErr.message);
       const { error: updateErr } = await svc.from("fee_invoices").update({
         paid_amount: newPaid,
         balance: newBalance,
@@ -2782,6 +2888,7 @@ export async function handleFees(
       if (updateErr) return fail(updateErr.message);
       return ok({
         success: true,
+        reversed_payment_id: seg,
         invoice_id: pmt.invoice_id,
         new_balance: newBalance,
         new_status: newStatus,
@@ -2849,7 +2956,9 @@ export async function handleFees(
             ...payment,
             receipt,
             receipt_number: text(
-              receipt?.receipt_number ?? payment.receipt_number,
+              receipt?.display_receipt_number ??
+                receipt?.receipt_number ??
+                payment.receipt_number,
             ),
           };
         })
@@ -2917,6 +3026,241 @@ export async function handleFees(
       if (!isParent) {
         return fail("only parents can submit payment requests", 403);
       }
+      if (contentType.includes("multipart/form-data")) {
+        const form = await req.formData().catch(() => null);
+        if (!form) return fail("multipart form required");
+        const screenshot = form.get("screenshot") as File | null;
+        if (!screenshot || screenshot.size <= 0) {
+          return fail("payment proof screenshot is required", 400);
+        }
+        const transactionRef = text(
+          form.get("transaction_ref") ?? form.get("transaction_id"),
+        );
+        if (!transactionRef) {
+          return fail("transaction_ref is required", 400);
+        }
+        const invoiceId = text(
+          form.get("invoice_id") ?? form.get("student_fee_id"),
+        );
+        if (!invoiceId) return fail("invoice_id is required", 400);
+        const { data: invoice, error: invoiceError } = await svc.from(
+          "fee_invoices",
+        ).select("*")
+          .eq("id", invoiceId)
+          .eq("school_id", school)
+          .maybeSingle();
+        if (invoiceError) return fail(invoiceError.message);
+        if (!invoice) return fail("Invoice not found", 404);
+        if (text(form.get("payment_method"), "upi").toLowerCase() !== "upi") {
+          return fail("Parents can submit manual UPI payment proofs only", 400);
+        }
+        try {
+          if (
+            !await parentCanAccessStudent(
+              svc,
+              school,
+              user,
+              text(invoice.student_id),
+            )
+          ) {
+            return fail("Invoice does not belong to a linked child", 403);
+          }
+        } catch (error) {
+          return fail(
+            error instanceof Error
+              ? error.message
+              : "failed to verify parent access",
+          );
+        }
+        let selection;
+        try {
+          selection = validateInvoicePaymentAmount(
+            invoice as Record<string, unknown>,
+            form.get("amount"),
+          );
+        } catch (error) {
+          return fail(
+            error instanceof Error
+              ? error.message
+              : "failed to validate payment amount",
+          );
+        }
+        let submittedPaymentDate = "";
+        try {
+          submittedPaymentDate = validatedManualPaymentDate(
+            form.get("payment_date"),
+          );
+        } catch (error) {
+          return fail(
+            error instanceof Error ? error.message : "invalid payment_date",
+            400,
+          );
+        }
+        const existingResult = await svc.from("parent_payment_requests")
+          .select("*")
+          .eq("school_id", school)
+          .eq("invoice_id", invoice.id)
+          .eq("parent_user_id", user.id)
+          .in("status", [
+            "initiated",
+            "pending",
+            "pending_verification",
+            "submitted",
+            "resubmitted",
+            "clarification_required",
+          ])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existingResult.error) return fail(existingResult.error.message);
+        const existingRequest = existingResult.data as
+          | Record<string, unknown>
+          | null;
+        if (
+          existingRequest &&
+          isReviewablePaymentRequestStatus(existingRequest.status)
+        ) {
+          return fail("A payment proof is already awaiting review", 409);
+        }
+        const requestId = text(existingRequest?.id) || crypto.randomUUID();
+        let proofUrl = "";
+        try {
+          proofUrl = await uploadPrivatePaymentProof(
+            svc,
+            school,
+            requestId,
+            screenshot,
+          );
+        } catch (error) {
+          return fail(
+            error instanceof Error ? error.message : "proof upload failed",
+          );
+        }
+        const requestReference = text(existingRequest?.request_reference) ||
+          `FPR-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+        const payload = {
+          school_id: school,
+          student_id: invoice.student_id,
+          invoice_id: invoice.id,
+          parent_user_id: user.id,
+          amount: selection.amount,
+          payment_method: "upi",
+          request_reference: requestReference,
+          transaction_ref: transactionRef,
+          transaction_id: transactionRef,
+          payment_date: submittedPaymentDate ||
+            new Date().toISOString().split("T")[0],
+          proof_url: proofUrl,
+          proof_file_name: screenshot.name,
+          proof_content_type: screenshot.type,
+          proof_size: screenshot.size,
+          remarks: text(form.get("remarks")),
+          status: existingRequest?.status === "clarification_required"
+            ? "resubmitted"
+            : "pending_verification",
+          submitted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          idempotency_key: text(form.get("idempotency_key")) ||
+            `proof:${requestId}`,
+        };
+        const mutation = existingRequest
+          ? await svc.from("parent_payment_requests").update(payload)
+            .eq("id", requestId)
+            .eq("school_id", school)
+            .select()
+            .single()
+          : await svc.from("parent_payment_requests").insert({
+            id: requestId,
+            ...payload,
+          }).select().single();
+        if (mutation.error) {
+          await removePrivatePaymentProof(svc, proofUrl).catch(() => undefined);
+          return fail(mutation.error.message);
+        }
+        try {
+          const { data: principals } = await svc.from("users")
+            .select("id")
+            .eq("school_id", school)
+            .in("role_name", ["principal", "admin", "super_admin"]);
+          const validPrincipals = (principals ?? []).filter((
+            p: Record<string, unknown>,
+          ) => text(p.id));
+          if (validPrincipals.length > 0) {
+            let studentName = text(invoice.student_id, "a student");
+            const { data: studentRow } = await svc.from("students")
+              .select("first_name, last_name")
+              .eq("id", invoice.student_id)
+              .eq("school_id", school)
+              .maybeSingle();
+            if (studentRow) {
+              const fn = text(studentRow.first_name);
+              const ln = text(studentRow.last_name);
+              studentName = fn && ln ? `${fn} ${ln}` : fn || ln || "a student";
+            }
+            const amountLabel = `INR ${selection.amount.toFixed(0)}`;
+            const feeMessage =
+              `A parent submitted ${amountLabel} payment proof for ${studentName}. Please review and verify.`;
+            await svc.from("notification_logs").insert(validPrincipals.map((
+              p: Record<string, unknown>,
+            ) => ({
+              school_id: school,
+              user_id: text(p.id),
+              target_role: "principal",
+              title: "New payment proof submitted",
+              body: feeMessage,
+              type: "fee",
+              entity_type: "parent_payment_requests",
+              entity_id: text(mutation.data.id),
+              reference_type: "fee",
+              reference_id: text(mutation.data.id),
+              action: "payment_submitted",
+              route: "/principal-fees-screen/payment-requests",
+              student_id: text(invoice.student_id),
+              is_read: false,
+            })));
+            const { data: feeEvents, error: feeEventError } = await svc
+              .from("notification_events")
+              .insert(validPrincipals.map((p: Record<string, unknown>) => ({
+                school_id: school,
+                user_id: text(p.id),
+                event_type: "fee_payment_submitted",
+                event_data: {
+                  payment_request_id: text(mutation.data.id),
+                  invoice_id: invoice.id,
+                  amount: selection.amount,
+                  message: feeMessage,
+                  reference_type: "fee",
+                  reference_id: text(mutation.data.id),
+                  action: "payment_submitted",
+                  route: "/principal-fees-screen/payment-requests",
+                  student_id: text(invoice.student_id),
+                },
+                processed: false,
+              }))).select("id");
+            if (!feeEventError) {
+              const feeEventIds = (feeEvents ?? []).map((row: { id: string }) =>
+                `${row.id ?? ""}`.trim()
+              ).filter(Boolean);
+              if (feeEventIds.length > 0) triggerPushProcessing(feeEventIds);
+            }
+          }
+        } catch (_) {
+          // Best-effort notification; the proof request itself is already saved.
+        }
+        try {
+          return ok(
+            (await attachPaymentRequestRelations(svc, school, [
+              mutation.data,
+            ]))[0],
+          );
+        } catch (error) {
+          return fail(
+            error instanceof Error
+              ? error.message
+              : "failed to load payment request details",
+          );
+        }
+      }
       const studentId = text((body as Record<string, unknown>).student_id);
       try {
         if (
@@ -2975,10 +3319,10 @@ export async function handleFees(
       if (existingError) return fail(existingError.message);
       if (!existing) return fail("not found", 404);
       if (
-        !["pending_verification", "resubmitted"].includes(text(existing.status))
+        !isReviewablePaymentRequestStatus(existing.status)
       ) {
         return fail(
-          "Only pending or resubmitted payment requests can be decided",
+          "Only pending payment requests can be decided",
           409,
         );
       }
@@ -3022,6 +3366,16 @@ export async function handleFees(
         const atomicPayment = payment as Record<string, unknown>;
         paymentId = text(atomicPayment.payment_id);
         receiptId = text(atomicPayment.receipt_id);
+        try {
+          const receipt = await ensureReceiptSnapshot(svc, school, receiptId);
+          receiptId = text(receipt.id);
+        } catch (snapshotError) {
+          return fail(
+            snapshotError instanceof Error
+              ? snapshotError.message
+              : "Receipt snapshot was not generated",
+          );
+        }
       }
       const { data, error } = await svc.from("parent_payment_requests").update({
         status,

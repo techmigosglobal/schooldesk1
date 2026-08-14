@@ -3,7 +3,7 @@
 // grade-subjects: NO max_marks / pass_marks
 
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { ok, fail } from "../index.ts";
+import { fail, ok } from "../index.ts";
 
 function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -33,70 +33,81 @@ async function deleteInvoiceWorkflowRows(
   svc: SupabaseClient,
   school: string,
   invoiceIds: string[],
+  userId: string,
 ) {
   const ids = [...new Set(invoiceIds.map(text).filter(Boolean))];
-  if (ids.length === 0) return 0;
+  if (ids.length === 0) {
+    return {
+      retained_invoices: 0,
+      cancelled_invoices: 0,
+      reversed_requests: 0,
+    };
+  }
 
-  const receiptDelete = await svc.from("fee_receipts").delete().eq(
+  const nowIso = new Date().toISOString();
+  const reason = "Academic year archived; financial history retained";
+
+  const requestUpdate = await svc.from("parent_payment_requests").update({
+    status: "reversed",
+    admin_remarks: reason,
+    updated_at: nowIso,
+  }).eq(
     "school_id",
     school,
-  ).in("invoice_id", ids);
-  if (receiptDelete.error) throw new Error(receiptDelete.error.message);
+  ).in("invoice_id", ids).in("status", [
+    "initiated",
+    "pending",
+    "pending_verification",
+    "submitted",
+    "clarification_required",
+    "resubmitted",
+  ]).select("id");
+  if (requestUpdate.error) throw new Error(requestUpdate.error.message);
 
-  const requestDelete = await svc.from("parent_payment_requests").delete().eq(
+  const invoiceUpdate = await svc.from("fee_invoices").update({
+    status: "cancelled",
+    voided_at: nowIso,
+    voided_by: userId,
+    updated_at: nowIso,
+  }).eq(
     "school_id",
     school,
-  ).in("invoice_id", ids);
-  if (requestDelete.error) throw new Error(requestDelete.error.message);
+  ).in("id", ids).eq("paid_amount", 0).not(
+    "status",
+    "in",
+    "(paid,settled,void,voided,cancelled)",
+  ).select("id");
+  if (invoiceUpdate.error) throw new Error(invoiceUpdate.error.message);
 
-  const paymentDelete = await svc.from("payments").delete().eq(
-    "school_id",
-    school,
-  ).in("invoice_id", ids);
-  if (paymentDelete.error) throw new Error(paymentDelete.error.message);
-
-  const invoiceDelete = await svc.from("fee_invoices").delete().eq(
-    "school_id",
-    school,
-  ).in("id", ids);
-  if (invoiceDelete.error) throw new Error(invoiceDelete.error.message);
-  return ids.length;
+  return {
+    retained_invoices: ids.length,
+    cancelled_invoices: (invoiceUpdate.data ?? []).length,
+    reversed_requests: (requestUpdate.data ?? []).length,
+  };
 }
 
 async function deleteAcademicYearWorkflowRows(
   svc: SupabaseClient,
   school: string,
   academicYearId: string,
+  userId: string,
 ) {
   const invoices = await svc.from("fee_invoices").select("id").eq(
     "school_id",
     school,
   ).eq("academic_year_id", academicYearId);
   if (invoices.error) throw new Error(invoices.error.message);
-  const deletedInvoices = await deleteInvoiceWorkflowRows(
+  const cleanup = await deleteInvoiceWorkflowRows(
     svc,
     school,
     (invoices.data ?? []).map((row) => text(row.id)),
+    userId,
   );
 
-  const structures = await svc.from("fee_structures").select("id").eq(
-    "school_id",
-    school,
-  ).eq("academic_year_id", academicYearId);
-  if (structures.error) throw new Error(structures.error.message);
-  const structureIds = (structures.data ?? []).map((row) => text(row.id))
-    .filter(Boolean);
-  if (structureIds.length > 0) {
-    const concessionDelete = await svc.from("fee_concessions").delete().eq(
-      "school_id",
-      school,
-    ).in("fee_structure_id", structureIds);
-    if (concessionDelete.error) {
-      throw new Error(concessionDelete.error.message);
-    }
-  }
-
-  return { deleted_invoices: deletedInvoices };
+  return {
+    ...cleanup,
+    archived_academic_year: cleanup.retained_invoices > 0,
+  };
 }
 
 async function staffSubjectPayloadWithGrade(
@@ -115,9 +126,11 @@ async function staffSubjectPayloadWithGrade(
     sectionId,
   ).eq("school_id", schoolId).maybeSingle();
   if (error) throw new Error(error.message);
-  const resolvedGradeId = text((data as Record<string, unknown> | null)?.[
-    "grade_id"
-  ]);
+  const resolvedGradeId = text(
+    (data as Record<string, unknown> | null)?.[
+      "grade_id"
+    ],
+  );
   return resolvedGradeId ? { ...payload, grade_id: resolvedGradeId } : payload;
 }
 
@@ -146,7 +159,9 @@ async function sectionPayload(
   if (classTeacherId !== undefined) payload.class_teacher_id = classTeacherId;
   if (coTeacherId !== undefined) payload.co_teacher_id = coTeacherId;
   if (classTeacherId && coTeacherId && classTeacherId === coTeacherId) {
-    throw new Error("class teacher and co-teacher must be different staff members");
+    throw new Error(
+      "class teacher and co-teacher must be different staff members",
+    );
   }
   const teacherIds = [classTeacherId, coTeacherId].filter(
     (value): value is string => Boolean(value),
@@ -156,7 +171,9 @@ async function sectionPayload(
       .eq("is_active", true).in("id", teacherIds);
     if (result.error) throw new Error(result.error.message);
     if ((result.data ?? []).length !== new Set(teacherIds).size) {
-      throw new Error("class teacher and co-teacher must be active staff in this school");
+      throw new Error(
+        "class teacher and co-teacher must be active staff in this school",
+      );
     }
   }
   return payload;
@@ -181,32 +198,41 @@ export async function handleAcademics(
     const id = parseId(path, "/academic-years");
     if (id && path.endsWith("/summary") && method === "GET") {
       const yearId = id;
-      const year = await svc.from("academic_years").select("id, school_id, year_label")
+      const year = await svc.from("academic_years").select(
+        "id, school_id, year_label",
+      )
         .eq("id", yearId).eq("school_id", sid).maybeSingle();
       if (year.error) return fail(year.error.message);
       if (!year.data) return fail("academic year not found", 404);
 
-      const [sectionsResult, subjectLinksResult, feeStructuresResult] = await Promise.all([
-        svc.from("sections").select(
-          "id, grade_id, section_name, grade:grades(grade_name)",
-        ).eq("school_id", sid).eq("academic_year_id", yearId).order(
-          "section_name",
-        ),
-        svc.from("grade_subjects").select(
-          "subject_id, subject:subjects(id, subject_name, is_active)",
-        ).eq("school_id", sid).eq("academic_year_id", yearId),
-        svc.from("fee_structures").select(
-          "id, grade_id, section_id, category_id, amount, frequency, fee_categories(name)",
-        ).eq("school_id", sid).eq("academic_year_id", yearId).eq(
-          "is_active",
-          true,
-        ),
-      ]);
+      const [sectionsResult, subjectLinksResult, feeStructuresResult] =
+        await Promise.all([
+          svc.from("sections").select(
+            "id, grade_id, section_name, grade:grades(grade_name)",
+          ).eq("school_id", sid).eq("academic_year_id", yearId).order(
+            "section_name",
+          ),
+          svc.from("grade_subjects").select(
+            "subject_id, subject:subjects(id, subject_name, is_active)",
+          ).eq("school_id", sid).eq("academic_year_id", yearId),
+          svc.from("fee_structures").select(
+            "id, grade_id, section_id, category_id, amount, frequency, fee_categories(name)",
+          ).eq("school_id", sid).eq("academic_year_id", yearId).eq(
+            "is_active",
+            true,
+          ),
+        ]);
       if (sectionsResult.error) return fail(sectionsResult.error.message);
-      if (subjectLinksResult.error) return fail(subjectLinksResult.error.message);
-      if (feeStructuresResult.error) return fail(feeStructuresResult.error.message);
+      if (subjectLinksResult.error) {
+        return fail(subjectLinksResult.error.message);
+      }
+      if (feeStructuresResult.error) {
+        return fail(feeStructuresResult.error.message);
+      }
 
-      const sections = (sectionsResult.data ?? []) as Array<Record<string, unknown>>;
+      const sections = (sectionsResult.data ?? []) as Array<
+        Record<string, unknown>
+      >;
       const sectionIds = sections.map((row) => text(row.id)).filter(Boolean);
       let students: Array<Record<string, unknown>> = [];
       if (sectionIds.length > 0) {
@@ -244,7 +270,11 @@ export async function handleAcademics(
       });
 
       const subjects = new Map<string, string>();
-      for (const link of (subjectLinksResult.data ?? []) as Array<Record<string, unknown>>) {
+      for (
+        const link of (subjectLinksResult.data ?? []) as Array<
+          Record<string, unknown>
+        >
+      ) {
         const subject = link.subject && typeof link.subject === "object"
           ? link.subject as Record<string, unknown>
           : {};
@@ -254,11 +284,14 @@ export async function handleAcademics(
         if (subjectId && subjectName) subjects.set(subjectId, subjectName);
       }
 
-      const feeStructures = (feeStructuresResult.data ?? []) as Array<Record<string, unknown>>;
+      const feeStructures = (feeStructuresResult.data ?? []) as Array<
+        Record<string, unknown>
+      >;
       const feeNames = feeStructures.map((row) => {
-        const category = row.fee_categories && typeof row.fee_categories === "object"
-          ? row.fee_categories as Record<string, unknown>
-          : {};
+        const category =
+          row.fee_categories && typeof row.fee_categories === "object"
+            ? row.fee_categories as Record<string, unknown>
+            : {};
         const name = text(category.name);
         return name || `${text(row.frequency) || "Fee"} · ${row.amount ?? 0}`;
       });
@@ -276,12 +309,17 @@ export async function handleAcademics(
       });
     }
     if (path.endsWith("/terms") && id) {
-      const { data, error } = await svc.from("terms").select("*").eq("academic_year_id", id);
+      const { data, error } = await svc.from("terms").select("*").eq(
+        "academic_year_id",
+        id,
+      );
       if (error) return fail(error.message);
       return ok(data);
     }
     if (!id && method === "GET") {
-      const { data, error } = await svc.from("academic_years").select("*, terms(*), holidays(*)").eq("school_id", sid);
+      const { data, error } = await svc.from("academic_years").select(
+        "*, terms(*), holidays(*)",
+      ).eq("school_id", sid);
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -312,7 +350,9 @@ export async function handleAcademics(
       return ok(data);
     }
     if (id && method === "GET") {
-      const { data, error } = await svc.from("academic_years").select("*, terms(*), holidays(*)").eq("id", id).eq("school_id", sid).single();
+      const { data, error } = await svc.from("academic_years").select(
+        "*, terms(*), holidays(*)",
+      ).eq("id", id).eq("school_id", sid).single();
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -324,14 +364,20 @@ export async function handleAcademics(
       ).eq("id", id).eq("school_id", sid).maybeSingle();
       if (existingYear.error) return fail(existingYear.error.message);
       if (!existingYear.data) return fail("academic year not found", 404);
-      if (text(existingYear.data.year_label).toLowerCase() !== yearLabel.toLowerCase()) {
+      if (
+        text(existingYear.data.year_label).toLowerCase() !==
+          yearLabel.toLowerCase()
+      ) {
         const duplicate = await svc.from("academic_years").select("id").eq(
           "school_id",
           sid,
         ).ilike("year_label", yearLabel).neq("id", id).limit(1);
         if (duplicate.error) return fail(duplicate.error.message);
         if ((duplicate.data ?? []).length > 0) {
-          return fail("academic year label already exists for this school", 409);
+          return fail(
+            "academic year label already exists for this school",
+            409,
+          );
         }
       }
       if (body.is_current === true) {
@@ -350,9 +396,14 @@ export async function handleAcademics(
       return ok(data);
     }
     if (id && method === "DELETE") {
-      let cleanup = { deleted_invoices: 0 };
+      let cleanup = {
+        retained_invoices: 0,
+        cancelled_invoices: 0,
+        reversed_requests: 0,
+        archived_academic_year: false,
+      };
       try {
-        cleanup = await deleteAcademicYearWorkflowRows(svc, sid, id);
+        cleanup = await deleteAcademicYearWorkflowRows(svc, sid, id, user.id);
       } catch (error) {
         return fail(
           error instanceof Error
@@ -360,7 +411,22 @@ export async function handleAcademics(
             : "failed to clear academic year finance rows",
         );
       }
-      const { error } = await svc.from("academic_years").delete().eq("id", id).eq("school_id", sid);
+      if (cleanup.archived_academic_year) {
+        const { data, error } = await svc.from("academic_years").update({
+          status: "archived",
+          is_current: false,
+          updated_at: new Date().toISOString(),
+        }).eq("id", id).eq("school_id", sid).select().single();
+        if (error) return fail(error.message);
+        return ok({
+          success: true,
+          archived: true,
+          academic_year: data,
+          ...cleanup,
+        });
+      }
+      const { error } = await svc.from("academic_years").delete().eq("id", id)
+        .eq("school_id", sid);
       if (error) return fail(error.message);
       return ok({ success: true, ...cleanup });
     }
@@ -370,17 +436,24 @@ export async function handleAcademics(
   if (path.startsWith("/grades")) {
     const id = parseId(path, "/grades");
     if (!id && method === "GET") {
-      const { data, error } = await svc.from("grades").select("*").eq("school_id", sid).order("grade_number");
+      const { data, error } = await svc.from("grades").select("*").eq(
+        "school_id",
+        sid,
+      ).order("grade_number");
       if (error) return fail(error.message);
       return ok(data);
     }
     if (!id && method === "POST") {
-      const { data, error } = await svc.from("grades").insert({ ...body, school_id: sid }).select().single();
+      const { data, error } = await svc.from("grades").insert({
+        ...body,
+        school_id: sid,
+      }).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
     if (id && (method === "PATCH" || method === "PUT")) {
-      const { data, error } = await svc.from("grades").update(body).eq("id", id).eq("school_id", sid).select().single();
+      const { data, error } = await svc.from("grades").update(body).eq("id", id)
+        .eq("school_id", sid).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -390,9 +463,13 @@ export async function handleAcademics(
   if (path.startsWith("/sections")) {
     const id = parseId(path, "/sections");
     if (!id && method === "GET") {
-      let q = svc.from("sections").select("*, grade:grades(*), academic_year:academic_years(*)").eq("school_id", sid);
+      let q = svc.from("sections").select(
+        "*, grade:grades(*), academic_year:academic_years(*)",
+      ).eq("school_id", sid);
       if (qp(url, "grade_id")) q = q.eq("grade_id", qp(url, "grade_id")!);
-      if (qp(url, "academic_year_id")) q = q.eq("academic_year_id", qp(url, "academic_year_id")!);
+      if (qp(url, "academic_year_id")) {
+        q = q.eq("academic_year_id", qp(url, "academic_year_id")!);
+      }
       const { data, error } = await q;
       if (error) return fail(error.message);
       return ok(data);
@@ -402,9 +479,15 @@ export async function handleAcademics(
       try {
         payload = await sectionPayload(svc, sid, body);
       } catch (error) {
-        return fail(error instanceof Error ? error.message : "invalid teacher assignment", 422);
+        return fail(
+          error instanceof Error ? error.message : "invalid teacher assignment",
+          422,
+        );
       }
-      const { data, error } = await svc.from("sections").insert({ ...payload, school_id: sid }).select().single();
+      const { data, error } = await svc.from("sections").insert({
+        ...payload,
+        school_id: sid,
+      }).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -413,9 +496,15 @@ export async function handleAcademics(
       try {
         payload = await sectionPayload(svc, sid, body);
       } catch (error) {
-        return fail(error instanceof Error ? error.message : "invalid teacher assignment", 422);
+        return fail(
+          error instanceof Error ? error.message : "invalid teacher assignment",
+          422,
+        );
       }
-      const { data, error } = await svc.from("sections").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", id).eq("school_id", sid).select().single();
+      const { data, error } = await svc.from("sections").update({
+        ...payload,
+        updated_at: new Date().toISOString(),
+      }).eq("id", id).eq("school_id", sid).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -425,12 +514,18 @@ export async function handleAcademics(
   if (path.startsWith("/departments")) {
     const id = parseId(path, "/departments");
     if (!id && method === "GET") {
-      const { data, error } = await svc.from("departments").select("*").eq("school_id", sid);
+      const { data, error } = await svc.from("departments").select("*").eq(
+        "school_id",
+        sid,
+      );
       if (error) return fail(error.message);
       return ok(data);
     }
     if (!id && method === "POST") {
-      const { data, error } = await svc.from("departments").insert({ ...body, school_id: sid }).select().single();
+      const { data, error } = await svc.from("departments").insert({
+        ...body,
+        school_id: sid,
+      }).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -441,7 +536,9 @@ export async function handleAcademics(
     const id = parseId(path, "/subjects");
     if (!id && method === "GET") {
       let q = svc.from("subjects").select("*").eq("school_id", sid);
-      if (qp(url, "subject_type")) q = q.eq("subject_type", qp(url, "subject_type")!);
+      if (qp(url, "subject_type")) {
+        q = q.eq("subject_type", qp(url, "subject_type")!);
+      }
       const { data, error } = await q;
       if (error) return fail(error.message);
       return ok(data);
@@ -468,8 +565,12 @@ export async function handleAcademics(
   if (path.startsWith("/grade-subjects")) {
     const id = parseId(path, "/grade-subjects");
     if (!id && method === "GET") {
-      let q = svc.from("grade_subjects").select("*, subject:subjects(*), grade:grades(*), section:sections(*)").eq("school_id", sid);
-      if (qp(url, "academic_year_id")) q = q.eq("academic_year_id", qp(url, "academic_year_id")!);
+      let q = svc.from("grade_subjects").select(
+        "*, subject:subjects(*), grade:grades(*), section:sections(*)",
+      ).eq("school_id", sid);
+      if (qp(url, "academic_year_id")) {
+        q = q.eq("academic_year_id", qp(url, "academic_year_id")!);
+      }
       if (qp(url, "grade_id")) q = q.eq("grade_id", qp(url, "grade_id")!);
       if (qp(url, "section_id")) q = q.eq("section_id", qp(url, "section_id")!);
       const { data, error } = await q;
@@ -479,13 +580,19 @@ export async function handleAcademics(
     if (!id && method === "POST") {
       // Strip marks fields even if old client sends them
       const { max_marks: _m, pass_marks: _p, ...safe } = body;
-      const { data, error } = await svc.from("grade_subjects").insert({ ...safe, school_id: sid }).select().single();
+      const { data, error } = await svc.from("grade_subjects").insert({
+        ...safe,
+        school_id: sid,
+      }).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
     if (id && method === "PATCH") {
       const { max_marks: _m, pass_marks: _p, ...safe } = body;
-      const { data, error } = await svc.from("grade_subjects").update({ ...safe, updated_at: new Date().toISOString() }).eq("id", id).eq("school_id", sid).select().single();
+      const { data, error } = await svc.from("grade_subjects").update({
+        ...safe,
+        updated_at: new Date().toISOString(),
+      }).eq("id", id).eq("school_id", sid).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -546,7 +653,10 @@ export async function handleAcademics(
       return ok(data);
     }
     if (!id && method === "POST") {
-      const { data, error } = await svc.from("rooms").insert({ ...body, school_id: sid }).select().single();
+      const { data, error } = await svc.from("rooms").insert({
+        ...body,
+        school_id: sid,
+      }).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }

@@ -145,6 +145,7 @@ void main() {
 
     expect(source, contains('receiptsByPaymentId'));
     expect(source, contains('receipt_number: text('));
+    expect(source, contains('receipt?.display_receipt_number'));
     expect(source, contains('fee_invoice_items(*), payments(*)'));
   });
 
@@ -315,10 +316,36 @@ void main() {
 
       expect(section, contains('svc.rpc("record_fee_payment"'));
       expect(source, contains('record_fee_payment'));
+      expect(section, contains('ensureReceiptSnapshot'));
+      expect(section, contains('isReviewablePaymentRequestStatus'));
       expect(section, contains('admin_remarks: body.admin_remarks'));
       expect(section, isNot(contains('remarks: body.remarks')));
     },
   );
+
+  test('payment reversal voids receipts and preserves snapshots', () {
+    final source = File(
+      'supabase/functions/api/handlers/fees.ts',
+    ).readAsStringSync();
+    final start = source.indexOf(
+      '// DELETE /fees/payments/:id — reverse a payment',
+    );
+    final end = source.indexOf(
+      r'if (/^\/parent\/students\/[^/]+\/fees$/.test(path) && method === "GET")',
+    );
+    final section = start >= 0 && end > start
+        ? source.substring(start, end)
+        : source;
+
+    expect(section, contains('status: "reversed"'));
+    expect(section, contains('reversed_at'));
+    expect(section, contains('voided_at'));
+    expect(section, contains('void_reason'));
+    expect(section, contains('remainingPayments'));
+    expect(section, isNot(contains('finance_document_snapshots").delete()')));
+    expect(section, isNot(contains('fee_receipts").delete()')));
+    expect(section, isNot(contains('payments").delete()')));
+  });
 
   test(
     'parent proof submission remains pending only until principal approval',
@@ -345,6 +372,41 @@ void main() {
       expect(section, isNot(contains('applyInvoiceAllocationUpdate(')));
     },
   );
+
+  test('canonical parent proof submission is atomic multipart', () {
+    final source = File(
+      'supabase/functions/api/handlers/fees.ts',
+    ).readAsStringSync();
+    final reviewableIndexMigration = File(
+      'supabase/migrations/20260814070445_parent_payment_request_reviewable_unique_index.sql',
+    ).readAsStringSync();
+    final start = source.indexOf(
+      'if (contentType.includes("multipart/form-data"))',
+    );
+    final end = source.indexOf(
+      'const studentId = text((body as Record<String, unknown>).student_id);',
+    );
+    final section = start >= 0
+        ? source.substring(start, end > start ? end : source.length)
+        : source;
+
+    expect(section, contains('payment proof screenshot is required'));
+    expect(section, contains('transaction_ref is required'));
+    expect(section, contains('uploadPrivatePaymentProof'));
+    expect(section, contains('removePrivatePaymentProof'));
+    expect(section, contains('"pending_verification"'));
+    expect(section, contains('submitted_at'));
+    expect(
+      reviewableIndexMigration,
+      contains("'pending', 'pending_verification'"),
+    );
+    expect(reviewableIndexMigration, contains("'submitted'"));
+    expect(reviewableIndexMigration, contains("'resubmitted'"));
+    expect(
+      reviewableIndexMigration,
+      isNot(contains("'initiated', 'pending'")),
+    );
+  });
 
   test(
     'payment validation enforces a direct positive amount within the balance',
@@ -465,21 +527,25 @@ void main() {
     },
   );
 
-  test('orphaned fee cleanup migration covers all affected tables', () {
-    final migration = File(
-      'supabase/migrations/20260706180300_orphaned_fee_cleanup.sql',
-    ).readAsStringSync();
+  test(
+    'orphaned fee cleanup migration targets unpaid orphaned invoices only',
+    () {
+      final migration = File(
+        'supabase/migrations/20260706180300_orphaned_fee_cleanup.sql',
+      ).readAsStringSync();
 
-    // Must target fee_invoices with fee_structure_id IS NULL
-    expect(migration, contains('fee_structure_id IS NULL'));
-    expect(migration, contains('status NOT IN'));
-    // Must delete from all child tables in correct order
-    expect(migration, contains('DELETE FROM public.fee_receipts'));
-    expect(migration, contains('DELETE FROM public.parent_payment_requests'));
-    expect(migration, contains('DELETE FROM public.payments'));
-    expect(migration, contains('DELETE FROM public.fee_invoice_items'));
-    expect(migration, contains('DELETE FROM public.fee_invoices'));
-    // Must preserve paid and cancelled invoices
-    expect(migration, contains("'paid', 'cancelled'"));
-  });
+      // Must target fee_invoices with fee_structure_id IS NULL
+      expect(migration, contains('fee_structure_id IS NULL'));
+      expect(migration, contains('status NOT IN'));
+      // Historical applied migration is preserved for auditability; runtime
+      // handlers now use soft reversals/voids instead of physical deletes.
+      expect(migration, contains('DELETE FROM public.fee_receipts'));
+      expect(migration, contains('DELETE FROM public.parent_payment_requests'));
+      expect(migration, contains('DELETE FROM public.payments'));
+      expect(migration, contains('DELETE FROM public.fee_invoice_items'));
+      expect(migration, contains('DELETE FROM public.fee_invoices'));
+      // Must preserve paid and cancelled invoices
+      expect(migration, contains("'paid', 'cancelled'"));
+    },
+  );
 }

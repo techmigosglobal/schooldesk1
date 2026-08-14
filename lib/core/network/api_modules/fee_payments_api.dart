@@ -41,6 +41,48 @@ extension BackendFeePaymentsApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> submitParentPaymentRequestProof({
+    required String invoiceId,
+    required double amount,
+    required String transactionRef,
+    required String screenshotPath,
+    required String screenshotName,
+    Uint8List? screenshotBytes,
+    String? screenshotMimeType,
+    String remarks = '',
+    String paymentMethod = 'upi',
+    String paymentDate = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/payment-requests',
+        data: FormData.fromMap({
+          'invoice_id': invoiceId.trim(),
+          'amount': amount.toStringAsFixed(2),
+          'payment_method': paymentMethod.trim(),
+          'transaction_ref': transactionRef.trim(),
+          if (paymentDate.trim().isNotEmpty) 'payment_date': paymentDate.trim(),
+          if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+          'screenshot': await _multipartUpload(
+            filePath: screenshotPath,
+            fileBytes: screenshotBytes,
+            filename: screenshotName,
+            contentType: _resolveMediaType(screenshotMimeType, screenshotName),
+          ),
+        }),
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to submit payment proof',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getParentStudentFees(
     String studentId, {
     int? refreshNonce,

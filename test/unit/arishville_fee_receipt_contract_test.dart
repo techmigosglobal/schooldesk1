@@ -5,16 +5,37 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('new receipts use the immutable Arishville identity format', () {
     final migration = File(
-      'supabase/migrations/20260813110000_arishville_fee_receipt_alignment.sql',
+      'supabase/migrations/20260814055208_fee_receipt_integrity_alignment.sql',
     ).readAsStringSync();
 
     expect(migration, contains("where lower(name) like '%arish%ville%'"));
-    expect(migration, contains("'-C' || lpad(v_class_order::text, 2, '0')"));
-    expect(migration, contains('v_student_token'));
+    expect(migration, contains("select id, 'AVP'"));
+    expect(migration, contains("v_receipt_number := v_receipt_prefix || '/'"));
+    expect(migration, contains("v_year_label || '/'"));
+    expect(migration, contains("v_branch_token || '/'"));
+    expect(migration, contains("v_month_token || '/'"));
     expect(migration, contains("lpad(v_sequence::text, 3, '0')"));
+    expect(migration, contains("p_school_id, v_year_label, 'receipt', 1"));
     expect(migration, contains('idempotency_key = p_idempotency_key'));
     expect(migration, contains("'payment_receipt'"));
   });
+
+  test(
+    'historical receipts get display aliases without renumbering identity',
+    () {
+      final migration = File(
+        'supabase/migrations/20260814055208_fee_receipt_integrity_alignment.sql',
+      ).readAsStringSync();
+
+      expect(migration, contains('display_receipt_number'));
+      expect(migration, contains('fee_receipt_display_number_backfilled'));
+      expect(migration, contains('legacy_receipt_number'));
+      expect(
+        migration,
+        isNot(contains('set receipt_number = v_display_number')),
+      );
+    },
+  );
 
   test('receipt payload is role-scoped and drives parent PDF rendering', () {
     final handler = File(
@@ -28,6 +49,8 @@ void main() {
     ).readAsStringSync();
 
     expect(handler, contains('async function paymentReceiptPayload'));
+    expect(handler, contains('legacy_receipt_number'));
+    expect(handler, contains('display_receipt_number'));
     expect(handler, contains('parentCanAccessStudent'));
     expect(handler, contains('if (!isParent && !isAdminOrPrincipal(user))'));
     expect(handler, contains(r'feesPath.match(/^\/receipts\/([^/]+)$/)'));
