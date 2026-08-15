@@ -818,7 +818,7 @@ The public school website includes:
 
 | # | Issue | Severity | Module |
 |---|-------|----------|--------|
-| 1 | A hardcoded privileged fallback token remains in the Sheets route authorization. Must be removed, rotated, and verified in repository history. | CRITICAL | Sheets / Security |
+| 1 | The former hardcoded privileged fallback token was removed from the current working tree. It was present in commit `a70af07`; production rotation, deployment verification, and repository-history remediation remain required before this item is closed. | CRITICAL | Sheets / Security |
 | 2 | Dashboard authorization must reject a lower-privileged user requesting another role's dashboard path. | CRITICAL | Auth / Dashboard |
 | 3 | Supabase security-advisor warnings: SECURITY DEFINER wrappers, mutable search paths, public storage listing, disabled leaked-password protection, RLS initialization plans, permissive-policy overlap, duplicate index. | CRITICAL | Security / DB |
 | 4 | The `school-assets` bucket is used by student documents and avatars; private records must move behind private storage and signed access. | CRITICAL | Storage / Security |

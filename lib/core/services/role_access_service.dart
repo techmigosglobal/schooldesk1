@@ -91,28 +91,50 @@ class RoleAccessService {
     // unnecessary sequential network round-trips to every parent login and
     // app resume.
     final isParent = effectiveRole == 'parent';
-    final students = isParent
-        ? null
-        : await _try(
+    // These reads share the same authenticated scope but do not depend on one
+    // another. Start them together after the teacher dashboard has supplied
+    // the section/staff identifiers. This reduces login/resume latency without
+    // changing the role-specific data boundaries above.
+    final studentsFuture = isParent
+        ? Future<PaginatedList<StudentModel>?>.value(null)
+        : _try<PaginatedList<StudentModel>>(
             () => api.getStudents(
               sectionId: teacherSectionId.isEmpty ? null : teacherSectionId,
               page: 1,
               pageSize: 100,
             ),
           );
-    final staff = (effectiveRole == 'teacher' || isParent)
-        ? null
-        : await _try(() => api.getStaff(page: 1, pageSize: 100));
-    final parentChildren = isParent
-        ? await _try(() => api.getMyStudents())
-        : <Map<String, dynamic>>[];
-    var timetable = isParent
-        ? <Map<String, dynamic>>[]
-        : await _try(
+    final staffFuture = (effectiveRole == 'teacher' || isParent)
+        ? Future<PaginatedList<StaffModel>?>.value(null)
+        : _try<PaginatedList<StaffModel>>(
+            () => api.getStaff(page: 1, pageSize: 100),
+          );
+    final parentChildrenFuture = isParent
+        ? _try<List<Map<String, dynamic>>>(() => api.getMyStudents())
+        : Future<List<Map<String, dynamic>>?>.value(<Map<String, dynamic>>[]);
+    final timetableFuture = isParent
+        ? Future<List<Map<String, dynamic>>?>.value(<Map<String, dynamic>>[])
+        : _try<List<Map<String, dynamic>>>(
             () => api.getTimetableSlots(
               staffId: teacherStaffId.isEmpty ? null : teacherStaffId,
             ),
           );
+    final invoicesFuture = (effectiveRole == 'teacher' || isParent)
+        ? Future<List<Map<String, dynamic>>?>.value(<Map<String, dynamic>>[])
+        : _try<List<Map<String, dynamic>>>(() => api.getInvoices());
+
+    final scopeResults = await Future.wait<Object?>([
+      studentsFuture,
+      staffFuture,
+      parentChildrenFuture,
+      timetableFuture,
+      invoicesFuture,
+    ]);
+    final students = scopeResults[0] as PaginatedList<StudentModel>?;
+    final staff = scopeResults[1] as PaginatedList<StaffModel>?;
+    final parentChildren = scopeResults[2] as List<Map<String, dynamic>>;
+    var timetable = scopeResults[3] as List<Map<String, dynamic>>?;
+    final invoices = scopeResults[4] as List<Map<String, dynamic>>;
     // If no staff-scoped timetable found, try section-scoped timetable as a
     // fallback (some backends store timetables by section rather than staff).
     if (!isParent && (timetable == null || timetable.isEmpty)) {
@@ -134,10 +156,6 @@ class RoleAccessService {
             .toList();
       }
     }
-    final invoices = (effectiveRole == 'teacher' || isParent)
-        ? <Map<String, dynamic>>[]
-        : await _try(() => api.getInvoices());
-
     _students = (students?.data ?? [])
         .map(
           (s) => {
@@ -175,10 +193,10 @@ class RoleAccessService {
     final assignedSubject = _subjectFromTimetable(timetableRows).isNotEmpty
         ? _subjectFromTimetable(timetableRows)
         : _subjectFromAssignments(_teacherAssignedClasses);
-    _parentChildren = parentChildren ?? [];
+    _parentChildren = parentChildren;
     _teacherTimetable = timetableRows;
     _todayTimetable = _filterTodayTimetable(timetableRows);
-    _invoices = invoices ?? [];
+    _invoices = invoices;
 
     if (effectiveRole == 'teacher') {
       final profileEmail = profile?.email.trim().toLowerCase() ?? '';

@@ -223,7 +223,10 @@ class BackendApiClient {
         // _ReadCacheOptionsInterceptor.
         policy: CachePolicy.request,
         hitCacheOnErrorExcept: const [401, 403],
-        maxStale: const Duration(minutes: 5),
+        // Keep the last authenticated read locally for offline resumes. The
+        // request interceptor supplies shorter, endpoint-specific windows;
+        // this global value is only the safety default for cached reads.
+        maxStale: const Duration(days: 7),
         allowPostMethod: false,
       );
       _dio.interceptors.add(DioCacheInterceptor(options: _cacheOptions!));

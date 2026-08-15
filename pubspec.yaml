@@ -1,7 +1,7 @@
 name: schooldesk1
 description: A new Flutter project.
 publish_to: none
-version: 1.0.18+29
+version: 1.0.21+32
 
 environment:
   sdk: ^3.9.0

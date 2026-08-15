@@ -20,7 +20,6 @@ class ParentPaymentFlow extends StatefulWidget {
 class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   int _currentStep = 1; // 1: Confirm, 2: Pay, 3: Done
   bool _loadingConfig = true;
-  bool _creatingIntent = false;
   bool _submitting = false;
 
   Map<String, dynamic> _paymentConfig = const {};
@@ -85,7 +84,6 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       _text(_resubmissionRequest['status']).toLowerCase() ==
       'clarification_required';
 
-  String get _intentId => _text(_paymentIntent?['id']);
   String get _intentReference => _text(_paymentIntent?['request_reference']);
 
   @override
@@ -559,7 +557,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _creatingIntent ? null : _proceedToPay,
+            onPressed: _proceedToPay,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1A6B4A),
               foregroundColor: Colors.white,
@@ -569,21 +567,13 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               ),
               elevation: 0,
             ),
-            child: _creatingIntent
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Text(
-                    'Continue to Pay',
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+            child: Text(
+              'Continue to Pay',
+              style: GoogleFonts.ibmPlexSans(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
       ],

@@ -108,6 +108,8 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
         clean.contains('/event-posts') ||
         clean.contains('/documents') ||
         clean.contains('/health') ||
+        clean.contains('/me/students') ||
+        clean.contains('/principal/classes') ||
         // Parent attendance screens hit this endpoint on every visit; it
         // was previously missing from the cacheable list entirely (unlike
         // `/students/:id/attendance`, which is covered above), so it always
@@ -124,14 +126,15 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
         clean.contains('/grades') ||
         clean.contains('/sections') ||
         clean.contains('/subjects')) {
+      return const Duration(days: 30);
+    }
+    if (clean.contains('/dashboard/')) return const Duration(days: 1);
+    if (clean.contains('/leave/') || clean.contains('/student-leave/')) {
       return const Duration(hours: 6);
     }
-    if (clean.contains('/dashboard/')) return const Duration(minutes: 2);
-    if (clean.contains('/leave/') || clean.contains('/student-leave/')) {
-      return const Duration(minutes: 1);
-    }
-    if (clean.contains('/attendance/')) return const Duration(minutes: 1);
-    return const Duration(minutes: 5);
+    if (clean.contains('/attendance/')) return const Duration(hours: 6);
+    if (clean.contains('/fees/')) return const Duration(hours: 12);
+    return const Duration(days: 7);
   }
 
   CachePolicy _policyForRequest(RequestOptions options) {

@@ -305,7 +305,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     icon: Icons.info_outline_rounded,
                     iconColor: mutedColor,
                     title: 'App Version',
-                    value: '1.0.0',
+                    value: '1.0.21+32',
                     onSurfaceColor: onSurfaceColor,
                     mutedColor: mutedColor,
                   ),

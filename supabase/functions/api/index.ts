@@ -49,7 +49,12 @@ import {
 import { handleHelp } from "./handlers/help.ts";
 import { handleAccess } from "./handlers/access.ts";
 import { handleIssues } from "./handlers/issues.ts";
-import { handleAdmissionInquiries, handleWebsite, handleWebsiteEnquiry, handleWebsitePublic } from "./handlers/website.ts";
+import {
+  handleAdmissionInquiries,
+  handleWebsite,
+  handleWebsiteEnquiry,
+  handleWebsitePublic,
+} from "./handlers/website.ts";
 import { handleDemo } from "./handlers/demo.ts";
 import { handleActivity, recordHttpActivity } from "./handlers/activity.ts";
 
@@ -60,6 +65,15 @@ type DirectSql = {
   unsafe: (query: string) => Promise<unknown[]>;
   end: (options?: { timeout?: number }) => Promise<void>;
 };
+
+type ServiceClient = ReturnType<typeof createClient>;
+let sharedServiceClient: ServiceClient | null = null;
+type QueryResult<T> = {
+  data: T | null;
+  error: { message?: string } | null;
+};
+type UserProfileRow = { id: string; is_active: boolean; school_id: string };
+type MembershipRow = { id: string };
 
 async function withDirectSql<T>(
   callback: (sql: DirectSql) => Promise<T>,
@@ -121,30 +135,46 @@ async function auditedResponse(
 ) {
   const resolved = await response;
   if (resolved.ok) {
-    const payload = await resolved.clone().json().catch(() => null);
-    if (payload?.success === true || path.endsWith("/export")) {
-      await recordHttpActivity(
-        svc,
-        user,
-        path,
-        method,
-        payload,
-        requestPayload,
-      ).catch(() =>
-        undefined
-      );
-    }
+    const activity = (async () => {
+      const payload = await resolved.clone().json().catch(() => null);
+      if (payload?.success === true || path.endsWith("/export")) {
+        await recordHttpActivity(
+          svc,
+          user,
+          path,
+          method,
+          payload,
+          requestPayload,
+        ).catch(() => undefined);
+      }
+    })();
+    // Audit persistence is important, but it should not add database latency
+    // to every successful API response when EdgeRuntime can finish the work
+    // after the response has been handed to the client. Local/CLI runtimes do
+    // not provide waitUntil, so they retain the synchronous fallback.
+    if (!scheduleAfterResponse(activity)) await activity;
   }
   return resolved;
 }
 
+function scheduleAfterResponse(task: Promise<void>): boolean {
+  const runtime = (globalThis as unknown as {
+    EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void };
+  }).EdgeRuntime;
+  if (!runtime?.waitUntil) return false;
+  runtime.waitUntil(task);
+  return true;
+}
+
 // ── Supabase clients ──────────────────────────────────────────
-export function serviceClient() {
-  return createClient(
+export function serviceClient(): ServiceClient {
+  if (sharedServiceClient) return sharedServiceClient;
+  sharedServiceClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { persistSession: false } },
   );
+  return sharedServiceClient;
 }
 
 // deno-lint-ignore require-await
@@ -191,20 +221,35 @@ export async function authedClient(req: Request) {
   const svc = serviceClient();
   if (error || !user) return { user: null, client: null, svc };
 
+  const requestedBranch = (req.headers.get("x-schooldesk-branch-id") ?? "")
+    .trim();
+  const requestedIdIsUuid = !requestedBranch ||
+    /^[0-9a-f-]{36}$/i.test(requestedBranch);
+  if (!requestedIdIsUuid) return { user: null, client: null, svc };
+  const currentRole = `${user.app_metadata?.role_name ?? ""}`.toLowerCase();
+
   // Auth user deletion does not instantly invalidate an already-issued JWT.
   // Require the active application profile on every protected request so a
   // school wipe immediately blocks deleted accounts from using stale tokens.
-  const { data: profile, error: profileError } = await svc.from("users")
-    .select("id, is_active, school_id").eq("id", user.id).maybeSingle();
+  // Branch membership is independent of the profile lookup for ordinary
+  // roles, so start both queries together after JWT validation.
+  const profilePromise: Promise<QueryResult<UserProfileRow>> = svc.from("users")
+    .select("id, is_active, school_id").eq("id", user.id)
+    .maybeSingle() as unknown as Promise<QueryResult<UserProfileRow>>;
+  const membershipPromise: Promise<QueryResult<MembershipRow>> =
+    requestedBranch && currentRole !== "super_admin"
+      ? svc.from("branch_memberships").select("id")
+        .eq("user_id", user.id).eq("school_id", requestedBranch)
+        .eq("is_active", true).maybeSingle() as unknown as Promise<
+          QueryResult<MembershipRow>
+        >
+      : Promise.resolve({ data: null, error: null });
+  const [{ data: profile, error: profileError }, membershipResult] =
+    await Promise.all([profilePromise, membershipPromise]);
   if (profileError || !profile || profile.is_active !== true) {
     return { user: null, client: null, svc };
   }
-  const requestedBranch = (req.headers.get("x-schooldesk-branch-id") ?? "")
-    .trim();
   if (!requestedBranch) return { user, client, svc };
-  const requestedIdIsUuid = /^[0-9a-f-]{36}$/i.test(requestedBranch);
-  if (!requestedIdIsUuid) return { user: null, client: null, svc };
-  const currentRole = `${user.app_metadata?.role_name ?? ""}`.toLowerCase();
   let permitted = false;
   if (currentRole === "super_admin") {
     const { data: schools } = await svc.from("schools")
@@ -220,16 +265,10 @@ export async function authedClient(req: Request) {
   } else if (currentRole === "coordinator") {
     permitted = Boolean(
       requestedBranch === profile.school_id &&
-        (await svc.from("branch_memberships").select("id")
-          .eq("user_id", user.id).eq("school_id", profile.school_id)
-          .eq("is_active", true).maybeSingle()).data,
+        membershipResult.data,
     );
   } else {
-    permitted = Boolean(
-      (await svc.from("branch_memberships").select("id")
-        .eq("user_id", user.id).eq("school_id", requestedBranch)
-        .eq("is_active", true).maybeSingle()).data,
-    );
+    permitted = Boolean(membershipResult.data);
   }
   if (!permitted) return { user: null, client: null, svc };
   // Existing handlers already derive their scope from app_metadata.school_id.
@@ -393,10 +432,11 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace("Bearer ", "").trim();
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    // Use environment-based fallback token if configured
+    const fallbackToken = Deno.env.get("SHEETS_WEBHOOK_TOKEN") || "";
     const isServiceRole = token.length > 0 && (
       token === serviceKey ||
-      token ===
-        "18fd0a5339c8e5e81c3122a7607608e48631ef47cf3f5ac72c3486f7d115ee41"
+      (fallbackToken && token === fallbackToken)
     );
     if (!isServiceRole) {
       return cors({ success: false, error: "unauthorized" }, 401);

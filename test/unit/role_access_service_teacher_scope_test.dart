@@ -38,6 +38,37 @@ void main() {
     expect(RoleAccessService.teacherClassName, 'Not assigned');
   });
 
+  test('initializes independent principal scope reads concurrently', () async {
+    BackendApiClient.instance.setCurrentRole('principal');
+    BackendApiClient.instance.setCurrentUserId('principal-user-1');
+    adapter.responseDelay = const Duration(milliseconds: 20);
+    adapter.routes['GET /auth/profile'] = _ok({
+      'id': 'principal-user-1',
+      'email': 'principal@example.test',
+      'role_name': 'principal',
+      'school_id': 'school-1',
+      'is_active': true,
+    });
+    adapter.routes['GET /students'] = _okList(
+      <Map<String, dynamic>>[],
+      total: 0,
+    );
+    adapter.routes['GET /staff'] = _okList(<Map<String, dynamic>>[], total: 0);
+    adapter.routes['GET /timetable/slots'] = _ok({'success': true, 'data': []});
+    adapter.routes['GET /fees/invoices'] = _okList(
+      <Map<String, dynamic>>[],
+      total: 0,
+    );
+
+    await RoleAccessService.initialize();
+
+    expect(
+      adapter.maxConcurrentRequests,
+      greaterThanOrEqualTo(4),
+      reason: 'Independent scope reads should not serialize on login/resume.',
+    );
+  });
+
   test(
     'teacher profile failure never falls back to another school staff member',
     () async {
@@ -412,6 +443,9 @@ void _seedTeacherScope(
 class _FakeBackendAdapter implements HttpClientAdapter {
   final Map<String, Map<String, dynamic>> routes = {};
   final List<String> requests = [];
+  Duration responseDelay = Duration.zero;
+  int _activeRequests = 0;
+  int maxConcurrentRequests = 0;
 
   @override
   Future<ResponseBody> fetch(
@@ -421,23 +455,33 @@ class _FakeBackendAdapter implements HttpClientAdapter {
   ) async {
     final key = '${options.method.toUpperCase()} ${options.path}';
     requests.add(key);
-    final payload = routes[key];
-    if (payload == null) {
+    _activeRequests++;
+    if (_activeRequests > maxConcurrentRequests) {
+      maxConcurrentRequests = _activeRequests;
+    }
+    try {
+      if (responseDelay > Duration.zero)
+        await Future<void>.delayed(responseDelay);
+      final payload = routes[key];
+      if (payload == null) {
+        return ResponseBody.fromString(
+          jsonEncode({'success': false, 'error': 'Missing fake route $key'}),
+          404,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      }
       return ResponseBody.fromString(
-        jsonEncode({'success': false, 'error': 'Missing fake route $key'}),
-        404,
+        jsonEncode(payload),
+        200,
         headers: {
           Headers.contentTypeHeader: [Headers.jsonContentType],
         },
       );
+    } finally {
+      _activeRequests--;
     }
-    return ResponseBody.fromString(
-      jsonEncode(payload),
-      200,
-      headers: {
-        Headers.contentTypeHeader: [Headers.jsonContentType],
-      },
-    );
   }
 
   @override
