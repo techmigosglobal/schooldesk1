@@ -26,6 +26,8 @@ enum _EventFilter {
 
 enum _EventsDisplayMode { month, week, agenda }
 
+enum _CalendarRecordKind { event, holiday, generatedHoliday }
+
 enum SchoolCalendarPortal { principal, teacher, parent }
 
 class EventsCalendarScreen extends StatefulWidget {
@@ -76,20 +78,44 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       final selectedYearId = _selectedAcademicYearId.isNotEmpty
           ? _selectedAcademicYearId
           : _currentAcademicYearId(years);
-      final results = await Future.wait<Object>([
+      final results = await Future.wait<List<Map<String, dynamic>>>([
         api.getEvents(
           academicYearId: selectedYearId.isEmpty ? null : selectedYearId,
         ),
-        api.getCalendarPreferences(),
+        api
+            .getHolidays(
+              academicYearId: selectedYearId.isEmpty ? null : selectedYearId,
+            )
+            .catchError((_) => <Map<String, dynamic>>[]),
       ]);
-      final rows = results[0] as List<Map<String, dynamic>>;
-      final preferences = results[1] as Map<String, dynamic>;
+      final rows = results[0];
+      final holidayRows = results[1];
+      Map<String, dynamic> preferences = const {};
+      try {
+        preferences = await api.getCalendarPreferences();
+      } on Object catch (_) {
+        // Calendar preferences are optional. A temporary preference failure
+        // must not hide the actual event and holiday data.
+      }
+      final storedHolidays = holidayRows
+          .map(_PrincipalEvent.fromHoliday)
+          .whereType<_PrincipalEvent>()
+          .toList();
+      final generatedHolidays = preferences['hide_generated_holidays'] != true
+          ? _getBuiltInHolidays(selectedYearId, years)
+                .where(
+                  (generated) => !storedHolidays.any(
+                    (holiday) => holiday.overlapsDate(generated.start),
+                  ),
+                )
+                .toList()
+          : const <_PrincipalEvent>[];
       final events = [
         ...rows
             .where((row) => _clean(row['event_type']).toLowerCase() != 'ptm')
             .map(_PrincipalEvent.fromApi),
-        if (preferences['hide_generated_holidays'] != true)
-          ..._getBuiltInHolidays(selectedYearId, years),
+        ...storedHolidays,
+        ...generatedHolidays,
       ]..sort((a, b) => a.start.compareTo(b.start));
       if (!mounted) return;
       // Derive the display year from the selected academic year's start date so
@@ -184,6 +210,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             isHoliday: true,
             start: h.$1,
             end: h.$1.add(const Duration(hours: 23, minutes: 59)),
+            recordKind: _CalendarRecordKind.generatedHoliday,
           );
         })
         .toList();
@@ -487,7 +514,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           event: event,
           academicYears: _academicYears,
           selectedAcademicYearId: _selectedAcademicYearId,
-          canManage: _canManageEvents,
+          canManage: _canManageEvents && event.isEventRecord,
           onAction: (action) => _handleEventAction(action, event),
         ),
       ),
@@ -751,10 +778,21 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(
-                  child: EmptyStateWidget(
-                    icon: Icons.cloud_off_rounded,
-                    title: 'Unable to load calendar',
-                    description: _error!,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      EmptyStateWidget(
+                        icon: Icons.cloud_off_rounded,
+                        title: 'Unable to load calendar',
+                        description: _error!,
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: _loadData,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Retry'),
+                      ),
+                    ],
                   ),
                 ),
               )
@@ -1066,7 +1104,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             children: [
               if (yearField == null || constraints.maxWidth < 640) ...[
                 PrincipalDirectorySearchBox(
-                  hint: 'Search event, venue, audience...',
+                  hint: 'Search event, holiday, venue, audience...',
                   onChanged: (value) => setState(() => _query = value),
                 ),
                 if (yearField != null) ...[
@@ -1079,7 +1117,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                     Expanded(
                       flex: 3,
                       child: PrincipalDirectorySearchBox(
-                        hint: 'Search event, venue, audience...',
+                        hint: 'Search event, holiday, venue, audience...',
                         onChanged: (value) => setState(() => _query = value),
                       ),
                     ),
@@ -1726,6 +1764,14 @@ class _EventDetailPage extends StatelessWidget {
               label: 'Holiday',
               value: event.isHoliday ? 'Yes' : 'No',
             ),
+            PrincipalDetailRow(
+              label: 'Record',
+              value: event.isStoredHoliday
+                  ? 'Official holiday calendar'
+                  : event.isGeneratedHoliday
+                  ? 'Generated holiday'
+                  : 'School event',
+            ),
           ],
         ),
         PrincipalDetailCard(
@@ -1799,7 +1845,6 @@ class _EventFormPageState extends State<_EventFormPage> {
     'meeting',
     'academic',
     'exam',
-    'holiday',
     'sports',
     'cultural',
     'staff',
@@ -1838,6 +1883,7 @@ class _EventFormPageState extends State<_EventFormPage> {
     _status = event?.status ?? 'scheduled';
     _audience = event?.audienceValue ?? 'all';
     _isHoliday = event?.isHoliday ?? false;
+    if (_isHoliday) _type = 'event';
     if (!_types.contains(_type)) _type = 'event';
     if (_status == 'pending') _status = 'pending_approval';
     if (!_statuses.contains(_status)) _status = 'scheduled';
@@ -1898,7 +1944,7 @@ class _EventFormPageState extends State<_EventFormPage> {
         'venue': _venueController.text.trim(),
         'audience_type': _audience,
         'status': _status,
-        'is_holiday': _isHoliday,
+        if (_isHoliday) 'is_holiday': true,
       };
       final eventId = widget.event?.id ?? '';
       if (eventId.isEmpty) {
@@ -2061,10 +2107,7 @@ class _EventFormPageState extends State<_EventFormPage> {
                   .toList(),
               onChanged: _saving
                   ? null
-                  : (value) => setState(() {
-                      _type = value ?? _type;
-                      _isHoliday = _type == 'holiday';
-                    }),
+                  : (value) => setState(() => _type = value ?? _type),
             ),
             const SizedBox(height: 14),
             _ResponsivePickerGrid(
@@ -2087,9 +2130,9 @@ class _EventFormPageState extends State<_EventFormPage> {
               const SizedBox(height: 14),
               const _CalendarNotice(
                 icon: Icons.celebration_rounded,
-                title: 'Holiday calendar entry',
+                title: 'Legacy holiday record',
                 message:
-                    'Holiday rows are saved as all-day events and also appear in parent calendars.',
+                    'This older holiday is retained for compatibility. New holidays are stored separately in the holiday calendar.',
               ),
             ] else ...[
               const SizedBox(height: 14),
@@ -2156,19 +2199,6 @@ class _EventFormPageState extends State<_EventFormPage> {
               onChanged: _saving
                   ? null
                   : (value) => setState(() => _status = value ?? _status),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _isHoliday,
-              title: const Text('Mark as holiday'),
-              subtitle: const Text('Show this event in holiday filters'),
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() {
-                      _isHoliday = value;
-                      if (value) _type = 'holiday';
-                    }),
             ),
             const SizedBox(height: 8),
             TextFormField(
@@ -2380,6 +2410,7 @@ class _PrincipalEvent {
   final bool isHoliday;
   final DateTime start;
   final DateTime end;
+  final _CalendarRecordKind recordKind;
 
   const _PrincipalEvent({
     required this.id,
@@ -2393,6 +2424,7 @@ class _PrincipalEvent {
     required this.isHoliday,
     required this.start,
     required this.end,
+    this.recordKind = _CalendarRecordKind.event,
   });
 
   factory _PrincipalEvent.fromApi(Map<String, dynamic> row) {
@@ -2421,6 +2453,39 @@ class _PrincipalEvent {
       end: end,
     );
   }
+
+  static _PrincipalEvent? fromHoliday(Map<String, dynamic> row) {
+    final from = DateTime.tryParse(_clean(row['from_date']));
+    final to = DateTime.tryParse(
+      _clean(row['to_date']).isEmpty
+          ? _clean(row['from_date'])
+          : _clean(row['to_date']),
+    );
+    if (from == null || to == null) return null;
+    final start = DateTime(from.year, from.month, from.day);
+    final endDate = DateTime(to.year, to.month, to.day);
+    return _PrincipalEvent(
+      id: 'holiday_${_clean(row['id'])}',
+      academicYearId: _clean(row['academic_year_id']),
+      title: _clean(row['holiday_name'], fallback: 'Holiday'),
+      type: 'holiday',
+      status: 'scheduled',
+      description: _clean(row['type'], fallback: 'Official school holiday'),
+      venue: 'School holiday',
+      audienceValue: 'all',
+      isHoliday: true,
+      start: start,
+      end: DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59),
+      recordKind: _CalendarRecordKind.holiday,
+    );
+  }
+
+  bool get isEventRecord => recordKind == _CalendarRecordKind.event;
+
+  bool get isStoredHoliday => recordKind == _CalendarRecordKind.holiday;
+
+  bool get isGeneratedHoliday =>
+      recordKind == _CalendarRecordKind.generatedHoliday;
 
   bool get needsApproval =>
       status == 'pending' || status == 'pending_approval' || status == 'draft';

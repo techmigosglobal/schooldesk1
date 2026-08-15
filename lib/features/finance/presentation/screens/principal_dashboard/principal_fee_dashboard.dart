@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -83,11 +84,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
 
       final requests = (results[2] as List)
           .cast<Map<String, dynamic>>()
-          .where(
-            (r) =>
-                '${r['status']}'.toLowerCase() == 'pending' ||
-                '${r['status']}'.toLowerCase() == 'pending_verification',
-          )
+          .where((r) => FeePaymentRequestStatus.isPrincipalPending(r['status']))
           .toList();
 
       final concessions = (results[3] as List).cast<Map<String, dynamic>>();

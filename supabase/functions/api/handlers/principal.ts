@@ -822,6 +822,7 @@ async function pendingFeeProofsBySection(
     "pending",
     "submitted",
     "pending_verification",
+    "resubmitted",
   ]);
   if (error) throw new Error(error.message);
   const totals = new Map<string, { amount: number; studentIds: Set<string> }>();

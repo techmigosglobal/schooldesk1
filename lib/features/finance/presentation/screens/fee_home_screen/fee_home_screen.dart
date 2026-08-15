@@ -4,6 +4,7 @@ library;
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -1109,10 +1110,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
   }
 
   bool _isPendingRequest(Map<String, dynamic> r) {
-    final s = textValue(r['status']).toLowerCase();
-    return s == 'pending' ||
-        s == 'pending_verification' ||
-        s == 'clarification_required';
+    return FeePaymentRequestStatus.isPrincipalPending(r['status']);
   }
 }
 

@@ -3318,11 +3318,9 @@ export async function handleFees(
         .maybeSingle();
       if (existingError) return fail(existingError.message);
       if (!existing) return fail("not found", 404);
-      if (
-        !isReviewablePaymentRequestStatus(existing.status)
-      ) {
+      if (!isReviewablePaymentRequestStatus(existing.status)) {
         return fail(
-          "Only pending payment requests can be decided",
+          "Only pending, submitted, pending_verification, or resubmitted payment requests can be decided",
           409,
         );
       }

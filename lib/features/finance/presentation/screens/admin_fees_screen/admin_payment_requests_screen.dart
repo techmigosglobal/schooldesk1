@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
@@ -44,9 +45,14 @@ class _AdminPaymentRequestsScreenState
       });
     }
     try {
-      final rows = await BackendApiClient.instance.getParentPaymentRequests(
-        pageSize: 100,
-      );
+      final rows =
+          (await BackendApiClient.instance.getParentPaymentRequests(
+                pageSize: 100,
+              ))
+              .where(
+                (row) => FeePaymentRequestStatus.isReviewRecord(row['status']),
+              )
+              .toList();
       if (!mounted) return;
       setState(() {
         _requests = rows;
@@ -169,12 +175,17 @@ class _AdminPaymentRequestsScreenState
   List<Map<String, dynamic>> get _visibleRequests {
     if (_statusFilter == 'all') return _requests;
     if (_statusFilter == 'pending') {
-      return _requests.where(_isReviewableRequest).toList();
+      return _requests
+          .where(
+            (request) =>
+                FeePaymentRequestStatus.isPrincipalPending(request['status']),
+          )
+          .toList();
     }
     return _requests
         .where(
           (request) =>
-              _text(request['status'], fallback: 'pending').toLowerCase() ==
+              FeePaymentRequestStatus.normalize(request['status']) ==
               _statusFilter,
         )
         .toList();
@@ -208,10 +219,16 @@ class _AdminPaymentRequestsScreenState
   }
 
   Widget _buildSummary() {
-    final pending = _requests.where(_isReviewableRequest).length;
+    final pending = _requests
+        .where(
+          (request) =>
+              FeePaymentRequestStatus.isPrincipalPending(request['status']),
+        )
+        .length;
     final clarification = _countByStatus('clarification_required');
     final approved = _countByStatus('approved');
     final rejected = _countByStatus('rejected');
+    final reversed = _countByStatus('reversed');
     return SchoolDeskResponsiveGrid(
       minTileWidth: 160,
       mainAxisExtent: 112,
@@ -244,6 +261,13 @@ class _AdminPaymentRequestsScreenState
           icon: Icons.cancel_rounded,
           color: context.appTheme.error,
         ),
+        SchoolDeskKpiCard(
+          title: 'Reversed',
+          value: '$reversed',
+          subtitle: 'Payment reversed',
+          icon: Icons.undo_rounded,
+          color: context.appTheme.muted,
+        ),
       ],
     );
   }
@@ -251,10 +275,10 @@ class _AdminPaymentRequestsScreenState
   Widget _buildStatusFilters() {
     final filters = const [
       ('pending', 'Pending'),
-      ('pending_verification', 'Pending Verification'),
       ('clarification_required', 'Clarification'),
       ('approved', 'Approved'),
       ('rejected', 'Rejected'),
+      ('reversed', 'Reversed'),
       ('all', 'All'),
     ];
     return SingleChildScrollView(
@@ -276,17 +300,21 @@ class _AdminPaymentRequestsScreenState
   }
 
   Widget _requestCard(Map<String, dynamic> request) {
-    final status = _text(request['status'], fallback: 'pending').toLowerCase();
-    final statusColor = switch (status) {
-      'approved' => context.appTheme.success,
-      'rejected' => context.appTheme.error,
-      'clarification_required' => context.appTheme.info,
+    final status = FeePaymentRequestStatus.normalize(request['status']);
+    final requestState = FeePaymentRequestStatus.state(status);
+    final statusColor = switch (requestState) {
+      FeePaymentRequestState.approved => context.appTheme.success,
+      FeePaymentRequestState.rejected => context.appTheme.error,
+      FeePaymentRequestState.clarificationRequired => context.appTheme.info,
+      FeePaymentRequestState.reversed => context.appTheme.muted,
       _ => context.appTheme.warning,
     };
-    final statusBg = switch (status) {
-      'approved' => context.appTheme.successContainer,
-      'rejected' => context.appTheme.errorContainer,
-      'clarification_required' => context.appTheme.infoContainer,
+    final statusBg = switch (requestState) {
+      FeePaymentRequestState.approved => context.appTheme.successContainer,
+      FeePaymentRequestState.rejected => context.appTheme.errorContainer,
+      FeePaymentRequestState.clarificationRequired =>
+        context.appTheme.infoContainer,
+      FeePaymentRequestState.reversed => context.appTheme.surfaceVariant,
       _ => context.appTheme.warningContainer,
     };
     final invoice = _map(request['invoice']);
@@ -322,7 +350,7 @@ class _AdminPaymentRequestsScreenState
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  _title(status),
+                  FeePaymentRequestStatus.label(status),
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
                     color: statusColor,
@@ -383,14 +411,17 @@ class _AdminPaymentRequestsScreenState
               Expanded(
                 flex: 2,
                 child: FilledButton.icon(
-                  onPressed: _isReviewableStatus(status) && requestID.isNotEmpty
+                  onPressed:
+                      FeePaymentRequestStatus.isPrincipalPending(status) &&
+                          requestID.isNotEmpty
                       ? () => _openDecision(request)
                       : null,
                   icon: const Icon(Icons.rate_review_rounded, size: 16),
                   label: Text(
-                    _isReviewableStatus(status)
+                    FeePaymentRequestStatus.isPrincipalPending(status)
                         ? 'Review'
-                        : status == 'clarification_required'
+                        : requestState ==
+                              FeePaymentRequestState.clarificationRequired
                         ? 'Waiting Parent'
                         : 'Resolved',
                     style: GoogleFonts.dmSans(fontSize: 12),
@@ -451,20 +482,9 @@ class _AdminPaymentRequestsScreenState
   int _countByStatus(String status) => _requests
       .where(
         (request) =>
-            _text(request['status'], fallback: 'pending').toLowerCase() ==
-            status,
+            FeePaymentRequestStatus.normalize(request['status']) == status,
       )
       .length;
-
-  bool _isReviewableRequest(Map<String, dynamic> request) =>
-      _isReviewableStatus(_text(request['status']).toLowerCase());
-
-  bool _isReviewableStatus(String status) => const {
-    'pending',
-    'pending_verification',
-    'resubmitted',
-    'submitted',
-  }.contains(status);
 
   Map<String, dynamic> _map(dynamic value) =>
       value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
@@ -485,18 +505,6 @@ class _AdminPaymentRequestsScreenState
     ].where((part) => part.isNotEmpty).join(' ');
     return name.isEmpty ? 'Student' : name;
   }
-
-  String _title(String value) => switch (value) {
-    'pending_verification' => 'Pending Verification',
-    'resubmitted' => 'Pending Verification',
-    'submitted' => 'Pending Verification',
-    'clarification_required' => 'Clarification',
-    'approved' => 'Approved',
-    'rejected' => 'Rejected',
-    'initiated' => 'Awaiting Proof',
-    'pending' => 'Pending',
-    _ => value.isEmpty ? value : value[0].toUpperCase() + value.substring(1),
-  };
 
   String _money(double value) => '₹${value.toStringAsFixed(0)}';
 

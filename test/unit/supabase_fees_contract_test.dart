@@ -3,6 +3,64 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('payment-proof decision guard accepts legacy pending aliases only', () {
+    final source = File(
+      'supabase/functions/api/handlers/fees.ts',
+    ).readAsStringSync();
+    expect(
+      source,
+      contains('!isReviewablePaymentRequestStatus(existing.status)'),
+    );
+    final statusesStart = source.indexOf(
+      'const reviewablePaymentRequestStatuses',
+    );
+    final statusesEnd = source.indexOf(
+      'function isReviewablePaymentRequestStatus',
+    );
+    expect(statusesStart, isNonNegative);
+    expect(statusesEnd, greaterThan(statusesStart));
+    final statuses = source.substring(statusesStart, statusesEnd);
+    for (final status in [
+      '"pending"',
+      '"submitted"',
+      '"pending_verification"',
+      '"resubmitted"',
+    ]) {
+      expect(statuses, contains(status));
+    }
+    expect(statuses, isNot(contains('"initiated"')));
+    expect(statuses, isNot(contains('"clarification_required"')));
+  });
+
+  test('legacy pending RPC compatibility preserves terminal exclusions', () {
+    final migration = File(
+      'supabase/migrations/20260815061457_fee_payment_request_legacy_status_compatibility.sql',
+    ).readAsStringSync();
+    final functionStart = migration.indexOf(
+      'create or replace function public.record_fee_payment',
+    );
+    expect(functionStart, isNonNegative);
+    final function = migration.substring(functionStart);
+    expect(function, contains("'pending', 'pending_verification'"));
+    expect(function, contains("'resubmitted', 'submitted'"));
+    expect(function, isNot(contains("v_request.status not in ('initiated'")));
+    expect(function, contains('idempotency_key'));
+    expect(function, contains('document_snapshot_id'));
+    expect(function, contains('fee_invoices'));
+  });
+
+  test('database smoke contract checks legacy approval boundaries', () {
+    final smoke = File(
+      'supabase/tests/fee_payment_request_legacy_status_smoke.sql',
+    ).readAsStringSync();
+    expect(smoke, contains('parent_payment_requests_status_check'));
+    expect(smoke, contains("%''pending''%"));
+    expect(smoke, contains("%''submitted''%"));
+    expect(smoke, contains("%''resubmitted''%"));
+    expect(smoke, contains("%''initiated''%"));
+    expect(smoke, contains("%''clarification_required''%"));
+  });
+
   test('fees handler supports slash fees aliases used by Flutter', () {
     final source = File(
       'supabase/functions/api/handlers/fees.ts',
@@ -402,10 +460,7 @@ void main() {
     );
     expect(reviewableIndexMigration, contains("'submitted'"));
     expect(reviewableIndexMigration, contains("'resubmitted'"));
-    expect(
-      reviewableIndexMigration,
-      isNot(contains("'initiated', 'pending'")),
-    );
+    expect(reviewableIndexMigration, isNot(contains("'initiated', 'pending'")));
   });
 
   test(

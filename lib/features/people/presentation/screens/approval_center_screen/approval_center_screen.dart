@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -26,6 +27,8 @@ enum ApprovalType {
   communication,
   academicInfo,
 }
+
+enum ApprovalSource { generic, feeConcession, feePaymentProof }
 
 class ApprovalCenterRouteArgs {
   final String initialApprovalId;
@@ -70,6 +73,7 @@ class ApprovalModel {
   String? remarks;
   String? actionDate;
   final String? decisionPath;
+  final ApprovalSource source;
 
   ApprovalModel({
     required this.id,
@@ -84,6 +88,7 @@ class ApprovalModel {
     this.remarks,
     this.actionDate,
     this.decisionPath,
+    this.source = ApprovalSource.generic,
   });
 
   static ApprovalType _typeFromString(String v) {
@@ -123,6 +128,20 @@ class ApprovalModel {
     }
   }
 
+  static ApprovalSource _sourceFromString(String value) {
+    switch (value.trim().toLowerCase()) {
+      case 'fee_concession':
+      case 'feeconcession':
+        return ApprovalSource.feeConcession;
+      case 'fee_payment_proof':
+      case 'payment_proof':
+      case 'feepaymentproof':
+        return ApprovalSource.feePaymentProof;
+      default:
+        return ApprovalSource.generic;
+    }
+  }
+
   factory ApprovalModel.fromMap(Map<String, dynamic> map) {
     return ApprovalModel(
       id: map['id'] as String,
@@ -137,6 +156,7 @@ class ApprovalModel {
       remarks: map['remarks'] as String?,
       actionDate: map['actionDate'] as String?,
       decisionPath: map['decisionPath'] as String?,
+      source: _sourceFromString('${map['source'] ?? ''}'),
     );
   }
 
@@ -153,6 +173,7 @@ class ApprovalModel {
     'remarks': remarks,
     'actionDate': actionDate,
     'decisionPath': decisionPath,
+    'source': source.name,
   };
 }
 
@@ -271,6 +292,17 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
             type: 'fee_concession',
           ),
         ),
+        _loadApprovalSource('Fee payment proofs', () async {
+          final requests = await BackendApiClient.instance
+              .getParentPaymentRequests(pageSize: 200);
+          return requests
+              .where(
+                (request) =>
+                    FeePaymentRequestStatus.isReviewRecord(request['status']),
+              )
+              .map(_feePaymentApprovalFromRow)
+              .toList();
+        }),
         _loadApprovalSource(
           'Events',
           // The dedicated approval endpoint for event posts is /event-posts/pending
@@ -456,6 +488,79 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       'decisionPath': resolvedType == 'fee_concession'
           ? '$path/${row['id']}/decision'
           : '$path/${row['id']}',
+      'source': resolvedType == 'fee_concession'
+          ? ApprovalSource.feeConcession.name
+          : ApprovalSource.generic.name,
+    };
+  }
+
+  Map<String, dynamic> _feePaymentApprovalFromRow(Map<String, dynamic> row) {
+    final student = _asMap(row['student']);
+    final parent = _asMap(row['parent_user']);
+    final invoice = _asMap(row['invoice']);
+    final rawStatus = FeePaymentRequestStatus.normalize(row['status']);
+    final state = FeePaymentRequestStatus.state(rawStatus);
+    final status = switch (state) {
+      FeePaymentRequestState.pending => 'pending',
+      FeePaymentRequestState.clarificationRequired => 'changes_requested',
+      FeePaymentRequestState.approved => 'approved',
+      FeePaymentRequestState.rejected => 'rejected',
+      FeePaymentRequestState.reversed => 'reversed',
+      _ => rawStatus,
+    };
+    final studentName = _joinNonEmpty([
+      _text(student['first_name']),
+      _text(student['last_name']),
+    ], fallback: 'Student');
+    final parentName = _text(
+      parent['name'],
+      fallback: _text(parent['email'], fallback: 'Parent'),
+    );
+    final invoiceNumber = _text(
+      invoice['invoice_number'],
+      fallback: _text(row['invoice_id'], fallback: 'Invoice'),
+    );
+    final amount = _text(row['amount'], fallback: '0');
+    final paymentDate = _dateOnly(row['payment_date'] ?? row['created_at']);
+    final method = _text(
+      row['payment_method'] ?? row['payment_mode'],
+      fallback: 'UPI',
+    ).toUpperCase();
+    final transactionRef = _text(
+      row['transaction_id'] ?? row['transaction_ref'],
+      fallback: _text(row['request_reference']),
+    );
+    final parentRemarks = _text(row['remarks']);
+    final reviewerRemarks = _text(row['admin_remarks']);
+    final proofState = _text(row['proof_url']).isEmpty
+        ? 'Proof screenshot: not available'
+        : 'Proof screenshot: uploaded';
+    final details = [
+      'Student: $studentName',
+      'Parent: $parentName',
+      'Invoice: $invoiceNumber',
+      'Amount: ₹$amount',
+      'Paid on: ${paymentDate.isEmpty ? '—' : paymentDate}',
+      'Mode / Reference: $method${transactionRef.isEmpty ? '' : ' / $transactionRef'}',
+      proofState,
+      if (parentRemarks.isNotEmpty) 'Parent note: $parentRemarks',
+      if (reviewerRemarks.isNotEmpty) 'Reviewer remarks: $reviewerRemarks',
+    ].join('\n');
+
+    return {
+      'id': _text(row['id']),
+      'type': 'fee',
+      'source': ApprovalSource.feePaymentProof.name,
+      'requesterName': studentName,
+      'requesterRole': 'Parent: $parentName',
+      'requesterClass': 'Payment proof',
+      'submittedDate': paymentDate,
+      'summary': 'Payment proof · ₹$amount · $invoiceNumber',
+      'details': details,
+      'status': status,
+      'remarks': reviewerRemarks.isEmpty ? null : reviewerRemarks,
+      'actionDate': _dateOnly(row['reviewed_at'] ?? row['updated_at']),
+      'decisionPath': '/fees/payment-requests/${_text(row['id'])}/decision',
     };
   }
 
@@ -654,6 +759,8 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         }
       }
     }
+    await _loadData();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${approval.requesterName}\'s request approved'),
@@ -750,6 +857,8 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         }
       }
     }
+    await _loadData();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${approval.requesterName}\'s request rejected'),
@@ -764,6 +873,19 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     String status,
     String remarks,
   ) async {
+    if (approval.source == ApprovalSource.feePaymentProof) {
+      if (status != 'approved' && status != 'rejected') {
+        throw const FormatException(
+          'Payment proofs only support approve or reject decisions',
+        );
+      }
+      await BackendApiClient.instance.decideParentPaymentRequest(
+        approval.id,
+        status: status,
+        adminRemarks: remarks,
+      );
+      return;
+    }
     final path = approval.decisionPath;
     if (path == null || path.isEmpty || path.endsWith('/')) {
       throw const FormatException('Approval decision path is missing');

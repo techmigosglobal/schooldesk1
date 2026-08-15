@@ -3,6 +3,7 @@ import { fail, ok } from "../index.ts";
 import {
   teacherCanUseSection as hasActiveTeacherSectionAccess,
 } from "./teacher_scope.ts";
+import { isIsoDate, isUuid } from "../lib/homework_legacy.ts";
 
 export type DailyOperation = "attendance" | "homework";
 
@@ -52,7 +53,8 @@ export function todayDate(): string {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(new Date());
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const value = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
@@ -62,6 +64,9 @@ export async function sectionAcademicYear(
   sectionId: string,
   requestedYearId = "",
 ) {
+  if (!isUuid(sectionId) || (requestedYearId && !isUuid(requestedYearId))) {
+    return "";
+  }
   const section = await svc.from("sections").select(
     "id, academic_year_id",
   ).eq("school_id", school).eq("id", sectionId).maybeSingle();
@@ -80,6 +85,14 @@ export async function loadDailyClaim(
   operation: DailyOperation,
   operationDate: string,
 ) {
+  // Legacy homework rows can have no academic year. Never send empty or
+  // malformed UUID/date values to Postgres; a missing claim is safe for reads
+  // and preserves the existing claim-conflict behavior for valid rows.
+  if (
+    !isUuid(academicYearId) || !isUuid(sectionId) || !isIsoDate(operationDate)
+  ) {
+    return null;
+  }
   const { data, error } = await svc.from("class_daily_operation_claims")
     .select(
       "*, claimed_by:staff!class_daily_operation_claims_claimed_by_staff_id_fkey(id, first_name, last_name)",
@@ -216,7 +229,9 @@ export async function handleDailyClaims(
         sectionId,
         text(url.searchParams.get("academic_year_id")),
       );
-      if (!academicYearId) return fail("section and academic year do not match", 422);
+      if (!academicYearId) {
+        return fail("section and academic year do not match", 422);
+      }
       return ok(
         await loadDailyClaim(
           svc,
