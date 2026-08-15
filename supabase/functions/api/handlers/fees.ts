@@ -2975,10 +2975,15 @@ export async function handleFees(
       if (existingError) return fail(existingError.message);
       if (!existing) return fail("not found", 404);
       if (
-        !["pending_verification", "resubmitted"].includes(text(existing.status))
+        ![
+          "pending",
+          "submitted",
+          "pending_verification",
+          "resubmitted",
+        ].includes(text(existing.status).toLowerCase())
       ) {
         return fail(
-          "Only pending or resubmitted payment requests can be decided",
+          "Only pending, submitted, pending_verification, or resubmitted payment requests can be decided",
           409,
         );
       }

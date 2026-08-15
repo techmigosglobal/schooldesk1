@@ -19,11 +19,27 @@ function query(url: URL, key: string): string | null {
   return url.searchParams.get(key);
 }
 
+function audienceFilterForRole(role: string): string | null {
+  if (role === "teacher") {
+    return "audience_type.eq.all,audience_type.eq.staff,audience_type.eq.teachers";
+  }
+  if (role === "parent") {
+    return "audience_type.eq.all,audience_type.eq.students,audience_type.eq.parents";
+  }
+  return null;
+}
+
+function isHolidayPayload(payload: Record<string, unknown>): boolean {
+  return payload.is_holiday === true ||
+    `${payload.event_type ?? ""}`.trim().toLowerCase() === "holiday";
+}
+
 async function notifyEventAudience(
   svc: SupabaseClient,
   school: string,
   event: Record<string, unknown>,
 ) {
+  if (isHolidayPayload(event)) return;
   const audience = `${event.audience_type ?? "all"}`.trim().toLowerCase();
   const roles = ["parents", "students"].includes(audience)
     ? ["parent"]
@@ -72,6 +88,7 @@ async function notifyEventAudience(
     event_data: {
       title: log.title,
       message: log.body,
+      event_id: event.id,
       reference_type: "event",
       reference_id: event.id,
       route: log.route,
@@ -162,6 +179,8 @@ export async function handleCalendar(
       if (query(url, "academic_year_id")) {
         q = q.eq("academic_year_id", query(url, "academic_year_id")!);
       }
+      const audienceFilter = audienceFilterForRole(roleName(user));
+      if (audienceFilter) q = q.or(audienceFilter);
       const { data, error } = await q.order("start_datetime", {
         ascending: true,
       }).order("start_date", { ascending: true });
@@ -171,6 +190,12 @@ export async function handleCalendar(
     if (!id && method === "POST") {
       if (!["principal", "coordinator"].includes(roleName(user))) {
         return fail("forbidden", 403);
+      }
+      if (isHolidayPayload(body)) {
+        return fail(
+          "Holiday records must be stored through the holiday calendar, not events",
+          422,
+        );
       }
       const payload = {
         ...body,
@@ -185,7 +210,11 @@ export async function handleCalendar(
         .single();
       if (error) return fail(error.message);
       try {
-        await notifyEventAudience(svc, sid, data as Record<string, unknown>);
+        const status = `${(data as Record<string, unknown>)?.status ?? "scheduled"}`
+          .trim().toLowerCase();
+        if (!['draft', 'cancelled'].includes(status)) {
+          await notifyEventAudience(svc, sid, data as Record<string, unknown>);
+        }
       } catch (notificationError) {
         console.error("Failed to notify event audience", notificationError);
       }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class PrincipalPaymentRequests extends StatefulWidget {
@@ -43,9 +44,14 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
       });
     }
     try {
-      final rows = await BackendApiClient.instance.getParentPaymentRequests(
-        pageSize: 200,
-      );
+      final rows =
+          (await BackendApiClient.instance.getParentPaymentRequests(
+                pageSize: 200,
+              ))
+              .where(
+                (row) => FeePaymentRequestStatus.isReviewRecord(row['status']),
+              )
+              .toList();
       if (!mounted) return;
 
       // Seed controllers
@@ -72,15 +78,15 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   List<Map<String, dynamic>> get _visibleRequests {
     if (_statusFilter == 'all') return _requests;
     if (_statusFilter == 'pending') {
-      return _requests.where((r) {
-        final status = _text(r['status']).toLowerCase();
-        return status == 'pending' ||
-            status == 'pending_verification' ||
-            status == 'submitted';
-      }).toList();
+      return _requests
+          .where((r) => FeePaymentRequestStatus.isPrincipalPending(r['status']))
+          .toList();
     }
     return _requests
-        .where((r) => _text(r['status']).toLowerCase() == _statusFilter)
+        .where(
+          (r) =>
+              FeePaymentRequestStatus.normalize(r['status']) == _statusFilter,
+        )
         .toList();
   }
 
@@ -187,19 +193,35 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   }
 
   Widget _buildSummaryCards() {
-    final pending = _requests.where((r) {
-      final s = _text(r['status']).toLowerCase();
-      return s == 'pending' || s == 'pending_verification' || s == 'submitted';
-    }).length;
+    final pending = _requests
+        .where((r) => FeePaymentRequestStatus.isPrincipalPending(r['status']))
+        .length;
     final approved = _requests
-        .where((r) => _text(r['status']).toLowerCase() == 'approved')
+        .where(
+          (r) =>
+              FeePaymentRequestStatus.state(r['status']) ==
+              FeePaymentRequestState.approved,
+        )
         .length;
     final rejected = _requests
-        .where((r) => _text(r['status']).toLowerCase() == 'rejected')
+        .where(
+          (r) =>
+              FeePaymentRequestStatus.state(r['status']) ==
+              FeePaymentRequestState.rejected,
+        )
+        .length;
+    final reversed = _requests
+        .where(
+          (r) =>
+              FeePaymentRequestStatus.state(r['status']) ==
+              FeePaymentRequestState.reversed,
+        )
         .length;
     final clarify = _requests
         .where(
-          (r) => _text(r['status']).toLowerCase() == 'clarification_required',
+          (r) =>
+              FeePaymentRequestStatus.state(r['status']) ==
+              FeePaymentRequestState.clarificationRequired,
         )
         .length;
 
@@ -212,6 +234,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
           _summaryItem('Clarify', clarify, Colors.blue),
           _summaryItem('Approved', approved, Colors.green),
           _summaryItem('Rejected', rejected, Colors.red),
+          _summaryItem('Reversed', reversed, Colors.blueGrey),
         ],
       ),
     );
@@ -249,6 +272,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
       ('clarification_required', 'Clarify'),
       ('approved', 'Approved'),
       ('rejected', 'Rejected'),
+      ('reversed', 'Reversed'),
       ('all', 'All'),
     ];
 
@@ -312,11 +336,9 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
 
   Widget _buildRequestCard(Map<String, dynamic> r) {
     final id = '${r['id'] ?? ''}';
-    final status = _text(r['status']).toLowerCase();
-    final isPending =
-        status == 'pending' ||
-        status == 'pending_verification' ||
-        status == 'submitted';
+    final status = FeePaymentRequestStatus.normalize(r['status']);
+    final state = FeePaymentRequestStatus.state(status);
+    final isPending = state == FeePaymentRequestState.pending;
     final invoice = r['invoice'] is Map
         ? Map<String, dynamic>.from(r['invoice'] as Map)
         : const <String, dynamic>{};
@@ -347,15 +369,18 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
 
     Color badgeColor = Colors.orange;
     Color badgeBg = Colors.orange.withOpacity(0.1);
-    if (status == 'approved') {
+    if (state == FeePaymentRequestState.approved) {
       badgeColor = Colors.green;
       badgeBg = Colors.green.withOpacity(0.1);
-    } else if (status == 'rejected') {
+    } else if (state == FeePaymentRequestState.rejected) {
       badgeColor = Colors.red;
       badgeBg = Colors.red.withOpacity(0.1);
-    } else if (status == 'clarification_required') {
+    } else if (state == FeePaymentRequestState.clarificationRequired) {
       badgeColor = Colors.blue;
       badgeBg = Colors.blue.withOpacity(0.1);
+    } else if (state == FeePaymentRequestState.reversed) {
+      badgeColor = Colors.blueGrey;
+      badgeBg = Colors.blueGrey.withOpacity(0.1);
     }
 
     return Card(
@@ -392,7 +417,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    _statusLabel(status),
+                    FeePaymentRequestStatus.label(status),
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 10,
@@ -594,22 +619,6 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         ],
       ),
     );
-  }
-
-  String _statusLabel(String status) {
-    switch (status) {
-      case 'pending_verification':
-      case 'submitted':
-        return 'Pending Review';
-      case 'clarification_required':
-        return 'Clarification Required';
-      case 'approved':
-        return 'Approved';
-      case 'rejected':
-        return 'Rejected';
-      default:
-        return 'Pending';
-    }
   }
 
   String _absoluteMediaUrl(String value) {

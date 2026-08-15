@@ -242,11 +242,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
     try {
       final response = await _dio.put(
         '/fees/payment-requests/$id/decision',
-        data: {
-          'status': status,
-          if (adminRemarks.trim().isNotEmpty)
-            'admin_remarks': adminRemarks.trim(),
-        },
+        data: {'status': status, 'admin_remarks': adminRemarks.trim()},
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {

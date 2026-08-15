@@ -66,11 +66,17 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
       for (final row in rows.take(12)) {
         final id = _homeworkId(row);
         if (id.isEmpty) continue;
-        final submissions = await BackendApiClient.instance
-            .getHomeworkSubmissions(id);
-        counts[id] = teacherFlowList(
-          submissions['submissions'] ?? submissions['data'],
-        ).length;
+        try {
+          final submissions = await BackendApiClient.instance
+              .getHomeworkSubmissions(id);
+          counts[id] = teacherFlowList(
+            submissions['submissions'] ?? submissions['data'],
+          ).length;
+        } on Object {
+          // Submission counts are supplementary. Keep legacy assignments
+          // visible when one submission record cannot be read.
+          counts[id] = 0;
+        }
       }
       if (!mounted) return;
       setState(() {

@@ -28,9 +28,13 @@ void main() {
       teacher,
       contains('Read-only schedule from Principal timetable setup'),
     );
-    expect(teacher, contains('List.generate(7'));
     expect(teacher, contains('_loadTeacherTimetableSlots'));
     expect(teacher, contains('getTimetableSlots(sectionId: sectionId)'));
+    expect(teacher, contains('_loadWorkingDays'));
+    expect(teacher, contains('_selectedDaySlots'));
+    expect(teacher, contains('scrollDirection: Axis.horizontal'));
+    expect(teacher, contains(r'No classes scheduled for $dayName.'));
+    expect(teacher, isNot(contains('List.generate(7')));
     expect(teacher, contains('Select class'));
     expect(
       teacher,

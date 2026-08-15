@@ -28,6 +28,12 @@ void main() {
     );
     expect(calendar, contains('svc.from("events")'));
     expect(calendar, contains('svc.from("holidays")'));
+    expect(calendar, contains('audienceFilterForRole'));
+    expect(calendar, contains('event_id: event.id'));
+    expect(
+      calendar,
+      contains('Holiday records must be stored through the holiday calendar'),
+    );
     expect(calendar, contains('["principal"].includes(roleName(user))'));
     expect(calendar, contains('return fail("forbidden", 403)'));
   });
@@ -42,5 +48,9 @@ void main() {
     expect(source, contains('floatingActionButton: _canManageEvents'));
     expect(source, contains("label: const Text('Create event')"));
     expect(source, contains('_buildCalendarSummary()'));
+    expect(source, contains('getHolidays('));
+    expect(source, contains('_CalendarRecordKind.holiday'));
+    expect(source, contains("label: const Text('Retry')"));
+    expect(source, isNot(contains("'holiday',\n    'sports'")));
   });
 }

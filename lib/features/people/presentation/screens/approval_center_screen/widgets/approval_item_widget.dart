@@ -96,6 +96,9 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
   }
 
   String _getTypeLabel() {
+    if (widget.approval.source == ApprovalSource.feePaymentProof) {
+      return 'Payment Proof';
+    }
     switch (widget.approval.type) {
       case ApprovalType.account:
         return 'Account';
@@ -156,16 +159,25 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
     widget.onRequestChanges(note);
   }
 
-  Widget _statusChip(bool isPending, bool isApproved, bool isChangesRequested) {
+  Widget _statusChip(
+    bool isPending,
+    bool isApproved,
+    bool isChangesRequested,
+    bool isReversed,
+  ) {
     final color = isPending || isChangesRequested
         ? context.appTheme.warning
         : isApproved
         ? context.appTheme.success
+        : isReversed
+        ? context.appTheme.muted
         : context.appTheme.error;
     final containerColor = isPending || isChangesRequested
         ? context.appTheme.warningContainer
         : isApproved
         ? context.appTheme.successContainer
+        : isReversed
+        ? context.appTheme.surfaceVariant
         : context.appTheme.errorContainer;
     final icon = isPending
         ? Icons.hourglass_empty_rounded
@@ -173,6 +185,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         ? Icons.edit_note_rounded
         : isApproved
         ? Icons.check_circle_rounded
+        : isReversed
+        ? Icons.undo_rounded
         : Icons.cancel_rounded;
     final label = isPending
         ? 'Pending'
@@ -180,6 +194,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         ? 'Changes requested'
         : isApproved
         ? 'Approved'
+        : isReversed
+        ? 'Reversed'
         : 'Rejected';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -346,6 +362,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
     final isPending = widget.approval.status == 'pending';
     final isApproved = widget.approval.status == 'approved';
     final isChangesRequested = widget.approval.status == 'changes_requested';
+    final isReversed = widget.approval.status == 'reversed';
     final typeColor = _getTypeColor();
     final isBusy = widget.isActionLoading;
     final requesterMeta = [
@@ -386,6 +403,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                       ? context.appTheme.warning
                       : isApproved
                       ? context.appTheme.success
+                      : isReversed
+                      ? context.appTheme.muted
                       : context.appTheme.error,
                 ),
                 Expanded(
@@ -433,6 +452,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                                             isPending,
                                             isApproved,
                                             isChangesRequested,
+                                            isReversed,
                                           ),
                                         ],
                                       ),
@@ -601,6 +621,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                     ? context.appTheme.successContainer
                     : widget.approval.status == 'changes_requested'
                     ? context.appTheme.warningContainer
+                    : widget.approval.status == 'reversed'
+                    ? context.appTheme.surfaceVariant
                     : context.appTheme.errorContainer,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
@@ -608,6 +630,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                       ? context.appTheme.success.withAlpha(77)
                       : widget.approval.status == 'changes_requested'
                       ? context.appTheme.warning.withAlpha(77)
+                      : widget.approval.status == 'reversed'
+                      ? context.appTheme.muted.withAlpha(77)
                       : context.appTheme.error.withAlpha(77),
                   width: 1,
                 ),
@@ -626,6 +650,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                         ? context.appTheme.success
                         : widget.approval.status == 'changes_requested'
                         ? context.appTheme.warning
+                        : widget.approval.status == 'reversed'
+                        ? context.appTheme.muted
                         : context.appTheme.error,
                   ),
                   const SizedBox(width: 8),
@@ -639,6 +665,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                             ? context.appTheme.success
                             : widget.approval.status == 'changes_requested'
                             ? context.appTheme.warning
+                            : widget.approval.status == 'reversed'
+                            ? context.appTheme.muted
                             : context.appTheme.error,
                         height: 1.5,
                       ),

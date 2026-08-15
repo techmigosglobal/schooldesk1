@@ -38,58 +38,75 @@ void main() {
     FlutterError.onError = previousOnError;
   });
 
-  testWidgets(
-    'principal payment requests list shows pending and pending verification in default review queue',
-    (tester) async {
-      _setLargeSurface(tester);
-      adapter.routes['GET /fees/payment-requests'] = <String, dynamic>{
-        'success': true,
-        'data': <Map<String, dynamic>>[
-          _requestRow(
-            id: 'req-pending',
-            status: 'pending',
-            studentName: 'Aarav Pending',
-          ),
-          _requestRow(
-            id: 'req-verify',
-            status: 'pending_verification',
-            studentName: 'Diya Verification',
-          ),
-          _requestRow(
-            id: 'req-clarify',
-            status: 'clarification_required',
-            studentName: 'Kabir Clarification',
-          ),
-        ],
-      };
-
-      await tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(
-            size: Size(1280, 1800),
-            textScaler: TextScaler.linear(0.9),
-          ),
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: const AdminPaymentRequestsScreen(),
-          ),
+  testWidgets('principal payment requests list unifies all pending aliases', (
+    tester,
+  ) async {
+    _setLargeSurface(tester);
+    adapter.routes['GET /fees/payment-requests'] = <String, dynamic>{
+      'success': true,
+      'data': <Map<String, dynamic>>[
+        _requestRow(
+          id: 'req-pending',
+          status: 'pending',
+          studentName: 'Aarav Pending',
         ),
-      );
-      await tester.pumpAndSettle();
-      _drainExpectedOverflow(tester);
+        _requestRow(
+          id: 'req-verify',
+          status: 'pending_verification',
+          studentName: 'Diya Verification',
+        ),
+        _requestRow(
+          id: 'req-submitted',
+          status: 'submitted',
+          studentName: 'Esha Submitted',
+        ),
+        _requestRow(
+          id: 'req-resubmitted',
+          status: 'resubmitted',
+          studentName: 'Farhan Resubmitted',
+        ),
+        _requestRow(
+          id: 'req-clarify',
+          status: 'clarification_required',
+          studentName: 'Kabir Clarification',
+        ),
+        _requestRow(
+          id: 'req-intent',
+          status: 'initiated',
+          studentName: 'Ishaan Unfinished',
+        ),
+      ],
+    };
 
-      expect(find.text('Aarav Pending'), findsOneWidget);
-      expect(find.text('Diya Verification'), findsOneWidget);
-      expect(find.textContaining('Kabir'), findsNothing);
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(1280, 1800),
+          textScaler: TextScaler.linear(0.9),
+        ),
+        child: MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: const AdminPaymentRequestsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    _drainExpectedOverflow(tester);
 
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Clarification'));
-      await tester.pumpAndSettle();
-      _drainExpectedOverflow(tester);
+    expect(find.text('Aarav Pending'), findsOneWidget);
+    expect(find.text('Diya Verification'), findsOneWidget);
+    expect(find.text('Esha Submitted'), findsOneWidget);
+    expect(find.text('Farhan Resubmitted'), findsOneWidget);
+    expect(find.textContaining('Kabir'), findsNothing);
+    expect(find.textContaining('Ishaan'), findsNothing);
 
-      expect(find.text('Kabir Clarification'), findsOneWidget);
-      expect(find.textContaining('Aarav'), findsNothing);
-    },
-  );
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Clarification'));
+    await tester.pumpAndSettle();
+    _drainExpectedOverflow(tester);
+
+    expect(find.text('Kabir Clarification'), findsOneWidget);
+    expect(find.textContaining('Aarav'), findsNothing);
+  });
 
   testWidgets('principal decision screen approves payment requests', (
     tester,

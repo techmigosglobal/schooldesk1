@@ -5,6 +5,8 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 
+import 'teacher_timetable_day_selection.dart';
+
 class TeacherTimetableScreen extends StatefulWidget {
   const TeacherTimetableScreen({super.key});
 
@@ -17,6 +19,8 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   String? _error;
   List<Map<String, dynamic>> _slots = const [];
   String _selectedSectionId = '';
+  List<int> _workingDays = defaultTeacherWorkingDays;
+  int? _selectedDay;
 
   @override
   void initState() {
@@ -34,11 +38,21 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
       if (!RoleAccessService.hasTeacherStaffLink) {
         throw Exception(RoleAccessService.teacherScopeStatus);
       }
+      final workingDays = await _loadWorkingDays();
       final slots = await _loadTeacherTimetableSlots();
       if (!mounted) return;
       final sectionIds = _sectionIdsFor(slots);
+      final normalizedWorkingDays = normalizeTeacherWorkingDays(workingDays);
+      final selectedDay =
+          _selectedDay != null && normalizedWorkingDays.contains(_selectedDay)
+          ? _selectedDay!
+          : selectInitialTeacherTimetableDay(
+              workingDays: normalizedWorkingDays,
+            );
       setState(() {
         _slots = slots;
+        _workingDays = normalizedWorkingDays;
+        _selectedDay = selectedDay;
         _selectedSectionId = sectionIds.contains(_selectedSectionId)
             ? _selectedSectionId
             : (sectionIds.isEmpty ? '' : sectionIds.first);
@@ -50,6 +64,14 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
         _loading = false;
         _error = error.toString().replaceFirst('Exception: ', '');
       });
+    }
+  }
+
+  Future<List<int>> _loadWorkingDays() async {
+    try {
+      return await BackendApiClient.instance.getTimetableWorkingDays();
+    } on Object {
+      return const [];
     }
   }
 
@@ -99,6 +121,12 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
     return grouped;
   }
 
+  List<Map<String, dynamic>> get _selectedDaySlots {
+    final selectedDay = _selectedDay;
+    if (selectedDay == null) return const [];
+    return _slotsByDay[selectedDay] ?? const [];
+  }
+
   List<String> get _weeklySubjects {
     return _visibleSlots
         .map((s) {
@@ -127,10 +155,12 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final slotsByDay = _slotsByDay;
     final subjects = _weeklySubjects;
     final classLabel = _assignedClass;
     final sectionIds = _sectionIdsFor(_slots);
+    final selectedDay =
+        _selectedDay ??
+        selectInitialTeacherTimetableDay(workingDays: _workingDays);
 
     return TeacherFlowScaffold(
       title: 'Weekly Timetable',
@@ -184,24 +214,21 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
             ),
             const SizedBox(height: 16),
 
-            const TeacherFlowSectionHeader(title: 'Weekly Timetable'),
+            const TeacherFlowSectionHeader(title: 'Select weekday'),
             const SizedBox(height: 8),
-            if (_visibleSlots.isEmpty)
-              const TeacherFlowCard(
-                icon: Icons.calendar_month_outlined,
-                title: 'No timetable published yet.',
-                subtitle:
-                    'Ask Principal to assign subjects, staff, and timetable slots for your staff profile.',
-              )
-            else
-              ...List.generate(7, (index) => index + 1).map(
-                (day) => _DayScheduleCard(
-                  dayName: _dayName(day),
-                  slots: slotsByDay[day] ?? const [],
-                  slotSubject: _slotSubject,
-                  slotTime: _slotTime,
-                ),
-              ),
+            _TeacherWeekdaySelector(
+              days: _workingDays,
+              selectedDay: selectedDay,
+              onSelected: (day) => setState(() => _selectedDay = day),
+            ),
+            const SizedBox(height: 16),
+            _DayScheduleCard(
+              key: const ValueKey('teacher-timetable-selected-day'),
+              dayName: _dayName(selectedDay),
+              slots: _selectedDaySlots,
+              slotSubject: _slotSubject,
+              slotTime: _slotTime,
+            ),
           ],
         ],
       ),
@@ -393,6 +420,7 @@ class _DayScheduleCard extends StatelessWidget {
   final String Function(Map<String, dynamic>) slotTime;
 
   const _DayScheduleCard({
+    super.key,
     required this.dayName,
     required this.slots,
     required this.slotSubject,
@@ -406,11 +434,16 @@ class _DayScheduleCard extends StatelessWidget {
       child: TeacherFlowCard(
         icon: Icons.calendar_view_week_rounded,
         title: dayName,
-        subtitle: slots.isEmpty
-            ? 'No periods assigned'
-            : '${slots.length} period${slots.length == 1 ? '' : 's'} assigned',
+        subtitle:
+            '${slots.length} period${slots.length == 1 ? '' : 's'} assigned',
         body: slots.isEmpty
-            ? null
+            ? Text(
+                'No classes scheduled for $dayName.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: teacherFlowMuted,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
             : Column(
                 children: slots
                     .map(
@@ -441,5 +474,80 @@ class _DayScheduleCard extends StatelessWidget {
               ),
       ),
     );
+  }
+}
+
+class _TeacherWeekdaySelector extends StatelessWidget {
+  final List<int> days;
+  final int selectedDay;
+  final ValueChanged<int> onSelected;
+
+  const _TeacherWeekdaySelector({
+    required this.days,
+    required this.selectedDay,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        key: const ValueKey('teacher-timetable-weekday-selector'),
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(right: 8),
+        itemCount: days.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final day = days[index];
+          final selected = day == selectedDay;
+          final dayName = _dayName(day);
+          return Semantics(
+            button: true,
+            selected: selected,
+            label: dayName,
+            hint: 'Show $dayName timetable',
+            child: ChoiceChip(
+              key: ValueKey('teacher-timetable-day-$day'),
+              label: Text(_shortDayName(day)),
+              selected: selected,
+              onSelected: (_) => onSelected(day),
+              showCheckmark: false,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              labelStyle: TextStyle(
+                color: selected ? Colors.white : teacherFlowInk,
+                fontWeight: FontWeight.w800,
+              ),
+              selectedColor: teacherFlowAccent,
+              backgroundColor: teacherFlowAccent.withValues(alpha: 0.08),
+              side: BorderSide(
+                color: selected
+                    ? teacherFlowAccent
+                    : teacherFlowAccent.withValues(alpha: 0.20),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  static String _dayName(int day) {
+    const days = [
+      '',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return day >= 1 && day < days.length ? days[day] : 'Day $day';
+  }
+
+  static String _shortDayName(int day) {
+    const days = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return day >= 1 && day < days.length ? days[day] : 'Day $day';
   }
 }
