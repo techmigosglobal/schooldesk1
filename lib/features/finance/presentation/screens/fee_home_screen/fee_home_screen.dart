@@ -28,6 +28,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
   List<Map<String, dynamic>> _invoices = const [];
   List<Map<String, dynamic>> _paymentRequests = const [];
   List<Map<String, dynamic>> _reminderDeliveries = const [];
+  List<Map<String, dynamic>> _daycarePlans = const [];
   List<AcademicYearModel> _academicYears = const [];
   List<GradeModel> _grades = const [];
   List<SectionModel> _sections = const [];
@@ -57,6 +58,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
       final structures = (results[0] as List)
           .cast<Map<String, dynamic>>()
           .map(normalizeFeeStructure)
+          .where((row) => !isDaycareFeeStructure(row))
           .toList();
       final invoices = (results[1] as List)
           .cast<Map<String, dynamic>>()
@@ -80,6 +82,14 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         reminderDeliveries = await api.getRawList('/fees/reminders');
       } on Object catch (_) {}
 
+      List<Map<String, dynamic>> daycarePlans = const [];
+      try {
+        daycarePlans = await api.getRawList(
+          '/fees/daycare-plans',
+          queryParameters: const {'active': 'true'},
+        );
+      } on Object catch (_) {}
+
       if (!mounted) return;
       final years = results[2] as List<AcademicYearModel>;
       final selectedYear = _selectedAcademicYearId.isNotEmpty
@@ -92,6 +102,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         _invoices = invoices;
         _paymentRequests = prList;
         _reminderDeliveries = reminderDeliveries;
+        _daycarePlans = daycarePlans;
         _academicYears = years;
         _grades = results[3] as List<GradeModel>;
         _sections = results[4] as List<SectionModel>;
@@ -562,6 +573,9 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
 
         const SizedBox(height: 16),
 
+        _daycareSection(),
+        const SizedBox(height: 16),
+
         // ── Quick Actions (always visible) ───────────────────
         const FeeSectionTitle('Quick Actions'),
         const SizedBox(height: 10),
@@ -582,8 +596,8 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         FeeActionRow(
           icon: Icons.schedule_rounded,
           iconColor: const Color(0xFF0F766E),
-          title: 'Daycare Plans',
-          subtitle: 'Set each child’s monthly amount and due day',
+          title: 'Day Care Plans',
+          subtitle: 'Set each child’s hourly rate, hours, and due day',
           onTap: _showDaycarePlans,
         ),
         FeeActionRow(
@@ -597,6 +611,136 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
 
         const SizedBox(height: 48),
       ],
+    );
+  }
+
+  Widget _daycareSection() {
+    final activePlans = _daycarePlans.where((plan) {
+      final active = plan['is_active'] != false;
+      final eligible = plan['is_daycare_eligible'] != false;
+      return active && eligible;
+    }).toList();
+    final monthlyTotal = activePlans.fold<double>(
+      0,
+      (sum, plan) => sum + numValue(plan['monthly_amount']),
+    );
+    return FeeCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: FeeSectionTitle('Day Care Fees')),
+              TextButton.icon(
+                onPressed: _showDaycarePlans,
+                icon: const Icon(Icons.tune_rounded, size: 18),
+                label: const Text('Manage'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Hourly per-child plans, separate from normal class fee structures.',
+            style: TextStyle(fontSize: 12, color: context.appTheme.muted),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FeeInfoTile(
+                  label: 'Active plans',
+                  value: '${activePlans.length}',
+                  highlighted: true,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FeeInfoTile(
+                  label: 'Monthly billing',
+                  value: money(monthlyTotal),
+                  highlighted: monthlyTotal > 0,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_daycarePlans.isEmpty)
+            FeeEmptyState(
+              icon: Icons.schedule_rounded,
+              title: 'No Day Care plans',
+              message: 'Create hourly plans for children enrolled in Day Care.',
+              actionLabel: 'Add plan',
+              onAction: _createDaycarePlan,
+            )
+          else
+            for (final plan in _daycarePlans.take(3)) ...[
+              _daycarePlanTile(plan, compact: true),
+              if (plan != _daycarePlans.take(3).last) const Divider(height: 18),
+            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _daycarePlanTile(Map<String, dynamic> plan, {bool compact = false}) {
+    final student = plan['student'] is Map
+        ? Map<String, dynamic>.from(plan['student'] as Map)
+        : const <String, dynamic>{};
+    final invoice = plan['current_period_invoice'] is Map
+        ? Map<String, dynamic>.from(plan['current_period_invoice'] as Map)
+        : const <String, dynamic>{};
+    final eligible = plan['is_daycare_eligible'] != false;
+    final isHourly =
+        textValue(plan['billing_model']) == 'hourly' ||
+        (numValue(plan['hourly_rate']) > 0 &&
+            numValue(plan['contracted_hours_per_month']) > 0);
+    final name = studentFullName(student);
+    final classLabel = _daycareStudentClassLabel(student);
+    final invoiceText = invoice.isEmpty
+        ? 'Current invoice pending'
+        : '${money(numValue(invoice['balance']))} balance · ${textValue(invoice['status'], fallback: 'pending')}';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: eligible
+            ? const Color(0xFFDDF5EC)
+            : const Color(0xFFFFEDD5),
+        child: Icon(
+          eligible ? Icons.schedule_rounded : Icons.warning_amber_rounded,
+          color: eligible ? const Color(0xFF176B43) : const Color(0xFFEA580C),
+        ),
+      ),
+      title: Text(
+        name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w900),
+      ),
+      subtitle: Text(
+        isHourly
+            ? '$classLabel · ${money(numValue(plan['hourly_rate']))}/hr x ${_hoursText(plan['contracted_hours_per_month'])} hrs · ${money(numValue(plan['monthly_amount']))}/month · due ${numValue(plan['due_day']).round()} · $invoiceText'
+            : '$classLabel · Legacy monthly · ${money(numValue(plan['monthly_amount']))}/month · due ${numValue(plan['due_day']).round()} · $invoiceText',
+        maxLines: compact ? 2 : 3,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 6,
+        children: [
+          if (!eligible)
+            const Chip(
+              avatar: Icon(Icons.warning_amber_rounded, size: 16),
+              label: Text('Needs attention'),
+            ),
+          IconButton(
+            tooltip: 'Change from next month',
+            icon: const Icon(Icons.edit_calendar_rounded),
+            onPressed: () => _changeDaycarePlan(plan),
+          ),
+        ],
+      ),
+      onTap: compact ? _showDaycarePlans : null,
+      isThreeLine: !compact,
     );
   }
 
@@ -924,7 +1068,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Only children currently enrolled in Day Care sections can have a plan. Each child has an individual monthly amount; class fee structures are not used.',
+                  'Only children currently enrolled in Day Care sections can have a plan. Each child has an individual hourly rate and contracted monthly hours; class fee structures are not used.',
                 ),
                 const SizedBox(height: 12),
                 Flexible(
@@ -941,44 +1085,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                           separatorBuilder: (_, _) => const Divider(),
                           itemBuilder: (context, index) {
                             final plan = plans[index];
-                            final student = plan['student'] is Map
-                                ? Map<String, dynamic>.from(
-                                    plan['student'] as Map,
-                                  )
-                                : const <String, dynamic>{};
-                            final invoice =
-                                plan['current_period_invoice'] is Map
-                                ? Map<String, dynamic>.from(
-                                    plan['current_period_invoice'] as Map,
-                                  )
-                                : const <String, dynamic>{};
-                            final name =
-                                '${textValue(student['first_name'])} ${textValue(student['last_name'])}'
-                                    .trim();
-                            final eligible =
-                                plan['is_daycare_eligible'] == true;
-                            return ListTile(
-                              leading: const CircleAvatar(
-                                backgroundColor: Color(0xFFDDF5EC),
-                                child: Icon(
-                                  Icons.schedule_rounded,
-                                  color: Color(0xFF176B43),
-                                ),
-                              ),
-                              title: Text(name.isEmpty ? 'Student' : name),
-                              subtitle: Text(
-                                '${money(numValue(plan['monthly_amount']))}/month · due on ${numValue(plan['due_day']).round()} · ${invoice.isEmpty ? 'Current invoice pending' : money(numValue(invoice['balance']))}',
-                              ),
-                              trailing: eligible
-                                  ? null
-                                  : const Chip(
-                                      avatar: Icon(
-                                        Icons.warning_amber_rounded,
-                                        size: 16,
-                                      ),
-                                      label: Text('Needs attention'),
-                                    ),
-                            );
+                            return _daycarePlanTile(plan);
                           },
                         ),
                 ),
@@ -987,6 +1094,11 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           ),
         ),
       );
+      if (mounted) {
+        setState(() {
+          _daycarePlans = plans;
+        });
+      }
     } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1005,7 +1117,8 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         throw StateError('No active Day Care students are available.');
       }
       String? studentId;
-      final amountController = TextEditingController();
+      final rateController = TextEditingController();
+      final hoursController = TextEditingController();
       final dueDayController = TextEditingController(text: '10');
       final created = await showDialog<bool>(
         context: context,
@@ -1035,12 +1148,22 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: amountController,
+                    controller: rateController,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
                     decoration: const InputDecoration(
-                      labelText: 'Monthly amount (₹)',
+                      labelText: 'Hourly rate (₹)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: hoursController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Contracted hours per month',
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1067,18 +1190,23 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           ),
         ),
       );
-      final amount = double.tryParse(amountController.text) ?? 0;
+      final rate = double.tryParse(rateController.text) ?? 0;
+      final hours = double.tryParse(hoursController.text) ?? 0;
       final dueDay = int.tryParse(dueDayController.text) ?? 0;
-      amountController.dispose();
+      rateController.dispose();
+      hoursController.dispose();
       dueDayController.dispose();
       if (created != true || studentId == null) return;
-      if (amount <= 0 || dueDay < 1 || dueDay > 28) {
-        throw StateError('Enter a monthly amount and a due day from 1 to 28.');
+      if (rate <= 0 || hours <= 0 || dueDay < 1 || dueDay > 28) {
+        throw StateError(
+          'Enter an hourly rate, monthly hours, and a due day from 1 to 28.',
+        );
       }
       await BackendApiClient.instance.createRaw('/fees/daycare-plans', {
         'student_id': studentId,
         'academic_year_id': _selectedAcademicYearId,
-        'monthly_amount': amount,
+        'hourly_rate': rate,
+        'contracted_hours_per_month': hours,
         'due_day': dueDay,
         'fee_label': 'Day Care',
         'effective_from': _todayIso(),
@@ -1107,6 +1235,141 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
   String _todayIso() {
     final now = DateTime.now();
     return '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _changeDaycarePlan(Map<String, dynamic> plan) async {
+    final id = textValue(plan['id']);
+    if (id.isEmpty) return;
+    final rateController = TextEditingController(
+      text: numValue(plan['hourly_rate']) > 0
+          ? _numberInputText(numValue(plan['hourly_rate']))
+          : '',
+    );
+    final hoursController = TextEditingController(
+      text: numValue(plan['contracted_hours_per_month']) > 0
+          ? _numberInputText(numValue(plan['contracted_hours_per_month']))
+          : '',
+    );
+    final dueDayController = TextEditingController(
+      text: '${numValue(plan['due_day']).round().clamp(1, 28)}',
+    );
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Change Day Care plan'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Changes apply from next month. Existing invoices and payments stay unchanged.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: rateController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Hourly rate (₹)'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: hoursController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Contracted hours per month',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: dueDayController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Due day (1–28)'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Save next month'),
+          ),
+        ],
+      ),
+    );
+    final rate = double.tryParse(rateController.text) ?? 0;
+    final hours = double.tryParse(hoursController.text) ?? 0;
+    final dueDay = int.tryParse(dueDayController.text) ?? 0;
+    rateController.dispose();
+    hoursController.dispose();
+    dueDayController.dispose();
+    if (approved != true) return;
+    if (rate <= 0 || hours <= 0 || dueDay < 1 || dueDay > 28) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Enter an hourly rate, monthly hours, and a due day from 1 to 28.',
+          ),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
+      return;
+    }
+    try {
+      await BackendApiClient.instance.updateRaw('/fees/daycare-plans/$id', {
+        'hourly_rate': rate,
+        'contracted_hours_per_month': hours,
+        'due_day': dueDay,
+        'fee_label': textValue(plan['fee_label'], fallback: 'Day Care'),
+      });
+      if (!mounted) return;
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Day Care plan change scheduled for next month.'),
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to update daycare plan: $error'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
+    }
+  }
+
+  String _daycareStudentClassLabel(Map<String, dynamic> student) {
+    final section = student['current_section'] is Map
+        ? Map<String, dynamic>.from(student['current_section'] as Map)
+        : const <String, dynamic>{};
+    final grade = section['grade'] is Map
+        ? Map<String, dynamic>.from(section['grade'] as Map)
+        : const <String, dynamic>{};
+    final label = [
+      textValue(grade['grade_name']),
+      textValue(section['section_name']),
+    ].where((part) => part.isNotEmpty).join(' - ');
+    return label.isEmpty ? 'Day Care' : label;
+  }
+
+  String _hoursText(Object? value) {
+    final hours = numValue(value);
+    if (hours == hours.roundToDouble()) return '${hours.round()}';
+    return hours.toStringAsFixed(2);
+  }
+
+  String _numberInputText(double value) {
+    if (value == value.roundToDouble()) return '${value.round()}';
+    return value.toStringAsFixed(2);
   }
 
   bool _isPendingRequest(Map<String, dynamic> r) {

@@ -94,6 +94,7 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
         _structures = (results[0] as List)
             .cast<Map<String, dynamic>>()
             .map(normalizeFeeStructure)
+            .where((row) => !isDaycareFeeStructure(row))
             .toList();
         _academicYears = years;
         _grades = results[2] as List<GradeModel>;

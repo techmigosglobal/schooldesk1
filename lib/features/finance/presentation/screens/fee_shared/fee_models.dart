@@ -192,6 +192,7 @@ Map<String, dynamic> normalizeFeeStructure(Map<String, dynamic> row) {
     'due_date': row['due_date'],
     'late_fine_per_day': _numValue(row['late_fine_per_day']),
     'is_mandatory': row['is_mandatory'] ?? true,
+    'is_daycare_structure': _isDaycareFeeRow(row, categoryName),
   };
 }
 
@@ -245,7 +246,23 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
       fallback: 'Fee',
     ),
     'fee_type': _textValue(row['fee_type']),
+    'billing_period': row['billing_period'],
+    'billing_details': row['billing_details'],
+    'daycare_plan_id': _textValue(row['daycare_plan_id']),
   };
+}
+
+bool _isDaycareFeeRow(Map<String, dynamic> row, String categoryName) {
+  final normalized = [
+    row['fee_type'],
+    row['billing_model'],
+    categoryName,
+    row['category_name'],
+    row['name'],
+  ].map((value) => _textValue(value).toLowerCase()).join(' ');
+  return normalized.contains('daycare') ||
+      normalized.contains('day care') ||
+      normalized.contains('day_care');
 }
 
 bool _isFinalizedPayment(Map payment) {
@@ -333,6 +350,9 @@ String displayDate(Object? value) {
 
 String studentFullName(Map<String, dynamic> student) =>
     _studentName(student, fallback: 'Student');
+
+bool isDaycareFeeStructure(Map<String, dynamic> row) =>
+    row['is_daycare_structure'] == true || _isDaycareFeeRow(row, '');
 
 /// A stable student-facing identifier for documents. Invoice numbers are
 /// transaction identifiers, never student roll/admission numbers.

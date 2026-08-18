@@ -153,6 +153,30 @@ class DemoFixtureStore {
       'created_at': now,
       'demo_local': true,
     };
+    if (path.contains('daycare-plans')) {
+      final rate = double.tryParse('${record['hourly_rate'] ?? 0}'.trim()) ?? 0;
+      final hours =
+          double.tryParse(
+            '${record['contracted_hours_per_month'] ?? 0}'.trim(),
+          ) ??
+          0;
+      if (rate > 0 && hours > 0) {
+        record['monthly_amount'] = double.parse(
+          (rate * hours).toStringAsFixed(2),
+        );
+        record['billing_model'] = 'hourly';
+      } else {
+        record['billing_model'] = 'legacy_fixed_monthly';
+      }
+      record['fee_label'] = '${record['fee_label'] ?? 'Day Care'}';
+      record['due_day'] = record['due_day'] ?? 10;
+      record['is_active'] = record['is_active'] ?? true;
+      record['is_daycare_eligible'] = true;
+      record['student'] = _list('daycare_students').firstWhere(
+        (student) => '${student['id']}' == '${record['student_id']}',
+        orElse: () => _list('daycare_students').first,
+      );
+    }
     final bucket = _bucketFor(path);
     if (bucket != null) {
       final rows = _mutableList(bucket);

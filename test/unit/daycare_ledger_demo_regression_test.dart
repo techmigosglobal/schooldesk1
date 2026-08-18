@@ -4,9 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:schooldesk1/core/services/demo_fixture_store.dart';
 
 void main() {
-  test('Day Care plans are child-only monthly plans', () {
-    final migration = File(
+  test('Day Care plans are child-only hourly monthly plans', () {
+    final childMonthlyMigration = File(
       'supabase/migrations/20260729140412_daycare_child_monthly_plans.sql',
+    ).readAsStringSync();
+    final hourlyMigration = File(
+      'supabase/migrations/20260818090712_daycare_hourly_per_child_plans.sql',
     ).readAsStringSync();
     final handler = File(
       'supabase/functions/api/handlers/fees.ts',
@@ -15,15 +18,37 @@ void main() {
       'lib/features/finance/presentation/screens/fee_home_screen/fee_home_screen.dart',
     ).readAsStringSync();
 
-    expect(migration, contains('alter column fee_structure_id drop not null'));
-    expect(migration, contains('monthly_amount'));
-    expect(migration, contains('daycare_plan_id'));
-    expect(migration, contains('fee_invoices_daycare_plan_period_unique'));
-    expect(handler, contains('monthly_amount must be greater than zero'));
+    expect(
+      childMonthlyMigration,
+      contains('alter column fee_structure_id drop not null'),
+    );
+    expect(childMonthlyMigration, contains('monthly_amount'));
+    expect(childMonthlyMigration, contains('daycare_plan_id'));
+    expect(
+      childMonthlyMigration,
+      contains('fee_invoices_daycare_plan_period_unique'),
+    );
+    expect(hourlyMigration, contains('hourly_rate numeric(12,2)'));
+    expect(
+      hourlyMigration,
+      contains('contracted_hours_per_month numeric(10,2)'),
+    );
+    expect(hourlyMigration, contains("'formula'"));
+    expect(
+      handler,
+      contains(
+        'hourly_rate and contracted_hours_per_month must be greater than zero',
+      ),
+    );
+    expect(
+      handler,
+      contains('.eq("is_active", true).lte("effective_from", today)'),
+    );
     expect(handler, contains('daycare_plan_id'));
-    expect(home, contains("'monthly_amount': amount"));
+    expect(home, contains("'hourly_rate': rate"));
+    expect(home, contains("'contracted_hours_per_month': hours"));
     expect(home, isNot(contains('Create a Daycare fee structure')));
-    expect(home, isNot(contains('contracted monthly hours')));
+    expect(home, contains('Contracted hours per month'));
   });
 
   test('Day Care eligibility is enforced before plan creation and billing', () {
@@ -74,6 +99,21 @@ void main() {
     expect(ledger, contains('FeeDocumentKind.paymentReceipt'));
   });
 
+  test('complete fee reports include a Day Care finance section', () {
+    final uploads = File(
+      'supabase/functions/api/handlers/uploads.ts',
+    ).readAsStringSync();
+    final feeModels = File(
+      'lib/features/finance/presentation/screens/fee_shared/fee_models.dart',
+    ).readAsStringSync();
+
+    expect(uploads, contains('title: "Day Care Finance"'));
+    expect(uploads, contains('"Hourly rate"'));
+    expect(uploads, contains('"Hours"'));
+    expect(uploads, contains('daycarePlansById'));
+    expect(feeModels, contains('isDaycareFeeStructure'));
+  });
+
   test('lesson plans complete automatically after the week ends', () {
     final handler = File(
       'supabase/functions/api/handlers/communications.ts',
@@ -114,7 +154,8 @@ void main() {
         role: 'principal',
         body: {
           'student_id': 'student-daycare-1',
-          'monthly_amount': 4200,
+          'hourly_rate': 70,
+          'contracted_hours_per_month': 60,
           'due_day': 10,
         },
       )['success'],

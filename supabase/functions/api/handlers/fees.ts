@@ -86,6 +86,31 @@ function isDaycareStudent(studentValue: unknown) {
 const daycareStudentSelect =
   "id, first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))";
 
+function daycarePlanAmount(planValue: unknown) {
+  const plan = record(planValue);
+  const hourlyRate = money(plan.hourly_rate);
+  const contractedHours = money(plan.contracted_hours_per_month);
+  return hourlyRate > 0 && contractedHours > 0
+    ? money(hourlyRate * contractedHours)
+    : money(plan.monthly_amount);
+}
+
+function decorateDaycarePlan(planValue: unknown) {
+  const plan = record(planValue);
+  const hourlyRate = money(plan.hourly_rate);
+  const contractedHours = money(plan.contracted_hours_per_month);
+  const isHourly = hourlyRate > 0 && contractedHours > 0;
+  return {
+    ...plan,
+    billing_model: isHourly ? "hourly" : "legacy_fixed_monthly",
+    hourly_rate: isHourly ? hourlyRate : plan.hourly_rate,
+    contracted_hours_per_month: isHourly
+      ? contractedHours
+      : plan.contracted_hours_per_month,
+    monthly_amount: daycarePlanAmount(plan),
+  };
+}
+
 async function attachInvoicePaymentReceipts(
   svc: SupabaseClient,
   school: string,
@@ -1494,10 +1519,19 @@ export async function handleFees(
             (row) => [text(row.id), row] as [string, Record<string, unknown>],
           ),
         );
-        return ok((categorized as Record<string, unknown>[]).map((row) => ({
+        const includeDaycare = url.searchParams.get("include_daycare") ===
+          "true";
+        const responseRows = (categorized as Record<string, unknown>[]).map((
+          row,
+        ) => ({
           ...row,
           ...(statsById.get(text(row.id)) ?? {}),
-        })));
+        })).filter((row) =>
+          includeDaycare ||
+          normalizeFeeType(row.fee_type ?? row.category_name) !==
+            "daycare_hourly"
+        );
+        return ok(responseRows);
       } catch (error) {
         return fail(
           error instanceof Error
@@ -1708,9 +1742,11 @@ export async function handleFees(
         query = query.eq("student_id", url.searchParams.get("student_id")!);
       }
       if (url.searchParams.get("active") === "true") {
-        query = query.eq("is_active", true).or(
+        query = query.eq("is_active", true).lte("effective_from", today).or(
           `effective_to.is.null,effective_to.gte.${today}`,
         );
+      } else if (url.searchParams.get("include_scheduled") !== "true") {
+        query = query.or(`effective_to.is.null,effective_to.gte.${today}`);
       }
       const { data, error } = await query;
       if (error) return fail(error.message);
@@ -1726,7 +1762,7 @@ export async function handleFees(
             .in("daycare_plan_id", planIds);
       if (invoiceError) return fail(invoiceError.message);
       return ok((data ?? []).map((plan) => ({
-        ...plan,
+        ...decorateDaycarePlan(plan),
         is_daycare_eligible: isDaycareStudent(plan.student),
         current_period_invoice: (currentInvoices ?? []).find((invoice) =>
           text(invoice.daycare_plan_id) === text(plan.id)
@@ -1737,7 +1773,9 @@ export async function handleFees(
     if (!planId && method === "POST") {
       const studentId = text(body.student_id);
       const academicYearId = text(body.academic_year_id);
-      const monthlyAmount = money(body.monthly_amount);
+      const hourlyRate = money(body.hourly_rate);
+      const contractedHours = money(body.contracted_hours_per_month);
+      const monthlyAmount = money(hourlyRate * contractedHours);
       const dueDay = Math.min(
         Math.max(parseInt(text(body.due_day, "10")), 1),
         28,
@@ -1747,8 +1785,10 @@ export async function handleFees(
       if (!studentId || !academicYearId) {
         return fail("student_id and academic_year_id are required");
       }
-      if (monthlyAmount <= 0) {
-        return fail("monthly_amount must be greater than zero");
+      if (hourlyRate <= 0 || contractedHours <= 0) {
+        return fail(
+          "hourly_rate and contracted_hours_per_month must be greater than zero",
+        );
       }
       const { data: student, error: studentError } = await svc.from("students")
         .select(daycareStudentSelect).eq("id", studentId).eq(
@@ -1790,6 +1830,8 @@ export async function handleFees(
         school_id: school,
         student_id: studentId,
         academic_year_id: academicYearId,
+        hourly_rate: hourlyRate,
+        contracted_hours_per_month: contractedHours,
         monthly_amount: monthlyAmount,
         due_day: dueDay,
         fee_label: feeLabel,
@@ -1809,7 +1851,10 @@ export async function handleFees(
         if (generateError) return fail(generateError.message);
         currentInvoiceId = text(generated) || null;
       }
-      return ok({ ...plan, current_period_invoice_id: currentInvoiceId });
+      return ok({
+        ...decorateDaycarePlan(plan),
+        current_period_invoice_id: currentInvoiceId,
+      });
     }
 
     if (planId && method === "PUT") {
@@ -1827,16 +1872,21 @@ export async function handleFees(
       if (effectiveFrom < nextMonth) {
         return fail("Daycare plan changes take effect from next month", 400);
       }
-      const monthlyAmount = money(
-        body.monthly_amount ?? previous.monthly_amount,
+      const hourlyRate = money(body.hourly_rate ?? previous.hourly_rate);
+      const contractedHours = money(
+        body.contracted_hours_per_month ??
+          previous.contracted_hours_per_month,
       );
+      const monthlyAmount = money(hourlyRate * contractedHours);
       const dueDay = Math.min(
         Math.max(parseInt(text(body.due_day ?? previous.due_day, "10")), 1),
         28,
       );
       const feeLabel = text(body.fee_label ?? previous.fee_label, "Day Care");
-      if (monthlyAmount <= 0) {
-        return fail("monthly_amount must be greater than zero");
+      if (hourlyRate <= 0 || contractedHours <= 0) {
+        return fail(
+          "hourly_rate and contracted_hours_per_month must be greater than zero",
+        );
       }
       const previousEnd = new Date(`${effectiveFrom}T00:00:00Z`);
       previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
@@ -1854,6 +1904,8 @@ export async function handleFees(
         school_id: school,
         student_id: previous.student_id,
         academic_year_id: previous.academic_year_id,
+        hourly_rate: hourlyRate,
+        contracted_hours_per_month: contractedHours,
         monthly_amount: monthlyAmount,
         due_day: dueDay,
         fee_label: feeLabel,
@@ -1862,7 +1914,10 @@ export async function handleFees(
         created_by: user.id,
       }).select().single();
       if (replacementError) return fail(replacementError.message);
-      return ok({ previous_plan_id: planId, replacement });
+      return ok({
+        previous_plan_id: planId,
+        replacement: decorateDaycarePlan(replacement),
+      });
     }
 
     if (planId && (method === "PATCH" || method === "DELETE")) {

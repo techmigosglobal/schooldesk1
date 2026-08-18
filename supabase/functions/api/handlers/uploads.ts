@@ -523,6 +523,10 @@ async function performStructuredReportExport(
     const parsed = Number(input ?? 0);
     return Number.isFinite(parsed) ? parsed : 0;
   };
+  const object = (input: unknown): Record<string, any> =>
+    input && typeof input === "object" && !Array.isArray(input)
+      ? input as Record<string, any>
+      : {};
   const titleize = (input: string) =>
     input.replaceAll("_", " ").replace(
       /\b\w/g,
@@ -911,6 +915,24 @@ async function performStructuredReportExport(
       );
     if (invoiceError) throw invoiceError;
     const invoices = (invoiceData ?? []) as Record<string, any>[];
+    const daycarePlanIds = [
+      ...new Set(
+        invoices.map((row) => value(row.daycare_plan_id)).filter(Boolean),
+      ),
+    ];
+    const { data: daycarePlanRows, error: daycarePlanError } =
+      daycarePlanIds.length
+        ? await svc.from("daycare_fee_plans").select(
+          "id, hourly_rate, contracted_hours_per_month, monthly_amount, fee_label",
+        ).eq("school_id", school).in("id", daycarePlanIds)
+        : { data: [], error: null };
+    if (daycarePlanError) throw daycarePlanError;
+    const daycarePlansById = new Map(
+      (daycarePlanRows ?? []).map((row: Record<string, any>) => [
+        value(row.id),
+        row,
+      ]),
+    );
     const invoiceRows = (rows: Record<string, any>[]) =>
       rows.map((row) => {
         const student = row.student ?? {};
@@ -932,6 +954,53 @@ async function performStructuredReportExport(
           titleize(value(row.status, "—")),
         ];
       });
+    const daycareRows = invoices.filter((row) =>
+      value(row.daycare_plan_id) ||
+      value(row.fee_type).toLowerCase().includes("daycare")
+    );
+    const daycareFinanceTable: StructuredExportTable = {
+      title: "Day Care Finance",
+      headers: [
+        "Student",
+        "Month",
+        "Hourly rate",
+        "Hours",
+        "Billed",
+        "Paid",
+        "Balance",
+        "Due date",
+        "Status",
+      ],
+      rows: daycareRows.map((row) => {
+        const details = object(row.billing_details);
+        const plan = daycarePlansById.get(value(row.daycare_plan_id)) ?? {};
+        const student = row.student ?? {};
+        return [
+          person(student),
+          date(row.billing_period || details.billing_period),
+          amount(details.hourly_rate ?? plan.hourly_rate) > 0
+            ? currency(details.hourly_rate ?? plan.hourly_rate)
+            : "Legacy monthly",
+          amount(
+              details.contracted_hours_per_month ??
+                plan.contracted_hours_per_month,
+            ) > 0
+            ? String(
+              amount(
+                details.contracted_hours_per_month ??
+                  plan.contracted_hours_per_month,
+              ),
+            )
+            : "—",
+          currency(row.net_amount || row.total_amount),
+          currency(row.paid_amount),
+          currency(row.balance),
+          date(row.due_date),
+          titleize(value(row.status, "—")),
+        ];
+      }),
+      weights: [1.7, 1, 1.1, 0.8, 1, 1, 1, 0.9, 0.8],
+    };
     const paidRows = invoices.filter((row) => value(row.status) === "paid");
     const pendingRows = invoices.filter((row) =>
       ["pending", "partial"].includes(value(row.status))
@@ -1033,7 +1102,11 @@ async function performStructuredReportExport(
           reportType === "outstanding_report"
       ? [{ ...invoiceTable, title: "Due fees", rows: invoiceRows(dueRows) }]
       : reportType === "complete_fees_report"
-      ? [structureTable, invoiceTable]
+      ? [
+        structureTable,
+        ...(daycareRows.length > 0 ? [daycareFinanceTable] : []),
+        invoiceTable,
+      ]
       : [invoiceTable];
   } else if (tableName === "attendance_report_exports") {
     const { data, error } = await svc.from("attendance_summaries").select(
@@ -1866,7 +1939,11 @@ export async function handleUploads(
     mime_type: file.type,
   }).select().single();
 
-  return ok({ url, path: privateUpload ? privateFileReference(filePath) : filePath, file: data });
+  return ok({
+    url,
+    path: privateUpload ? privateFileReference(filePath) : filePath,
+    file: data,
+  });
 }
 
 // handlers/events.ts
@@ -2453,10 +2530,12 @@ export async function handleDocuments(
         ascending: false,
       });
       if (error) return fail(error.message);
-      return ok(await Promise.all((data ?? []).map(async (row) => ({
-        ...row,
-        file_url: await signedPrivateFileUrl(svc, row.file_url),
-      }))));
+      return ok(
+        await Promise.all((data ?? []).map(async (row) => ({
+          ...row,
+          file_url: await signedPrivateFileUrl(svc, row.file_url),
+        }))),
+      );
     } else if (["principal", "coordinator"].includes(userRole)) {
       let query = svc.from("staff_documents").select(
         "*, staff:staff(id, school_id, first_name, last_name)",
@@ -2468,10 +2547,12 @@ export async function handleDocuments(
         ascending: false,
       });
       if (error) return fail(error.message);
-      return ok(await Promise.all((data ?? []).map(async (row) => ({
-        ...row,
-        file_url: await signedPrivateFileUrl(svc, row.file_url),
-      }))));
+      return ok(
+        await Promise.all((data ?? []).map(async (row) => ({
+          ...row,
+          file_url: await signedPrivateFileUrl(svc, row.file_url),
+        }))),
+      );
     } else {
       return fail("unauthorized", 403);
     }

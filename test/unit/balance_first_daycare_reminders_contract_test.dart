@@ -9,6 +9,9 @@ void main() {
   final migration = File(
     'supabase/migrations/20260728043610_balance_first_daycare_reminders.sql',
   ).readAsStringSync();
+  final hourlyMigration = File(
+    'supabase/migrations/20260818090712_daycare_hourly_per_child_plans.sql',
+  ).readAsStringSync();
 
   test('new fee payments use live balance amounts instead of month allocation', () {
     final parentFlow = File(
@@ -25,7 +28,7 @@ void main() {
     );
     expect(feesHandler, contains('p_idempotency_key'));
     expect(feesHandler, isNot(contains('selected_month_names')));
-    expect(parentFlow, contains('amount: amount'));
+    expect(parentFlow, contains('amount: _totalAmount'));
     expect(parentFlow, contains(r'Maximum ${_money(_remainingBalance)}'));
     expect(parentFlow, isNot(contains('Select Months to Pay')));
     expect(
@@ -43,21 +46,22 @@ void main() {
         migration,
         contains('create table if not exists public.daycare_fee_plans'),
       );
-      expect(migration, contains('hourly_rate numeric(12,2) not null'));
+      expect(hourlyMigration, contains('hourly_rate numeric(12,2)'));
       expect(
-        migration,
-        contains('contracted_hours_per_month numeric(10,2) not null'),
+        hourlyMigration,
+        contains('contracted_hours_per_month numeric(10,2)'),
       );
       expect(migration, contains('billing_period date'));
       expect(migration, contains('billing_details jsonb'));
-      expect(migration, contains('ensure_daycare_invoice_for_plan'));
+      expect(hourlyMigration, contains('ensure_daycare_invoice_for_plan'));
       expect(migration, contains('generate_current_daycare_invoices'));
-      expect(migration, contains("'hourly_rate', v_plan.hourly_rate"));
       expect(
-        migration,
-        contains(
-          "'contracted_hours_per_month', v_plan.contracted_hours_per_month",
-        ),
+        hourlyMigration,
+        contains("'hourly_rate', case when v_is_hourly then v_hourly_rate"),
+      );
+      expect(
+        hourlyMigration,
+        contains("'contracted_hours_per_month', case when v_is_hourly"),
       );
       expect(feesHandler, contains('feesPath.startsWith("/daycare-plans")'));
       expect(
