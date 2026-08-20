@@ -2042,7 +2042,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         'amount': _numValue(row['amount_paid'] ?? row['amount']),
         'mode': _textValue(row['payment_mode'] ?? row['mode']),
         'date': row['payment_date'] ?? row['created_at'],
-        'receipt': row['receipt_number'] ?? row['receipt'],
+        'receipt':
+            row['display_receipt_number'] ??
+            row['receipt_number'] ??
+            row['receipt'],
         'status': _textValue(row['status'], fallback: 'completed'),
         'transaction_id': _textValue(row['transaction_id'], fallback: 'N/A'),
       };

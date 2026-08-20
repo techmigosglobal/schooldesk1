@@ -110,15 +110,22 @@ extension BackendEventsApi on BackendApiClient {
       if (academicYearId != null && academicYearId.trim().isNotEmpty) {
         filters['academic_year_id'] = academicYearId.trim();
       }
-      final response = await _get('/events', queryParameters: filters);
-      final data = _asMap(response.data);
-      if (data['success'] != true) {
-        throw ServerException(message: data['error'] ?? 'Failed to get events');
-      }
-      return _asListMap(data['data']).map((event) {
+      // The generated client remains the real-user transport contract. Demo
+      // sessions use BackendApiClient's intercepted Dio because the generated
+      // client owns a separate Dio instance.
+      final events = DemoLocalApiService.instance.isActive
+          ? _asListMap(
+              (await _get('/events', queryParameters: filters)).data['data'],
+            )
+          : (await SchoolDeskApi.instance.client.events(filters)).data
+                .whereType<Map>()
+                .map((event) => Map<String, dynamic>.from(event))
+                .toList();
+      return events.map((event) {
         final normalized = Map<String, dynamic>.from(event);
         normalized['id'] ??= normalized['event_id'];
-        normalized['event_title'] ??= normalized['event_name'];
+        normalized['event_title'] ??=
+            normalized['event_name'] ?? normalized['title'];
         normalized['location'] ??= normalized['venue'];
         normalized['start_date'] ??= normalized['event_date'];
         normalized['end_date'] ??= normalized['event_date'];

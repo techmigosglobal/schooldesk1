@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -611,9 +612,20 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
       final total = numValue(invoice['total']);
       final paid = numValue(invoice['paid']);
       final balance = numValue(invoice['balance']);
+      Map<String, dynamic> school = const {};
+      try {
+        school = await BackendApiClient.instance.getCurrentSchool();
+      } on Object {
+        // The invoice remains printable from its cached ledger data when
+        // branding metadata is temporarily unavailable.
+      }
+      final assets = await Future.wait([
+        _networkImageBytes(textValue(school['logo_url'])),
+        _networkImageBytes(textValue(school['authorized_signature_url'])),
+      ]);
       final bytes = await pdfService.generateFeeReceipt(
         documentKind: FeeDocumentKind.feeInvoice,
-        receiptNo: textValue(invoice['invoice_number'], fallback: 'Invoice'),
+        receiptNo: _invoiceReceiptNumber(invoice),
         studentName: account.name,
         className: account.classLabel,
         rollNo: account.studentId,
@@ -630,6 +642,15 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
         balance: balance,
         paymentMode: '',
         paymentDate: DateTime.now(),
+        schoolName: textValue(school['name'], fallback: 'School'),
+        schoolAddress: _schoolAddress(school),
+        schoolLogo: assets[0],
+        authorizedSignature: assets[1],
+        authorizedSignatoryName: textValue(school['principal_name']),
+        academicYear: textValue(
+          invoice['academic_year_label'] ?? invoice['academic_year_name'],
+        ),
+        feePeriod: _feePeriodLabel(invoice),
       );
       if (!mounted) return;
       await pdfService.previewDocument(
@@ -778,6 +799,42 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
     school['state'],
     school['postal_code'],
   ].map(textValue).where((value) => value.isNotEmpty).toSet().join(', ');
+
+  String _feePeriodLabel(Map<String, dynamic> invoice) {
+    final raw = textValue(
+      invoice['fee_period'] ??
+          invoice['billing_period'] ??
+          invoice['installment'] ??
+          invoice['term'],
+    );
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return raw;
+    return DateFormat('MMMM yyyy').format(parsed);
+  }
+
+  String _invoiceReceiptNumber(Map<String, dynamic> invoice) {
+    final direct = textValue(
+      invoice['display_receipt_number'] ?? invoice['receipt_number'],
+    );
+    if (direct.isNotEmpty) return direct;
+    final payments = invoice['payments'];
+    if (payments is List) {
+      for (final rawPayment in payments.whereType<Map>()) {
+        final payment = Map<String, dynamic>.from(rawPayment);
+        final receipt = payment['receipt'] is Map
+            ? Map<String, dynamic>.from(payment['receipt'] as Map)
+            : const <String, dynamic>{};
+        final number = textValue(
+          receipt['display_receipt_number'] ??
+              payment['display_receipt_number'] ??
+              receipt['receipt_number'] ??
+              payment['receipt_number'],
+        );
+        if (number.isNotEmpty) return number;
+      }
+    }
+    return 'Not issued';
+  }
 
   bool _isFinalizedPayment(Map<String, dynamic> payment) {
     return const {

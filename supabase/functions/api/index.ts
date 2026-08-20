@@ -4,7 +4,7 @@
 // Exams, exam-schedules, results, assistant → 404
 // ============================================================
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { handleAuth } from "./handlers/auth.ts";
 import { handleHealth } from "./handlers/health.ts";
 import { handleSchools } from "./handlers/schools.ts";
@@ -66,7 +66,12 @@ type DirectSql = {
   end: (options?: { timeout?: number }) => Promise<void>;
 };
 
-type ServiceClient = ReturnType<typeof createClient>;
+// The API currently has no generated Database type.  Explicitly keeping the
+// service client on Supabase's generic schema prevents an untyped
+// `createClient()` return from inferring table builders as `never` during Deno
+// checks, while leaving the runtime query behavior unchanged.  Replace this
+// with the generated schema type when the migration type pipeline is added.
+type ServiceClient = SupabaseClient<any>;
 let sharedServiceClient: ServiceClient | null = null;
 type QueryResult<T> = {
   data: T | null;

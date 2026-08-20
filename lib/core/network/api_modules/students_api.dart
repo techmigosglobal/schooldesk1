@@ -63,7 +63,9 @@ extension BackendStudentsApi on BackendApiClient {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getMyStudents({int? refreshNonce}) async {
+  Future<List<Map<String, dynamic>>> getMyStudents({
+    int? refreshNonce,
+  }) async {
     try {
       final response = await _get(
         '/me/students',

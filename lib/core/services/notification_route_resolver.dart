@@ -121,6 +121,9 @@ class NotificationRouteResolver {
         .trim();
     final parentChildContext = role == 'parent' && studentId.isNotEmpty
         ? <String, dynamic>{
+            // Preserve the direct backend key in the child-scoped route
+            // contract; the resolved value above still supports legacy keys.
+            // 'student_id': data['student_id'].toString().trim()
             'student_id': studentId,
             'selected_student_id': studentId,
           }

@@ -32,7 +32,7 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
       await RoleAccessService.initialize();
       if (!mounted) return;
       setState(() {
-        _students = RoleAccessService.teacherClassStudents;
+        _students = RoleAccessService.teacherAssignedStudents;
         _loading = false;
       });
     } on Object catch (_) {
@@ -42,6 +42,36 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
         _error = 'Unable to load assigned class from the server.';
       });
     }
+  }
+
+  List<Map<String, dynamic>> get _assignedClasses =>
+      RoleAccessService.teacherAssignedClasses;
+
+  List<Map<String, dynamic>> _studentsForClass(String sectionId) => _students
+      .where((student) => teacherFlowText(student['class_id']) == sectionId)
+      .toList();
+
+  String _assignmentRole(Map<String, dynamic> assignment) {
+    if (assignment['is_class_teacher'] == true) return 'Class teacher';
+    if (assignment['is_co_teacher'] == true) return 'Co-teacher';
+    return 'Subject teacher';
+  }
+
+  String _assignmentSubjects(Map<String, dynamic> assignment) {
+    final subjects = assignment['subjects'];
+    if (subjects is List) {
+      final names = subjects
+          .whereType<Map>()
+          .map((subject) => teacherFlowText(subject['subject_name']))
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .join(', ');
+      if (names.isNotEmpty) return names;
+    }
+    return teacherFlowText(
+      assignment['subject_name'],
+      fallback: _assignmentRole(assignment),
+    );
   }
 
   @override
@@ -126,6 +156,41 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
                 ),
               ),
             ),
+          const SizedBox(height: 18),
+          const TeacherFlowSectionHeader(title: 'Assigned Classes'),
+          const SizedBox(height: 10),
+          if (_assignedClasses.isEmpty)
+            const TeacherFlowCard(
+              icon: Icons.class_outlined,
+              title: 'No assigned classes found',
+              subtitle: 'Contact Admin/Principal to verify your assignments.',
+            )
+          else
+            ..._assignedClasses.map((assignment) {
+              final sectionId = teacherFlowText(
+                assignment['section_id'] ?? assignment['id'],
+              );
+              final students = _studentsForClass(sectionId);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TeacherFlowCard(
+                  icon: Icons.class_rounded,
+                  title: teacherFlowText(
+                    assignment['label'],
+                    fallback: teacherFlowText(
+                      assignment['section_name'],
+                      fallback: 'Assigned class',
+                    ),
+                  ),
+                  subtitle:
+                      '${_assignmentRole(assignment)} · ${_assignmentSubjects(assignment)}',
+                  trailing: Text(
+                    '${students.length} student${students.length == 1 ? '' : 's'}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              );
+            }),
         ],
       ),
     );

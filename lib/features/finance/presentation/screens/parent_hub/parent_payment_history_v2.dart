@@ -113,7 +113,8 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
                   (payment['payment_method'] ?? payment['payment_mode'] ?? '')
                       .toString(),
               'receiptNo': _text(
-                receipt['receipt_number'] ??
+                receipt['display_receipt_number'] ??
+                    receipt['receipt_number'] ??
                     payment['receipt_number'] ??
                     payment['reference_number'],
               ),
@@ -179,7 +180,8 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
           'method': (request['payment_method'] ?? request['payment_mode'] ?? '')
               .toString(),
           'receiptNo': _text(
-            receipt['receipt_number'] ??
+            receipt['display_receipt_number'] ??
+                receipt['receipt_number'] ??
                 request['transaction_ref'] ??
                 request['request_reference'],
           ),

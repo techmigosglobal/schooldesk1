@@ -83,7 +83,12 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
 
   bool _isCacheablePath(String path) {
     final clean = path.toLowerCase();
-    if (clean.contains('/auth/') ||
+    // Keep authentication, mutation-like GETs, and short-lived operational
+    // endpoints out of the offline snapshot. Other authenticated GETs are
+    // read models and should remain available when the device temporarily
+    // loses connectivity; a narrow allow-list made whole feature areas blank
+    // even though their data had already been loaded once.
+    if ((clean.contains('/auth/') && !clean.contains('/auth/profile')) ||
         clean.contains('/uploads') ||
         clean.contains('/payment-requests') ||
         clean.contains('/payments') ||
@@ -91,33 +96,7 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
         clean.contains('/attendance/staff/qr-token')) {
       return false;
     }
-    return clean.contains('/dashboard/') ||
-        clean.contains('/students') ||
-        clean.contains('/staff') ||
-        clean.contains('/schools') ||
-        clean.contains('/academic-years') ||
-        clean.contains('/grades') ||
-        clean.contains('/sections') ||
-        clean.contains('/subjects') ||
-        clean.contains('/timetable') ||
-        clean.contains('/homework') ||
-        clean.contains('/lesson-planners') ||
-        clean.contains('/leave/') ||
-        clean.contains('/student-leave/') ||
-        clean.contains('/announcements') ||
-        clean.contains('/event-posts') ||
-        clean.contains('/documents') ||
-        clean.contains('/health') ||
-        clean.contains('/me/students') ||
-        clean.contains('/principal/classes') ||
-        // Parent attendance screens hit this endpoint on every visit; it
-        // was previously missing from the cacheable list entirely (unlike
-        // `/students/:id/attendance`, which is covered above), so it always
-        // went to the network with no offline/error fallback.
-        clean.contains('/attendance/summary') ||
-        clean.contains('/fees/invoices') ||
-        clean.contains('/fees/structures') ||
-        clean.contains('/fees/categories');
+    return !clean.contains('/health');
   }
 
   Duration _ttlForPath(String path) {

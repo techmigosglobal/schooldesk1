@@ -2,14 +2,12 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:dio/dio.dart';
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:dio_cache_interceptor_hive_store/dio_cache_interceptor_hive_store.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
 import 'package:schooldesk1/features/shared/data/models/backend_models.dart';
@@ -22,7 +20,6 @@ import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 
 export 'package:schooldesk1/features/shared/data/models/backend_models.dart';
-
 part 'api_modules/auth_api.dart';
 part 'api_modules/branches_api.dart';
 part 'api_modules/client_interceptors.dart';
@@ -49,7 +46,6 @@ part 'api_modules/demo_api.dart';
 part 'api_modules/request_coalescing.dart';
 
 typedef ApiErrorReporter = void Function(DioException error);
-
 const _forceRefreshCacheExtraKey = 'schooldesk_force_refresh_cache';
 
 Future<MultipartFile> _multipartUpload({
@@ -76,8 +72,6 @@ Future<MultipartFile> _multipartUpload({
   );
 }
 
-/// Backend API client for school-desk backend
-/// Handles all HTTP communication with the FastAPI backend.
 class BackendApiClient {
   static BackendApiClient? _instance;
   static ApiErrorReporter? apiErrorReporter;
@@ -108,13 +102,13 @@ class BackendApiClient {
       _ErrorInterceptor(this),
     ]);
   }
-
   static BackendApiClient get instance {
     _instance ??= BackendApiClient._();
     return _instance!;
   }
 
   String get baseUrl => _dio.options.baseUrl;
+
   static Future<void> initialize() async {
     final client = instance;
     await client.installPersistentCache();
@@ -126,9 +120,7 @@ class BackendApiClient {
       await client.setActiveBranchId(await TokenStorageService.getSchoolId());
     }
   }
-
   Dio get dio => _dio;
-
   String? _authToken;
   String? _currentRoleName;
   String? _currentUserId;
@@ -140,25 +132,17 @@ class BackendApiClient {
   String? get currentRoleName => _currentRoleName;
   String? get currentUserId => _currentUserId;
   String? get activeBranchId => _activeBranchId;
-  void setAuthToken(String token) {
-    _authToken = token;
-  }
+  void setAuthToken(String token) => _authToken = token;
 
   void setCurrentRole(String? roleName) {
     final normalized = roleName?.trim();
-    _currentRoleName = normalized == null || normalized.isEmpty
-        ? null
-        : normalized;
+    _currentRoleName = normalized?.isEmpty == true ? null : normalized;
   }
 
   void setCurrentUserId(String? userId) {
     final normalized = userId?.trim();
-    final nextUserId = normalized == null || normalized.isEmpty
-        ? null
-        : normalized;
+    final nextUserId = normalized?.isEmpty == true ? null : normalized;
     if (_currentUserId != nextUserId) {
-      // Never retain an in-memory profile across account changes on a shared
-      // device. The persistent response cache is independently user-scoped.
       _cachedProfile = null;
       _cachedCurrentSchool = null;
       _cachedDashboards.clear();
@@ -166,12 +150,9 @@ class BackendApiClient {
     }
     _currentUserId = nextUserId;
   }
-
   Future<void> setActiveBranchId(String? schoolId) async {
     final normalized = schoolId?.trim();
-    _activeBranchId = normalized == null || normalized.isEmpty
-        ? null
-        : normalized;
+    _activeBranchId = normalized?.isEmpty == true ? null : normalized;
     if (_activeBranchId == null) {
       _dio.options.headers.remove('x-schooldesk-branch-id');
     } else {
@@ -183,7 +164,6 @@ class BackendApiClient {
     _clearCoalescedGets();
     await invalidateCachedReads();
   }
-
   void clearAuthToken() {
     _authToken = null;
     _currentRoleName = null;
@@ -195,9 +175,6 @@ class BackendApiClient {
     _activeBranchId = null;
     _dio.options.headers.remove('x-schooldesk-branch-id');
   }
-
-  /// Activates a memory-only local demo session. It deliberately does not
-  /// write any demo credential or operational token to normal auth storage.
   void beginLocalDemoSession({
     required String role,
     required String userId,
@@ -209,8 +186,8 @@ class BackendApiClient {
     _activeBranchId = schoolId;
     _dio.options.headers['x-schooldesk-branch-id'] = schoolId;
   }
-
   bool get isAuthenticated => _authToken != null;
+
   Future<void> installPersistentCache() async {
     if (_cacheInstalled) return;
     try {
@@ -219,13 +196,8 @@ class BackendApiClient {
       _cacheOptions = CacheOptions(
         store: store,
         keyBuilder: _authenticatedCacheKey,
-        // Per-request policy and TTL are assigned by
-        // _ReadCacheOptionsInterceptor.
         policy: CachePolicy.request,
         hitCacheOnErrorExcept: const [401, 403],
-        // Keep the last authenticated read locally for offline resumes. The
-        // request interceptor supplies shorter, endpoint-specific windows;
-        // this global value is only the safety default for cached reads.
         maxStale: const Duration(days: 7),
         allowPostMethod: false,
       );
@@ -251,7 +223,6 @@ class BackendApiClient {
     _clearCoalescedGets();
     await _cacheOptions?.store?.clean();
   }
-
   Future<void> _invalidateReadMemoryAndDisk(List<String> pathPatterns) async {
     _cachedDashboards.clear();
     _clearCoalescedGets();

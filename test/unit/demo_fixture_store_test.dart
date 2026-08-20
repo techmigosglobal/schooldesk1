@@ -82,6 +82,89 @@ void main() {
     }
   });
 
+  test('attendance sessions keep legacy demo snapshots parseable', () {
+    final store = DemoFixtureStore.pristine();
+    final response = store.respond(
+      path: '/attendance/sessions',
+      method: 'GET',
+      role: 'principal',
+    );
+    final sessions = response['data'] as List;
+    expect(sessions, isNotEmpty);
+    expect(sessions.first, containsPair('date', isA<String>()));
+    expect(sessions.first['id'], isA<String>());
+  });
+
+  test(
+    'all three demo roles have local data for their core feature surfaces',
+    () {
+      final rolePaths = <String, List<String>>{
+        'principal': [
+          '/dashboard/principal',
+          '/schools/current',
+          '/academic-years',
+          '/grades',
+          '/sections',
+          '/subjects',
+          '/staff',
+          '/students',
+          '/attendance/sessions',
+          '/attendance/staff',
+          '/fees/invoices',
+          '/approvals',
+          '/events',
+          '/holidays',
+          '/timetable/slots',
+          '/notifications',
+          '/documents',
+        ],
+        'teacher': [
+          '/dashboard/teacher',
+          '/sections',
+          '/students',
+          '/attendance/sessions',
+          '/attendance/staff/me/today',
+          '/timetable/slots',
+          '/homework',
+          '/lesson-planners/teacher',
+          '/event-posts/teacher',
+          '/leave/applications',
+          '/events',
+          '/notifications',
+          '/documents',
+        ],
+        'parent': [
+          '/dashboard/parent',
+          '/me/students',
+          '/students/student-1/attendance',
+          '/attendance/summary',
+          '/students/student-1/fees',
+          '/timetable/slots',
+          '/homework',
+          '/lesson-planners/parent',
+          '/student-leave/applications',
+          '/health-reminders',
+          '/events',
+          '/holidays',
+          '/notifications',
+          '/documents',
+        ],
+      };
+      final store = DemoFixtureStore.pristine();
+      for (final entry in rolePaths.entries) {
+        for (final path in entry.value) {
+          final response = store.respond(
+            path: path,
+            method: 'GET',
+            role: entry.key,
+          );
+          expect(response['success'], true, reason: '${entry.key}: $path');
+          expect(response, contains('data'), reason: '${entry.key}: $path');
+        }
+      }
+    },
+  );
+
   test('post-login demo guards prevent direct realtime, push, and telemetry', () {
     for (final path in [
       'lib/features/communication/presentation/screens/teacher_communication_screen/teacher_communication_screen.dart',

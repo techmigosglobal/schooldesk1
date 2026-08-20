@@ -317,6 +317,9 @@ class _TeacherCommunicationScreenState
       if (_isContactPlaceholder(conversation)) {
         final created = await BackendApiClient.instance
             .createUnifiedChatConversation(
+              // Keep the parent-teacher context explicit for contact rows.
+              // The fallback is intentionally type: 'parent_teacher'.
+              // Principal contacts retain type: 'principal_teacher'.
               type: _text(conversation['type'], fallback: 'parent_teacher'),
               teacherId: RoleAccessService.teacherStaffId,
               parentId: _text(conversation['parent_id']),

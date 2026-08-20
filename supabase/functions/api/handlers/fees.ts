@@ -28,6 +28,18 @@ function money(value: unknown) {
   return Math.round((Number.isFinite(parsed) ? parsed : 0) * 100) / 100;
 }
 
+function feePeriodLabel(value: unknown) {
+  const raw = text(value);
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 const reviewablePaymentRequestStatuses = new Set([
   "pending",
   "pending_verification",
@@ -373,8 +385,20 @@ async function paymentReceiptPayload(
         "id, name, branch_code, logo_url, address_line1, address_line2, city, state, postal_code, principal_name, authorized_signature_path",
       ).eq("id", school).maybeSingle(),
     ]);
+  const yearResult = await svc.from("academic_years").select(
+    "year_label, year, start_date, end_date",
+  ).eq("id", text(record(invoiceResult.data).academic_year_id)).eq(
+    "school_id",
+    school,
+  ).maybeSingle();
   for (
-    const result of [snapshotResult, invoiceResult, studentResult, schoolResult]
+    const result of [
+      snapshotResult,
+      invoiceResult,
+      studentResult,
+      schoolResult,
+      yearResult,
+    ]
   ) {
     if (result.error) throw new Error(result.error.message);
   }
@@ -384,6 +408,7 @@ async function paymentReceiptPayload(
   const invoice = record(invoiceResult.data);
   const student = record(studentResult.data);
   const schoolRow = record(schoolResult.data);
+  const yearRow = record(yearResult.data);
   const currentSection = record(student.current_section);
   const currentGrade = record(currentSection.grade);
   const publicReceiptNumber = text(
@@ -440,8 +465,14 @@ async function paymentReceiptPayload(
         text(currentSection.section_name),
       ),
     },
-    academic_year: text(source.academic_year),
-    fee_period: text(source.fee_period, text(invoice.billing_period)),
+    academic_year: text(
+      source.academic_year,
+      text(yearRow.year_label, text(yearRow.year)),
+    ),
+    fee_period: text(
+      source.fee_period,
+      feePeriodLabel(invoice.billing_period),
+    ),
     fee_items: Array.isArray(source.fee_items) && source.fee_items.length > 0
       ? source.fee_items
       : [{
@@ -1950,7 +1981,7 @@ export async function handleFees(
         200,
       );
       let q = svc.from("fee_invoices").select(
-        "*, student:students(first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))), fee_invoice_items(*), payments(*)",
+        "*, academic_year:academic_years(year_label, year, start_date, end_date), student:students(first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))), fee_invoice_items(*), payments(*)",
         { count: "exact" },
       ).eq("school_id", school).range((page - 1) * size, page * size - 1);
       if (url.searchParams.get("student_id")) {

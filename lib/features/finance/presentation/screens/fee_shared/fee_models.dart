@@ -200,6 +200,7 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
   final student = _mapValue(row['student']);
   final section = _mapValue(student['current_section'] ?? row['section']);
   final grade = _mapValue(section['grade']);
+  final academicYear = _mapValue(row['academic_year']);
   final classLabel = [
     _textValue(grade['grade_name'] ?? row['grade_name']),
     _textValue(section['section_name'] ?? row['section_name']),
@@ -236,6 +237,11 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     'due_date': row['due_date'],
     'status': _textValue(row['status'], fallback: 'pending'),
     'invoice_number': _textValue(row['invoice_number']),
+    'academic_year_label': _textValue(
+      row['academic_year_label'] ??
+          academicYear['year_label'] ??
+          academicYear['year'],
+    ),
     'fee_item_name': _textValue(
       row['fee_item_name'] ??
           (_listValue(row['fee_invoice_items']).isNotEmpty
@@ -247,6 +253,7 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     ),
     'fee_type': _textValue(row['fee_type']),
     'billing_period': row['billing_period'],
+    'fee_period': row['fee_period'] ?? row['billing_period'],
     'billing_details': row['billing_details'],
     'daycare_plan_id': _textValue(row['daycare_plan_id']),
   };
@@ -300,7 +307,17 @@ List<Map<String, dynamic>> normalizePayments(Map<String, dynamic> invoice) {
       ),
       'date': row['payment_date'] ?? row['paid_at'] ?? row['created_at'],
       'receipt': _textValue(
-        receipt['receipt_number'] ?? row['receipt_number'] ?? row['receipt'],
+        receipt['display_receipt_number'] ??
+            receipt['receipt_number'] ??
+            row['display_receipt_number'] ??
+            row['receipt_number'] ??
+            row['receipt'],
+      ),
+      'receipt_number': _textValue(
+        receipt['receipt_number'] ?? row['receipt_number'],
+      ),
+      'display_receipt_number': _textValue(
+        receipt['display_receipt_number'] ?? row['display_receipt_number'],
       ),
       'receipt_snapshot': receiptSnapshot,
       'status': _textValue(row['status'], fallback: 'completed'),

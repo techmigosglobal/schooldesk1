@@ -163,7 +163,16 @@ export async function handleDemo(
     if (error || !account) return fail("demo account not found", 404);
     if (!account.password_secret_ciphertext || account.password_revealed_at || new Date(account.password_secret_expires_at ?? 0) < new Date()) return fail("no unrevealed temporary password is available", 410);
     const password = await openSecret(account.password_secret_ciphertext);
-    await svc.from("demo_accounts").update({ password_secret_ciphertext: null, password_revealed_at: new Date().toISOString() }).eq("id", id);
+    // Consume the wrapped secret atomically. This prevents a double tap or
+    // concurrent super-admin request from revealing the same password twice.
+    const { data: consumed, error: consumeError } = await svc.from("demo_accounts")
+      .update({ password_secret_ciphertext: null, password_revealed_at: new Date().toISOString() })
+      .eq("id", id)
+      .is("password_revealed_at", null)
+      .select("id")
+      .maybeSingle();
+    if (consumeError) return fail(consumeError.message);
+    if (!consumed) return fail("no unrevealed temporary password is available", 410);
     return ok({ username: account.username, temporary_password: password });
   }
   if (match && match[2] === "reset" && method === "POST") {

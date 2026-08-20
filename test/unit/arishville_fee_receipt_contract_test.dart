@@ -47,16 +47,23 @@ void main() {
     final parentReceipt = File(
       'lib/features/finance/presentation/screens/parent_hub/parent_receipt_view_v2.dart',
     ).readAsStringSync();
+    final ledger = File(
+      'lib/features/finance/presentation/screens/fee_ledger_screen/fee_ledger_screen.dart',
+    ).readAsStringSync();
 
     expect(handler, contains('async function paymentReceiptPayload'));
     expect(handler, contains('legacy_receipt_number'));
     expect(handler, contains('display_receipt_number'));
+    expect(handler, contains('feePeriodLabel(invoice.billing_period)'));
+    expect(handler, contains('yearRow.year_label'));
     expect(handler, contains('parentCanAccessStudent'));
     expect(handler, contains('if (!isParent && !isAdminOrPrincipal(user))'));
     expect(handler, contains(r'feesPath.match(/^\/receipts\/([^/]+)$/)'));
     expect(api, contains('getFeeReceiptPayload'));
     expect(parentReceipt, contains('getFeeReceiptPayload'));
     expect(parentReceipt, contains('generatePaymentReceiptFromPayload'));
+    expect(ledger, contains("receipt['display_receipt_number']"));
+    expect(ledger, contains("return 'Not issued';"));
   });
 
   test('payment receipt PDF follows the supplied formal layout', () {
@@ -72,5 +79,6 @@ void main() {
     expect(pdf, contains("'Transaction Reference'"));
     expect(pdf, contains("'Amount in Words'"));
     expect(pdf, contains("'Authorised Signatory'"));
+    expect(pdf, contains('documentKind == FeeDocumentKind.feeInvoice'));
   });
 }

@@ -230,15 +230,25 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  Timer? _scopeRecoveryTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scopeRecoveryTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (BackendApiClient.instance.isAuthenticated &&
+          !RoleAccessService.isInitialized) {
+        unawaited(_recoverRoleScopeIfOnline());
+      }
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scopeRecoveryTimer?.cancel();
+    _scopeRecoveryTimer = null;
     // Cancel FCM subscriptions when the app is permanently destroyed.
     unawaited(PushNotificationService.instance.dispose());
     super.dispose();
@@ -246,9 +256,27 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        BackendApiClient.instance.isAuthenticated) {
+      // A device can regain Wi-Fi/mobile data while the process is still
+      // alive. The probe prevents an offline resume from deleting the only
+      // persistent snapshot before the backend is reachable again.
+      unawaited(_recoverRoleScopeIfOnline());
+    }
     if (state == AppLifecycleState.detached) {
       unawaited(PushNotificationService.instance.dispose());
     }
+  }
+
+  Future<void> _recoverRoleScopeIfOnline() async {
+    final api = BackendApiClient.instance;
+    try {
+      await api.getProfile(forceRefresh: true);
+    } on Object {
+      return;
+    }
+    await api.invalidateCachedReads();
+    await RoleAccessService.refreshAfterConnectivity();
   }
 
   @override

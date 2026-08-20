@@ -2364,7 +2364,8 @@ export async function handleCommunications(
   // ── Diary ─────────────────────────────────────────────────
   if ((path === "/diary" || path === "/diary-entries") && method === "GET") {
     let q = svc.from("diary_entries").select("*").eq("school_id", school);
-    const requestedStaffId = text(url.searchParams.get("staff_id"));
+    const staffId = url.searchParams.get("staff_id");
+    const requestedStaffId = text(staffId);
     const requestedSectionId = text(url.searchParams.get("section_id"));
     const userRole = role(user);
     if (userRole === "teacher") {
@@ -2374,7 +2375,7 @@ export async function handleCommunications(
         linkedStaffId(user),
       );
       if (!scope.isActive) return fail("staff profile not linked", 403);
-      if (requestedStaffId && requestedStaffId !== scope.staffId) {
+      if (staffId && staffId !== linkedStaffId(user)) {
         return fail("forbidden", 403);
       }
       if (requestedSectionId && !scope.sections.has(requestedSectionId)) {
@@ -2428,7 +2429,7 @@ export async function handleCommunications(
       ...body,
       school_id: school,
       section_id: sectionId || null,
-      staff_id: staffId || null,
+      staff_id: canManageSchoolContent(user) ? staffId : linkedStaffId(user),
       teacher_id: staffId || null,
       created_by: user.id,
     };

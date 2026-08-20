@@ -176,36 +176,35 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 studentId: studentId,
               );
 
-        feeList =
-            feeRows.map((inv) {
-              final balance =
-                  (inv['balance_amount'] as num?)?.toDouble() ??
-                  (inv['balance'] as num?)?.toDouble() ??
-                  0.0;
-              final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
-              final total =
-                  (inv['net_amount'] as num?)?.toDouble() ??
-                  (inv['total_amount'] as num?)?.toDouble() ??
-                  balance + paid;
-              final feeType = _text(inv['fee_type']);
-              return {
-                'id': inv['id'],
-                'invoiceNumber': inv['invoice_number'] ?? '',
-                'component': _text(
-                  inv['fee_item_name'],
-                  fallback: _feeTypeLabel(feeType),
-                ),
-                'fee_type': feeType,
-                'amount': balance,
-                'paidAmount': paid,
-                'totalAmount': total,
-                'dueDate': (inv['due_date'] ?? '').toString(),
-                'status': _statusFromFeeRow(inv),
-                'rejection_reason': inv['rejection_reason'],
-                'items': _invoiceItems(inv),
-                'student': inv['student'],
-              };
-            }).toList();
+        feeList = feeRows.map((inv) {
+          final balance =
+              (inv['balance_amount'] as num?)?.toDouble() ??
+              (inv['balance'] as num?)?.toDouble() ??
+              0.0;
+          final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
+          final total =
+              (inv['net_amount'] as num?)?.toDouble() ??
+              (inv['total_amount'] as num?)?.toDouble() ??
+              balance + paid;
+          final feeType = _text(inv['fee_type']);
+          return {
+            'id': inv['id'],
+            'invoiceNumber': inv['invoice_number'] ?? '',
+            'component': _text(
+              inv['fee_item_name'],
+              fallback: _feeTypeLabel(feeType),
+            ),
+            'fee_type': feeType,
+            'amount': balance,
+            'paidAmount': paid,
+            'totalAmount': total,
+            'dueDate': (inv['due_date'] ?? '').toString(),
+            'status': _statusFromFeeRow(inv),
+            'rejection_reason': inv['rejection_reason'],
+            'items': _invoiceItems(inv),
+            'student': inv['student'],
+          };
+        }).toList();
 
         for (final inv in invoices) {
           final payments = inv['payments'];
@@ -240,7 +239,8 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                     (payment['payment_method'] ?? payment['payment_mode'] ?? '')
                         .toString(),
                 'receiptNo': _text(
-                  receipt['receipt_number'] ??
+                  receipt['display_receipt_number'] ??
+                      receipt['receipt_number'] ??
                       payment['receipt_number'] ??
                       payment['reference_number'],
                 ),
@@ -1146,7 +1146,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     if (request is! Map) return false;
     final receipt = request['receipt'];
     if (receipt is! Map) return false;
-    return _text(receipt['receipt_number']).isNotEmpty;
+    return _text(
+      receipt['display_receipt_number'] ?? receipt['receipt_number'],
+    ).isNotEmpty;
   }
 
   String _studentClass(Map<String, dynamic> student) =>

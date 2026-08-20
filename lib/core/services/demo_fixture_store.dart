@@ -81,6 +81,9 @@ class DemoFixtureStore {
     if (clean.startsWith('/attendance/staff'))
       return _ok(_list('staff_attendance'));
     if (clean.startsWith('/attendance/summary')) return _ok(_attendanceSummary);
+    if (clean.startsWith('/attendance/sessions')) {
+      return _ok(_attendanceSessions);
+    }
     if (clean.startsWith('/attendance/')) return _ok(_list('attendance'));
     if (clean.startsWith('/fees/invoices')) return _paged(_list('invoices'));
     if (clean.startsWith('/fees/payments')) return _paged(_list('payments'));
@@ -278,6 +281,35 @@ class DemoFixtureStore {
   );
   Map<String, dynamic> get _attendanceSummary =>
       Map<String, dynamic>.from((_data['attendance_summary'] as Map));
+
+  /// Older demo snapshots predate the dedicated session fixture. Derive a
+  /// complete, fictional session from the stored attendance row so upgrading
+  /// the app cannot make an existing local demo snapshot crash during parsing.
+  List<Map<String, dynamic>> get _attendanceSessions {
+    final configured = _list('attendance_sessions');
+    if (configured.isNotEmpty) return configured;
+    final attendance = _list('attendance');
+    if (attendance.isEmpty) return const [];
+    final first = attendance.first;
+    return [
+      {
+        'id': 'demo-session-1',
+        'section_id': first['section_id'] ?? '',
+        'timetable_slot_id': '',
+        'subject_id': 'subject-1',
+        'subject': {'subject_name': 'Early Learning'},
+        'staff_id': first['marked_by'] ?? 'staff-1',
+        'staff': {'first_name': 'Meera', 'last_name': 'Sharma'},
+        'date': first['attendance_date'] ?? DateTime.now().toIso8601String(),
+        'period_number': 1,
+        'total_students': _list('students').length,
+        'present_count': first['status'] == 'present' ? 1 : 0,
+        'is_finalized': true,
+        'status': 'submitted',
+      },
+    ];
+  }
+
   Map<String, dynamic> get _monitoring => {
     'total_events': 0,
     'open_events': 0,

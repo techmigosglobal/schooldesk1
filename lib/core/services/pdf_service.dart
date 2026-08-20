@@ -250,10 +250,17 @@ class PdfService {
     final isAccountStatement = documentKind == FeeDocumentKind.accountStatement;
     final isInvoice = documentKind == FeeDocumentKind.feeInvoice;
 
-    // Payment receipts are immutable evidence for one finalized payment. Keep
-    // them visually distinct from the account statement and invoice formats.
-    if (documentKind == FeeDocumentKind.paymentReceipt) {
-      final paymentAmount = thisPaymentAmount ?? paidAmount;
+    // Payment receipts and invoice previews share the same formal fee
+    // document. An invoice may still have a balance, but it must not fall
+    // back to the older generic invoice card; the school requires one
+    // consistent receipt presentation for ledger, admin, and parent flows.
+    if (documentKind == FeeDocumentKind.paymentReceipt || isInvoice) {
+      // For an unpaid invoice, the meaningful amount in words is the invoice
+      // total. Finalized payment receipts continue to use only the amount
+      // collected in that payment.
+      final paymentAmount = isInvoice
+          ? (thisPaymentAmount ?? totalAmount)
+          : (thisPaymentAmount ?? paidAmount);
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
@@ -290,8 +297,6 @@ class PdfService {
 
     final documentTitle = isAccountStatement
         ? 'FEE ACCOUNT STATEMENT'
-        : isInvoice
-        ? 'FEE INVOICE'
         : 'FEE RECEIPT';
     final documentNumberLabel = isAccountStatement
         ? 'Statement No.'
@@ -572,25 +577,60 @@ class PdfService {
     Map<String, dynamic> mapAt(String key) => payload[key] is Map
         ? Map<String, dynamic>.from(payload[key] as Map)
         : const <String, dynamic>{};
-    final receipt = mapAt('receipt');
-    final totals = mapAt('totals');
-    final student = mapAt('student');
+    final snapshot = mapAt('receipt_snapshot');
+    final receipt = {...snapshot, ...mapAt('receipt')};
+    final totals = {...mapAt('source_totals'), ...mapAt('totals')};
+    final snapshotStudent = snapshot['student_snapshot'] is Map
+        ? Map<String, dynamic>.from(snapshot['student_snapshot'] as Map)
+        : const <String, dynamic>{};
+    final student = {
+      ...mapAt('student_snapshot'),
+      ...mapAt('student'),
+      ...snapshotStudent,
+    };
     final school = mapAt('school');
-    final rawItems = payload['fee_items'] is List
-        ? (payload['fee_items'] as List)
+    final rawItemSource =
+        payload['fee_items'] ??
+        payload['items'] ??
+        snapshot['fee_items'] ??
+        snapshot['items'];
+    final rawItems = rawItemSource is List
+        ? rawItemSource
               .whereType<Map>()
               .map((item) => Map<String, dynamic>.from(item))
               .toList()
         : const <Map<String, dynamic>>[];
     final amount = _numberValue(
-      totals['this_payment_amount'] ?? receipt['amount'],
+      totals['this_payment_amount'] ??
+          receipt['amount'] ??
+          payload['amount'] ??
+          payload['paid_amount'],
     );
     return generateFeeReceipt(
       documentKind: FeeDocumentKind.paymentReceipt,
-      receiptNo: _textValue(receipt['receipt_number'], fallback: 'Receipt'),
-      studentName: _textValue(student['name'], fallback: 'Student'),
-      className: _textValue(student['class_name'], fallback: '—'),
-      rollNo: _textValue(student['student_id_number']),
+      receiptNo: _textValue(
+        receipt['receipt_number'] ??
+            receipt['display_receipt_number'] ??
+            receipt['legacy_receipt_number'] ??
+            payload['receipt_no'],
+        fallback: 'Receipt',
+      ),
+      studentName: _textValue(
+        student['name'] ?? student['student_name'] ?? payload['student_name'],
+        fallback: 'Student',
+      ),
+      className: _textValue(
+        student['class_name'] ??
+            student['class'] ??
+            student['class_section'] ??
+            payload['class_name'],
+        fallback: '—',
+      ),
+      rollNo: _textValue(
+        student['student_id_number'] ??
+            student['admission_number'] ??
+            payload['student_id'],
+      ),
       parentName: '',
       feeItems: rawItems.isEmpty
           ? [
@@ -600,23 +640,45 @@ class PdfService {
       totalAmount: amount,
       paidAmount: _numberValue(totals['paid_amount'] ?? amount),
       balance: _numberValue(totals['balance']),
-      paymentMode: _textValue(receipt['payment_method']),
+      paymentMode: _textValue(
+        receipt['payment_method'] ??
+            receipt['payment_mode'] ??
+            payload['payment_mode'],
+      ),
       paymentDate:
-          DateTime.tryParse(_textValue(receipt['payment_date'])) ??
+          DateTime.tryParse(
+            _textValue(
+              receipt['payment_date'] ??
+                  receipt['paid_at'] ??
+                  payload['payment_date'],
+            ),
+          ) ??
           DateTime.now(),
       schoolName: _textValue(school['name'], fallback: 'School'),
       schoolAddress: _textValue(school['address']),
       schoolLogo: schoolLogo,
       authorizedSignature: authorizedSignature,
       authorizedSignatoryName: _textValue(school['authorized_signatory_name']),
-      transactionReference: _textValue(receipt['reference_number']),
+      transactionReference: _textValue(
+        receipt['reference_number'] ??
+            receipt['transaction_reference'] ??
+            payload['transaction_reference'],
+      ),
       thisPaymentAmount: amount,
       admissionNo: _textValue(
-        student['admission_number'],
-        fallback: _textValue(student['student_id_number']),
+        student['admission_number'] ?? student['student_id_number'],
+        fallback: _textValue(payload['student_id']),
       ),
-      academicYear: _textValue(payload['academic_year']),
-      feePeriod: _textValue(payload['fee_period']),
+      academicYear: _textValue(
+        payload['academic_year'] ??
+            payload['academic_year_label'] ??
+            receipt['academic_year'],
+      ),
+      feePeriod: _textValue(
+        payload['fee_period'] ??
+            payload['billing_period'] ??
+            receipt['fee_period'],
+      ),
     );
   }
 
@@ -1427,7 +1489,7 @@ class PdfService {
         value.trim().isEmpty ? '—' : value.trim(),
         textAlign: align,
         style: pw.TextStyle(
-          fontSize: label ? 7.5 : 8,
+          fontSize: label ? 8 : 9,
           fontWeight: label ? pw.FontWeight.bold : pw.FontWeight.normal,
           color: _darkText,
         ),
@@ -1579,7 +1641,7 @@ class PdfService {
 
   String _amountInWords(double amount) {
     final rounded = amount.round();
-    if (rounded == 0) return 'Zero rupees';
+    if (rounded == 0) return 'Zero';
     const ones = [
       '',
       'one',

@@ -98,14 +98,21 @@ function buildTeacherAssignments(
     const subject = asRecord(row.subject);
     const subjectId = text(subject?.id ?? row.subject_id);
     const subjectName = text(subject?.subject_name ?? row.subject_name);
+    const directSectionId = text(row.section_id);
     const assignmentGradeId = text(row.grade_id);
     const assignmentYearId = text(row.academic_year_id);
+    const directSection = directSectionId
+      ? schoolSections.find((candidate) => text(candidate.id) === directSectionId)
+      : null;
     const matchingSections = section
       ? [section]
+      : directSection
+      ? [directSection]
       : schoolSections.filter((candidate) =>
-        text(candidate.grade_id) === assignmentGradeId &&
-        (!assignmentYearId || text(candidate.academic_year_id) === assignmentYearId)
-      );
+          text(candidate.grade_id) === assignmentGradeId &&
+          (!assignmentYearId ||
+            text(candidate.academic_year_id) === assignmentYearId)
+        );
     for (const matchingSection of matchingSections) {
       const entry = ensureSection(matchingSection, "subject_teacher", row);
       if (!entry) continue;
@@ -463,28 +470,48 @@ async function parentDashboardResponse(
     (total, count) => total + count,
     0,
   );
+  const parentChildOverview = ({
+    attendancePct,
+    homeworkDueByStudent,
+    feeBalanceByStudent,
+    unreadMessages,
+  }: {
+    attendancePct: number | null;
+    homeworkDueByStudent: number;
+    feeBalanceByStudent: number;
+    unreadMessages: number;
+  }) => ({
+    // Child notification counts originate from unread_messages: unreadMessagesByStudent.
+    attendance_pct: attendancePct ?? null,
+    homework_due: homeworkDueByStudent,
+    pending_fee_balance: feeBalanceByStudent,
+    unread_messages: unreadMessages,
+  });
+  const base = { metrics: { total_children: linkedStudents.length } };
 
   return ok({
     children: linkedStudents.map((student) => {
       const section = asRecord(student.section);
       const grade = asRecord(section?.grade);
       const studentId = text(student.id);
+      const attendancePct = attendanceByStudent.get(studentId) ?? null;
+      const homeworkDue = homeworkDueByStudent.get(studentId) ?? 0;
+      const feeBalance = feeBalanceByStudent.get(studentId) ?? 0;
       return {
         ...student,
         name: studentName(student),
         class: text(grade?.grade_name),
         section: text(section?.section_name),
         photo_url: text(student.photo_url ?? student.photo ?? student.avatar),
-        attendance_pct: attendanceByStudent.get(studentId) ?? null,
-        homework_due: homeworkDueByStudent.get(studentId) ?? 0,
-        pending_fee_balance: feeBalanceByStudent.get(studentId) ?? 0,
-        unread_messages: unreadMessagesByStudent.get(studentId) ?? 0,
+        ...parentChildOverview({
+          attendancePct,
+          homeworkDueByStudent: homeworkDue,
+          feeBalanceByStudent: feeBalance,
+          unreadMessages: unreadMessagesByStudent.get(studentId) ?? 0,
+        }),
       };
     }),
-    metrics: {
-      total_children: linkedStudents.length,
-      unread_messages: unreadMessages,
-    },
+    metrics: { ...base.metrics, unread_messages: unreadMessages },
     recent_announcements: announcementsResult.data ?? [],
   });
 }

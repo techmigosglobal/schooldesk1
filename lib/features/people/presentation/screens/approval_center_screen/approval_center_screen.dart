@@ -313,7 +313,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
                 .getPendingEventPosts();
             return posts.map((post) {
               final creatorName =
-                  '${post['creator_name'] ?? post['created_by_name'] ?? post['requester_name'] ?? 'Teacher'}';
+                  '${post['creator_name'] ?? post['created_by_name'] ?? post['author'] ?? post['posted_by'] ?? post['requester_name'] ?? 'Teacher'}';
               final creatorRole =
                   '${post['creator_role'] ?? post['created_by_role'] ?? 'teacher'}';
               return {
@@ -462,13 +462,16 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     String path,
   ) {
     final resolvedType = type == 'approval' ? _generalApprovalType(row) : type;
+    final requestedBy = row['requested_by'] is Map
+        ? Map<String, dynamic>.from(row['requested_by'] as Map)
+        : const <String, dynamic>{};
     return {
       'id': '${row['id'] ?? ''}',
       'type': resolvedType,
       'requesterName':
-          '${row['requester_name'] ?? row['student_name'] ?? row['staff_name'] ?? row['requested_by_user_id'] ?? row['created_by'] ?? 'Requester'}',
+          '${row['requester_name'] ?? row['student_name'] ?? row['staff_name'] ?? requestedBy['name'] ?? requestedBy['username'] ?? row['requested_by_user_id'] ?? row['created_by'] ?? 'Requester'}',
       'requesterRole':
-          '${row['requester_role'] ?? row['requested_by_role'] ?? row['role'] ?? ''}',
+          '${row['requester_role'] ?? row['requested_by_role'] ?? requestedBy['role_name'] ?? row['role'] ?? ''}',
       'requesterClass':
           '${row['requesterClass'] ?? row['class_label'] ?? row['class_name'] ?? row['class'] ?? row['section'] ?? ''}',
       'submittedDate':

@@ -63,4 +63,60 @@ void main() {
     expect(bytes.length, greaterThan(100));
     expect(String.fromCharCodes(bytes.take(4)), '%PDF');
   });
+
+  testWidgets('normalizes historical receipt aliases into the formal layout', (
+    tester,
+  ) async {
+    final bytes = await PdfService.getInstance()
+        .generatePaymentReceiptFromPayload({
+          'receipt_snapshot': {
+            'legacy_receipt_number': 'OLD-001',
+            'amount': 1250,
+            'payment_mode': 'Cash',
+            'paid_at': '2026-08-19T10:00:00Z',
+            'transaction_reference': 'COUNTER-7',
+            'student_snapshot': {
+              'student_name': 'Historical Student',
+              'class_section': 'Nursery - A',
+              'admission_number': 'ADM-7',
+            },
+            'items': [
+              {'name': 'Tuition Fee', 'amount': 1250},
+            ],
+          },
+          'academic_year_label': '2026-27',
+          'billing_period': 'August 2026',
+        });
+
+    expect(bytes.length, greaterThan(100));
+    expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+  });
+
+  testWidgets('invoice previews use the same formal receipt document', (
+    tester,
+  ) async {
+    final bytes = await PdfService.getInstance().generateFeeReceipt(
+      documentKind: FeeDocumentKind.feeInvoice,
+      receiptNo: 'FEE-AUTO-001',
+      studentName: 'Invoice Student',
+      className: 'LKG - A',
+      rollNo: 'ADM-001',
+      parentName: '',
+      feeItems: const [
+        {'description': 'Books & Kit', 'amount': 10000.0},
+      ],
+      totalAmount: 10000,
+      paidAmount: 0,
+      balance: 10000,
+      paymentMode: 'Invoice',
+      paymentDate: DateTime(2026, 8, 19),
+      schoolName: 'Arish Ville Preschool',
+      schoolAddress: 'School Address',
+      academicYear: '2026-27',
+      feePeriod: 'August 2026',
+    );
+
+    expect(bytes.length, greaterThan(100));
+    expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+  });
 }

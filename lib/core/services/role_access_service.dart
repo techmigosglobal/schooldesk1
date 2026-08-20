@@ -19,6 +19,8 @@ class RoleAccessService {
   static Map<String, dynamic> _teacherDashboard = const {};
   static List<Map<String, dynamic>> _teacherAssignedClasses = [];
 
+  static bool get isInitialized => _initialized;
+
   static Future<void> initialize() {
     if (_signedOut) return Future<void>.value();
     final now = DateTime.now();
@@ -38,6 +40,16 @@ class RoleAccessService {
         _initializationFuture = null;
       }
     });
+  }
+
+  /// Rebuilds the role scope after the app returns from a disconnected state.
+  /// Existing scope data is deliberately retained until replacement data has
+  /// arrived, so reconnecting never causes a blank intermediate dashboard.
+  static Future<void> refreshAfterConnectivity() {
+    if (_signedOut) return Future<void>.value();
+    _initialized = false;
+    _lastInitializedAt = null;
+    return initialize();
   }
 
   static Future<void> _initializeScope() async {
@@ -63,16 +75,21 @@ class RoleAccessService {
         (sessionRole.isEmpty || sessionRole == profileRole)) {
       api.setCurrentRole(profile!.roleName);
     }
+    final previousTeacherDashboard = _teacherDashboard;
+    final previousAssignedClasses = _teacherAssignedClasses;
     final teacherDashboard = effectiveRole == 'teacher'
         ? await _try(() => api.getDashboard('teacher'))
         : null;
-    _teacherDashboard = teacherDashboard ?? const {};
+    _teacherDashboard = teacherDashboard ?? previousTeacherDashboard;
     _teacherAssignedClasses = _listMap(_teacherDashboard['assigned_classes'])
         .map(_normalizeTeacherAssignedClass)
         .where((row) {
           return _sectionId(row).isNotEmpty;
         })
         .toList();
+    if (teacherDashboard == null && previousAssignedClasses.isNotEmpty) {
+      _teacherAssignedClasses = previousAssignedClasses;
+    }
 
     final teacherStaffId = _text(_teacherDashboard['staff_id']);
     final classTeacherRow = _teacherAssignedClasses.firstWhere(
@@ -91,12 +108,19 @@ class RoleAccessService {
     // unnecessary sequential network round-trips to every parent login and
     // app resume.
     final isParent = effectiveRole == 'parent';
+    final assignedSectionIds = _teacherAssignedClasses
+        .map(_sectionId)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
     // These reads share the same authenticated scope but do not depend on one
     // another. Start them together after the teacher dashboard has supplied
     // the section/staff identifiers. This reduces login/resume latency without
     // changing the role-specific data boundaries above.
     final studentsFuture = isParent
         ? Future<PaginatedList<StudentModel>?>.value(null)
+        : assignedSectionIds.length > 1
+        ? _loadStudentsForSections(api, assignedSectionIds)
         : _try<PaginatedList<StudentModel>>(
             () => api.getStudents(
               sectionId: teacherSectionId.isEmpty ? null : teacherSectionId,
@@ -132,17 +156,12 @@ class RoleAccessService {
     ]);
     final students = scopeResults[0] as PaginatedList<StudentModel>?;
     final staff = scopeResults[1] as PaginatedList<StaffModel>?;
-    final parentChildren = scopeResults[2] as List<Map<String, dynamic>>;
+    final parentChildren = scopeResults[2] as List<Map<String, dynamic>>?;
     var timetable = scopeResults[3] as List<Map<String, dynamic>>?;
-    final invoices = scopeResults[4] as List<Map<String, dynamic>>;
+    final invoices = scopeResults[4] as List<Map<String, dynamic>>?;
     // If no staff-scoped timetable found, try section-scoped timetable as a
     // fallback (some backends store timetables by section rather than staff).
     if (!isParent && (timetable == null || timetable.isEmpty)) {
-      final assignedSectionIds = _teacherAssignedClasses
-          .map(_sectionId)
-          .where((id) => id.isNotEmpty)
-          .toSet()
-          .toList();
       if (assignedSectionIds.isNotEmpty) {
         final sectionResults = await Future.wait(
           assignedSectionIds.map(
@@ -156,47 +175,70 @@ class RoleAccessService {
             .toList();
       }
     }
-    _students = (students?.data ?? [])
-        .map(
-          (s) => {
-            'id': s.id,
-            'name': s.fullName,
-            'class_id': s.currentSectionId ?? '',
-            'class': _classLabelForSection(s.currentSectionId ?? ''),
-            'section': _sectionLabelForSection(s.currentSectionId ?? ''),
-            'roll': s.admissionNumber.isNotEmpty
-                ? s.admissionNumber
-                : s.studentCode,
-            'admission_number': s.admissionNumber,
-            'student_code': s.studentCode,
-            'attendance': 'Not marked',
-            'grade': 'N/A',
-            'status': s.status,
-          },
-        )
-        .toList();
-    _teachers = (staff?.data ?? [])
-        .map(
-          (s) => {
-            'id': s.id,
-            'name': '${s.firstName} ${s.lastName}',
-            'subject': s.designation ?? 'General',
-            'class': '',
-            'assignedClass': '',
-            'email': s.email ?? '',
-            'phone': s.phone ?? '',
-            'status': s.status,
-          },
-        )
-        .toList();
+    final hasUsableScope =
+        profile != null ||
+        (effectiveRole == 'teacher' &&
+            (teacherDashboard != null ||
+                students != null ||
+                timetable != null)) ||
+        (isParent && parentChildren != null) ||
+        (!isParent &&
+            effectiveRole != 'teacher' &&
+            (staff != null || timetable != null || invoices != null));
+    if (!hasUsableScope) {
+      // Do not turn a disconnected startup into a successful empty scope.
+      // The caller can retry as soon as the device regains connectivity.
+      _initialized = false;
+      _lastInitializedAt = null;
+      return;
+    }
+    if (students != null) {
+      _students = students.data
+          .map(
+            (s) => {
+              'id': s.id,
+              'name': s.fullName,
+              'class_id': s.currentSectionId ?? '',
+              'class': _classLabelForSection(s.currentSectionId ?? ''),
+              'section': _sectionLabelForSection(s.currentSectionId ?? ''),
+              'roll': s.admissionNumber.isNotEmpty
+                  ? s.admissionNumber
+                  : s.studentCode,
+              'admission_number': s.admissionNumber,
+              'student_code': s.studentCode,
+              'attendance': 'Not marked',
+              'grade': 'N/A',
+              'status': s.status,
+            },
+          )
+          .toList();
+    }
+    if (staff != null) {
+      _teachers = staff.data
+          .map(
+            (s) => {
+              'id': s.id,
+              'name': '${s.firstName} ${s.lastName}',
+              'subject': s.designation ?? 'General',
+              'class': '',
+              'assignedClass': '',
+              'email': s.email ?? '',
+              'phone': s.phone ?? '',
+              'status': s.status,
+            },
+          )
+          .toList();
+    }
     final timetableRows = timetable ?? [];
     final assignedSubject = _subjectFromTimetable(timetableRows).isNotEmpty
         ? _subjectFromTimetable(timetableRows)
         : _subjectFromAssignments(_teacherAssignedClasses);
-    _parentChildren = parentChildren;
-    _teacherTimetable = timetableRows;
-    _todayTimetable = _filterTodayTimetable(timetableRows);
-    _invoices = invoices;
+    if (isParent && parentChildren != null) _parentChildren = parentChildren;
+    if (timetable != null) {
+      _teacherTimetable = timetableRows;
+      _todayTimetable = _filterTodayTimetable(timetableRows);
+    }
+    if (invoices != null) _invoices = invoices;
 
     if (effectiveRole == 'teacher') {
       final profileEmail = profile?.email.trim().toLowerCase() ?? '';
@@ -329,6 +371,11 @@ class RoleAccessService {
         )
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
+  }
+
+  static List<Map<String, dynamic>> get teacherAssignedStudents {
+    _ensureInitialized();
+    return _students.map((row) => Map<String, dynamic>.from(row)).toList();
   }
 
   static List<Map<String, dynamic>> get teacherAssignedClasses {
@@ -827,6 +874,30 @@ class RoleAccessService {
     } on Object catch (_) {
       return null;
     }
+  }
+
+  static Future<PaginatedList<StudentModel>?> _loadStudentsForSections(
+    BackendApiClient api,
+    List<String> sectionIds,
+  ) async {
+    final studentsById = <String, StudentModel>{};
+    // Keep section filters explicit. This avoids loading unrelated school-wide
+    // students and remains compatible with backends that coalesce identical
+    // directory requests.
+    for (final sectionId in sectionIds) {
+      final result = await _try(
+        () => api.getStudents(sectionId: sectionId, page: 1, pageSize: 100),
+      );
+      for (final student in result?.data ?? const <StudentModel>[]) {
+        studentsById[student.id] = student;
+      }
+    }
+    return PaginatedList<StudentModel>(
+      data: studentsById.values.toList(),
+      total: studentsById.length,
+      page: 1,
+      pageSize: studentsById.length,
+    );
   }
 
   static bool _isTrue(dynamic value) {

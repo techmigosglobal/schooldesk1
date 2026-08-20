@@ -13,6 +13,17 @@ void main() {
     expect(handler, contains('mode: "local_sandbox"'));
     expect(handler, contains('DEMO_CREDENTIAL_WRAP_KEY'));
     expect(handler, contains('password_revealed_at'));
+    expect(handler, contains('.is("password_revealed_at", null)'));
+    expect(
+      handler,
+      contains('if (consumeError) return fail(consumeError.message)'),
+    );
+    expect(
+      handler,
+      contains(
+        'if (!consumed) return fail("no unrevealed temporary password is available", 410)',
+      ),
+    );
     expect(handler, contains('roles: ["principal", "teacher", "parent"]'));
     expect(handler, contains('Demo@'));
     expect(handler, contains('nextDemoUsername'));
@@ -42,6 +53,12 @@ void main() {
     expect(localApi, contains('awaitRoleSelection'));
     expect(main, contains('_restoreLocalDemoSessionIfNeeded'));
     expect(main, contains('isAwaitingRoleSelection'));
+
+    final generatedApi = File(
+      'lib/core/network/schooldesk_api.dart',
+    ).readAsStringSync();
+    expect(generatedApi, contains('_SchoolDeskDemoInterceptor'));
+    expect(generatedApi, contains('demo.responseFor(options)'));
 
     final logout = File(
       'lib/core/services/logout_service.dart',
