@@ -1,0 +1,4 @@
+-- Hosted migration-history marker.
+-- The verified hosted schema already contains the canonical approval-request
+-- index and no duplicate index to remove. This intentionally remains a
+-- no-op so local history matches the hosted version without inventing a DROP.

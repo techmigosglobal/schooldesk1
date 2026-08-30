@@ -1,13 +1,13 @@
 -- A student has one parent login association. A parent login may be shared by
 -- any number of students, so the uniqueness key is student_id alone.
--- Keep the oldest link when repairing legacy many-to-many rows; this is
--- deterministic and preserves the first association already visible to staff.
+-- Keep the newest link when repairing legacy many-to-many rows; this is
+-- deterministic and preserves the most recently approved association.
 with ranked_links as (
   select
     id,
     row_number() over (
       partition by student_id
-      order by created_at asc, id asc
+      order by created_at desc, id desc
     ) as link_rank
   from public.parent_student_links
 )
