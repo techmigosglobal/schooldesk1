@@ -126,6 +126,10 @@ flutter {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("com.google.android.material:material:1.12.0")
+    // image_cropper declares UCropActivity in the app manifest. Keep uCrop
+    // explicit here so release lint and manifest validation resolve the
+    // activity from the final application classpath.
+    implementation("com.github.Yalantis:ucrop:2.2.11")
 }
 
 val stripDevOnlyPluginsFromReleaseRegistrant by tasks.registering {
