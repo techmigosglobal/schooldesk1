@@ -1,0 +1,229 @@
+name: Build signed iOS IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_name:
+        description: iOS marketing version (must be greater than the current App Store version)
+        required: true
+        type: string
+        default: 1.0.23
+      build_number:
+        description: iOS build number (must be greater than the prior App Store build)
+        required: true
+        type: string
+      run_quality_checks:
+        description: Run Flutter analysis and focused release tests before archiving
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signed-ios-ipa-production
+  cancel-in-progress: false
+
+jobs:
+  build-signed-ipa:
+    name: Build signed production IPA
+    runs-on: macos-14
+    environment: ios-release
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.0
+          channel: stable
+          cache: true
+
+      - name: Check Apple toolchain
+        run: |
+          set -Eeuo pipefail
+          xcodebuild -version
+          pod --version
+
+      - name: Restore release-only configuration
+        env:
+          SCHOOLDESK_RELEASE_ENV_BASE64: ${{ secrets.SCHOOLDESK_RELEASE_ENV_BASE64 }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ -n "$SCHOOLDESK_RELEASE_ENV_BASE64" ]] || {
+            echo "::error::Missing GitHub environment secret: SCHOOLDESK_RELEASE_ENV_BASE64"
+            exit 1
+          }
+          env_file="$RUNNER_TEMP/schooldesk-production.env.json"
+          printf '%s' "$SCHOOLDESK_RELEASE_ENV_BASE64" | base64 --decode > "$env_file"
+          chmod 600 "$env_file"
+          jq -e '
+            type == "object"
+            and (.API_BASE_URL | type == "string" and test("^https://.+\\.supabase\\.co/functions/v1/api$"))
+            and (.SUPABASE_URL | type == "string" and test("^https://.+\\.supabase\\.co$"))
+            and (.APP_ENV == "production")
+            and ((.ENABLE_LOGGING | tostring) == "false")
+            and (.FIREBASE_IOS_APP_ID | type == "string" and length > 0)
+          ' "$env_file" >/dev/null || {
+            echo "::error::Production environment is invalid or missing Firebase iOS settings."
+            exit 1
+          }
+          printf 'SCHOOLDESK_ENV_FILE=%s\n' "$env_file" >> "$GITHUB_ENV"
+
+      - name: Restore Apple distribution signing assets
+        env:
+          SCHOOLDESK_IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.SCHOOLDESK_IOS_DISTRIBUTION_CERT_BASE64 }}
+          SCHOOLDESK_IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.SCHOOLDESK_IOS_DISTRIBUTION_CERT_PASSWORD }}
+          SCHOOLDESK_IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.SCHOOLDESK_IOS_PROVISIONING_PROFILE_BASE64 }}
+          SCHOOLDESK_IOS_KEYCHAIN_PASSWORD: ${{ secrets.SCHOOLDESK_IOS_KEYCHAIN_PASSWORD }}
+          SCHOOLDESK_IOS_TEAM_ID: ${{ secrets.SCHOOLDESK_IOS_TEAM_ID }}
+          SCHOOLDESK_IOS_BUNDLE_ID: ${{ secrets.SCHOOLDESK_IOS_BUNDLE_ID }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for secret_name in \
+            SCHOOLDESK_IOS_DISTRIBUTION_CERT_BASE64 \
+            SCHOOLDESK_IOS_DISTRIBUTION_CERT_PASSWORD \
+            SCHOOLDESK_IOS_PROVISIONING_PROFILE_BASE64 \
+            SCHOOLDESK_IOS_KEYCHAIN_PASSWORD \
+            SCHOOLDESK_IOS_TEAM_ID \
+            SCHOOLDESK_IOS_BUNDLE_ID; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "::error::Missing GitHub environment secret: ${secret_name}"
+              exit 1
+            fi
+          done
+
+          cert_file="$RUNNER_TEMP/schooldesk-distribution.p12"
+          profile_file="$RUNNER_TEMP/schooldesk.mobileprovision"
+          keychain_file="$RUNNER_TEMP/schooldesk-build.keychain-db"
+          profile_plist="$RUNNER_TEMP/schooldesk-profile.plist"
+          printf '%s' "$SCHOOLDESK_IOS_DISTRIBUTION_CERT_BASE64" | base64 --decode > "$cert_file"
+          printf '%s' "$SCHOOLDESK_IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$profile_file"
+          chmod 600 "$cert_file" "$profile_file"
+
+          security create-keychain -p "$SCHOOLDESK_IOS_KEYCHAIN_PASSWORD" "$keychain_file"
+          security set-keychain-settings -lut 21600 "$keychain_file"
+          security unlock-keychain -p "$SCHOOLDESK_IOS_KEYCHAIN_PASSWORD" "$keychain_file"
+          security import "$cert_file" -P "$SCHOOLDESK_IOS_DISTRIBUTION_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain_file"
+          security list-keychains -d user -s "$keychain_file" "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -s "$keychain_file"
+
+          security cms -D -i "$profile_file" > "$profile_plist"
+          profile_uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile_plist")
+          profile_name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$profile_plist")
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$profile_file" "$HOME/Library/MobileDevice/Provisioning Profiles/${profile_uuid}.mobileprovision"
+
+          {
+            printf 'IOS_KEYCHAIN_PATH=%s\n' "$keychain_file"
+            printf 'IOS_PROFILE_NAME=%s\n' "$profile_name"
+            printf 'IOS_TEAM_ID=%s\n' "$SCHOOLDESK_IOS_TEAM_ID"
+            printf 'IOS_BUNDLE_ID=%s\n' "$SCHOOLDESK_IOS_BUNDLE_ID"
+          } >> "$GITHUB_ENV"
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Run release quality checks
+        if: ${{ inputs.run_quality_checks }}
+        run: |
+          set -Eeuo pipefail
+          flutter analyze
+          flutter test --concurrency=1 \
+            test/unit/arishville_fee_receipt_contract_test.dart \
+            test/widget/fee_receipt_pdf_generation_test.dart \
+            test/unit/supabase_fees_contract_test.dart \
+            test/unit/automatic_receipt_snapshot_contract_test.dart \
+            test/unit/image_upload_optimizer_test.dart \
+            test/unit/image_media_url_contract_test.dart
+
+      - name: Validate and archive signed app
+        env:
+          BUILD_NAME: ${{ inputs.build_name }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
+            echo "::error::build_number must be a positive integer."
+            exit 1
+          }
+          flutter build ios --config-only --release \
+            --build-name="$BUILD_NAME" \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define-from-file="$SCHOOLDESK_ENV_FILE"
+          sh scripts/fix_spm_deployment_target.sh
+
+          archive_path="$RUNNER_TEMP/Runner.xcarchive"
+          export_options="$RUNNER_TEMP/ExportOptions.plist"
+          export_path="$RUNNER_TEMP/ipa"
+          cat > "$export_options" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>${IOS_TEAM_ID}</string>
+            <key>provisioningProfiles</key>
+            <dict><key>${IOS_BUNDLE_ID}</key><string>${IOS_PROFILE_NAME}</string></dict>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$archive_path" \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
+            archive
+          xcodebuild -exportArchive \
+            -archivePath "$archive_path" \
+            -exportOptionsPlist "$export_options" \
+            -exportPath "$export_path"
+
+          ipa_file="$export_path/Runner.ipa"
+          [[ -s "$ipa_file" ]] || {
+            echo "::error::Expected signed IPA was not produced."
+            exit 1
+          }
+          verify_dir="$RUNNER_TEMP/ipa-verify"
+          mkdir -p "$verify_dir"
+          unzip -q "$ipa_file" -d "$verify_dir"
+          codesign --verify --deep --strict --verbose=2 "$verify_dir/Payload/Runner.app"
+          security cms -D -i "$verify_dir/Payload/Runner.app/embedded.mobileprovision" > "$RUNNER_TEMP/embedded-profile.plist"
+          /usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/embedded-profile.plist" >/dev/null
+          /usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/embedded-profile.plist" >/dev/null
+          shasum -a 256 "$ipa_file" > "$export_path/Runner.ipa.sha256"
+
+      - name: Upload signed IPA and dSYM
+        uses: actions/upload-artifact@v4
+        with:
+          name: schooldesk-signed-ios-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/ipa/Runner.ipa
+            ${{ runner.temp }}/ipa/Runner.ipa.sha256
+            ${{ runner.temp }}/Runner.xcarchive/dSYMs/
+
+      - name: Remove Apple signing material
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          security delete-keychain "${IOS_KEYCHAIN_PATH:-}" 2>/dev/null || true
+          rm -f "${SCHOOLDESK_ENV_FILE:-}" "$RUNNER_TEMP/schooldesk-distribution.p12" \
+            "$RUNNER_TEMP/schooldesk.mobileprovision" "$RUNNER_TEMP/schooldesk-profile.plist"
