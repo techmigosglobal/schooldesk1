@@ -15,7 +15,6 @@ class RouteAccessGuard {
   static const Set<String> publicRoutes = {
     AppRoutes.initial,
     AppRoutes.landingPage,
-    AppRoutes.onboarding,
     AppRoutes.principalLogin,
     AppRoutes.teacherLogin,
     AppRoutes.parentLogin,

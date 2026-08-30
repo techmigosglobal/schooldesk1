@@ -1,6 +1,15 @@
 // handlers/dashboard.ts — admin, principal, teacher, parent dashboards
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok } from "../index.ts";
+import {
+  coordinatorDashboardDto,
+  financeDashboardDto,
+} from "../lib/dashboard_dto.ts";
+import {
+  isFinanceLeader,
+  isSchoolLeader,
+  roleName,
+} from "./authorization.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -526,7 +535,7 @@ export async function handleDashboard(
   user: User,
 ): Promise<Response> {
   const school = sid(user);
-  const role = (user.app_metadata?.role_name as string ?? "").toLowerCase();
+  const role = roleName(user);
   const requestedRole = text(
     url.searchParams.get("role") ?? path.split("/").filter(Boolean)[1],
   ).toLowerCase();
@@ -542,24 +551,37 @@ export async function handleDashboard(
     if (dashRole === "parent") {
       return parentDashboardResponse(svc, school, user);
     }
+    if (!isSchoolLeader(user)) {
+      return fail("forbidden", 403);
+    }
+
     const today = new Date();
     const todayStart = new Date(
       today.getFullYear(),
       today.getMonth(),
       today.getDate(),
     ).toISOString();
+    const financeAuthorized = isFinanceLeader(user);
+    let approvalRequestsQuery = svc.from("approval_requests").select(
+      "id, status",
+    ).eq("school_id", school).eq("status", "pending");
+    if (!financeAuthorized) {
+      // A coordinator's operations count must not disclose pending fee work.
+      approvalRequestsQuery = approvalRequestsQuery.not(
+        "module",
+        "in",
+        '("fee","fees","finance","payment")',
+      );
+    }
 
     const [
       students,
       staff,
-      invoices,
-      paidInvoices,
       announcements,
       sections,
       pendingLeave,
       attendanceSessions,
       todayAttendances,
-      parentPaymentRequests,
       approvalRequests,
     ] = await Promise.all([
       svc.from("students").select("id, status, current_section_id, is_test_account", {
@@ -569,14 +591,6 @@ export async function handleDashboard(
         "school_id",
         school,
       ),
-      svc.from("fee_invoices").select("balance, status").eq(
-        "school_id",
-        school,
-      ).eq("status", "pending"),
-      svc.from("fee_invoices").select("paid_amount").eq(
-        "school_id",
-        school,
-      ).eq("status", "paid"),
       svc.from("announcements").select("id, title, published_at, priority")
         .eq("school_id", school).order("published_at", { ascending: false })
         .limit(5),
@@ -596,28 +610,8 @@ export async function handleDashboard(
         "school_id",
         school,
       ).gte("created_at", todayStart),
-      svc.from("parent_payment_requests").select("id, status").eq(
-        "school_id",
-        school,
-      ).eq("status", "pending"),
-      svc.from("approval_requests").select("id, status").eq(
-        "school_id",
-        school,
-      ).eq("status", "pending"),
+      approvalRequestsQuery,
     ]);
-
-    const totalOutstanding = (invoices.data ?? []).reduce(
-      (s: number, i: Record<string, number>) => s + (i.balance ?? 0),
-      0,
-    );
-    const totalPaid = (paidInvoices.data ?? []).reduce(
-      (s: number, i: Record<string, number>) => s + (i.paid_amount ?? 0),
-      0,
-    );
-    const totalDue = totalOutstanding;
-    const collectionPct = totalDue > 0
-      ? Math.round((totalPaid / (totalPaid + totalDue)) * 100)
-      : 100;
 
     // Calculate today's attendance percentage
     const todayRows = todayAttendances.data ?? [];
@@ -642,90 +636,62 @@ export async function handleDashboard(
         `${student.current_section_id ?? ""}`.trim().length === 0,
     ).length;
 
-    const base = {
-      total_students: activeAssignedStudents,
-      total_staff: staff.count ?? 0,
-      total_sections: sections.count ?? 0,
-      pending_fee_balance: totalOutstanding,
-      pending_leave_requests: pendingLeave.count ?? 0,
-      recent_announcements: announcements.data ?? [],
-      metrics: {
-        total_students: activeAssignedStudents,
-        active_unassigned_students: activeUnassignedStudents,
-        total_staff: staff.count ?? 0,
-        total_classes: sections.count ?? 0,
-        pending_event_approvals: approvalRequests.data?.length ?? 0,
-        pending_fee_requests: parentPaymentRequests.data?.length ?? 0,
-        pending_access_approvals: approvalRequests.data?.length ?? 0,
-        attendance_today: attendanceSessions.data?.length ?? 0,
-      },
-      today_attendance: {
-        attendance_pct: attendancePct,
-        present: todayPresent,
-        marked: todayMarked,
-      },
-      fees: {
-        collection_pct: collectionPct,
-        total_paid: totalPaid,
-        total_due: totalDue,
-      },
+    const operations = {
+      activeAssignedStudents,
+      activeUnassignedStudents,
+      staffCount: staff.count ?? 0,
+      sectionCount: sections.count ?? 0,
+      pendingLeaveCount: pendingLeave.count ?? 0,
+      recentAnnouncements: (announcements.data ?? []) as Array<
+        Record<string, unknown>
+      >,
+      pendingEventApprovals: approvalRequests.data?.length ?? 0,
+      pendingAccessApprovals: approvalRequests.data?.length ?? 0,
+      attendanceToday: attendanceSessions.data?.length ?? 0,
+      attendancePercentage: attendancePct,
+      attendancePresent: todayPresent,
+      attendanceMarked: todayMarked,
     };
 
-    if (dashRole === "teacher") {
-      const { data: userRow } = await svc.from("users").select("linked_id").eq(
-        "id",
-        user.id,
-      ).single();
-      const staffId = userRow?.linked_id;
-      let assigned: unknown[] = [];
-      if (staffId) {
-        const [
-          staffSubjectsResult,
-          classTeacherSectionsResult,
-          coTeacherSectionsResult,
-          gradeSubjectsResult,
-          allStaffSubjectsResult,
-          timetableSlotsResult,
-        ] = await Promise.all([
-          svc.from("staff_subjects").select(
-            "*, section:sections(*, grade:grades(*)), subject:subjects(*), grade:grades(*)",
-          ).eq("staff_id", staffId).eq("school_id", school),
-          svc.from("sections").select("*, grade:grades(*)").eq(
-            "class_teacher_id",
-            staffId,
-          ).eq("school_id", school),
-          svc.from("sections").select("*, grade:grades(*)").eq(
-            "co_teacher_id",
-            staffId,
-          ).eq("school_id", school),
-          svc.from("grade_subjects").select(
-            "*, subject:subjects(*)",
-          ).eq("school_id", school),
-          svc.from("staff_subjects").select(
-            "*, subject:subjects(*)",
-          ).eq("school_id", school),
-          svc.from("timetable_slots").select(
-            "*, subject:subjects(*)",
-          ).eq("school_id", school),
-        ]);
-        assigned = buildTeacherAssignments(
-          (staffSubjectsResult.data ?? []) as Array<Record<string, unknown>>,
-          (classTeacherSectionsResult.data ?? []) as Array<
-            Record<string, unknown>
-          >,
-          (coTeacherSectionsResult.data ?? []) as Array<
-            Record<string, unknown>
-          >,
-          (classTeacherSectionsResult.data ?? []) as Array<
-            Record<string, unknown>
-          >,
-          (gradeSubjectsResult.data ?? []) as Array<
-            Record<string, unknown>
-          >,
-        );
-      }
-      return ok({ ...base, assigned_classes: assigned, staff_id: staffId });
+    if (!financeAuthorized) {
+      return ok(coordinatorDashboardDto(operations));
     }
+
+    const [invoices, paidInvoices, parentPaymentRequests] = await Promise.all([
+      svc.from("fee_invoices").select("balance, status").eq(
+        "school_id",
+        school,
+      ).eq("status", "pending"),
+      svc.from("fee_invoices").select("paid_amount").eq(
+        "school_id",
+        school,
+      ).eq("status", "paid"),
+      svc.from("parent_payment_requests").select("id, status").eq(
+        "school_id",
+        school,
+      ).eq("status", "pending"),
+    ]);
+
+    const totalOutstanding = (invoices.data ?? []).reduce(
+      (sum: number, invoice: Record<string, number>) =>
+        sum + (invoice.balance ?? 0),
+      0,
+    );
+    const totalPaid = (paidInvoices.data ?? []).reduce(
+      (sum: number, i: Record<string, number>) => sum + (i.paid_amount ?? 0),
+      0,
+    );
+    const totalDue = totalOutstanding;
+    const collectionPct = totalDue > 0
+      ? Math.round((totalPaid / (totalPaid + totalDue)) * 100)
+      : 100;
+    const base = financeDashboardDto(operations, {
+      pendingFeeBalance: totalOutstanding,
+      pendingFeeRequests: parentPaymentRequests.data?.length ?? 0,
+      collectionPercentage: collectionPct,
+      totalPaid,
+      totalDue,
+    });
 
     if (dashRole === "super_admin") {
       // Super admin dashboard: system-level metrics + base school data.

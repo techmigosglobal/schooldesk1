@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:dio/dio.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 
 /// Shared media loader used by feed, gallery, and document previews.
 ///
@@ -60,13 +62,27 @@ class MediaCache {
       }
     }
 
-    final response = await BackendApiClient.instance.dio.get<List<int>>(
-      url,
-      options: Options(responseType: ResponseType.bytes),
-    );
-    final bytes = Uint8List.fromList(response.data ?? const <int>[]);
-    if (bytes.isNotEmpty) _remember(key, bytes);
-    return bytes;
+    try {
+      final response = await BackendApiClient.instance.dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = Uint8List.fromList(response.data ?? const <int>[]);
+      if (bytes.isNotEmpty) _remember(key, bytes);
+      return bytes;
+    } on DioException catch (error, stackTrace) {
+      // Media is optional decoration for a screen. A disconnected device or
+      // an expired signed URL should resolve to the existing placeholder, not
+      // become an unhandled Future error that takes down the current route.
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          '[MEDIA] unavailable: $url (${error.type})',
+          name: 'MediaCache',
+          stackTrace: stackTrace,
+        );
+      }
+      return Uint8List(0);
+    }
   }
 
   static bool _isPublicStorageUrl(String value) {

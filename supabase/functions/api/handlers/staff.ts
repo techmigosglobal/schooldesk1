@@ -6,6 +6,13 @@ import {
   privateFileReference,
   signedPrivateFileUrl,
 } from "../storage_helpers.ts";
+import {
+  canAssignStaffRole,
+  canManageStaff,
+  linkedStaffId,
+  normalizedRole,
+  roleName,
+} from "./authorization.ts";
 
 function sid(user: User) {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -35,7 +42,10 @@ function numeric(value: unknown) {
   return null;
 }
 
-function staffWriteFields(body: Record<string, unknown>) {
+function staffWriteFields(
+  body: Record<string, unknown>,
+  accountRole?: string,
+) {
   const patch: Record<string, unknown> = {
     first_name: text(body.first_name),
     last_name: text(body.last_name),
@@ -44,8 +54,8 @@ function staffWriteFields(body: Record<string, unknown>) {
     gender: text(body.gender),
     designation: text(body.designation),
     employment_type: text(body.employment_type) || "full_time",
-    account_role: text(body.account_role).toLowerCase() || "teacher",
   };
+  if (accountRole) patch.account_role = accountRole;
 
   const optionalTextFields = [
     "staff_code",
@@ -76,13 +86,13 @@ function staffUserFields(
   body: Record<string, unknown>,
   staffId: string,
   school: string,
+  accountRole: string,
 ) {
   const firstName = text(body.first_name);
   const lastName = text(body.last_name);
   const username = text(body.username).toLowerCase();
   const email = text(body.email);
   const phone = text(body.phone);
-  const roleName = text(body.account_role).toLowerCase() || "teacher";
 
   return {
     username,
@@ -93,7 +103,7 @@ function staffUserFields(
       name: [firstName, lastName].filter(Boolean).join(" ").trim(),
       email: email || null,
       phone: phone || null,
-      role_name: roleName,
+      role_name: accountRole,
       linked_type: "staff",
       linked_id: staffId,
       is_active: body.is_active === undefined ? true : Boolean(body.is_active),
@@ -153,16 +163,24 @@ async function provisionStaffLogin(
   school: string,
   staffId: string,
   body: Record<string, unknown>,
+  requestedRole?: string,
 ) {
   const password = text(body.password);
+  const linked = await linkedUser(svc, school, staffId);
+  const accountRole = requestedRole || text(linked?.role_name).toLowerCase() ||
+    "teacher";
   const wantsLogin = Boolean(
-    password || text(body.username) || text(body.email),
+    password || text(body.username) || text(body.email) || requestedRole,
   );
   if (!wantsLogin) return null;
 
   const email = loginEmail(body, school, staffId);
-  const { username, userRow } = staffUserFields(body, staffId, school);
-  const linked = await linkedUser(svc, school, staffId);
+  const { username, userRow } = staffUserFields(
+    body,
+    staffId,
+    school,
+    accountRole,
+  );
 
   if (!linked) {
     if (!password) return null;
@@ -228,8 +246,38 @@ export async function handleStaff(
   const school = sid(user);
   const id = parseId(path, "/staff");
   const sub = id ? subPath(path, "/staff") : "";
+  const managesStaff = canManageStaff(user);
+  const isOwnProfile = Boolean(id && linkedStaffId(user) === id);
+
+  // Staff and teachers may read their own profile only. All directory, file,
+  // and mutation operations require school-administration authority.
+  if (!managesStaff && !(method === "GET" && id && !sub && isOwnProfile)) {
+    return fail("forbidden", 403);
+  }
+
+  const requestedRole = (body: Record<string, unknown>, required: boolean) => {
+    if (!("account_role" in body)) return required ? "teacher" : null;
+    const roleName = text(body.account_role).toLowerCase() || "staff";
+    const role = normalizedRole(roleName);
+    if (!role) return { error: "invalid staff account role", status: 422 };
+    if (!canAssignStaffRole(user, role)) {
+      return { error: "forbidden staff role assignment", status: 403 };
+    }
+    return role;
+  };
+
+  const mayModifyExistingStaff = async (staffId: string) => {
+    if (roleName(user) === "super_admin") return true;
+    const { data, error } = await svc.from("staff").select("account_role")
+      .eq("id", staffId).eq("school_id", school).maybeSingle();
+    if (error) throw new Error(error.message);
+    // An unknown legacy role is privileged by default. Do not allow a lower
+    // role to edit/delete it until an authorized administrator remediates it.
+    return Boolean(data && canAssignStaffRole(user, data.account_role));
+  };
 
   if (id && sub === "photo" && method === "POST") {
+    if (!await mayModifyExistingStaff(id)) return fail("not found", 404);
     const form = await req.formData();
     const file = form.get("photo") as File;
     if (!file) return fail("photo required");
@@ -246,6 +294,7 @@ export async function handleStaff(
   }
 
   if (id && sub === "documents" && method === "POST") {
+    if (!await mayModifyExistingStaff(id)) return fail("not found", 404);
     const form = await req.formData();
     const file = form.get("document") as File;
     const docType = (form.get("doc_type") as string) ?? "other";
@@ -313,14 +362,20 @@ export async function handleStaff(
 
   if (!id && method === "POST") {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const patch = staffWriteFields(body);
+    const assignment = requestedRole(body, true);
+    if (typeof assignment === "object" && assignment !== null) {
+      return fail(assignment.error, assignment.status);
+    }
+    const assignmentRole = typeof assignment === "string" ? assignment :
+      "teacher";
+    const patch = staffWriteFields(body, assignmentRole);
     const { data, error } = await svc.from("staff").insert({
       ...patch,
       school_id: school,
     }).select().single();
     if (error) return fail(error.message);
     try {
-      await provisionStaffLogin(svc, school, data.id, body);
+      await provisionStaffLogin(svc, school, data.id, body, assignmentRole);
     } catch (loginError) {
       await svc.from("staff").delete().eq("id", data.id).eq(
         "school_id",
@@ -359,8 +414,15 @@ export async function handleStaff(
 
   if (id && (method === "PUT" || method === "PATCH")) {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (!await mayModifyExistingStaff(id)) return fail("not found", 404);
+    const assignment = requestedRole(body, false);
+    if (typeof assignment === "object" && assignment !== null) {
+      return fail(assignment.error, assignment.status);
+    }
+    const assignmentRole = typeof assignment === "string" ? assignment :
+      undefined;
     const patch = {
-      ...staffWriteFields(body),
+      ...staffWriteFields(body, assignmentRole),
       updated_at: new Date().toISOString(),
     };
     const { data, error } = await svc.from("staff").update(patch)
@@ -370,7 +432,7 @@ export async function handleStaff(
       .single();
     if (error) return fail(error.message);
     try {
-      await provisionStaffLogin(svc, school, id, body);
+      await provisionStaffLogin(svc, school, id, body, assignmentRole);
     } catch (loginError) {
       return fail(
         loginError instanceof Error
@@ -382,6 +444,7 @@ export async function handleStaff(
   }
 
   if (id && method === "DELETE") {
+    if (!await mayModifyExistingStaff(id)) return fail("not found", 404);
     try {
       const linked = await linkedUser(svc, school, id);
       if (linked) {

@@ -4,6 +4,13 @@
 
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok } from "../index.ts";
+import {
+  canManageAcademics,
+  isFinanceLeader,
+  linkedStaffId,
+  roleName,
+} from "./authorization.ts";
+import { resolveActiveTeacherScope } from "./teacher_scope.ts";
 
 function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -189,6 +196,29 @@ export async function handleAcademics(
   user: User,
 ): Promise<Response> {
   const sid = schoolId(user);
+  if (method !== "GET" && !canManageAcademics(user)) {
+    return fail("school administration access required", 403);
+  }
+  const role = roleName(user);
+  let teacherSectionIds: string[] = [];
+  let teacherGradeIds: string[] = [];
+  let teacherYearIds: string[] = [];
+  let teacherSubjectIds: string[] = [];
+  if (!canManageAcademics(user)) {
+    // Teachers may read only the canonical assignments resolved from staff,
+    // sections, and staff_subjects. Parents, kiosk, and generic staff do not
+    // receive school-wide academic metadata through this administrative API.
+    if (role !== "teacher") return fail("forbidden", 403);
+    try {
+      const scope = await resolveActiveTeacherScope(svc, sid, linkedStaffId(user));
+      teacherSectionIds = [...scope.sections.keys()];
+      teacherGradeIds = [...new Set([...scope.sections.values()].map((row) => row.gradeId).filter(Boolean))];
+      teacherYearIds = [...new Set([...scope.sections.values()].map((row) => row.academicYearId).filter(Boolean))];
+      teacherSubjectIds = [...new Set([...scope.sections.values()].flatMap((row) => [...row.subjectIds]))];
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : "failed to resolve teacher scope");
+    }
+  }
   const body = method !== "GET"
     ? await req.json().catch(() => ({})) as Record<string, unknown>
     : {};
@@ -198,6 +228,9 @@ export async function handleAcademics(
     const id = parseId(path, "/academic-years");
     if (id && path.endsWith("/summary") && method === "GET") {
       const yearId = id;
+      if (role === "teacher" && !teacherYearIds.includes(yearId)) {
+        return fail("academic year not found", 404);
+      }
       const year = await svc.from("academic_years").select(
         "id, school_id, year_label",
       )
@@ -205,22 +238,31 @@ export async function handleAcademics(
       if (year.error) return fail(year.error.message);
       if (!year.data) return fail("academic year not found", 404);
 
+      const includeFinance = isFinanceLeader(user);
       const [sectionsResult, subjectLinksResult, feeStructuresResult] =
         await Promise.all([
-          svc.from("sections").select(
+          (() => {
+            let query = svc.from("sections").select(
             "id, grade_id, section_name, grade:grades(grade_name)",
-          ).eq("school_id", sid).eq("academic_year_id", yearId).order(
-            "section_name",
-          ),
-          svc.from("grade_subjects").select(
+            ).eq("school_id", sid).eq("academic_year_id", yearId);
+            if (role === "teacher") query = query.in("id", teacherSectionIds);
+            return query.order("section_name");
+          })(),
+          (() => {
+            let query = svc.from("grade_subjects").select(
             "subject_id, subject:subjects(id, subject_name, is_active)",
-          ).eq("school_id", sid).eq("academic_year_id", yearId),
-          svc.from("fee_structures").select(
-            "id, grade_id, section_id, category_id, amount, frequency, fee_categories(name)",
-          ).eq("school_id", sid).eq("academic_year_id", yearId).eq(
-            "is_active",
-            true,
-          ),
+            ).eq("school_id", sid).eq("academic_year_id", yearId);
+            if (role === "teacher") query = query.in("section_id", teacherSectionIds);
+            return query;
+          })(),
+          includeFinance
+            ? svc.from("fee_structures").select(
+              "id, grade_id, section_id, category_id, amount, frequency, fee_categories(name)",
+            ).eq("school_id", sid).eq("academic_year_id", yearId).eq(
+              "is_active",
+              true,
+            )
+            : Promise.resolve({ data: [], error: null }),
         ]);
       if (sectionsResult.error) return fail(sectionsResult.error.message);
       if (subjectLinksResult.error) {
@@ -296,7 +338,7 @@ export async function handleAcademics(
         return name || `${text(row.frequency) || "Fee"} · ${row.amount ?? 0}`;
       });
 
-      return ok({
+      const summary = {
         academic_year_id: yearId,
         year_label: text(year.data.year_label),
         active_student_count: students.length,
@@ -304,11 +346,19 @@ export async function handleAcademics(
         classes: classRows,
         subject_count: subjects.size,
         subject_names: [...subjects.values()].sort(),
-        fee_structure_count: feeStructures.length,
-        fee_structure_names: feeNames,
-      });
+        ...(includeFinance
+          ? {
+            fee_structure_count: feeStructures.length,
+            fee_structure_names: feeNames,
+          }
+          : {}),
+      };
+      return ok(summary);
     }
     if (path.endsWith("/terms") && id) {
+      if (role === "teacher" && !teacherYearIds.includes(id)) {
+        return fail("academic year not found", 404);
+      }
       const { data, error } = await svc.from("terms").select("*").eq(
         "academic_year_id",
         id,
@@ -317,9 +367,14 @@ export async function handleAcademics(
       return ok(data);
     }
     if (!id && method === "GET") {
-      const { data, error } = await svc.from("academic_years").select(
+      let query = svc.from("academic_years").select(
         "*, terms(*), holidays(*)",
       ).eq("school_id", sid);
+      if (role === "teacher") {
+        if (teacherYearIds.length === 0) return ok([]);
+        query = query.in("id", teacherYearIds);
+      }
+      const { data, error } = await query;
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -350,6 +405,9 @@ export async function handleAcademics(
       return ok(data);
     }
     if (id && method === "GET") {
+      if (role === "teacher" && !teacherYearIds.includes(id)) {
+        return fail("academic year not found", 404);
+      }
       const { data, error } = await svc.from("academic_years").select(
         "*, terms(*), holidays(*)",
       ).eq("id", id).eq("school_id", sid).single();
@@ -436,10 +494,15 @@ export async function handleAcademics(
   if (path.startsWith("/grades")) {
     const id = parseId(path, "/grades");
     if (!id && method === "GET") {
-      const { data, error } = await svc.from("grades").select("*").eq(
+      let query = svc.from("grades").select("*").eq(
         "school_id",
         sid,
-      ).order("grade_number");
+      );
+      if (role === "teacher") {
+        if (teacherGradeIds.length === 0) return ok([]);
+        query = query.in("id", teacherGradeIds);
+      }
+      const { data, error } = await query.order("grade_number");
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -466,6 +529,10 @@ export async function handleAcademics(
       let q = svc.from("sections").select(
         "*, grade:grades(*), academic_year:academic_years(*)",
       ).eq("school_id", sid);
+      if (role === "teacher") {
+        if (teacherSectionIds.length === 0) return ok([]);
+        q = q.in("id", teacherSectionIds);
+      }
       if (qp(url, "grade_id")) q = q.eq("grade_id", qp(url, "grade_id")!);
       if (qp(url, "academic_year_id")) {
         q = q.eq("academic_year_id", qp(url, "academic_year_id")!);
@@ -512,6 +579,7 @@ export async function handleAcademics(
 
   // ── Departments ────────────────────────────────────────────
   if (path.startsWith("/departments")) {
+    if (role === "teacher") return fail("forbidden", 403);
     const id = parseId(path, "/departments");
     if (!id && method === "GET") {
       const { data, error } = await svc.from("departments").select("*").eq(
@@ -536,6 +604,10 @@ export async function handleAcademics(
     const id = parseId(path, "/subjects");
     if (!id && method === "GET") {
       let q = svc.from("subjects").select("*").eq("school_id", sid);
+      if (role === "teacher") {
+        if (teacherSubjectIds.length === 0) return ok([]);
+        q = q.in("id", teacherSubjectIds);
+      }
       if (qp(url, "subject_type")) {
         q = q.eq("subject_type", qp(url, "subject_type")!);
       }
@@ -568,6 +640,10 @@ export async function handleAcademics(
       let q = svc.from("grade_subjects").select(
         "*, subject:subjects(*), grade:grades(*), section:sections(*)",
       ).eq("school_id", sid);
+      if (role === "teacher") {
+        if (teacherSectionIds.length === 0) return ok([]);
+        q = q.in("section_id", teacherSectionIds);
+      }
       if (qp(url, "academic_year_id")) {
         q = q.eq("academic_year_id", qp(url, "academic_year_id")!);
       }
@@ -605,6 +681,11 @@ export async function handleAcademics(
       let q = svc.from("staff_subjects").select(
         "*, staff:staff(*), subject:subjects(*), grade:grades(*), section:sections(*)",
       ).eq("school_id", sid);
+      if (role === "teacher") {
+        const staffId = linkedStaffId(user);
+        if (!staffId) return ok([]);
+        q = q.eq("staff_id", staffId);
+      }
       if (qp(url, "staff_id")) q = q.eq("staff_id", qp(url, "staff_id")!);
       if (qp(url, "grade_id")) q = q.eq("grade_id", qp(url, "grade_id")!);
       if (qp(url, "section_id")) {
@@ -644,6 +725,7 @@ export async function handleAcademics(
 
   // ── Rooms ──────────────────────────────────────────────────
   if (path.startsWith("/rooms")) {
+    if (role === "teacher") return fail("forbidden", 403);
     const id = parseId(path, "/rooms");
     if (!id && method === "GET") {
       let q = svc.from("rooms").select("*").eq("school_id", sid);

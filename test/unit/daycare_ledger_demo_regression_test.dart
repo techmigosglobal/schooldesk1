@@ -63,7 +63,9 @@ void main() {
     ).readAsStringSync();
 
     expect(handler, contains('/daycare-eligible-students'));
-    expect(handler, contains('isDaycareStudent(student)'));
+    expect(handler, contains('filter(isDaycareStudent)'));
+    expect(handler, contains('student_id_number, status, current_section'));
+    expect(handler, contains('enrichDaycareStudents'));
     expect(
       handler,
       contains('Student must be enrolled in an active Day Care section'),

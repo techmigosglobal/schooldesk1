@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:schooldesk1/features/shared/data/models/api_contracts.dart'
     as contracts;
+import 'package:schooldesk1/features/shared/data/models/backend_models.dart'
+    as backend_models;
 
 void main() {
   test('login contract matches the live username-based auth payload', () {
@@ -16,10 +18,14 @@ void main() {
         username: 'principal',
         password: 'secret123',
       ).toJson(),
-      {
-        'username': 'principal',
-        'password': 'secret123',
-      },
+      {'username': 'principal', 'password': 'secret123'},
+    );
+    expect(
+      const backend_models.LoginRequest(
+        username: 'principal',
+        password: 'secret123',
+      ).toJson(),
+      {'username': 'principal', 'password': 'secret123'},
     );
   });
 

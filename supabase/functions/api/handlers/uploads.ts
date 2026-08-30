@@ -11,6 +11,15 @@ import {
   signedPrivateFileUrl,
   storagePathFromValue,
 } from "../storage_helpers.ts";
+import {
+  canManageStaff,
+  canManageStudents,
+  isFinanceLeader,
+  linkedStaffId,
+  roleName,
+  studentAccess,
+  visibleStudentIds,
+} from "./authorization.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -22,6 +31,33 @@ function textValue(value: unknown, fallback = ""): string {
 
 function roleValue(user: User): string {
   return `${user.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
+}
+
+function canUseOwnStaffDocuments(user: User): boolean {
+  return ["teacher", "staff"].includes(roleName(user)) &&
+    Boolean(linkedStaffId(user));
+}
+
+// Compatibility-named wrapper retained at the document boundary while the
+// authorization implementation lives in the centralized student scope layer.
+async function parentCanAccessStudent(
+  svc: SupabaseClient,
+  school: string,
+  user: User,
+  studentId: string,
+): Promise<boolean> {
+  return Boolean(await studentAccess(svc, school, user, studentId));
+}
+
+async function staffExistsInSchool(
+  svc: SupabaseClient,
+  school: string,
+  staffId: string,
+): Promise<boolean> {
+  const { data, error } = await svc.from("staff").select("id")
+    .eq("school_id", school).eq("id", staffId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data);
 }
 
 function asStringArray(value: unknown): string[] {
@@ -404,73 +440,6 @@ async function ensureEventPostSchema() {
     }
   })();
   return eventPostSchemaPromise;
-}
-
-async function parentCanAccessStudent(
-  svc: SupabaseClient,
-  user: User,
-  studentId: string,
-) {
-  if (roleValue(user) !== "parent") return true;
-  if (!studentId) return false;
-  const { data, error } = await svc.from("parent_student_links").select(
-    "student_id",
-  ).eq("school_id", sid(user)).eq("parent_user_id", user.id).eq(
-    "student_id",
-    studentId,
-  ).maybeSingle();
-  if (error) throw error;
-  return Boolean(data);
-}
-
-function canManageStudentDocuments(role: string) {
-  return ["principal", "coordinator", "admin", "super_admin"].includes(role);
-}
-
-async function teacherAssignedSectionIds(
-  svc: SupabaseClient,
-  school: string,
-  staffId: string,
-) {
-  const sectionIds = new Set<string>();
-  if (!staffId) return sectionIds;
-
-  const { data: classSections, error: classSectionsError } = await svc.from(
-    "sections",
-  ).select("id").eq("school_id", school).or(
-    `class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`,
-  );
-  if (classSectionsError) throw classSectionsError;
-  for (const section of classSections ?? []) {
-    const sectionId = textValue(section.id);
-    if (sectionId) sectionIds.add(sectionId);
-  }
-
-  const { data: subjectSections, error: subjectSectionsError } = await svc.from(
-    "staff_subjects",
-  ).select("section_id").eq("school_id", school).eq("staff_id", staffId);
-  if (subjectSectionsError) throw subjectSectionsError;
-  for (const section of subjectSections ?? []) {
-    const sectionId = textValue(section.section_id);
-    if (sectionId) sectionIds.add(sectionId);
-  }
-  return sectionIds;
-}
-
-async function teacherCanAccessStudentDocument(
-  svc: SupabaseClient,
-  school: string,
-  staffId: string,
-  studentId: string,
-) {
-  if (!staffId || !studentId) return false;
-  const { data: student, error } = await svc.from("students").select(
-    "current_section_id",
-  ).eq("school_id", school).eq("id", studentId).maybeSingle();
-  if (error) throw error;
-  if (!student) return false;
-  const sectionIds = await teacherAssignedSectionIds(svc, school, staffId);
-  return sectionIds.has(textValue(student.current_section_id));
 }
 
 function documentRow(row: Record<string, unknown>) {
@@ -2328,82 +2297,57 @@ export async function handleDocuments(
   const url = new URL(req.url);
   if (path === "/student-documents" && method === "GET") {
     const studentId = textValue(url.searchParams.get("student_id"));
-    const userRole = roleValue(user);
+    const userRole = roleName(user);
+    const managesStudents = canManageStudents(user);
+    if (!managesStudents && userRole !== "teacher" && userRole !== "parent") {
+      return fail("forbidden", 403);
+    }
     let query = svc.from("student_documents").select(
       "*, student:students(id, school_id, first_name, last_name, current_section_id)",
     ).eq("school_id", school);
 
-    if (userRole === "parent") {
-      const { data: links, error: linkErr } = await svc.from(
-        "parent_student_links",
-      ).select("student_id").eq("school_id", school).eq(
-        "parent_user_id",
-        user.id,
-      );
-      if (linkErr) return fail(linkErr.message);
-      const parentStudentIds = (links ?? []).map((l) => textValue(l.student_id))
-        .filter(Boolean);
-      if (parentStudentIds.length === 0) return ok([]);
-      if (studentId) {
-        if (!parentStudentIds.includes(studentId)) {
-          return fail("student not linked to parent", 403);
-        }
-        query = query.eq("student_id", studentId);
-      } else {
-        query = query.in("student_id", parentStudentIds);
+    if (studentId) {
+      if (!(await parentCanAccessStudent(svc, school, user, studentId))) {
+        return fail("not found", 404);
       }
-    } else if (userRole === "teacher") {
-      const staffId = textValue(user.app_metadata?.linked_id);
-      if (!staffId) return fail("teacher profile is not linked", 403);
-      const sectionIds = await teacherAssignedSectionIds(svc, school, staffId);
-      if (sectionIds.size === 0) return ok([]);
-      const sectionId = textValue(url.searchParams.get("section_id"));
-      if (sectionId && !sectionIds.has(sectionId)) {
-        return fail("section is not assigned to teacher", 403);
+      query = query.eq("student_id", studentId);
+    } else {
+      // Teacher rows are derived from canonical assignments, never from a
+      // client-provided section identifier.
+      const teacherAssignedSectionIds = userRole === "teacher"
+        ? await visibleStudentIds(svc, school, user)
+        : null;
+      const allowedStudentIds = teacherAssignedSectionIds ??
+        await visibleStudentIds(svc, school, user);
+      if (allowedStudentIds !== null) {
+        if (allowedStudentIds.size === 0) return ok([]);
+        query = query.in("student_id", [...allowedStudentIds]);
       }
-      if (studentId) {
-        if (
-          !(await teacherCanAccessStudentDocument(
-            svc,
-            school,
-            staffId,
-            studentId,
-          ))
-        ) {
-          return fail("student is not assigned to teacher", 403);
-        }
-        query = query.eq("student_id", studentId);
-      } else {
-        const permittedSections = sectionId ? [sectionId] : [...sectionIds];
-        const { data: students, error: studentsError } = await svc.from(
-          "students",
-        ).select("id").eq("school_id", school).in(
-          "current_section_id",
-          permittedSections,
-        );
-        if (studentsError) return fail(studentsError.message);
-        const studentIds = (students ?? []).map((row) => textValue(row.id))
-          .filter(Boolean);
-        if (studentIds.length === 0) return ok([]);
-        query = query.in("student_id", studentIds);
-      }
-    } else if (canManageStudentDocuments(userRole)) {
-      if (studentId) {
-        query = query.eq("student_id", studentId);
-      }
+
       const sectionId = textValue(url.searchParams.get("section_id"));
       if (sectionId) {
-        const { data: students, error: studErr } = await svc.from("students")
-          .select("id").eq("school_id", school).eq(
+        const { data: sectionStudents, error: sectionStudentsError } = await svc
+          .from("students").select("id").eq("school_id", school).eq(
             "current_section_id",
             sectionId,
           );
-        if (studErr) return fail(studErr.message);
-        const ids = (students ?? []).map((s) => s.id);
-        query = query.in("student_id", ids);
+        if (sectionStudentsError) return fail(sectionStudentsError.message);
+        const sectionStudentIds = (sectionStudents ?? []).map((row) =>
+          textValue(row.id)
+        ).filter(Boolean);
+        const scopedStudentIds = allowedStudentIds === null
+          ? sectionStudentIds
+          : sectionStudentIds.filter((id) => allowedStudentIds.has(id));
+        if (scopedStudentIds.length === 0) return ok([]);
+        query = query.in("student_id", scopedStudentIds);
       }
-    } else {
-      return fail("unauthorized", 403);
+    }
+
+    // Finance receipts are never a Coordinator/Teacher school-wide document
+    // capability. Parents may retrieve their own family's receipts through
+    // their already-scoped parent links.
+    if (!isFinanceLeader(user) && userRole !== "parent") {
+      query = query.neq("doc_type", "fee_receipt");
     }
 
     const { data, error } = await query.order("created_at", {
@@ -2420,29 +2364,18 @@ export async function handleDocuments(
   if (path === "/student-documents" && method === "POST") {
     const studentId = textValue(body.student_id);
     if (!studentId) return fail("student_id required");
-    const userRole = roleValue(user);
-    if (
-      userRole === "parent" &&
-      !(await parentCanAccessStudent(svc, user, studentId))
-    ) {
-      return fail("student not linked to parent", 403);
+    const userRole = roleName(user);
+    const managesStudents = canManageStudents(user);
+    if (!managesStudents && userRole !== "parent" && userRole !== "teacher") {
+      return fail("forbidden", 403);
     }
-    if (userRole === "teacher") {
-      const staffId = textValue(user.app_metadata?.linked_id);
-      if (
-        !(await teacherCanAccessStudentDocument(
-          svc,
-          school,
-          staffId,
-          studentId,
-        ))
-      ) {
-        return fail("student is not assigned to teacher", 403);
-      }
-    } else if (userRole !== "parent" && !canManageStudentDocuments(userRole)) {
-      return fail("unauthorized", 403);
+    if (!(await parentCanAccessStudent(svc, school, user, studentId))) {
+      return fail("not found", 404);
     }
     const docType = textValue(body.doc_type || body.type, "other");
+    if (docType.toLowerCase() === "fee_receipt" && !isFinanceLeader(user)) {
+      return fail("finance access required", 403);
+    }
     const fileUrl = textValue(body.file_url);
     const title = textValue(body.title);
     if (!fileUrl) return fail("file_url required");
@@ -2459,7 +2392,7 @@ export async function handleDocuments(
       title: title,
     }).select().single();
     if (error) return fail(error.message);
-    if (canManageStudentDocuments(userRole)) {
+    if (managesStudents) {
       try {
         await notifyStudentDocumentParents(
           svc,
@@ -2484,46 +2417,40 @@ export async function handleDocuments(
   const studentDocMatch = path.match(/^\/student-documents\/([^/]+)$/);
   if (studentDocMatch && method === "DELETE") {
     const docId = studentDocMatch[1];
-    const userRole = roleValue(user);
-    if (canManageStudentDocuments(userRole)) {
-      const { error } = await svc.from("student_documents").delete().eq(
-        "id",
-        docId,
-      ).eq("school_id", school);
-      if (error) return fail(error.message);
-      return ok({ success: true });
-    } else if (userRole === "parent") {
-      const { data: doc, error: getErr } = await svc.from("student_documents")
-        .select("student_id, doc_type").eq("id", docId).eq(
-          "school_id",
-          school,
-        ).maybeSingle();
-      if (getErr) return fail(getErr.message);
-      if (!doc) return fail("not found", 404);
-      if (!(await parentCanAccessStudent(svc, user, doc.student_id))) {
-        return fail("unauthorized", 403);
-      }
-      if (textValue(doc.doc_type).toLowerCase() === "fee_receipt") {
-        return fail("fee receipts cannot be deleted by parents", 403);
-      }
-      const { error } = await svc.from("student_documents").delete().eq(
-        "id",
-        docId,
-      ).eq("school_id", school);
-      if (error) return fail(error.message);
-      return ok({ success: true });
-    } else {
-      return fail("unauthorized", 403);
+    const userRole = roleName(user);
+    const managesStudents = canManageStudents(user);
+    if (!managesStudents && userRole !== "parent") {
+      return fail("forbidden", 403);
     }
+    const { data: doc, error: getErr } = await svc.from("student_documents")
+      .select("student_id, doc_type").eq("id", docId).eq(
+        "school_id",
+        school,
+      ).maybeSingle();
+    if (getErr) return fail(getErr.message);
+    if (!doc || !(await parentCanAccessStudent(svc, school, user, doc.student_id))) {
+      return fail("not found", 404);
+    }
+    if (textValue(doc.doc_type).toLowerCase() === "fee_receipt" &&
+      !isFinanceLeader(user)) {
+      // fee receipts cannot be deleted by parents; only finance leaders may
+      // remove a receipt document after the ownership check above.
+      return fail("finance access required", 403);
+    }
+    const { error } = await svc.from("student_documents").delete().eq(
+      "id",
+      docId,
+    ).eq("school_id", school);
+    if (error) return fail(error.message);
+    return ok({ success: true });
   }
 
   if (path === "/staff-documents" && method === "GET") {
-    const userRole = roleValue(user);
     const staffId = textValue(url.searchParams.get("staff_id"));
-    if (userRole === "teacher") {
-      const myStaffId = (user.app_metadata?.linked_id as string | undefined) ??
-        "";
+    if (canUseOwnStaffDocuments(user)) {
+      const myStaffId = linkedStaffId(user);
       if (!myStaffId) return fail("user not linked to staff", 400);
+      if (staffId && staffId !== myStaffId) return fail("not found", 404);
       const { data, error } = await svc.from("staff_documents").select(
         "*, staff:staff(id, school_id, first_name, last_name)",
       ).eq("school_id", school).eq("staff_id", myStaffId).order("created_at", {
@@ -2536,7 +2463,7 @@ export async function handleDocuments(
           file_url: await signedPrivateFileUrl(svc, row.file_url),
         }))),
       );
-    } else if (["principal", "coordinator"].includes(userRole)) {
+    } else if (canManageStaff(user)) {
       let query = svc.from("staff_documents").select(
         "*, staff:staff(id, school_id, first_name, last_name)",
       ).eq("school_id", school);
@@ -2559,17 +2486,18 @@ export async function handleDocuments(
   }
 
   if (path === "/staff-documents" && method === "POST") {
-    const userRole = roleValue(user);
     let staffId = textValue(body.staff_id);
-    if (userRole === "teacher") {
-      const myStaffId = (user.app_metadata?.linked_id as string | undefined) ??
-        "";
+    if (canUseOwnStaffDocuments(user)) {
+      const myStaffId = linkedStaffId(user);
       if (!myStaffId) return fail("user not linked to staff", 400);
       staffId = myStaffId;
-    } else if (!["principal", "coordinator"].includes(userRole)) {
-      return fail("unauthorized", 403);
+    } else if (!canManageStaff(user)) {
+      return fail("forbidden", 403);
     }
     if (!staffId) return fail("staff_id required");
+    if (!(await staffExistsInSchool(svc, school, staffId))) {
+      return fail("not found", 404);
+    }
     const docType = textValue(body.doc_type || body.type, "other");
     const fileUrl = textValue(body.file_url);
     const title = textValue(body.title);
@@ -2596,36 +2524,26 @@ export async function handleDocuments(
   const staffDocMatch = path.match(/^\/staff-documents\/([^/]+)$/);
   if (staffDocMatch && method === "DELETE") {
     const docId = staffDocMatch[1];
-    const userRole = roleValue(user);
-    if (["principal", "coordinator"].includes(userRole)) {
-      const { error } = await svc.from("staff_documents").delete().eq(
-        "id",
-        docId,
-      ).eq("school_id", school);
-      if (error) return fail(error.message);
-      return ok({ success: true });
-    } else if (userRole === "teacher") {
-      const myStaffId = (user.app_metadata?.linked_id as string | undefined) ??
-        "";
-      if (!myStaffId) return fail("user not linked to staff", 400);
-      const { data: doc, error: getErr } = await svc.from("staff_documents")
-        .select("staff_id").eq("id", docId).maybeSingle();
-      if (getErr) return fail(getErr.message);
-      if (!doc) return fail("not found", 404);
-      if (doc.staff_id !== myStaffId) {
-        return fail("unauthorized", 403);
-      }
-      const { error } = await svc.from("staff_documents").delete().eq(
-        "id",
-        docId,
-      ).eq("school_id", school);
-      if (error) return fail(error.message);
-      return ok({ success: true });
-    } else {
-      return fail("unauthorized", 403);
+    if (!canManageStaff(user) && !canUseOwnStaffDocuments(user)) {
+      return fail("forbidden", 403);
     }
+    const { data: doc, error: getErr } = await svc.from("staff_documents")
+      .select("staff_id").eq("id", docId).eq("school_id", school)
+      .maybeSingle();
+    if (getErr) return fail(getErr.message);
+    if (!doc) return fail("not found", 404);
+    if (!canManageStaff(user) && doc.staff_id !== linkedStaffId(user)) {
+      return fail("not found", 404);
+    }
+    const { error } = await svc.from("staff_documents").delete().eq(
+      "id",
+      docId,
+    ).eq("school_id", school);
+    if (error) return fail(error.message);
+    return ok({ success: true });
   }
   if (path === "/documents/requests" && method === "GET") {
+    if (!canManageStudents(user)) return fail("forbidden", 403);
     const { data, error } = await svc.from("frontend_records").select("*").eq(
       "school_id",
       school,
@@ -2636,6 +2554,7 @@ export async function handleDocuments(
     return ok((data ?? []).map((row) => documentRow(row)));
   }
   if (path === "/documents/requests" && method === "POST") {
+    if (!canManageStudents(user)) return fail("forbidden", 403);
     const payload = {
       id: crypto.randomUUID(),
       student_name: textValue(body.student_name, "Student"),
@@ -2656,6 +2575,7 @@ export async function handleDocuments(
   }
   const printMatch = path.match(/^\/documents\/requests\/([^/]+)\/prints$/);
   if (printMatch && method === "POST") {
+    if (!canManageStudents(user)) return fail("forbidden", 403);
     const { data: existing, error: loadError } = await svc.from(
       "frontend_records",
     ).select("*").eq("school_id", school).eq("table_name", "document_requests")
@@ -2677,6 +2597,7 @@ export async function handleDocuments(
     return ok(documentRow(data));
   }
   if (path === "/documents/templates" && method === "GET") {
+    if (!canManageStudents(user)) return fail("forbidden", 403);
     const { data, error } = await svc.from("frontend_records").select("*").eq(
       "school_id",
       school,
@@ -2687,6 +2608,7 @@ export async function handleDocuments(
     return ok((data ?? []).map((row) => documentRow(row)));
   }
   if (path === "/documents/templates" && method === "POST") {
+    if (!canManageStudents(user)) return fail("forbidden", 403);
     const payload = {
       id: crypto.randomUUID(),
       name: textValue(body.name, "Template"),
@@ -2741,7 +2663,7 @@ export async function handleParent(
       return fail("forbidden", 403);
     }
     const { data, error } = await svc.from("parent_student_links").select(
-      "student_id, student:students(id, admission_number, student_code, first_name, last_name)",
+      "student_id, student:students(id, admission_number, student_code:student_id_number, first_name, last_name)",
     ).eq("school_id", school).eq("parent_user_id", parentUserId);
     if (error) return fail(error.message);
     return ok(
@@ -2769,6 +2691,15 @@ export async function handleParent(
     ) {
       return fail("forbidden", 403);
     }
+    const { data: parentAccount, error: parentError } = await svc.from("users")
+      .select("id, role_name, school_id")
+      .eq("id", parentMatch[1])
+      .eq("school_id", school)
+      .ilike("role_name", "parent")
+      .eq("is_active", true)
+      .maybeSingle();
+    if (parentError) return fail(parentError.message);
+    if (!parentAccount) return fail("parent account not found", 404);
     const body = await req.json().catch(() => ({}));
     const studentIds = Array.isArray(body.student_ids)
       ? body.student_ids.map((value: unknown) => `${value ?? ""}`.trim())
@@ -2799,15 +2730,53 @@ export async function handleParent(
       return fail("student_ids or admission_numbers required");
     }
 
+    // Resolve every explicit ID inside this school before changing links. An
+    // invalid or cross-tenant ID is never allowed to create a dangling link.
+    const { data: ownedStudents, error: ownedStudentsError } = await svc.from(
+      "students",
+    ).select("id").eq("school_id", school).in("id", resolvedStudentIds);
+    if (ownedStudentsError) return fail(ownedStudentsError.message);
+    const ownedIds = new Set(
+      (ownedStudents ?? []).map((row: Record<string, unknown>) =>
+        textValue(row.id)
+      ).filter(Boolean),
+    );
+    if (ownedIds.size !== resolvedStudentIds.length) {
+      return fail("one or more students were not found", 404);
+    }
+
+    const { data: existingLinks, error: existingLinksError } = await svc.from(
+      "parent_student_links",
+    ).select("student_id, parent_user_id").eq("school_id", school).in(
+      "student_id",
+      resolvedStudentIds,
+    );
+    if (existingLinksError) return fail(existingLinksError.message);
+    const conflictingStudent = (existingLinks ?? []).find(
+      (link: Record<string, unknown>) =>
+        textValue(link.parent_user_id) !== parentMatch[1],
+    );
+    if (conflictingStudent) {
+      return fail(
+        "one or more students are already linked to another parent",
+        409,
+      );
+    }
+
     const rows = resolvedStudentIds.map((studentId) => ({
       school_id: school,
       parent_user_id: parentMatch[1],
       student_id: studentId,
     }));
+    // A student can have only one parent login. Reassigning through this
+    // endpoint replaces the old link, while the same parent may own many rows.
+    const { error: clearError } = await svc.from("parent_student_links").delete()
+      .eq("school_id", school).in("student_id", resolvedStudentIds);
+    if (clearError) return fail(clearError.message);
     const { data, error } = await svc.from("parent_student_links").upsert(
       rows,
       {
-        onConflict: "parent_user_id,student_id",
+        onConflict: "student_id",
       },
     ).select();
     if (error) return fail(error.message);
@@ -2828,7 +2797,7 @@ export async function handleReports(
 ): Promise<Response> {
   const school = sid(user);
   if (path === "/reports/exports" && method === "POST") {
-    if (!["principal", "coordinator"].includes(roleValue(user))) {
+    if (!canManageStudents(user)) {
       return fail("leadership access required", 403);
     }
     try {
@@ -2850,7 +2819,7 @@ export async function handleReports(
     }
   }
   if (path === "/reports/exports" && method === "GET") {
-    if (!["principal", "coordinator"].includes(roleValue(user))) {
+    if (!canManageStudents(user)) {
       return fail("leadership access required", 403);
     }
     const { data, error } = await svc.from("frontend_records").select("*").eq(
@@ -2863,6 +2832,9 @@ export async function handleReports(
     return ok((data ?? []).map((row) => documentRow(row)));
   }
   if (path === "/reports/attendance" && method === "GET") {
+    if (!canManageStudents(user)) {
+      return fail("leadership access required", 403);
+    }
     const { data, error } = await svc.from("attendance_summaries").select(
       "*, student:students(first_name, last_name, admission_number, current_section_id)",
     ).eq("school_id", school);
@@ -2870,6 +2842,9 @@ export async function handleReports(
     return ok(data);
   }
   if (path === "/reports/fees" && method === "GET") {
+    if (!isFinanceLeader(user)) {
+      return fail("finance access required", 403);
+    }
     const { data, error } = await svc.from("fee_invoices").select(
       "*, student:students(first_name, last_name, admission_number)",
     ).eq("school_id", school).order("invoice_date", { ascending: false });
@@ -2877,6 +2852,9 @@ export async function handleReports(
     return ok(data);
   }
   if (path === "/reports/staff" && method === "GET") {
+    if (!canManageStaff(user)) {
+      return fail("leadership access required", 403);
+    }
     const { data, error } = await svc.from("staff").select(
       "*, department:departments(department_name), staff_subjects(*, subject:subjects(*))",
     ).eq("school_id", school);

@@ -45,7 +45,7 @@ class SchoolDeskModuleRegistry {
         SchoolDeskModuleLayer.domain,
         SchoolDeskModuleLayer.presentation,
       },
-      ownerRoutes: {'/', '/landing-page-screen', '/onboarding-screen'},
+      ownerRoutes: {'/', '/landing-page-screen'},
     ),
     SchoolDeskModuleDefinition(
       name: 'Dashboard',

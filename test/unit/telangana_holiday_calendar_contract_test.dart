@@ -43,6 +43,20 @@ void main() {
     expect(source, contains('where not exists'));
   });
 
+  test('the supplied PDF spelling and local seed order are preserved', () {
+    const sources = [
+      'supabase/migrations/20260829144043_fix_telangana_holiday_calendar_academic_year_range.sql',
+      'supabase/seed.sql',
+      'supabase/seed_local_security.sql',
+    ];
+    for (final path in sources) {
+      final source = File(path).readAsStringSync();
+      expect(source, contains("'Vinayaka Nimarjanam'"), reason: path);
+      expect(source, contains("'Dussehra Holidays'"), reason: path);
+      expect(source, contains("date '2027-04-19'"), reason: path);
+    }
+  });
+
   test('calendar keeps official holidays separate from events', () {
     final api = File(
       'lib/core/network/api_modules/events_api.dart',

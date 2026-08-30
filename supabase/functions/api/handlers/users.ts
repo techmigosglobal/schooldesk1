@@ -1,19 +1,19 @@
 // handlers/users.ts — user account management
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
+import {
+  canAssignAccountRole,
+  canCreateParentAccount,
+  canReadParentAccounts,
+  canManageAccounts,
+  normalizedRole as normalizeRole,
+  roleName,
+} from "./authorization.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function roleName(user: User): string {
-  return text(user.app_metadata?.role_name).toLowerCase();
-}
-
-function canManageAccounts(user: User): boolean {
-  return ["principal", "admin", "super_admin"].includes(roleName(user));
 }
 
 function temporaryPassword(): string {
@@ -38,7 +38,7 @@ function userInsertPayload(
   body: Record<string, unknown>,
   school: string,
   authUserId: string,
-  roleName: string,
+  normalizedRole: string,
 ) {
   return {
     id: authUserId,
@@ -48,7 +48,7 @@ function userInsertPayload(
     email: text(body.email) || null,
     phone: text(body.phone) || null,
     avatar: text(body.avatar) || null,
-    role_name: roleName,
+    role_name: normalizedRole,
     linked_type: text(body.linked_type) || null,
     linked_id: text(body.linked_id) || null,
     is_active: body.is_active ?? true,
@@ -86,6 +86,30 @@ export async function handleUsers(
   const school = sid(user);
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
   const seg = path.slice("/users".length).split("/").filter(Boolean)[0];
+  const isOwnRead = method === "GET" && Boolean(seg && seg === user.id);
+  const isOwnAvatar = method === "POST" && path.endsWith("/avatar") &&
+    Boolean(seg && seg === user.id);
+  const requestedRole = method === "POST" && !seg
+    ? normalizeRole((body as Record<string, unknown>).role_name ??
+      (body as Record<string, unknown>).role)
+    : null;
+  const isCoordinatorParentCreate = method === "POST" && !seg &&
+    canCreateParentAccount(user, requestedRole);
+  const isParentDirectoryRead = method === "GET" && !seg &&
+    canReadParentAccounts(user, url.searchParams.get("role"));
+  // A Coordinator may update only an existing parent account. The target row
+  // is checked again in the PATCH branch before any fields are changed.
+  const isCoordinatorParentPatch = method === "PATCH" && Boolean(seg) &&
+    roleName(user) === "coordinator";
+
+  // Generic account management is more powerful than staff provisioning.
+  // A Coordinator manages staff through /staff, but cannot use /users to mint
+  // a parent, kiosk, admin, or platform identity.
+  if (!canManageAccounts(user) && !isCoordinatorParentCreate &&
+    !isParentDirectoryRead && !isCoordinatorParentPatch && !isOwnRead &&
+    !isOwnAvatar) {
+    return fail("forbidden", 403);
+  }
 
   if (!seg && method === "GET") {
     const page = parseInt(url.searchParams.get("page") ?? "1");
@@ -115,15 +139,12 @@ export async function handleUsers(
   }
 
   if (!seg && method === "POST") {
-    if (!canManageAccounts(user)) return fail("forbidden", 403);
     const { password, role, role_name, ...rest } = body;
-    const resolvedRole =
-      `${role_name ?? role ?? "staff"}`.trim().toLowerCase() || "staff";
-    if (
-      ["principal", "super_admin"].includes(resolvedRole) &&
-      roleName(user) !== "super_admin"
-    ) {
-      return fail("only super_admin can create principal accounts", 403);
+    const roleName = `${role_name ?? role ?? ""}`.trim().toLowerCase() || "staff";
+    const resolvedRole = normalizeRole(roleName);
+    if (!resolvedRole) return fail("invalid account role", 422);
+    if (!canAssignAccountRole(user, resolvedRole)) {
+      return fail("forbidden account role assignment", 403);
     }
     const email = loginEmail(rest, school);
     // Create Supabase Auth user
@@ -165,7 +186,6 @@ export async function handleUsers(
   }
 
   if (seg && path.endsWith("/reset-credentials") && method === "POST") {
-    if (!canManageAccounts(user)) return fail("forbidden", 403);
     const { data: target, error: targetError } = await svc.from("users")
       .select("id, username, school_id, role_name").eq("id", seg).eq(
         "school_id",
@@ -207,20 +227,35 @@ export async function handleUsers(
   }
 
   if (seg && method === "PATCH") {
-    if (!canManageAccounts(user)) return fail("forbidden", 403);
     const { password, role, role_name, ...patch } = body;
-    const resolvedRole = role_name ?? role;
-    const normalizedRole = resolvedRole
-      ? `${resolvedRole}`.trim().toLowerCase()
-      : "";
-    if (
-      ["principal", "super_admin"].includes(normalizedRole) &&
-      roleName(user) !== "super_admin"
-    ) {
-      return fail("only super_admin can assign principal accounts", 403);
+    const { data: target, error: targetError } = await svc.from("users").select(
+      "id, school_id, role_name",
+    ).eq("id", seg).eq("school_id", school).maybeSingle();
+    if (targetError) return fail(targetError.message);
+    if (!target) return fail("user not found", 404);
+    const coordinatorParentTarget = roleName(user) === "coordinator" &&
+      normalizeRole(target.role_name) === "parent";
+    if (!canManageAccounts(user) && !coordinatorParentTarget) {
+      return fail("forbidden", 403);
     }
-    const allowedPatch = Object.fromEntries(
-      [
+    const resolvedRole = role_name ?? role;
+    const resolvedNormalizedRole = resolvedRole === undefined
+      ? null
+      : normalizeRole(resolvedRole);
+    if (resolvedRole !== undefined && !resolvedNormalizedRole) {
+      return fail("invalid account role", 422);
+    }
+    if (resolvedNormalizedRole && !canAssignAccountRole(user, resolvedNormalizedRole)) {
+      return fail("forbidden account role assignment", 403);
+    }
+    if (coordinatorParentTarget &&
+      ((resolvedNormalizedRole && resolvedNormalizedRole !== "parent") ||
+        patch.linked_type !== undefined || patch.linked_id !== undefined)) {
+      return fail("Coordinator may update parent details only", 403);
+    }
+    const allowedKeys = coordinatorParentTarget
+      ? ["username", "name", "email", "phone", "is_active"]
+      : [
         "username",
         "name",
         "email",
@@ -229,16 +264,23 @@ export async function handleUsers(
         "is_active",
         "linked_type",
         "linked_id",
-      ]
+      ];
+    const allowedPatch = Object.fromEntries(
+      allowedKeys
         .filter((key) => patch[key] !== undefined)
         .map((key) => [key, patch[key]]),
     );
-    if (password || resolvedRole || allowedPatch.email !== undefined) {
+    if (password || resolvedNormalizedRole || allowedPatch.email !== undefined) {
       const { error: authError } = await svc.auth.admin.updateUserById(seg, {
         ...(password ? { password } : {}),
         ...(allowedPatch.email ? { email: text(allowedPatch.email) } : {}),
-        ...(normalizedRole
-          ? { app_metadata: { school_id: school, role_name: normalizedRole } }
+        ...(resolvedNormalizedRole
+          ? {
+            app_metadata: {
+              school_id: school,
+              role_name: resolvedNormalizedRole,
+            },
+          }
           : {}),
       });
       if (authError) return fail(authError.message);
@@ -257,7 +299,7 @@ export async function handleUsers(
     }
     const { data, error } = await svc.from("users").update({
       ...allowedPatch,
-      ...(normalizedRole ? { role_name: normalizedRole } : {}),
+      ...(resolvedNormalizedRole ? { role_name: resolvedNormalizedRole } : {}),
       updated_at: new Date().toISOString(),
     }).eq("id", seg).eq("school_id", school).select().single();
     if (error) return fail(error.message);

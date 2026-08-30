@@ -1663,6 +1663,15 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
       setState(() => _error = 'Student already assigned');
       return;
     }
+    final linkedParentId = student.parentUserId;
+    final currentParentId = widget.initialGuardian?.id;
+    if (linkedParentId != null && linkedParentId != currentParentId) {
+      setState(
+        () => _error =
+            'This student is already linked to another parent. Edit the student to change the parent association.',
+      );
+      return;
+    }
     setState(() {
       _error = null;
       _selectedStudentId = null;
@@ -1947,7 +1956,9 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
     final availableStudents = widget.students
         .where(
           (student) =>
-              !_linkedStudents.any((link) => link.studentId == student.id),
+              !_linkedStudents.any((link) => link.studentId == student.id) &&
+              (student.parentUserId == null ||
+                  student.parentUserId == widget.initialGuardian?.id),
         )
         .toList();
     return _FormCard(
@@ -1959,6 +1970,12 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
             text: 'Create students first before linking parent accounts.',
           )
         else ...[
+          if (availableStudents.length < widget.students.length)
+            const _InlineNotice(
+              icon: Icons.link_rounded,
+              text:
+                  'Students linked to another parent are unavailable. Edit the student to change its single parent association.',
+            ),
           _ResponsiveFieldRow(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

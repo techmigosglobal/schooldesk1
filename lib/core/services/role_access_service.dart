@@ -143,7 +143,14 @@ class RoleAccessService {
               staffId: teacherStaffId.isEmpty ? null : teacherStaffId,
             ),
           );
-    final invoicesFuture = (effectiveRole == 'teacher' || isParent)
+    // Coordinators have school-wide operations access but no finance access;
+    // do not probe the finance endpoint for this role. Apart from avoiding a
+    // predictable 403, this keeps bootstrap quiet and removes an unnecessary
+    // request from the local Edge worker budget.
+    final invoicesFuture =
+        (effectiveRole == 'teacher' ||
+            effectiveRole == 'coordinator' ||
+            isParent)
         ? Future<List<Map<String, dynamic>>?>.value(<Map<String, dynamic>>[])
         : _try<List<Map<String, dynamic>>>(() => api.getInvoices());
 

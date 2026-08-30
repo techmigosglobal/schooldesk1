@@ -1,4 +1,10 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/media_cache.dart';
 import 'package:schooldesk1/core/utils/media_url.dart';
 
 void main() {
@@ -33,4 +39,44 @@ void main() {
       );
     },
   );
+
+  test('Docker storage aliases use the local gateway when running locally', () {
+    const dockerUrl =
+        'http://kong:8000/storage/v1/object/public/school-assets/logo.png';
+    expect(
+      resolveOriginalImageUrl(dockerUrl),
+      'http://127.0.0.1:54321/storage/v1/object/public/school-assets/logo.png',
+    );
+  }, skip: !EnvConfig.isLocal);
+
+  test('unavailable media resolves to an empty placeholder safely', () async {
+    final api = BackendApiClient.instance;
+    final previousAdapter = api.dio.httpClientAdapter;
+    api.dio.httpClientAdapter = _OfflineAdapter();
+    try {
+      final bytes = await MediaCache.load(
+        'http://offline.test/media/${DateTime.now().microsecondsSinceEpoch}.png',
+      );
+      expect(bytes, isEmpty);
+    } finally {
+      api.dio.httpClientAdapter = previousAdapter;
+    }
+  });
+}
+
+class _OfflineAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    throw DioException(
+      requestOptions: options,
+      type: DioExceptionType.connectionError,
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }

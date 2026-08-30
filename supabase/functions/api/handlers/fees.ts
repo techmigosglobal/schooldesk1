@@ -79,6 +79,15 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
+// PostgREST normally serializes a many-to-one relationship as an object, but
+// older schema-cache snapshots can return the same relationship as a
+// single-item array.  Treat both shapes identically so Day Care eligibility
+// does not disappear merely because the local schema cache has not refreshed.
+function firstRecord(value: unknown): Record<string, unknown> {
+  if (Array.isArray(value)) return record(value[0]);
+  return record(value);
+}
+
 function isDaycareGradeName(value: unknown) {
   // Schools commonly model this as a Day Care grade with section A, but some
   // imports name the grade itself "Day Care A". Both are Day Care classes.
@@ -89,14 +98,66 @@ function isDaycareGradeName(value: unknown) {
 
 function isDaycareStudent(studentValue: unknown) {
   const student = record(studentValue);
-  const section = record(student.current_section);
-  const grade = record(section.grade);
+  const section = firstRecord(student.current_section);
+  const grade = firstRecord(section.grade);
   return text(student.status).toLowerCase() === "active" &&
     isDaycareGradeName(grade.grade_name);
 }
 
 const daycareStudentSelect =
-  "id, first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))";
+  "id, first_name, last_name, admission_number, student_id_number, status, current_section:sections!students_current_section_id_fkey(id, section_name, grade:grades(id, grade_name))";
+
+const daycareStudentBaseSelect =
+  "id, first_name, last_name, admission_number, student_id_number, status, current_section_id";
+
+/**
+ * Resolve the section/grade relationship in separate requests.  This is a
+ * little more work than relying on a nested PostgREST expansion, but it is
+ * stable while the local schema cache is being rebuilt and avoids returning
+ * an empty Day Care list when the relationship is represented as an array.
+ */
+async function enrichDaycareStudents(
+  svc: SupabaseClient,
+  rows: Record<string, unknown>[],
+) {
+  const sectionIds = [
+    ...new Set(rows.map((row) => text(row.current_section_id)).filter(Boolean)),
+  ];
+  const sectionResult = sectionIds.length === 0
+    ? { data: [], error: null }
+    : await svc.from("sections").select("id, section_name, grade_id").in(
+      "id",
+      sectionIds,
+    );
+  if (sectionResult.error) throw new Error(sectionResult.error.message);
+  const sections = new Map(
+    (sectionResult.data ?? []).map((section) => [text(section.id), section]),
+  );
+  const gradeIds = [
+    ...new Set(
+      (sectionResult.data ?? []).map((section) => text(section.grade_id)).filter(
+        Boolean,
+      ),
+    ),
+  ];
+  const gradeResult = gradeIds.length === 0
+    ? { data: [], error: null }
+    : await svc.from("grades").select("id, grade_name").in("id", gradeIds);
+  if (gradeResult.error) throw new Error(gradeResult.error.message);
+  const grades = new Map(
+    (gradeResult.data ?? []).map((grade) => [text(grade.id), grade]),
+  );
+  return rows.map((row) => {
+    const section = sections.get(text(row.current_section_id));
+    const grade = section ? grades.get(text(section.grade_id)) : undefined;
+    return {
+      ...row,
+      current_section: section
+        ? { ...section, grade: grade ?? null }
+        : row.current_section,
+    };
+  });
+}
 
 function daycarePlanAmount(planValue: unknown) {
   const plan = record(planValue);
@@ -1753,7 +1814,7 @@ export async function handleFees(
 
     if (feesPath === "/daycare-eligible-students" && method === "GET") {
       const { data, error } = await svc.from("students").select(
-        daycareStudentSelect,
+        daycareStudentBaseSelect,
       ).eq("school_id", school).ilike("status", "active").not(
         "current_section_id",
         "is",
@@ -1762,7 +1823,19 @@ export async function handleFees(
         ascending: true,
       });
       if (error) return fail(error.message);
-      return ok((data ?? []).filter(isDaycareStudent));
+      try {
+        const enriched = await enrichDaycareStudents(
+          svc,
+          (data ?? []) as Record<string, unknown>[],
+        );
+        return ok(enriched.filter(isDaycareStudent));
+      } catch (enrichmentError) {
+        return fail(
+          enrichmentError instanceof Error
+            ? enrichmentError.message
+            : "failed to resolve Day Care eligibility",
+        );
+      }
     }
 
     if (!planId && method === "GET") {
@@ -1822,13 +1895,25 @@ export async function handleFees(
         );
       }
       const { data: student, error: studentError } = await svc.from("students")
-        .select(daycareStudentSelect).eq("id", studentId).eq(
+        .select(daycareStudentBaseSelect).eq("id", studentId).eq(
           "school_id",
           school,
         ).ilike("status", "active").maybeSingle();
       if (studentError) return fail(studentError.message);
       if (!student) return fail("Student not found", 404);
-      if (!isDaycareStudent(student)) {
+      let enrichedStudent: Record<string, unknown>;
+      try {
+        enrichedStudent = (await enrichDaycareStudents(svc, [
+          student as Record<string, unknown>,
+        ]))[0];
+      } catch (enrichmentError) {
+        return fail(
+          enrichmentError instanceof Error
+            ? enrichmentError.message
+            : "failed to resolve Day Care eligibility",
+        );
+      }
+      if (!isDaycareStudent(enrichedStudent)) {
         return fail(
           "Student must be enrolled in an active Day Care section",
           400,
@@ -2369,8 +2454,50 @@ export async function handleFees(
 
     if (!seg && method === "POST") {
       const { items, ...invoicePayload } = body;
+      const structureId = text(invoicePayload.fee_structure_id);
+      const studentId = text(invoicePayload.student_id);
+      const daycarePlanId = text(invoicePayload.daycare_plan_id);
+      // Every operational invoice must identify the fee source.  A generic
+      // structure-less insert is what allowed a second ₹12,000 tuition row to
+      // sit beside the canonical auto-assigned invoice.  Day Care invoices
+      // have their own child-plan route and are likewise never created here.
+      if (daycarePlanId) {
+        return fail(
+          "Day Care invoices must be created from a child plan",
+          400,
+        );
+      }
+      if (!structureId || !studentId) {
+        return fail(
+          "student_id and fee_structure_id are required; use invoice generation for a fee structure",
+          400,
+        );
+      }
+      const { data: structure, error: structureError } = await svc.from(
+        "fee_structures",
+      ).select("id, academic_year_id, school_id").eq("id", structureId).eq(
+        "school_id",
+        school,
+      ).maybeSingle();
+      if (structureError) return fail(structureError.message);
+      if (!structure) return fail("Fee structure not found", 404);
+      const { data: existing, error: existingError } = await svc.from(
+        "fee_invoices",
+      ).select("*").eq("school_id", school).eq("student_id", studentId).eq(
+        "fee_structure_id",
+        structureId,
+      ).maybeSingle();
+      if (existingError) return fail(existingError.message);
+      if (existing) return ok(existing);
       const { data: invoice, error: invErr } = await svc.from("fee_invoices")
-        .insert({ ...invoicePayload, school_id: school }).select().single();
+        .insert({
+          ...invoicePayload,
+          school_id: school,
+          student_id: studentId,
+          fee_structure_id: structureId,
+          academic_year_id: invoicePayload.academic_year_id ??
+            structure.academic_year_id,
+        }).select().single();
       if (invErr) return fail(invErr.message);
       if (Array.isArray(items) && items.length > 0) {
         await svc.from("fee_invoice_items").insert(

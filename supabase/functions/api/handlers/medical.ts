@@ -1,6 +1,7 @@
 // handlers/medical.ts — parent health updates and medical records
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok } from "../index.ts";
+import { studentAccess } from "./authorization.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -20,13 +21,7 @@ async function parentCanAccessStudent(
   user: User,
   studentId: string,
 ) {
-  if (role(user) !== "parent") return true;
-  if (!studentId) return false;
-  const { data, error } = await svc.from("parent_student_links").select(
-    "student_id",
-  ).eq("parent_user_id", user.id).eq("student_id", studentId).maybeSingle();
-  if (error) throw error;
-  return Boolean(data);
+  return Boolean(await studentAccess(svc, sid(user), user, studentId));
 }
 
 function recordPayload(row: Record<string, unknown>) {

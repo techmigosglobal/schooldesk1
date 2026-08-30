@@ -1,4 +1,7 @@
-project_id = "ouvwogguttybmpgfgctc"
+# This ID names only the Docker-local Supabase project. It is intentionally not
+# the hosted project ref, so local CLI commands cannot target the hosted stack
+# through this configuration.
+project_id = "schooldesk-local"
 
 [api]
 enabled = true
@@ -18,7 +21,10 @@ schema_paths = []
 
 [db.seed]
 enabled = true
-sql_paths = ["./seed.sql"]
+# Keep the application fixture and the tenant-isolation fixture separate. The
+# CLI executes these in order on `supabase db reset`, which makes local RBAC
+# and cross-school tests deterministic.
+sql_paths = ["./seed.sql", "./seed_local_security.sql"]
 
 [studio]
 enabled = true

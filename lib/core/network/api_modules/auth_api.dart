@@ -41,35 +41,6 @@ extension BackendAuthApi on BackendApiClient {
     }
   }
 
-  Future<LoginResponse> setupSchool(SchoolSetupRequest request) async {
-    try {
-      final response = await _dio.post(
-        '/schools/setup',
-        data: request.toJson(),
-      );
-      final data = _asMap(response.data);
-      if (data['success'] == true) {
-        final setupData = _asMap(data['data']);
-        final resp = LoginResponse.fromJson(_asMap(setupData['auth']));
-        setAuthToken(resp.token);
-        setCurrentRole(resp.user.roleName);
-        setCurrentUserId(resp.user.id);
-        _cachedProfile = resp.user;
-        await TokenStorageService.saveTokens(
-          accessToken: resp.token,
-          refreshToken: resp.refreshToken,
-          roleName: resp.user.roleName,
-        );
-        await TokenStorageService.saveUserId(resp.user.id);
-        await setActiveBranchId(resp.user.schoolId);
-        return resp;
-      }
-      throw ServerException(message: data['error'] ?? 'School setup failed');
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
-  }
-
   Future<void> logout() async {
     final refresh = await TokenStorageService.getRefreshToken();
     if (_authToken != null) {

@@ -12,17 +12,24 @@ exception when others then
   null;
 end $$;
 
-select cron.schedule(
-  'rotate-schooldesk-demo-credential',
-  '0 * * * *',
-  $$
-  select net.http_post(
-    url := current_setting('app.settings.supabase_url') || '/functions/v1/api/jobs/demo-credential-rotation',
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key'),
-      'Content-Type', 'application/json'
-    ),
-    body := '{}'::jsonb
-  );
-  $$
-);
+do $$
+begin
+  if nullif(current_setting('app.settings.supabase_url', true), '') is not null
+     and nullif(current_setting('app.settings.service_role_key', true), '') is not null then
+    perform cron.schedule(
+      'rotate-schooldesk-demo-credential',
+      '0 * * * *',
+      $cron$
+      select net.http_post(
+        url := current_setting('app.settings.supabase_url', true) || '/functions/v1/api/jobs/demo-credential-rotation',
+        headers := jsonb_build_object(
+          'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true),
+          'Content-Type', 'application/json'
+        ),
+        body := '{}'::jsonb
+      );
+      $cron$
+    );
+  end if;
+end
+$$;

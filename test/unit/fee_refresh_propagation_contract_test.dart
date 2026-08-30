@@ -30,10 +30,10 @@ void main() {
       parentDashboard,
       contains("api.getDashboard('parent', forceRefresh: forceRefresh)"),
     );
-    expect(
-      parentDashboard,
-      contains("api.getMyStudents(\n          refreshNonce: forceRefresh"),
-    );
+    // Parent dashboard children are returned by its role-scoped DTO. The
+    // fee hub owns its own refreshable child request, so the dashboard must
+    // not issue a second child-list call.
+    expect(parentDashboard, isNot(contains('api.getMyStudents(')));
   });
 
   test(

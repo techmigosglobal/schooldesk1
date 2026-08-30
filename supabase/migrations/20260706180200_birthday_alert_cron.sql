@@ -18,20 +18,26 @@ exception when others then
 end
 $$;
 
--- Schedule the birthday alert job to run daily at 06:00 UTC.
--- The Edge Function uses the service role key via the ANON_KEY header,
--- so it bypasses RLS and can read all students + write notifications.
-select cron.schedule(
-  'daily-birthday-alerts',
-  '0 6 * * *',
-  $$
-  select net.http_post(
-    url    := current_setting('app.settings.supabase_url') || '/functions/v1/api/jobs/birthday-alerts/run',
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key'),
-      'Content-Type',  'application/json'
-    ),
-    body := '{}'::jsonb
-  );
-  $$
-);
+-- Schedule only when deployment-time settings explicitly opt in. Local
+-- Docker resets leave these settings unset, so no outbound job is created.
+do $$
+begin
+  if nullif(current_setting('app.settings.supabase_url', true), '') is not null
+     and nullif(current_setting('app.settings.service_role_key', true), '') is not null then
+    perform cron.schedule(
+      'daily-birthday-alerts',
+      '0 6 * * *',
+      $cron$
+      select net.http_post(
+        url    := current_setting('app.settings.supabase_url', true) || '/functions/v1/api/jobs/birthday-alerts/run',
+        headers := jsonb_build_object(
+          'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true),
+          'Content-Type', 'application/json'
+        ),
+        body := '{}'::jsonb
+      );
+      $cron$
+    );
+  end if;
+end
+$$;

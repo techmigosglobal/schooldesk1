@@ -63,10 +63,19 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
     setSwitchingBranch(true);
     try {
       const response = await fetch("/api/branch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchId }) });
-      if (!response.ok) return;
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: unknown };
+        const message = typeof payload.error === "string" && payload.error.trim()
+          ? payload.error
+          : "Unable to switch school branch. Please try again.";
+        notify(message, "error");
+        return;
+      }
       setActiveBranch(branchId);
       setBranchSelected(true);
       setDashboardRefresh((value) => value + 1);
+    } catch {
+      notify("Unable to switch school branch. Check your connection and try again.", "error");
     } finally {
       setSwitchingBranch(false);
     }

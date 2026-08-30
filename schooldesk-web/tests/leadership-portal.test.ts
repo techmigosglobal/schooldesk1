@@ -149,6 +149,14 @@ test("login exposes a clear accessible invalid-credentials response", () => {
   expect(loginForm).toContain('role="alert" aria-live="assertive"');
 });
 
+test("branch switching keeps the prior branch and reports failures", () => {
+  const portal = source("../components/portal-client.tsx");
+  expect(portal).toContain("Unable to switch school branch. Please try again.");
+  expect(portal).toContain("Check your connection and try again.");
+  expect(portal).toContain('notify(message, "error")');
+  expect(portal).toContain("if (!response.ok)");
+});
+
 test("leadership feature workspaces use layout-shaped loading states", () => {
   const modules = [
     "../components/portal/StudentDirectory.tsx",

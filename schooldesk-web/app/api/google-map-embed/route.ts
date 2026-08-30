@@ -4,7 +4,10 @@ export function GET() {
   const key = process.env.GOOGLE_MAPS_EMBED_API_KEY || process.env.GOOGLE_PLACES_API_KEY;
   const placeId = process.env.GOOGLE_PLACE_ID;
   if (!key || !placeId) {
-    return new NextResponse('<!doctype html><html><body style="margin:0;display:grid;place-items:center;min-height:100vh;font-family:system-ui;color:#102a43;background:#f8fbfe"><a style="color:#0e5ea8;font-weight:700" target="_blank" rel="noreferrer" href="https://www.google.com/maps?q=Arish+Ville+Miyapur">Open Arish Ville in Google Maps ↗</a></body></html>', { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    // This response is intentionally embedded by the public contact sections.
+    // Override the site-wide anti-framing headers for this same-origin fallback
+    // so an unconfigured local environment still gets an actionable map link.
+    return new NextResponse('<!doctype html><html><body style="margin:0;display:grid;place-items:center;min-height:100vh;font-family:system-ui;color:#102a43;background:#f8fbfe"><a style="color:#0e5ea8;font-weight:700" target="_blank" rel="noreferrer" href="https://www.google.com/maps?q=Arish+Ville+Miyapur">Open Arish Ville in Google Maps ↗</a></body></html>', { headers: { "Content-Type": "text/html; charset=utf-8", "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'; base-uri 'none'" } });
   }
   const url = new URL("https://www.google.com/maps/embed/v1/place");
   url.searchParams.set("key", key);

@@ -22,7 +22,6 @@ const _legacyRouteCompatibilityManifest = '''
 // The active backend is Supabase Edge Functions; these aliases document the
 // equivalent route ownership until the contracts are fully migrated.
 api.Group("/principal/bulk-import")
-schools.POST("/setup"
 lessonPlanners.GET("/principal"
 lessonPlanners.GET("/teacher"
 students.PUT("/:id", middleware.RBACMiddleware("Principal")

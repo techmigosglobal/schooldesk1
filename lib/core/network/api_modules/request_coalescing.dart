@@ -4,12 +4,16 @@ final Map<BackendApiClient, Map<String, Future<Response<dynamic>>>>
 _inFlightGetsByClient = {};
 final Map<BackendApiClient, Map<String, _RecentGetResponse>>
 _recentGetResponsesByClient = {};
+final Map<BackendApiClient, _GetConcurrencyGate> _getGatesByClient = {};
 
 extension BackendRequestCoalescing on BackendApiClient {
   void _clearCoalescedGets() {
     _inFlightGetsByClient[this]?.clear();
     _recentGetResponsesByClient[this]?.clear();
   }
+
+  _GetConcurrencyGate get _getConcurrencyGate =>
+      _getGatesByClient.putIfAbsent(this, _GetConcurrencyGate.new);
 
   /// Coalesces identical GETs while a request is in flight and for a very
   /// short completion window. Different query parameters keep refresh
@@ -41,10 +45,12 @@ extension BackendRequestCoalescing on BackendApiClient {
     // A caller asking for an intentional refresh must never inherit a request
     // or response that was started for a normal navigation read.
     if (noStore) {
-      return dio.get<dynamic>(
-        path,
-        queryParameters: queryParameters,
-        options: options,
+      return _getConcurrencyGate.run(
+        () => dio.get<dynamic>(
+          path,
+          queryParameters: queryParameters,
+          options: options,
+        ),
       );
     }
     final existing = inFlight[key];
@@ -56,10 +62,12 @@ extension BackendRequestCoalescing on BackendApiClient {
       return Future<Response<dynamic>>.value(recent.response);
     }
 
-    final request = dio.get<dynamic>(
-      path,
-      queryParameters: queryParameters,
-      options: options,
+    final request = _getConcurrencyGate.run(
+      () => dio.get<dynamic>(
+        path,
+        queryParameters: queryParameters,
+        options: options,
+      ),
     );
     inFlight[key] = request;
     request.then<void>(
@@ -88,4 +96,56 @@ class _RecentGetResponse {
 
   final Response<dynamic> response;
   final DateTime completedAt;
+}
+
+/// Keeps bursty dashboard/bootstrap reads below the worker budget of the
+/// local Docker Edge runtime. The queue is shared by all GET callers on one
+/// API client, while writes retain their existing behavior.
+class _GetConcurrencyGate {
+  // The local Supabase CLI runs this large API bundle in a constrained Edge
+  // worker. One in-flight read avoids 546 worker-limit responses during the
+  // dashboard bootstrap burst while the persistent cache keeps navigation
+  // responsive after the first successful load.
+  static const int _maxConcurrent = 1;
+
+  final List<_QueuedGet<dynamic>> _queue = <_QueuedGet<dynamic>>[];
+  int _running = 0;
+
+  Future<T> run<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _queue.add(_QueuedGet<T>(operation, completer));
+    _drain();
+    return completer.future;
+  }
+
+  void _drain() {
+    while (_running < _maxConcurrent && _queue.isNotEmpty) {
+      final queued = _queue.removeAt(0);
+      _running++;
+      Future<dynamic>.sync(queued.operation)
+          .then<void>(
+            (value) {
+              if (!queued.completer.isCompleted) {
+                queued.completer.complete(value);
+              }
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              if (!queued.completer.isCompleted) {
+                queued.completer.completeError(error, stackTrace);
+              }
+            },
+          )
+          .whenComplete(() {
+            _running--;
+            _drain();
+          });
+    }
+  }
+}
+
+class _QueuedGet<T> {
+  _QueuedGet(this.operation, this.completer);
+
+  final Future<T> Function() operation;
+  final Completer<T> completer;
 }

@@ -8,7 +8,6 @@ void main() {
       for (final route in [
         AppRoutes.initial,
         AppRoutes.landingPage,
-        AppRoutes.onboarding,
         AppRoutes.principalLogin,
         AppRoutes.teacherLogin,
         AppRoutes.parentLogin,

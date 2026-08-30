@@ -1,7 +1,15 @@
 // handlers/students.ts — CRUD, photo, documents, enrollments
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
-import { isSchoolLeader } from "./authorization.ts";
+import {
+  canManageGuardians,
+  canManageStudents,
+  guardianSelectFor,
+  isFinanceLeader,
+  roleName,
+  studentAccess,
+  visibleStudentIds,
+} from "./authorization.ts";
 import {
   PRIVATE_FILES_BUCKET,
   privateFileReference,
@@ -10,6 +18,12 @@ import {
 
 const studentDirectorySelect =
   "*, section:sections(*), guardians(*), student_guardians(guardian:guardians(*)), parent_student_links(parent_user_id)";
+
+// Restricted readers never receive financial totals, parent account details,
+// medical records, or permanent/signed document references through the student
+// directory. Teacher guardian data is reduced further by guardianSelectFor().
+const restrictedStudentDirectorySelect =
+  "id, first_name, last_name, admission_number, current_section_id, status, photo_url, section:sections(id, section_name, grade:grades(id, grade_name)), guardians(id, student_id, full_name, relationship, phone, is_primary), student_guardians(guardian:guardians(id, student_id, full_name, relationship, phone, is_primary))";
 
 function sid(user: User) {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -93,10 +107,6 @@ function guardianPayload(body: Record<string, unknown>, school: string) {
     occupation: text(body.occupation) || null,
     is_primary: body.is_primary ?? true,
   };
-}
-
-function canManageStudents(user: User) {
-  return isSchoolLeader(user);
 }
 
 async function validateStudentSection(
@@ -195,13 +205,19 @@ async function replaceStudentParentLink(
 ) {
   const parent = await validateParentAccount(svc, school, parentUserId);
   if (!parent) throw new Error("active parent account is required");
-  // Linking a new parent must not erase other valid parent links. The caller
-  // may explicitly clear all links only through the dedicated unlink path.
+  // A student has exactly one parent login association. Replacing the link is
+  // intentionally safe for a parent shared by multiple students.
+  const { error: clearError } = await svc.from("parent_student_links").delete()
+    .eq("school_id", school).eq("student_id", studentId).neq(
+      "parent_user_id",
+      parentUserId,
+    );
+  if (clearError) throw clearError;
   const { error: insertError } = await svc.from("parent_student_links").upsert({
     school_id: school,
     parent_user_id: parentUserId,
     student_id: studentId,
-  }, { onConflict: "parent_user_id,student_id" });
+  }, { onConflict: "student_id" });
   if (insertError) throw insertError;
 }
 
@@ -398,6 +414,7 @@ async function hydrateStudentDirectory(
   svc: SupabaseClient,
   school: string,
   students: Record<string, unknown>[],
+  includeFeeSummaries = true,
 ) {
   const classDetails = await attachClassDetails(svc, school, students);
   if (classDetails.error) return classDetails;
@@ -406,10 +423,13 @@ async function hydrateStudentDirectory(
   // the directory endpoint without changing the response contract.
   const [withParents, withFees] = await Promise.all([
     attachParentAccounts(svc, school, classDetails.data),
-    attachFeeSummaries(svc, school, classDetails.data),
+    includeFeeSummaries
+      ? attachFeeSummaries(svc, school, classDetails.data)
+      : Promise.resolve({ data: classDetails.data, error: null }),
   ]);
   if (withParents.error) return withParents;
   if (withFees.error) return withFees;
+  if (!includeFeeSummaries) return withParents;
   const feeByStudentId = new Map<string, unknown>(
     withFees.data.map(
       (student) => [text(student.id), student.fee_summary] as [string, unknown],
@@ -443,12 +463,26 @@ export async function handleGuardians(
 ): Promise<Response> {
   const school = sid(user);
   const id = parseId(path, "/guardians");
+  const managesGuardians = canManageGuardians(user);
+
+  if (method !== "GET" && !managesGuardians) {
+    return fail("forbidden", 403);
+  }
 
   if (!id && method === "GET") {
-    const { data, error } = await svc.from("guardians").select("*").eq(
+    let allowedStudentIds: Set<string> | null = null;
+    try {
+      allowedStudentIds = await visibleStudentIds(svc, school, user);
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : "failed to resolve guardian scope");
+    }
+    if (allowedStudentIds && allowedStudentIds.size === 0) return ok([]);
+    let query = svc.from("guardians").select(guardianSelectFor(user)).eq(
       "school_id",
       school,
-    ).order("created_at", { ascending: false });
+    );
+    if (allowedStudentIds) query = query.in("student_id", [...allowedStudentIds]);
+    const { data, error } = await query.order("created_at", { ascending: false });
     if (error) return fail(error.message);
     return ok(data ?? []);
   }
@@ -514,10 +548,11 @@ export async function handleStudents(
   user: User,
 ): Promise<Response> {
   const school = sid(user);
+  const managesStudents = canManageStudents(user);
 
   if (
     ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
-    !canManageStudents(user)
+    !managesStudents
   ) {
     return fail("forbidden", 403);
   }
@@ -537,6 +572,7 @@ export async function handleStudents(
   const sub = id ? subPath(path, "/students") : "";
 
   if (path === "/students/integrity" && method === "GET") {
+    if (!managesStudents) return fail("forbidden", 403);
     const [studentsResult, linksResult, usersResult] = await Promise.all([
       svc.from("students").select(
         "id, first_name, last_name, current_section_id",
@@ -576,6 +612,7 @@ export async function handleStudents(
   }
 
   if (path === "/students/summary" && method === "GET") {
+    if (!managesStudents) return fail("forbidden", 403);
     const [sectionsResult, studentsResult] = await Promise.all([
       svc.from("sections").select(
         "id, grade_id, section_name, grade:grades(grade_name)",
@@ -597,6 +634,19 @@ export async function handleStudents(
       active_student_count: studentsResult.data?.length ?? 0,
       active_students_by_section: Object.fromEntries(counts),
     });
+  }
+
+  // Every student subresource and detail read must first prove the caller owns
+  // the record, teaches its assigned section, or has school-admin authority.
+  // An unknown or out-of-scope ID intentionally looks absent.
+  let access: "all" | "scoped" | null = null;
+  if (id && method === "GET") {
+    try {
+      access = await studentAccess(svc, school, user, id);
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : "failed to resolve student scope");
+    }
+    if (!access) return fail("student not found", 404);
   }
 
   if (id && sub === "photo" && method === "POST") {
@@ -760,6 +810,9 @@ export async function handleStudents(
   }
 
   if (id && sub === "fees" && method === "GET") {
+    if (!isFinanceLeader(user) && roleName(user) !== "parent") {
+      return fail("forbidden", 403);
+    }
     const { data, error } = await svc.from("fee_invoices").select(
       "*, fee_invoice_items(*)",
     ).eq("school_id", school).eq("student_id", id).not(
@@ -772,6 +825,12 @@ export async function handleStudents(
   }
 
   if (!id && method === "GET") {
+    // Kiosk and generic staff identities are limited to their dedicated
+    // attendance/operations endpoints; an empty directory is not a valid
+    // substitute for denying the capability.
+    if (!managesStudents && !["teacher", "parent"].includes(roleName(user))) {
+      return fail("forbidden", 403);
+    }
     const page = parseInt(url.searchParams.get("page") ?? "1");
     const requestedSize = parseInt(url.searchParams.get("page_size") ?? "50");
     const size = Math.min(
@@ -779,12 +838,25 @@ export async function handleStudents(
       200,
     );
     const search = url.searchParams.get("search") ?? "";
-    let q = svc.from("students").select(studentDirectorySelect, {
+    let allowedStudentIds: Set<string> | null = null;
+    try {
+      allowedStudentIds = await visibleStudentIds(svc, school, user);
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : "failed to resolve student scope");
+    }
+    if (allowedStudentIds && allowedStudentIds.size === 0) {
+      return cors({ success: true, data: [], total: 0, page, page_size: size });
+    }
+    let q = svc.from("students").select(
+      managesStudents ? studentDirectorySelect : restrictedStudentDirectorySelect,
+      {
       count: "exact",
-    }).eq("school_id", school).range((page - 1) * size, page * size - 1);
-    if (url.searchParams.get("include_test_accounts") !== "true") {
+      },
+    ).eq("school_id", school).range((page - 1) * size, page * size - 1);
+    if (!managesStudents || url.searchParams.get("include_test_accounts") !== "true") {
       q = q.eq("is_test_account", false);
     }
+    if (allowedStudentIds) q = q.in("id", [...allowedStudentIds]);
     if (url.searchParams.get("section_id")) {
       q = q.eq("current_section_id", url.searchParams.get("section_id")!);
     }
@@ -798,11 +870,14 @@ export async function handleStudents(
     }
     const { data, error, count } = await q;
     if (error) return fail(error.message);
-    const directory = await hydrateStudentDirectory(
-      svc,
-      school,
-      (data ?? []) as Record<string, unknown>[],
-    );
+    const directory = managesStudents
+      ? await hydrateStudentDirectory(
+        svc,
+        school,
+        (data ?? []) as unknown as Record<string, unknown>[],
+        isFinanceLeader(user),
+      )
+      : { data: (data ?? []) as unknown as Record<string, unknown>[], error: null };
     if (directory.error) return fail(directory.error.message);
     return cors({
       success: true,
@@ -883,13 +958,16 @@ export async function handleStudents(
   }
 
   if (id && method === "GET") {
-    const { data, error } = await svc.from("students").select(
-      `${studentDirectorySelect}, medical_records(*), student_documents(*), enrollments(*, section:sections(*), academic_year:academic_years(*))`,
-    ).eq("id", id).eq("school_id", school).single();
+    const detailedSelect = access === "all"
+      ? `${studentDirectorySelect}, medical_records(*), student_documents(*), enrollments(*, section:sections(*), academic_year:academic_years(*))`
+      : restrictedStudentDirectorySelect;
+    const { data, error } = await svc.from("students").select(detailedSelect)
+      .eq("id", id).eq("school_id", school).single();
     if (error) return fail(error.message);
+    if (access !== "all") return ok(data);
     const detail = await hydrateStudentDirectory(svc, school, [
-      data as Record<string, unknown>,
-    ]);
+      data as unknown as Record<string, unknown>,
+    ], isFinanceLeader(user));
     if (detail.error) return fail(detail.error.message);
     const student = detail.data[0] as Record<string, unknown>;
     return ok({

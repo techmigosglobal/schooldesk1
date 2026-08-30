@@ -1,5 +1,7 @@
-INSERT INTO supabase_migrations.schema_migrations(version, name, statements)
-VALUES ('0022', 'notification_push_support', ARRAY['Applied via manual CLI run']);
-
-INSERT INTO supabase_migrations.schema_migrations(version, name, statements)
-VALUES ('0023', 'notification_event_triggers', ARRAY['Applied via manual CLI run']);
+-- Historical migration marker.
+--
+-- The notification tables/triggers are created by 0021 and 0022. This file
+-- used to insert rows directly into supabase_migrations.schema_migrations,
+-- which made a clean local reset fail with a duplicate version (0022). The
+-- CLI owns migration bookkeeping; this retained marker is intentionally a
+-- no-op so the checked-in history can be replayed deterministically.

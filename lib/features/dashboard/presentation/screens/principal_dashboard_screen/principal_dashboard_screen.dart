@@ -45,7 +45,11 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
       'coordinator';
 
-  String get _leadershipRole => _isCoordinator ? 'coordinator' : 'principal';
+  String get _leadershipRole {
+    final role = BackendApiClient.instance.currentRoleName?.trim().toLowerCase();
+    if (role == 'coordinator' || role == 'admin') return role!;
+    return 'principal';
+  }
 
   @override
   void initState() {

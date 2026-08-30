@@ -741,6 +741,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   Widget _buildSharedCalendar() {
+    final compact = MediaQuery.sizeOf(context).width < 520;
     return SchoolDeskModuleScaffold(
       title: 'Academic Calendar',
       subtitle: _canManageEvents
@@ -757,11 +758,19 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             ]
           : const [],
       floatingActionButton: _canManageEvents
-          ? FloatingActionButton.extended(
-              onPressed: () => _openCreateEvent(initialDate: _selectedDate),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Create event'),
-            )
+          ? compact
+                ? FloatingActionButton(
+                    onPressed: () =>
+                        _openCreateEvent(initialDate: _selectedDate),
+                    tooltip: 'Create event',
+                    child: const Icon(Icons.add_rounded),
+                  )
+                : FloatingActionButton.extended(
+                    onPressed: () =>
+                        _openCreateEvent(initialDate: _selectedDate),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Create event'),
+                  )
           : null,
       body: RefreshIndicator(
         onRefresh: _loadData,
@@ -799,12 +808,12 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             else ...[
               if (_displayMode == _EventsDisplayMode.agenda)
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 72),
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, compact ? 136 : 88),
                   sliver: SliverToBoxAdapter(child: _buildAgendaView()),
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 72),
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, compact ? 136 : 88),
                   sliver: SliverToBoxAdapter(child: _buildCalendarView()),
                 ),
             ],
@@ -981,6 +990,8 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   Widget _buildSelectedDayAgenda() {
     final events = _selectedDayEvents;
+    final showInlineCreate =
+        _canManageEvents && MediaQuery.sizeOf(context).width >= 520;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1005,9 +1016,11 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           _buildSelectedDayEmptyState(
             title: 'No events scheduled',
             message: _canManageEvents
-                ? 'Add the first event for this day, or choose another date.'
+                ? showInlineCreate
+                      ? 'Add the first event for this day, or choose another date.'
+                      : 'Use the + button to add the first event for this day, or choose another date.'
                 : 'Choose another date or check back when the school adds an event.',
-            showCreate: _canManageEvents,
+            showCreate: showInlineCreate,
           )
         else
           ...events.map(
@@ -1146,6 +1159,23 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             visualDensity: compact
                 ? const VisualDensity(horizontal: -2, vertical: -1)
                 : VisualDensity.standard,
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              return states.contains(WidgetState.selected)
+                  ? principalDirectoryAccent
+                  : Colors.white;
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              return states.contains(WidgetState.selected)
+                  ? Colors.white
+                  : principalDirectoryText;
+            }),
+            side: WidgetStateProperty.resolveWith((states) {
+              return BorderSide(
+                color: states.contains(WidgetState.selected)
+                    ? principalDirectoryAccent
+                    : const Color(0xFFD5E4F1),
+              );
+            }),
           ),
           segments: [
             const ButtonSegment(
@@ -1174,11 +1204,17 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   Widget _buildMonthStrip() {
+    final startMonth = _selectedAcademicYear == null
+        ? 1
+        : (DateTime.tryParse(_selectedAcademicYear!.startDate)?.month ?? 1);
+    final months = [
+      ...List.generate(12 - startMonth + 1, (index) => startMonth + index),
+      ...List.generate(startMonth - 1, (index) => index + 1),
+    ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: List.generate(12, (index) {
-          final month = index + 1;
+        children: months.map((month) {
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: PrincipalDirectoryChip(
@@ -1202,7 +1238,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               }),
             ),
           );
-        }),
+        }).toList(),
       ),
     );
   }
@@ -1336,8 +1372,8 @@ class _CalendarPanel extends StatelessWidget {
             selectedDayPredicate: (day) => isSameDay(day, selectedDate),
             eventLoader: eventsForDay,
             rowHeight: format == CalendarFormat.month
-                ? (smallScreen ? 58 : 72)
-                : 88,
+                ? (smallScreen ? 52 : 68)
+                : (smallScreen ? 76 : 88),
             onDaySelected: onDaySelected,
             onPageChanged: (focused) => onDaySelected(
               isSameDay(selectedDate, focused) ? selectedDate : focused,
@@ -1425,7 +1461,7 @@ class _CalendarDateCell extends StatelessWidget {
         ? events.first.typeColor
         : principalDirectoryAccent;
     final background = isSelected
-        ? primary.withAlpha(26)
+        ? primary.withAlpha(72)
         : isToday
         ? const Color(0xFFEAF4FF)
         : isWeekend
@@ -1450,58 +1486,72 @@ class _CalendarDateCell extends StatelessWidget {
       button: true,
       label:
           '${DateFormat('EEEE d MMMM').format(day)}. ${events.length} ${events.length == 1 ? 'event' : 'events'}',
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Ink(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: border, width: isSelected ? 1.5 : 1),
-          ),
-          child: Stack(
-            children: [
-              Align(
-                alignment: Alignment.center,
-                child: Text(
-                  '${day.day}',
-                  style: GoogleFonts.dmSans(
-                    color: textColor,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              if (events.length > 1)
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: _EventCountBadge(count: events.length),
-                ),
-              if (events.isNotEmpty)
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: border, width: isSelected ? 1.5 : 1),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: primary.withAlpha(38),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Stack(
+              children: [
                 Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: Wrap(
-                      spacing: 3,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        for (final event in events.take(3))
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: event.typeColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                      ],
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${day.day}',
+                    style: GoogleFonts.dmSans(
+                      color: textColor,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
                     ),
                   ),
                 ),
-            ],
+                if (events.length > 1)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: _EventCountBadge(count: events.length),
+                  ),
+                if (events.isNotEmpty)
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Wrap(
+                        spacing: 3,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          for (final event in events.take(3))
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.white.withAlpha(220)
+                                    : event.typeColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

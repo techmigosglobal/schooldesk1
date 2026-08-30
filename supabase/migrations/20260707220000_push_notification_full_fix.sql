@@ -27,50 +27,16 @@ FROM ranked_user_tokens rut
 WHERE nd.id = rut.id
   AND rut.rn > 1;
 
--- 3. Re-schedule daily-birthday-alerts cron job
+-- 3-4. Remove the legacy hosted schedulers. Local Docker tests invoke the
+-- Edge Functions directly; a hosted scheduler must be provisioned separately
+-- with deployment-time settings and secrets.
 DO $$
 BEGIN
-  PERFORM cron.unschedule('daily-birthday-alerts');
+  IF to_regnamespace('cron') IS NOT NULL THEN
+    EXECUTE 'select cron.unschedule($1)' USING 'daily-birthday-alerts';
+    EXECUTE 'select cron.unschedule($1)' USING 'process-notification-events';
+  END IF;
 EXCEPTION WHEN OTHERS THEN
   NULL;
 END
 $$;
-
-SELECT cron.schedule(
-  'daily-birthday-alerts',
-  '0 6 * * *',
-  $$
-  SELECT net.http_post(
-    url    := 'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api/jobs/birthday-alerts/run',
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer 18fd0a5339c8e5e81c3122a7607608e48631ef47cf3f5ac72c3486f7d115ee41',
-      'Content-Type',  'application/json'
-    ),
-    body := '{}'::jsonb
-  );
-  $$
-);
-
--- 4. Re-schedule process-notification-events cron job
-DO $$
-BEGIN
-  PERFORM cron.unschedule('process-notification-events');
-EXCEPTION WHEN OTHERS THEN
-  NULL;
-END
-$$;
-
-SELECT cron.schedule(
-  'process-notification-events',
-  '*/2 * * * *',
-  $$
-  SELECT net.http_post(
-    url    := 'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/notification-processor',
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer 18fd0a5339c8e5e81c3122a7607608e48631ef47cf3f5ac72c3486f7d115ee41',
-      'Content-Type',  'application/json'
-    ),
-    body := jsonb_build_object('source', 'pg_cron')
-  );
-  $$
-);

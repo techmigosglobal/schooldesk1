@@ -1207,6 +1207,16 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     }
 
     try {
+      if (input.studentId != null &&
+          !input.shouldCreateParentLogin &&
+          (parentUserId ?? '').isNotEmpty) {
+        await client.updateUser(
+          parentUserId!,
+          fullName: input.parentFullName,
+          email: input.parentEmail,
+          phone: input.parentPhone,
+        );
+      }
       if (studentId == null || studentId.isEmpty) {
         final student = await client.createStudent(
           firstName: firstName,
@@ -1449,7 +1459,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           grades: _grades,
           academicYears: _academicYears,
           feeStructures: _feeStructures,
-          parents: _parents,
+          parents: _parentOptionsForStudent(student),
           existingStudents: _allStudents,
           initialStudent: student,
           onSubmit: _saveStudentFromForm,
@@ -1457,6 +1467,19 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       ),
     );
     return updated == true;
+  }
+
+  List<api.UserAccountModel> _parentOptionsForStudent(StudentModel student) {
+    final byId = <String, api.UserAccountModel>{
+      for (final parent in _parents) parent.id: parent,
+    };
+    for (final raw in student.parentAccounts) {
+      final map = Map<String, dynamic>.from(raw);
+      final id = '${map['id'] ?? ''}'.trim();
+      if (id.isEmpty || byId.containsKey(id)) continue;
+      byId[id] = api.UserAccountModel.fromJson(map);
+    }
+    return byId.values.toList(growable: false);
   }
 
   Future<bool> _confirmAndRemoveStudent(
@@ -2119,6 +2142,7 @@ class _AddStudentInput {
   final String parentPassword;
   final String parentEmail;
   final String parentPhone;
+  final String parentFullName;
   final String? photoPath;
   final Uint8List? photoBytes;
   final String? photoName;
@@ -2145,6 +2169,7 @@ class _AddStudentInput {
     required this.parentPassword,
     required this.parentEmail,
     required this.parentPhone,
+    this.parentFullName = '',
     required this.photoPath,
     required this.photoBytes,
     required this.photoName,
@@ -2223,8 +2248,10 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   late final TextEditingController _motherLastNameCtrl;
   late final TextEditingController _parentUsernameCtrl;
   late final TextEditingController _parentPasswordCtrl;
+  final _linkedParentNameCtrl = TextEditingController();
   final _parentEmailCtrl = TextEditingController();
   final _parentPhoneCtrl = TextEditingController();
+  String _linkedParentUsername = '';
   final _concessionAmountCtrl = TextEditingController();
   final _concessionReasonCtrl = TextEditingController();
   final ImagePicker _picker = ImagePicker();
@@ -2281,6 +2308,11 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     _parentUserId = initial?.parentUserId?.trim().isNotEmpty == true
         ? initial!.parentUserId!.trim()
         : null;
+    final linkedParent = _parentForId(_parentUserId);
+    _linkedParentNameCtrl.text = linkedParent?.name.trim() ?? '';
+    _parentEmailCtrl.text = linkedParent?.email.trim() ?? '';
+    _parentPhoneCtrl.text = linkedParent?.phone.trim() ?? '';
+    _linkedParentUsername = linkedParent?.username.trim() ?? '';
     _fatherFirstNameCtrl = TextEditingController();
     _fatherLastNameCtrl = TextEditingController();
     _motherFirstNameCtrl = TextEditingController();
@@ -2302,6 +2334,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     _motherLastNameCtrl.dispose();
     _parentUsernameCtrl.dispose();
     _parentPasswordCtrl.dispose();
+    _linkedParentNameCtrl.dispose();
     _parentEmailCtrl.dispose();
     _parentPhoneCtrl.dispose();
     _concessionAmountCtrl.dispose();
@@ -2475,6 +2508,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
           parentPassword: _parentPasswordCtrl.text.trim(),
           parentEmail: _parentEmailCtrl.text.trim(),
           parentPhone: _parentPhoneCtrl.text.trim(),
+          parentFullName: _linkedParentNameCtrl.text.trim(),
           photoPath: _photoFile?.path,
           photoBytes: optimizedPhoto?.bytes,
           photoName: optimizedPhoto?.filename,
@@ -2716,8 +2750,20 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                     ...widget.parents.map((p) => p.id),
                                   ],
                                   labelBuilder: _parentLabel,
-                                  onChanged: (value) =>
-                                      setState(() => _parentUserId = value),
+                                  onChanged: (value) {
+                                    final parent = _parentForId(value);
+                                    setState(() {
+                                      _parentUserId = value;
+                                      _linkedParentNameCtrl.text =
+                                          parent?.name.trim() ?? '';
+                                      _parentEmailCtrl.text =
+                                          parent?.email.trim() ?? '';
+                                      _parentPhoneCtrl.text =
+                                          parent?.phone.trim() ?? '';
+                                      _linkedParentUsername =
+                                          parent?.username.trim() ?? '';
+                                    });
+                                  },
                                   suffixIcon: Icons.search_rounded,
                                 ),
                               ],
@@ -2732,7 +2778,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                       children: [
                         SwitchListTile(
                           value: _createParentLogin,
-                          onChanged: _saving
+                          onChanged: _saving || (_isEdit && _parentUserId != null)
                               ? null
                               : (value) {
                                   setState(() {
@@ -2910,6 +2956,59 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                         ],
                       ],
                     ),
+                    if (_isEdit && _parentUserId != null && !_createParentLogin) ...[
+                      const SizedBox(height: 14),
+                      _FormCard(
+                        title: 'Linked Parent Details',
+                        children: [
+                          if (_linkedParentUsername.isNotEmpty) ...[
+                            Text(
+                              'Login: $_linkedParentUsername',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: context.appTheme.muted,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+                          const _FieldLabel('Parent Name'),
+                          _TextInput(
+                            controller: _linkedParentNameCtrl,
+                            enabled: !_saving,
+                            hint: 'Full name',
+                          ),
+                          const SizedBox(height: 10),
+                          _ResponsiveFieldRow(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const _FieldLabel('Parent Email'),
+                                  _TextInput(
+                                    controller: _parentEmailCtrl,
+                                    enabled: !_saving,
+                                    hint: 'Optional',
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const _FieldLabel('Parent Phone'),
+                                  _TextInput(
+                                    controller: _parentPhoneCtrl,
+                                    enabled: !_saving,
+                                    hint: 'Optional',
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 14),
                     _FormCard(
                       title: 'Student Documents',
@@ -3262,6 +3361,21 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     if (parent.name.trim().isNotEmpty) return parent.name.trim();
     if (parent.username.trim().isNotEmpty) return parent.username.trim();
     return parent.phone.trim().isNotEmpty ? parent.phone.trim() : parent.id;
+  }
+
+  api.UserAccountModel? _parentForId(String? id) {
+    final cleanId = (id ?? '').trim();
+    if (cleanId.isEmpty) return null;
+    for (final parent in widget.parents) {
+      if (parent.id == cleanId) return parent;
+    }
+    final initialParents = widget.initialStudent?.parentAccounts ?? const [];
+    for (final raw in initialParents) {
+      final map = Map<String, dynamic>.from(raw);
+      if ('${map['id'] ?? ''}'.trim() != cleanId) continue;
+      return api.UserAccountModel.fromJson(map);
+    }
+    return null;
   }
 
   static String _displayDate(DateTime date) {

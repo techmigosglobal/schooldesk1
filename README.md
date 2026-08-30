@@ -1,11 +1,13 @@
 # SchoolDesk Flutter
 
-SchoolDesk is a Flutter school management app for Principal, Admin, Teacher, and Parent roles.
+SchoolDesk is a Flutter school management app for Principal, Admin, Coordinator,
+Teacher, Parent, and Kiosk roles.
 
-The current runtime target is Supabase:
+The current development runtime target is the isolated Docker-local Supabase
+stack (the hosted project is not contacted by local commands):
 
-- API base URL: `https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api`
-- Supabase project URL: `https://ouvwogguttybmpgfgctc.supabase.co`
+- API base URL: `http://127.0.0.1:54321/functions/v1/api`
+- Supabase project URL: `http://127.0.0.1:54321`
 - Backend implementation: Supabase Edge Functions under `supabase/functions/api`
 - Schema changes: Supabase migrations under `supabase/migrations`
 
@@ -15,28 +17,38 @@ The retired backend and mobile-flow automation folders have been removed from th
 
 ```bash
 flutter pub get
-python3 tool/generate_dart_defines.py
+scripts/local_supabase.sh prepare
+scripts/local_supabase.sh functions
 ```
 
 Run the app:
 
 ```bash
-flutter run
+flutter run --dart-define-from-file=env.local.json
 ```
 
-Plain `flutter run` attaches to the Supabase Edge backend after generating the
-local iOS define file. For Xcode Debug, Release, or Archive builds, run
-`python3 tool/generate_dart_defines.py` after changing `env.supabase.json` and
-before building. Both Runner configurations load that generated file, so an
-installed iPhone build receives the same backend configuration as a run from
-Xcode. Release/debug CI builds should pass the same values through
-`--dart-define` or Codemagic variables.
+`scripts/local_supabase.sh prepare` resets the local database and synthetic
+two-school fixtures. Keep the Edge Function server running in a second
+terminal. Hosted promotion is a separate, explicitly approved workflow.
+
+### Telangana holiday calendar
+
+`Holiday calender - Telangana.pdf` is the source of truth for the 24 official
+2026–27 Telangana holidays. The local seed files load the same rows into
+`public.holidays` for both synthetic schools, including the multi-day ranges.
+The repair migrations
+`20260829143718_repair_telangana_holiday_calendar_2026_27.sql` and
+`20260829144043_fix_telangana_holiday_calendar_academic_year_range.sql` keep
+existing academic-year data aligned and correct the PDF spelling
+“Vinayaka Nimarjanam”. Before any hosted promotion, take a backup and reconcile
+remote migration history; then apply the reviewed calendar migrations only
+after explicit approval.
 
 ## iOS Archive and App Store Distribution
 
 The iOS release is `com.techmigos.arishville`. Build numbers must increase for
 every App Store Connect upload; update the `+<build>` suffix in `pubspec.yaml`
-before starting an archive (the current release is `1.0.21+32`). Do not commit
+before starting an archive (the current release is `1.0.23+35`). Do not commit
 `env.supabase.json`, signing certificates, or provisioning profiles.
 
 1. Make sure `env.supabase.json` contains the required production API,
@@ -98,8 +110,8 @@ before starting an archive (the current release is `1.0.21+32`). Do not commit
 
 `codemagic.yaml` builds Android debug APKs with:
 
-- `API_BASE_URL=https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api`
-- `SUPABASE_URL=https://ouvwogguttybmpgfgctc.supabase.co`
+- `API_BASE_URL=https://YOUR_PROJECT_ID.supabase.co/functions/v1/api`
+- `SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co`
 - `SUPABASE_ANON_KEY`
 - `APP_ENV=production`
 - `ENABLE_LOGGING=false`

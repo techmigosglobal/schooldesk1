@@ -56,7 +56,17 @@ import {
   handleWebsitePublic,
 } from "./handlers/website.ts";
 import { handleDemo } from "./handlers/demo.ts";
-import { handleActivity, recordHttpActivity } from "./handlers/activity.ts";
+import {
+  handleActivity,
+  recordActivity,
+  recordHttpActivity,
+} from "./handlers/activity.ts";
+import {
+  consumeRateLimit,
+  RateLimitBackendError,
+  rateLimitHeaders,
+  RateLimitPolicy,
+} from "./lib/rate_limit.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
 
@@ -111,10 +121,18 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 };
 
-export function cors(body: unknown, status = 200): Response {
+export function cors(
+  body: unknown,
+  status = 200,
+  extraHeaders: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    headers: {
+      ...CORS_HEADERS,
+      "Content-Type": "application/json",
+      ...extraHeaders,
+    },
   });
 }
 
@@ -130,6 +148,64 @@ export function notFound(path: string): Response {
   return cors({ success: false, error: "not_found", path }, 404);
 }
 
+function requestIp(req: Request): string {
+  // The local CLI and the production ingress both provide one of these
+  // headers. The ingress must overwrite forwarded values before this boundary;
+  // an absent address is intentionally placed in one shared fail-closed
+  // bucket instead of disabling abuse protection.
+  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  // Kong's local gateway may add a constant loopback address to every
+  // request. Prefer the caller-supplied forwarding value in that isolated
+  // environment so deterministic local abuse tests can use separate buckets;
+  // production ingress headers remain authoritative outside loopback.
+  const hostname = new URL(req.url).hostname;
+  if (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1") {
+    return (forwarded ?? req.headers.get("x-real-ip") ?? "unknown").trim() || "unknown";
+  }
+  return (req.headers.get("cf-connecting-ip") ??
+    req.headers.get("x-real-ip") ?? forwarded ?? "unknown").trim() || "unknown";
+}
+
+async function enforceRateLimit(
+  req: Request,
+  policy: RateLimitPolicy,
+  userId?: string,
+): Promise<Response | null> {
+  try {
+    const decision = await consumeRateLimit(
+      serviceClient(),
+      policy,
+      policy === "login" || policy === "public"
+        ? { ip: requestIp(req) }
+        : { userId },
+    );
+    if (!decision.allowed) {
+      return cors(
+        { success: false, error: "rate_limited", code: policy },
+        429,
+        rateLimitHeaders(decision),
+      );
+    }
+    return null;
+  } catch (error) {
+    // A missing/unavailable counter store must not silently turn into an
+    // unbounded API. The service-role RPC itself is the only permitted writer.
+    if (error instanceof RateLimitBackendError) {
+      console.error(`Rate-limit backend unavailable (${policy})`);
+    } else {
+      console.error(`Rate-limit enforcement failed (${policy})`, error);
+    }
+    return fail("rate limiter unavailable", 503);
+  }
+}
+
+function isSensitiveAccountPath(path: string, method: string): boolean {
+  if (method === "GET" || method === "HEAD") return false;
+  return path.startsWith("/staff") || path.startsWith("/users") ||
+    path.startsWith("/account-approvals") || path.startsWith("/approvals") ||
+    path.startsWith("/access") || path.startsWith("/parents/");
+}
+
 async function auditedResponse(
   response: Promise<Response>,
   svc: ReturnType<typeof serviceClient>,
@@ -139,6 +215,24 @@ async function auditedResponse(
   requestPayload: Record<string, unknown> = {},
 ) {
   const resolved = await response;
+  if (resolved.status === 403) {
+    // Keep denial telemetry deliberately metadata-only: no request body,
+    // credentials, PII, or resource contents are copied into the audit trail.
+    const denial = recordActivity(svc, {
+      schoolId: `${user.app_metadata?.school_id ?? ""}`,
+      userId: user.id,
+      actorRole: `${user.app_metadata?.role_name ?? ""}`.toLowerCase(),
+      action: "authorization.denied",
+      module: path.split("/").filter(Boolean).at(0) || "system",
+      eventType: "authorization_denied",
+      summary: "Authorization denied",
+      entityType: "http_route",
+      entityId: undefined,
+      actorName: undefined,
+      details: { path, method, status: resolved.status },
+    }).catch(() => undefined);
+    if (!scheduleAfterResponse(denial)) await denial;
+  }
   if (resolved.ok) {
     const activity = (async () => {
       const payload = await resolved.clone().json().catch(() => null);
@@ -388,16 +482,6 @@ Deno.serve(async (req: Request) => {
       serviceClient(),
     );
   }
-  if (rawPath.endsWith("/schools/setup")) {
-    return handleSchools(
-      req,
-      "/schools/setup",
-      req.method.toUpperCase(),
-      url,
-      null,
-      serviceClient(),
-    );
-  }
   const removedRawPrefixes = [
     "/exams",
     "/exam-schedules",
@@ -430,6 +514,12 @@ Deno.serve(async (req: Request) => {
   // ── Health (no auth required) ─────────────────────────────
   if (path === "/health" || path === "/ready") {
     return handleHealth(req, path, serviceClient());
+  }
+
+  // School creation is a reset-only/local fixture concern. There is no public
+  // onboarding endpoint in this build, including for unauthenticated callers.
+  if (path === "/schools/setup") {
+    return notFound(path);
   }
 
   // ── Google Sheets real-time synchronization webhooks ──────
@@ -467,26 +557,46 @@ Deno.serve(async (req: Request) => {
 
   // ── Auth routes (no prior auth required for login) ────────
   if (path.startsWith("/auth")) {
+    if (path === "/auth/login" && method === "POST") {
+      const limited = await enforceRateLimit(req, "login");
+      if (limited) return limited;
+    } else if (
+      path === "/auth/password" || path.startsWith("/auth/profile")
+    ) {
+      const authContext = await authedClient(req);
+      const limited = await enforceRateLimit(
+        req,
+        authContext.user ? "sensitiveAccount" : "public",
+        authContext.user?.id,
+      );
+      if (limited) return limited;
+    } else {
+      const limited = await enforceRateLimit(req, "public");
+      if (limited) return limited;
+    }
     return handleAuth(req, path, method, url);
   }
 
   // ── Public landing feed (no auth — serves pre-login carousel) ─
   if (path === "/event-posts/landing" && method === "GET") {
+    const limited = await enforceRateLimit(req, "public");
+    if (limited) return limited;
     return handleLandingFeed(req, url, serviceClient());
   }
   if (path === "/website/public" && method === "GET") {
+    const limited = await enforceRateLimit(req, "public");
+    if (limited) return limited;
     return handleWebsitePublic(url, serviceClient());
   }
   if (path === "/website/enquiries" && method === "POST") {
+    const limited = await enforceRateLimit(req, "public");
+    if (limited) return limited;
     return handleWebsiteEnquiry(req, url, serviceClient());
   }
   if (path === "/demo/login" || path === "/jobs/demo-credential-rotation") {
+    const limited = await enforceRateLimit(req, "public");
+    if (limited) return limited;
     return handleDemo(req, path, method, serviceClient(), null);
-  }
-
-  // ── Schools setup (no prior auth for first-time setup) ────
-  if (path === "/schools/setup" && method === "POST") {
-    return handleSchools(req, path, method, url, null, serviceClient());
   }
 
   // ── REMOVED: return 404 for exam / assistant routes ───────
@@ -529,6 +639,14 @@ Deno.serve(async (req: Request) => {
     return cors({ success: false, error: "unauthorized" }, 401);
   }
 
+  const ratePolicy: RateLimitPolicy = isSensitiveAccountPath(path, method)
+    ? "sensitiveAccount"
+    : method === "GET" || method === "HEAD"
+    ? "authenticatedRead"
+    : "authenticatedWrite";
+  const limited = await enforceRateLimit(req, ratePolicy, user.id);
+  if (limited) return limited;
+
   if (path.startsWith("/demo/admin")) {
     return handleDemo(req, path, method, svc, user);
   }
@@ -553,7 +671,13 @@ Deno.serve(async (req: Request) => {
     );
   }
   if (path.startsWith("/dashboard")) {
-    return handleDashboard(req, path, method, url, client, svc, user);
+    return auditedResponse(
+      handleDashboard(req, path, method, url, client, svc, user),
+      svc,
+      user,
+      path,
+      method,
+    );
   }
   if (path.startsWith("/class-daily-claims")) {
     return auditedResponse(

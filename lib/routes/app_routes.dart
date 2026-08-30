@@ -32,7 +32,6 @@ import 'package:schooldesk1/features/people/presentation/screens/admission_inqui
 class AppRoutes {
   static const String initial = '/';
   static const String landingPage = '/landing-page-screen';
-  static const String onboarding = '/onboarding-screen';
 
   // Loading
   static const String loginLoading = '/login-loading-screen';
@@ -185,7 +184,6 @@ class AppRoutes {
   static Map<String, WidgetBuilder> routes = {
     initial: (context) => const LandingPageScreen(),
     landingPage: (context) => const LandingPageScreen(),
-    onboarding: (context) => const OnboardingScreen(),
 
     // Principal
     loginLoading: (context) => const LoginLoadingScreen(),

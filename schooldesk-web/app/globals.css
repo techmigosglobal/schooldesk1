@@ -347,7 +347,7 @@ button .activity-spinner {
   animation: field-shake 0.4s ease;
 }
 
-/* ─── P2.4 Mobile Portal Navigation (2-column icon grid) ─────────────────── */
+/* ─── P2.4 Mobile Portal Navigation (compact icon grid) ──────────────────── */
 @media (max-width: 850px) {
   .ops-sidebar .side-nav {
     display: grid;
@@ -365,9 +365,11 @@ button .activity-spinner {
     padding: .52rem .3rem;
     font-size: .62rem;
     border-radius: 8px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+    line-height: 1.1;
+    text-align: center;
   }
   .ops-sidebar .side-nav button.active {
     background: rgba(255, 255, 255, 0.18);

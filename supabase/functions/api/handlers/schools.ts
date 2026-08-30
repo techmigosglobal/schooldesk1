@@ -35,99 +35,11 @@ export async function handleSchools(
   client: SupabaseClient | null,
   svc: SupabaseClient,
 ): Promise<Response> {
-  // POST /schools/setup — create school + admin user (no prior auth)
-  if (path === "/schools/setup" && method === "POST") {
-    const body = await req.json().catch(() => ({}));
-    const {
-      school_name,
-      admin_email,
-      admin_password,
-      admin_name,
-      admin_username,
-    } = body;
-    if (!school_name || !admin_email || !admin_password) {
-      return fail("school_name, admin_email, admin_password are required");
-    }
-
-    // 1. Create school
-    const { data: school, error: schoolErr } = await svc
-      .from("schools")
-      .insert({
-        name: school_name,
-        school_type: body.school_type ?? "school",
-        affiliation_board: body.affiliation_board ?? "",
-        email: body.email ?? admin_email,
-        phone: body.phone ?? "",
-        city: body.city ?? "",
-        state: body.state ?? "",
-      })
-      .select()
-      .single();
-    if (schoolErr) return fail(schoolErr.message);
-
-    // 2. Create Supabase Auth user
-    const { data: authUser, error: authErr } = await svc.auth.admin.createUser({
-      email: admin_email,
-      password: admin_password,
-      email_confirm: true,
-      app_metadata: {
-        school_id: school.id,
-        role_name: body.admin_role ?? "principal",
-      },
-    });
-    if (authErr) return fail(authErr.message);
-
-    // 3. Create internal user row
-    const { data: userRow, error: userErr } = await svc
-      .from("users")
-      .insert({
-        id: authUser.user!.id,
-        school_id: school.id,
-        username: admin_username ?? admin_email,
-        name: admin_name,
-        email: admin_email,
-        phone: body.admin_phone ?? "",
-        role_name: body.admin_role ?? "principal",
-        is_active: true,
-        is_verified: true,
-      })
-      .select()
-      .single();
-    if (userErr) return fail(userErr.message);
-
-    // 4. Insert username alias
-    if (admin_username) {
-      await svc.from("username_aliases").insert({
-        username: admin_username.toLowerCase(),
-        auth_user_id: authUser.user!.id,
-        school_id: school.id,
-      });
-    }
-
-    // 5. Sign in to get tokens
-    const { createClient } = await import(
-      "https://esm.sh/@supabase/supabase-js@2"
-    );
-    const anonClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-    );
-    const { data: session } = await anonClient.auth.signInWithPassword({
-      email: admin_email,
-      password: admin_password,
-    });
-
-    return ok({
-      school,
-      admin_user: userRow,
-      auth: {
-        token: session?.session?.access_token ?? "",
-        access_token: session?.session?.access_token ?? "",
-        refresh_token: session?.session?.refresh_token ?? "",
-        expires_at: session?.session?.expires_at ?? 0,
-        user: userRow,
-      },
-    });
+  // School provisioning is intentionally local-seed-only. Keep this guard in
+  // the handler while route removal rolls out so every direct invocation fails
+  // closed without parsing a body or creating any database/Auth records.
+  if (path === "/schools/setup") {
+    return fail("not found", 404);
   }
 
   if (!client) return fail("unauthorized", 401);

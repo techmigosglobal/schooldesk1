@@ -28,7 +28,7 @@ repair_candidates as (
     ranked_objects.student_id,
     coalesce(
       (select origin from storage_origin),
-      'https://ouvwogguttybmpgfgctc.supabase.co'
+      null
     ) || '/storage/v1/object/public/school-assets/' || ranked_objects.name as photo_url
   from ranked_objects
   where ranked_objects.row_number = 1

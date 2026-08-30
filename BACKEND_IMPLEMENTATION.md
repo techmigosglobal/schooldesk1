@@ -98,20 +98,26 @@ A typical authenticated Flutter API call flows as follows:
 ### Base URL
 
 ```
-https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api
+http://127.0.0.1:54321/functions/v1/api
 ```
 
 ### URL Resolution Rules (`EnvConfig.v1BaseUrlFrom`)
 
-- Accepts exact Supabase Edge Function API URLs
-- Accepts bare Supabase project URLs, auto-converted to `/functions/v1/api`
-- Non-Supabase backend URLs fall back to the default Supabase Edge URL to prevent accidentally attaching builds to retired backends
+- Accepts the Docker-local Supabase Edge Function API URL for development
+- Accepts a protected hosted project URL only during an explicitly approved promotion
+- Rejects unrecognized backend URLs instead of silently attaching to another project
+
+The tracked `Holiday calender - Telangana.pdf` is the source of truth for the
+2026–27 holiday calendar. Local seeds load all 24 rows into `public.holidays`;
+the two repair migrations reconcile existing academic years and must be
+reviewed and promoted separately after a hosted backup and migration-history
+check.
 
 ### Environment Configuration
 
 | Config Key | Default | Notes |
 |-----------|---------|-------|
-| `apiBaseUrl` | `https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api` | Pinned to Supabase Edge |
+| `apiBaseUrl` | `http://127.0.0.1:54321/functions/v1/api` | Docker-local default; hosted value is CI-secret supplied |
 | `apiTimeoutSeconds` | `30` | Connect + receive timeout |
 | `enableLogging` | `false` (prod) | Debug logging flag |
 
@@ -854,8 +860,8 @@ npx supabase db lint
 ### Health Check (Live)
 
 ```
-GET https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api/health
-GET https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api/ready
+GET http://127.0.0.1:54321/functions/v1/api/health
+GET http://127.0.0.1:54321/functions/v1/api/ready
 # Both must return 200 with success body
 ```
 

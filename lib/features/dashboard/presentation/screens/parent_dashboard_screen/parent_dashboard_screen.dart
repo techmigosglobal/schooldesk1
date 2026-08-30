@@ -101,12 +101,14 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
       final results = await Future.wait(futures);
       if (!mounted) return;
       final dashboard = Map<String, dynamic>.from(results[0] as Map);
-      final dashboardChildren =
-          (dashboard['children'] as List?)
-              ?.whereType<Map>()
-              .map((row) => Map<String, dynamic>.from(row))
-              .toList() ??
-          const <Map<String, dynamic>>[];
+      // The backend dashboard DTO is the single authorized family scope. Do
+      // not issue a second child-list request that could drift from the
+      // dashboard's tenant/parent checks.
+      final rawChildren = dashboard['children'];
+      final dashboardChildren = (rawChildren is List ? rawChildren : const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
       final selectedChildIndex = await ParentChildSelectionService.indexFor(
         dashboardChildren,
         fallback: _activeChildIndex,

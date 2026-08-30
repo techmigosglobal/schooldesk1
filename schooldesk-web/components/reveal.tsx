@@ -7,7 +7,7 @@ export function Reveal({ children, delay = 0, className = "" }: { children: Reac
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!(element instanceof Element)) return;
     const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } }, { threshold: 0.12 });
     observer.observe(element);
     return () => observer.disconnect();

@@ -182,6 +182,32 @@ void main() {
     expect(source, contains('"(cancelled,void,voided)"'));
   });
 
+  test('generic invoice creation requires one canonical fee source', () {
+    final source = File(
+      'supabase/functions/api/handlers/fees.ts',
+    ).readAsStringSync();
+    expect(source, contains('student_id and fee_structure_id are required'));
+    expect(
+      source,
+      contains('Day Care invoices must be created from a child plan'),
+    );
+    expect(source, contains('Fee structure not found'));
+    expect(source, contains('if (existing) return ok(existing);'));
+
+    final migration = File(
+      'supabase/migrations/20260830103000_require_canonical_fee_invoice_source.sql',
+    ).readAsStringSync();
+    expect(migration, contains('reject_structureless_fee_invoice'));
+    expect(migration, contains('fee_invoices_require_canonical_source'));
+    expect(
+      migration,
+      contains(
+        'fee invoice must reference fee_structure_id or daycare_plan_id',
+      ),
+    );
+    expect(migration, contains('before insert or update of fee_structure_id'));
+  });
+
   test(
     'invoice generation fills missing student components without duplicating paid or unpaid invoices',
     () {

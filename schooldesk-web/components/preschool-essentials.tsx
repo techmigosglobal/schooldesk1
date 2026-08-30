@@ -61,7 +61,8 @@ export function PreschoolEssentials({ site }: { site: PublicWebsite }) {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const observer = new IntersectionObserver((entries) => entries.forEach((entry) => { if (entry.isIntersecting) entry.target.classList.add("is-visible"); }), { threshold: .12 });
-    const nodes = document.querySelectorAll(".reveal-on-scroll"); nodes.forEach((node) => observer.observe(node));
+    const nodes = document.querySelectorAll(".reveal-on-scroll");
+    nodes.forEach((node) => { if (node instanceof Element) observer.observe(node); });
     return () => observer.disconnect();
   }, []);
   return <>

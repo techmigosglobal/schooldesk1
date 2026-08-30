@@ -291,38 +291,59 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                slots.isEmpty ? 'No Timetable Found' : 'Existing Timetable',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: _ink,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                slots.isEmpty
-                    ? 'Start with three rows and apply them to the selected days.'
-                    : '${slots.length} saved row${slots.length == 1 ? '' : 's'} across ${slots.map((slot) => _int(slot['day_of_week'])).toSet().length} day(s).',
-                style: const TextStyle(color: _muted),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : () => _openEditor(slots),
-                  icon: Icon(
-                    slots.isEmpty
-                        ? Icons.table_chart_outlined
-                        : Icons.edit_outlined,
-                  ),
-                  label: Text(
-                    slots.isEmpty
-                        ? 'Create Timetable'
-                        : 'View / Edit Timetable',
+              if (slots.isEmpty) ...[
+                const Text(
+                  'No Timetable Found',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: _ink,
                   ),
                 ),
-              ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Start with three rows and apply them to the selected days.',
+                  style: TextStyle(color: _muted),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : () => _openEditor(slots),
+                    icon: const Icon(Icons.table_chart_outlined),
+                    label: const Text('Create Timetable'),
+                  ),
+                ),
+              ] else ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Existing Timetable',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: _ink,
+                        ),
+                      ),
+                    ),
+                    IconButton.filledTonal(
+                      tooltip: 'Edit timetable',
+                      onPressed: _saving ? null : () => _openEditor(slots),
+                      icon: const Icon(Icons.edit_rounded, size: 19),
+                      color: _accent,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${slots.length} saved period${slots.length == 1 ? '' : 's'} across ${slots.map((slot) => _int(slot['day_of_week'])).toSet().length} day(s).',
+                  style: const TextStyle(color: _muted),
+                ),
+                const SizedBox(height: 14),
+                ..._existingTimetableSections(slots),
+              ],
             ],
           ),
         ),
@@ -346,6 +367,135 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         ),
       ],
     );
+  }
+
+  List<Widget> _existingTimetableSections(List<Map<String, dynamic>> slots) {
+    final byDay = <int, List<Map<String, dynamic>>>{};
+    for (final slot in slots) {
+      final day = _int(slot['day_of_week']);
+      if (day < 1 || day > 7) continue;
+      byDay.putIfAbsent(day, () => []).add(slot);
+    }
+    final days = byDay.keys.toList()..sort();
+    return [
+      for (var dayIndex = 0; dayIndex < days.length; dayIndex++) ...[
+        if (dayIndex > 0) const SizedBox(height: 12),
+        _existingDaySection(days[dayIndex], byDay[days[dayIndex]]!),
+      ],
+    ];
+  }
+
+  Widget _existingDaySection(int day, List<Map<String, dynamic>> slots) {
+    slots.sort(_slotSort);
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFE),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: const Color(0xFFE8F3FF),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Text(
+              day >= 1 && day <= _dayLabels.length
+                  ? _dayLabels[day - 1]
+                  : 'Day $day',
+              style: const TextStyle(
+                color: _ink,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          for (var index = 0; index < slots.length; index++)
+            _existingSlotRow(slots[index], index == slots.length - 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _existingSlotRow(Map<String, dynamic> slot, bool last) {
+    final subject = _subjectNameForSlot(slot);
+    final staff = _staffNameForSlot(slot);
+    return Container(
+      constraints: const BoxConstraints(minHeight: 62),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: last ? null : const Border(bottom: BorderSide(color: _border)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 96,
+            child: Text(
+              '${_text(slot['start_time'], fallback: '--:--')} – ${_text(slot['end_time'], fallback: '--:--')}',
+              style: const TextStyle(
+                color: _accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(width: 1, height: 34, color: _border),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  subject,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                if (staff.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    staff,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _muted, fontSize: 11),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _subjectNameForSlot(Map<String, dynamic> slot) {
+    final nested = _map(slot['subject']);
+    return _text(
+      slot['subject_name'] ?? nested['subject_name'] ?? nested['name'],
+      fallback: _text(slot['slot_type']).toLowerCase() == 'free'
+          ? 'Free Period'
+          : 'Subject not assigned',
+    );
+  }
+
+  String _staffNameForSlot(Map<String, dynamic> slot) {
+    final nested = _map(slot['staff']);
+    final name = _text(
+      slot['staff_name'] ?? nested['name'],
+      fallback: [
+        _text(nested['first_name']),
+        _text(nested['last_name']),
+      ].where((part) => part.isNotEmpty).join(' '),
+    );
+    return name.isEmpty ? '' : 'Teacher: $name';
   }
 
   Widget _buildEditor() {

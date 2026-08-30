@@ -3,6 +3,7 @@ library;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/core/errors/exceptions.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -1223,9 +1224,12 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
       );
     } on Object catch (error) {
       if (!mounted) return;
+      final message = error is ServerException && error.statusCode == 409
+          ? 'This child already has an active Day Care plan for this period. Open Day Care Plans to edit it.'
+          : 'Unable to create daycare plan: $error';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to create daycare plan: $error'),
+          content: Text(message),
           backgroundColor: context.appTheme.error,
         ),
       );

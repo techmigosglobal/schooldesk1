@@ -6,13 +6,23 @@ const csp = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: http: https:",
-  "media-src 'self' https://ouvwogguttybmpgfgctc.supabase.co",
+  // Local Docker Supabase is the only backend used by this development
+  // build. Production media origins are injected during the separately
+  // approved hosted promotion.
+  "media-src 'self' http://127.0.0.1:54321 http://localhost:54321",
   "connect-src 'self'",
   "worker-src 'self' blob:",
   "frame-src 'self' https://www.google.com https://www.google.co.in https://maps.google.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+].join("; ");
+
+const embeddedMapFallbackCsp = [
+  "default-src 'none'",
+  "style-src 'unsafe-inline'",
+  "frame-ancestors 'self'",
+  "base-uri 'none'",
 ].join("; ");
 
 const securityHeaders = [
@@ -32,6 +42,16 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: securityHeaders,
+      },
+      {
+        // The local map fallback is deliberately rendered in a same-origin
+        // iframe. Keep the default site unembeddable while allowing this
+        // narrowly scoped, static response to display its map link.
+        source: "/api/google-map-embed",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: embeddedMapFallbackCsp },
+        ],
       },
     ];
   },

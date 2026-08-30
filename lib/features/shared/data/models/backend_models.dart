@@ -19,13 +19,6 @@ class LoginRequest {
 
   static String _fallbackEmail(String value) {
     final identity = value.trim();
-    final lower = identity.toLowerCase();
-    if (lower == 'princ' || lower == 'principal') {
-      return 'principal@schooldesk.local';
-    }
-    if (lower == 'principal@schooldesk.com') {
-      return 'principal@schooldesk.local';
-    }
     if (_looksLikeEmail(identity)) {
       return identity;
     }
@@ -35,55 +28,6 @@ class LoginRequest {
   static bool _looksLikeEmail(String value) {
     return value.contains('@') && value.contains('.');
   }
-}
-
-class SchoolSetupRequest {
-  final String schoolName;
-  final String schoolType;
-  final String affiliationBoard;
-  final String email;
-  final String phone;
-  final String city;
-  final String state;
-  final String adminName;
-  final String adminUsername;
-  final String adminEmail;
-  final String adminPhone;
-  final String adminPassword;
-  final String adminRole;
-
-  const SchoolSetupRequest({
-    required this.schoolName,
-    required this.schoolType,
-    required this.affiliationBoard,
-    required this.email,
-    required this.phone,
-    required this.city,
-    required this.state,
-    required this.adminName,
-    required this.adminUsername,
-    required this.adminEmail,
-    required this.adminPhone,
-    required this.adminPassword,
-    required this.adminRole,
-  });
-
-  Map<String, dynamic> toJson() => {
-    'school_name': schoolName.trim(),
-    'school_type': schoolType.trim().isEmpty ? 'school' : schoolType.trim(),
-    if (affiliationBoard.trim().isNotEmpty)
-      'affiliation_board': affiliationBoard.trim(),
-    if (email.trim().isNotEmpty) 'email': email.trim(),
-    if (phone.trim().isNotEmpty) 'phone': phone.trim(),
-    if (city.trim().isNotEmpty) 'city': city.trim(),
-    if (state.trim().isNotEmpty) 'state': state.trim(),
-    'admin_name': adminName.trim(),
-    if (adminUsername.trim().isNotEmpty) 'admin_username': adminUsername.trim(),
-    'admin_email': adminEmail.trim(),
-    if (adminPhone.trim().isNotEmpty) 'admin_phone': adminPhone.trim(),
-    'admin_password': adminPassword,
-    'admin_role': adminRole,
-  };
 }
 
 class LoginResponse {

@@ -1,26 +1,14 @@
--- Configure the hosted notification processor scheduler.
--- The notification-processor function is deployed with verify_jwt=false, so
--- the cron job can invoke it without storing service-role material in Postgres.
-
-create extension if not exists pg_net with schema extensions;
-create extension if not exists pg_cron with schema extensions;
-
+-- Historical hosted scheduler migration.
+--
+-- The old version embedded a hosted project URL.  Local resets must never
+-- enqueue requests to a cloud project, so this migration only removes a job
+-- left by an older database.  A separately approved hosted deployment can
+-- create its scheduler with deployment-time settings.
 do $$
 begin
-  perform cron.unschedule('process-notification-events');
-exception
-  when others then
-    null;
+  if to_regnamespace('cron') is not null then
+    execute 'select cron.unschedule($1)' using 'process-notification-events';
+  end if;
+exception when others then
+  null;
 end $$;
-
-select cron.schedule(
-  'process-notification-events',
-  '*/2 * * * *',
-  $$
-  select net.http_post(
-    url := 'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/notification-processor',
-    headers := jsonb_build_object('Content-Type', 'application/json'),
-    body := jsonb_build_object('source', 'pg_cron')
-  );
-  $$
-);

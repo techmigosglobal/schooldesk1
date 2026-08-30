@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-const productionDefaults = {
+const localDefaults = {
   SCHOOLDESK_API_BASE_URL:
-    "https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api",
-  SCHOOLDESK_PUBLIC_SCHOOL_ID: "b3409710-78ac-446d-b8f5-45c58d72a004",
-  NEXT_PUBLIC_SITE_URL: "https://arishvillepreschool.com",
+    "http://127.0.0.1:54321/functions/v1/api",
+  SCHOOLDESK_PUBLIC_SCHOOL_ID: "00000000-0000-4000-8000-000000000001",
+  NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
 };
 
 /**
@@ -16,19 +16,14 @@ const productionDefaults = {
  */
 const envSchema = z.object({
   /** Base URL of the SchoolDesk backend API (no trailing slash). */
-  SCHOOLDESK_API_BASE_URL: z
-    .string()
-    .url(
-      "SCHOOLDESK_API_BASE_URL must be a valid URL (e.g. https://api.yourbackend.com)"
-    )
-    .default(productionDefaults.SCHOOLDESK_API_BASE_URL),
+  SCHOOLDESK_API_BASE_URL: z.string().url().optional(),
   /** Public website school UUID for fetching published branded content. */
   SCHOOLDESK_PUBLIC_SCHOOL_ID: z
     .string()
     .uuid()
-    .default(productionDefaults.SCHOOLDESK_PUBLIC_SCHOOL_ID),
+    .optional(),
   /** Canonical site URL used for metadata. */
-  NEXT_PUBLIC_SITE_URL: z.string().url().default(productionDefaults.NEXT_PUBLIC_SITE_URL),
+  NEXT_PUBLIC_SITE_URL: z.string().url().optional(),
   /** Secret for signing session cookies. Must be at least 32 characters. */
   SESSION_SECRET: z
     .string()
@@ -50,7 +45,30 @@ function parseEnv() {
       `\n[schooldesk-web] Missing or invalid environment variables:\n${issues}\n\nCheck your .env.local file or Vercel Project Settings.`
     );
   }
-  return result.data;
+  const parsed = result.data;
+  const requiredProduction = [
+    "SCHOOLDESK_API_BASE_URL",
+    "SCHOOLDESK_PUBLIC_SCHOOL_ID",
+    "NEXT_PUBLIC_SITE_URL",
+  ] as const;
+  if (parsed.NODE_ENV === "production") {
+    const missing = requiredProduction.filter((key) => !parsed[key]);
+    if (missing.length > 0) {
+      throw new Error(
+        `[schooldesk-web] Production configuration is missing: ${missing.join(", ")}. ` +
+          "Inject protected deployment variables; local defaults are never used for production.",
+      );
+    }
+  }
+  return {
+    ...parsed,
+    SCHOOLDESK_API_BASE_URL:
+      parsed.SCHOOLDESK_API_BASE_URL ?? localDefaults.SCHOOLDESK_API_BASE_URL,
+    SCHOOLDESK_PUBLIC_SCHOOL_ID:
+      parsed.SCHOOLDESK_PUBLIC_SCHOOL_ID ?? localDefaults.SCHOOLDESK_PUBLIC_SCHOOL_ID,
+    NEXT_PUBLIC_SITE_URL:
+      parsed.NEXT_PUBLIC_SITE_URL ?? localDefaults.NEXT_PUBLIC_SITE_URL,
+  };
 }
 
 export const env = parseEnv();
