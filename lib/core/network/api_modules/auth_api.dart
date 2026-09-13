@@ -243,6 +243,22 @@ extension BackendAuthApi on BackendApiClient {
         message: data['error'] ?? 'Failed to upload profile avatar',
       );
     } on DioException catch (e) {
+      final sync = offlineSync;
+      if (sync != null && OfflineSyncEngine.isTransportFailure(e)) {
+        final queued = await sync.enqueueFileUpload(
+          path: '/auth/profile/avatar',
+          fields: const {},
+          fieldName: 'avatar',
+          fileName: (fileName ?? '').trim().isEmpty
+              ? 'profile-avatar.jpg'
+              : fileName!.trim(),
+          mimeType: mimeType,
+          filePath: filePath,
+          fileBytes: fileBytes,
+          idempotencyKey: e.requestOptions.headers['Idempotency-Key']?.toString(),
+        );
+        if (queued != null) return queued.placeholder;
+      }
       throw _handleError(e);
     }
   }

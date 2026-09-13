@@ -1,6 +1,17 @@
 // handlers/fees.ts — categories, structures, invoices, payments, requests, config
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
+import {
+  signedPrivateFileUrl,
+  stableStorageReference,
+} from "../storage_helpers.ts";
+import {
+  deleteR2File,
+  legacyStorageWritesEnabled,
+  r2FileReference,
+  r2KeyFromValue,
+  uploadToR2,
+} from "../lib/r2_storage.ts";
 import { queueReportExport } from "./uploads.ts";
 
 function sid(u: User) {
@@ -19,6 +30,26 @@ function isAdminOrPrincipal(u: User) {
 function text(value: unknown, fallback = "") {
   const raw = `${value ?? ""}`.trim();
   return raw === "null" ? fallback : raw || fallback;
+}
+
+async function materializePaymentConfig(
+  svc: SupabaseClient,
+  value: Record<string, unknown> | null | undefined,
+): Promise<Record<string, unknown>> {
+  const config = { ...(value ?? {}) };
+  const rawQr = text(config.qr_image_url);
+  if (!rawQr) return config;
+  const signedQr = await signedPrivateFileUrl(
+    svc,
+    rawQr,
+    10 * 60,
+    "school-assets",
+  );
+  return {
+    ...config,
+    qr_image_url: signedQr || rawQr,
+    ...(r2KeyFromValue(rawQr) ? { qr_image_storage_ref: rawQr } : {}),
+  };
 }
 
 function money(value: unknown) {
@@ -351,6 +382,15 @@ function decorateInvoice(invoice: Record<string, unknown>) {
     ),
   };
 }
+
+const invoiceListSelect =
+  "id, school_id, student_id, invoice_number, academic_year_id, " +
+  "fee_structure_id, fee_type, billing_mode, billing_period, due_date, invoice_date, " +
+  "total_amount, discount_amount, net_amount, paid_amount, " +
+  "balance, status, created_at, updated_at, " +
+  "academic_year:academic_years(year_label, year), " +
+  "student:students(first_name, last_name, admission_number, student_id_number, " +
+  "current_section:sections(id, section_name, grade:grades(id, grade_name)))";
 
 function validateInvoicePaymentAmount(
   invoice: Record<string, unknown>,
@@ -854,14 +894,8 @@ async function attachPaymentRequestRelations(
 
   return await Promise.all(rows.map(async (row) => {
     const storedProof = text(row.proof_url);
-    const proofPath = storedProof.startsWith("payment-proofs/")
-      ? storedProof.slice("payment-proofs/".length)
-      : storedProof;
     const proofUrl = storedProof
-      ? (await svc.storage.from("payment-proofs").createSignedUrl(
-        proofPath,
-        10 * 60,
-      )).data?.signedUrl ?? ""
+      ? await signedPrivateFileUrl(svc, storedProof, 10 * 60, "payment-proofs")
       : "";
     return {
       ...row,
@@ -881,6 +915,17 @@ async function uploadPrivatePaymentProof(
   file: File,
 ) {
   const path = `${school}/${requestId}/${Date.now()}-${file.name}`;
+  const r2Upload = await uploadToR2(
+    `private/payment-proofs/${path}`,
+    file,
+    file.type || "application/octet-stream",
+  );
+  if (r2Upload) return r2FileReference(r2Upload.key);
+
+  if (!legacyStorageWritesEnabled()) {
+    throw new Error("R2 storage is unavailable; legacy storage writes are disabled");
+  }
+
   const { error } = await svc.storage.from("payment-proofs").upload(
     path,
     file,
@@ -896,6 +941,7 @@ async function uploadPrivatePaymentProof(
 
 function paymentProofStoragePath(value: unknown) {
   const raw = text(value);
+  if (r2KeyFromValue(raw)) return "";
   return raw.startsWith("payment-proofs/")
     ? raw.slice("payment-proofs/".length)
     : raw;
@@ -905,6 +951,10 @@ async function removePrivatePaymentProof(
   svc: SupabaseClient,
   proofUrl: unknown,
 ) {
+  if (r2KeyFromValue(proofUrl)) {
+    await deleteR2File(proofUrl);
+    return;
+  }
   const proofPath = paymentProofStoragePath(proofUrl);
   if (!proofPath) return;
   await svc.storage.from("payment-proofs").remove([proofPath]);
@@ -1588,6 +1638,7 @@ export async function handleFees(
     if (!seg && method === "GET") {
       let q = svc.from("fee_structures").select(
         "*, grade:grades(*), section:sections(*)",
+        { count: "exact" },
       ).eq("school_id", school);
       if (url.searchParams.get("academic_year_id")) {
         q = q.eq("academic_year_id", url.searchParams.get("academic_year_id")!);
@@ -1598,32 +1649,38 @@ export async function handleFees(
       if (url.searchParams.get("section_id")) {
         q = q.eq("section_id", url.searchParams.get("section_id")!);
       }
-      const { data, error } = await q;
+      const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+      const pageSize = Math.min(
+        100,
+        Math.max(1, Number(url.searchParams.get("page_size") ?? "20") || 20),
+      );
+      const { data, error, count } = await q
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range((page - 1) * pageSize, page * pageSize - 1);
       if (error) return fail(error.message);
       try {
         const rows = (data ?? []) as Record<string, unknown>[];
-        const [categorized, withStats] = await Promise.all([
-          attachFeeCategories(svc, school, rows),
-          attachStructureAssignmentStats(svc, school, rows),
-        ]);
-        const statsById = new Map<string, Record<string, unknown>>(
-          withStats.map(
-            (row) => [text(row.id), row] as [string, Record<string, unknown>],
-          ),
-        );
+        const categorized = await attachFeeCategories(svc, school, rows);
         const includeDaycare = url.searchParams.get("include_daycare") ===
           "true";
         const responseRows = (categorized as Record<string, unknown>[]).map((
           row,
         ) => ({
           ...row,
-          ...(statsById.get(text(row.id)) ?? {}),
         })).filter((row) =>
           includeDaycare ||
           normalizeFeeType(row.fee_type ?? row.category_name) !==
             "daycare_hourly"
         );
-        return ok(responseRows);
+        return cors({
+          success: true,
+          data: responseRows,
+          total: count ?? 0,
+          page,
+          page_size: pageSize,
+          has_more: page * pageSize < (count ?? 0),
+        });
       } catch (error) {
         return fail(
           error instanceof Error
@@ -2047,6 +2104,17 @@ export async function handleFees(
     }
   }
 
+  if (feesPath === "/summary" && method === "GET") {
+    if (!isAdminOrPrincipal(user)) return fail("admin or principal access required", 403);
+    const academicYearId = text(url.searchParams.get("academic_year_id"));
+    const { data, error } = await svc.rpc("fee_dashboard_summary", {
+      p_school_id: school,
+      p_academic_year_id: academicYearId || null,
+    });
+    if (error) return fail(error.message);
+    return cors({ success: true, data: record(data) });
+  }
+
   if (
     path.startsWith("/fee-invoices") || path === "/invoices" ||
     feesPath.startsWith("/invoices")
@@ -2059,16 +2127,19 @@ export async function handleFees(
     const seg = parts[0];
 
     if (!seg && method === "GET") {
-      const page = parseInt(url.searchParams.get("page") ?? "1");
-      const requestedSize = parseInt(url.searchParams.get("page_size") ?? "50");
+      const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+      const requestedSize = parseInt(url.searchParams.get("page_size") ?? "20");
       const size = Math.min(
-        Math.max(Number.isFinite(requestedSize) ? requestedSize : 50, 1),
-        200,
+        Math.max(Number.isFinite(requestedSize) ? requestedSize : 20, 1),
+        100,
       );
       let q = svc.from("fee_invoices").select(
-        "*, academic_year:academic_years(year_label, year, start_date, end_date), student:students(first_name, last_name, admission_number, student_id_number, current_section:sections(id, section_name, grade:grades(id, grade_name))), fee_invoice_items(*), payments(*)",
+        invoiceListSelect,
         { count: "exact" },
-      ).eq("school_id", school).range((page - 1) * size, page * size - 1);
+      ).eq("school_id", school)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range((page - 1) * size, page * size - 1);
       if (url.searchParams.get("student_id")) {
         q = q.eq("student_id", url.searchParams.get("student_id")!);
       }
@@ -2078,6 +2149,51 @@ export async function handleFees(
       if (url.searchParams.get("academic_year_id")) {
         q = q.eq("academic_year_id", url.searchParams.get("academic_year_id")!);
       }
+      const search = text(url.searchParams.get("search"));
+      const gradeId = text(url.searchParams.get("grade_id"));
+      const sectionId = text(url.searchParams.get("section_id"));
+      let scopedStudentIds: string[] | null = null;
+      if (gradeId || sectionId || search) {
+        let studentQuery = svc.from("students").select("id")
+          .eq("school_id", school);
+        if (sectionId) studentQuery = studentQuery.eq("current_section_id", sectionId);
+        if (gradeId) {
+          const { data: sections, error: sectionsError } = await svc.from("sections")
+            .select("id").eq("school_id", school).eq("grade_id", gradeId);
+          if (sectionsError) return fail(sectionsError.message);
+          const sectionIds = (sections ?? []).map((row) => text(row.id)).filter(Boolean);
+          if (sectionIds.length === 0) {
+            return cors({ success: true, data: [], total: 0, page, page_size: size, has_more: false });
+          }
+          studentQuery = studentQuery.in("current_section_id", sectionIds);
+        }
+        if (search) {
+          const safeSearch = search.replaceAll(/[%,()]/g, " ");
+          studentQuery = studentQuery.or(
+            `first_name.ilike.%${safeSearch}%,last_name.ilike.%${safeSearch}%,admission_number.ilike.%${safeSearch}%,student_id_number.ilike.%${safeSearch}%`,
+          );
+        }
+        const { data: students, error: studentsError } = await studentQuery;
+        if (studentsError) return fail(studentsError.message);
+        scopedStudentIds = (students ?? []).map((row) => text(row.id)).filter(Boolean);
+        if (scopedStudentIds.length === 0) {
+          return cors({ success: true, data: [], total: 0, page, page_size: size, has_more: false });
+        }
+        q = q.in("student_id", scopedStudentIds);
+      }
+      const dueFilter = text(url.searchParams.get("due")).toLowerCase();
+      const overdueFilter = text(url.searchParams.get("overdue")).toLowerCase();
+      const outstandingFilter = text(url.searchParams.get("outstanding")).toLowerCase();
+      const today = new Date().toISOString().slice(0, 10);
+      if (["true", "1", "yes"].includes(outstandingFilter)) {
+        q = q.gt("balance", 0);
+      }
+      if (["true", "1", "yes"].includes(dueFilter) || ["true", "1", "yes"].includes(overdueFilter)) {
+        q = q.gt("balance", 0).lte("due_date", today);
+      }
+      if (["true", "1", "yes"].includes(overdueFilter)) {
+        q = q.lt("due_date", today);
+      }
       // Cancelled/void invoices remain available for explicit audit reads,
       // but must not enter normal operational fee lists or payment selectors.
       if (url.searchParams.get("include_cancelled") !== "true") {
@@ -2085,28 +2201,15 @@ export async function handleFees(
       }
       const { data, error, count } = await q;
       if (error) return fail(error.message);
-      let invoicesWithReceipts: Record<string, unknown>[];
-      try {
-        invoicesWithReceipts = await attachInvoicePaymentReceipts(
-          svc,
-          school,
-          (data ?? []) as Record<string, unknown>[],
-        );
-      } catch (receiptError) {
-        return fail(
-          receiptError instanceof Error
-            ? receiptError.message
-            : "failed to load payment receipts",
-        );
-      }
       return cors({
         success: true,
-        data: invoicesWithReceipts.map((invoice: Record<string, unknown>) =>
+        data: (data as unknown as Record<string, unknown>[] ?? []).map((invoice: Record<string, unknown>) =>
           decorateInvoice(invoice)
         ),
         total: count ?? 0,
         page,
         page_size: size,
+        has_more: page * size < (count ?? 0),
       });
     }
 
@@ -2560,12 +2663,19 @@ export async function handleFees(
     const seg = normalized.split("/").filter(Boolean)[0];
 
     if (!seg && method === "GET") {
-      const page = parseInt(url.searchParams.get("page") ?? "1");
-      const size = parseInt(url.searchParams.get("page_size") ?? "50");
+      const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+      const requestedSize = parseInt(url.searchParams.get("page_size") ?? "20");
+      const size = Math.min(
+        Math.max(Number.isFinite(requestedSize) ? requestedSize : 20, 1),
+        100,
+      );
       let q = svc.from("payments").select(
-        "*, student:students(first_name, last_name), invoice:fee_invoices(*), fee_receipts(*)",
+        "id, school_id, student_id, invoice_id, amount, payment_method, reference_number, paid_at, status, created_at, student:students(first_name, last_name, admission_number, student_id_number), invoice:fee_invoices(id, invoice_number, student_id, academic_year_id, net_amount, paid_amount, balance)",
         { count: "exact" },
-      ).eq("school_id", school).range((page - 1) * size, page * size - 1);
+      ).eq("school_id", school)
+        .order("paid_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range((page - 1) * size, page * size - 1);
       if (url.searchParams.get("student_id")) {
         q = q.eq("student_id", url.searchParams.get("student_id")!);
       }
@@ -2583,6 +2693,7 @@ export async function handleFees(
         total: count ?? 0,
         page,
         page_size: size,
+        has_more: page * size < (count ?? 0),
       });
     }
 
@@ -3202,13 +3313,15 @@ export async function handleFees(
         1,
       );
       const requestedSize = parseInt(
-        url.searchParams.get("page_size") ?? "100",
+        url.searchParams.get("page_size") ?? "20",
       );
       const size = Math.min(
-        Math.max(Number.isFinite(requestedSize) ? requestedSize : 100, 1),
-        200,
+        Math.max(Number.isFinite(requestedSize) ? requestedSize : 20, 1),
+        100,
       );
-      let q = svc.from("parent_payment_requests").select("*").eq(
+      let q = svc.from("parent_payment_requests").select("*", {
+        count: "exact",
+      }).eq(
         "school_id",
         school,
       );
@@ -3220,13 +3333,27 @@ export async function handleFees(
         q = q.eq("invoice_id", url.searchParams.get("invoice_id")!);
       }
       if (url.searchParams.get("status")) {
-        q = q.eq("status", url.searchParams.get("status")!);
+        const requestedStatus = url.searchParams.get("status")!.toLowerCase();
+        q = requestedStatus === "pending"
+          ? q.in("status", [...reviewablePaymentRequestStatuses])
+          : q.eq("status", requestedStatus);
       }
-      const { data, error } = await q.order("created_at", { ascending: false })
-        .range((page - 1) * size, page * size - 1);
+      const { data, error, count } = await q.order("created_at", {
+        ascending: false,
+      }).order("id", { ascending: false }).range(
+        (page - 1) * size,
+        page * size - 1,
+      );
       if (error) return fail(error.message);
       try {
-        return ok(await attachPaymentRequestRelations(svc, school, data ?? []));
+        return cors({
+          success: true,
+          data: await attachPaymentRequestRelations(svc, school, data ?? []),
+          total: count ?? 0,
+          page,
+          page_size: size,
+          has_more: page * size < (count ?? 0),
+        });
       } catch (error) {
         return fail(
           error instanceof Error
@@ -3596,7 +3723,8 @@ export async function handleFees(
         payment_id: paymentId ?? existing.payment_id ?? null,
         receipt_id: receiptId ?? existing.receipt_id ?? null,
         updated_at: new Date().toISOString(),
-      }).eq("id", seg).eq("school_id", school).select().single();
+      }).eq("id", seg).eq("school_id", school).eq("status", existing.status)
+        .select().single();
       if (error) return fail(error.message);
       // Notify the parent about the approval/rejection decision
       try {
@@ -3688,7 +3816,10 @@ export async function handleFees(
         school,
         text(url.searchParams.get("invoice_id")),
       );
-      return ok((data?.data as Record<string, unknown> | null) ?? {});
+      return ok(await materializePaymentConfig(
+        svc,
+        (data?.data as Record<string, unknown> | null) ?? {},
+      ));
     } catch (error) {
       return fail(
         error instanceof Error
@@ -3706,11 +3837,15 @@ export async function handleFees(
         "payee_name",
         "merchant_code",
         "qr_note",
-        "qr_image_url",
+      "qr_image_url",
         "upi_enabled",
       ]
     ) {
-      if (Object.hasOwn(body, key)) payload[key] = body[key];
+      if (Object.hasOwn(body, key)) {
+        payload[key] = key === "qr_image_url"
+          ? stableStorageReference(body[key])
+          : body[key];
+      }
     }
     try {
       const data = await savePaymentConfigRecord(
@@ -3719,7 +3854,10 @@ export async function handleFees(
         configRecordId("school"),
         payload,
       );
-      return ok((data?.data as Record<string, unknown> | null) ?? payload);
+      return ok(await materializePaymentConfig(
+        svc,
+        (data?.data as Record<string, unknown> | null) ?? payload,
+      ));
     } catch (error) {
       return fail(
         error instanceof Error
@@ -3734,21 +3872,34 @@ export async function handleFees(
     const file = form?.get("file") as File | null;
     if (!file) return fail("file required");
     const filePath = `payment-config/${school}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await svc.storage.from("school-assets")
-      .upload(filePath, file, { upsert: true });
-    if (uploadError) return fail(uploadError.message);
-    const publicUrl =
-      svc.storage.from("school-assets").getPublicUrl(filePath).data.publicUrl;
+    const contentType = file.type || "application/octet-stream";
+    const r2Upload = await uploadToR2(`private/${filePath}`, file, contentType);
+    let storedQr = r2Upload ? r2FileReference(r2Upload.key) : filePath;
+    if (!r2Upload) {
+      if (!legacyStorageWritesEnabled()) {
+        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+      }
+      const { error: uploadError } = await svc.storage.from("school-assets")
+        .upload(filePath, file, { upsert: true, contentType });
+      if (uploadError) return fail(uploadError.message);
+    }
     try {
       const data = await savePaymentConfigRecord(
         svc,
         school,
         configRecordId("school"),
-        { scope: "school", qr_image_url: publicUrl },
+        { scope: "school", qr_image_url: storedQr },
+      );
+      const config = await materializePaymentConfig(
+        svc,
+        (data?.data as Record<string, unknown> | null) ?? {
+          scope: "school",
+          qr_image_url: storedQr,
+        },
       );
       return ok({
-        ...((data?.data as Record<string, unknown> | null) ?? {}),
-        qr_image_url: publicUrl,
+        ...config,
+        id: data?.id,
       });
     } catch (error) {
       return fail(
@@ -3765,10 +3916,13 @@ export async function handleFees(
       ascending: false,
     });
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row: Record<string, unknown>) => ({
+    return ok(await Promise.all((data ?? []).map(async (row: Record<string, unknown>) => ({
       id: row.id,
-      ...((row.data as Record<string, unknown> | null) ?? {}),
-    })));
+      ...await materializePaymentConfig(
+        svc,
+        (row.data as Record<string, unknown> | null) ?? {},
+      ),
+    }))));
   }
 
   if (feesPath === "/payment-configs" && method === "POST") {
@@ -3783,7 +3937,7 @@ export async function handleFees(
       payee_name: body.payee_name ?? "",
       merchant_code: body.merchant_code ?? "",
       qr_note: body.qr_note ?? "",
-      qr_image_url: body.qr_image_url ?? "",
+      qr_image_url: stableStorageReference(body.qr_image_url),
       upi_enabled: body.upi_enabled ?? true,
     };
     try {
@@ -3796,7 +3950,10 @@ export async function handleFees(
       );
       return ok({
         id: data?.id,
-        ...((data?.data as Record<string, unknown> | null) ?? payload),
+        ...await materializePaymentConfig(
+          svc,
+          (data?.data as Record<string, unknown> | null) ?? payload,
+        ),
       });
     } catch (error) {
       return fail(
@@ -3836,7 +3993,11 @@ export async function handleFees(
         "upi_enabled",
       ]
     ) {
-      if (Object.hasOwn(body, key)) payload[key] = body[key];
+      if (Object.hasOwn(body, key)) {
+        payload[key] = key === "qr_image_url"
+          ? stableStorageReference(body[key])
+          : body[key];
+      }
     }
     const { data, error } = await svc.from("frontend_records").update({
       data: {
@@ -3873,23 +4034,34 @@ export async function handleFees(
     if (!file) return fail("file required");
     const filePath =
       `payment-config/${school}/${id}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await svc.storage.from("school-assets")
-      .upload(filePath, file, { upsert: true });
-    if (uploadError) return fail(uploadError.message);
-    const publicUrl =
-      svc.storage.from("school-assets").getPublicUrl(filePath).data.publicUrl;
+    const contentType = file.type || "application/octet-stream";
+    const r2Upload = await uploadToR2(`private/${filePath}`, file, contentType);
+    let storedQr = r2Upload ? r2FileReference(r2Upload.key) : filePath;
+    if (!r2Upload) {
+      if (!legacyStorageWritesEnabled()) {
+        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+      }
+      const { error: uploadError } = await svc.storage.from("school-assets")
+        .upload(filePath, file, { upsert: true, contentType });
+      if (uploadError) return fail(uploadError.message);
+    }
     const { data, error } = await svc.from("frontend_records").update({
       data: {
         ...((existing.data as Record<string, unknown> | null) ?? {}),
-        qr_image_url: publicUrl,
+        qr_image_url: storedQr,
       },
       updated_at: new Date().toISOString(),
     }).eq("id", id).eq("school_id", school).select().single();
     if (error) return fail(error.message);
+    const config = await materializePaymentConfig(
+      svc,
+      (data?.data as Record<string, unknown> | null) ?? {
+        qr_image_url: storedQr,
+      },
+    );
     return ok({
       id: data?.id,
-      ...((data?.data as Record<string, unknown> | null) ?? {}),
-      qr_image_url: publicUrl,
+      ...config,
     });
   }
 
@@ -3898,20 +4070,47 @@ export async function handleFees(
       Boolean,
     )[0];
     if (!seg && method === "GET") {
+      const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1") || 1);
+      const requestedSize = parseInt(url.searchParams.get("page_size") ?? "20");
+      const size = Math.min(Math.max(Number.isFinite(requestedSize) ? requestedSize : 20, 1), 100);
       let query = svc.from("fee_concessions").select(
-        "*, student:students(first_name, last_name, admission_number, student_id_number), invoice:fee_invoices(invoice_number, total_amount, net_amount, paid_amount, balance), fee_structure:fee_structures(id, fee_category_id, category_id)",
-      ).eq("school_id", school);
+        "id, school_id, student_id, invoice_id, fee_structure_id, amount, percentage, reason, status, approved_by, created_at, updated_at, student:students(first_name, last_name, admission_number, student_id_number), invoice:fee_invoices(invoice_number, total_amount, net_amount, paid_amount, balance), fee_structure:fee_structures(id, fee_category_id, category_id)",
+        { count: "exact" },
+      ).eq("school_id", school).order("created_at", { ascending: false })
+        .order("id", { ascending: false }).range((page - 1) * size, page * size - 1);
       const studentId = text(url.searchParams.get("student_id"));
       const invoiceId = text(url.searchParams.get("invoice_id"));
       const status = text(url.searchParams.get("status")).toLowerCase();
+      const search = text(url.searchParams.get("q")).toLowerCase();
       if (studentId) query = query.eq("student_id", studentId);
       if (invoiceId) query = query.eq("invoice_id", invoiceId);
       if (["pending", "approved", "rejected"].includes(status)) {
         query = query.eq("status", status);
       }
-      const { data, error } = await query.order("created_at", {
-        ascending: false,
-      });
+      if (search) {
+        const safeSearch = search.replace(/[%,()]/g, "");
+        const { data: matchingStudents, error: studentSearchError } = await svc
+          .from("students")
+          .select("id")
+          .eq("school_id", school)
+          .or(
+            `first_name.ilike.%${safeSearch}%,last_name.ilike.%${safeSearch}%,admission_number.ilike.%${safeSearch}%,student_id_number.ilike.%${safeSearch}%`,
+          );
+        if (studentSearchError) return fail(studentSearchError.message);
+        const matchingIds = (matchingStudents ?? []).map((row) => text(row.id));
+        if (matchingIds.length === 0) {
+          return cors({
+            success: true,
+            data: [],
+            total: 0,
+            page,
+            page_size: size,
+            has_more: false,
+          });
+        }
+        query = query.in("student_id", matchingIds);
+      }
+      const { data, error, count } = await query;
       if (error) return fail(error.message);
 
       // fee_structures keeps both category_id (legacy) and fee_category_id
@@ -3942,7 +4141,6 @@ export async function handleFees(
         hydratedStructures.map((structure) => [text(structure.id), structure]),
       );
 
-      const search = text(url.searchParams.get("q")).toLowerCase();
       const normalized = rows.map((row: Record<string, unknown>) => {
         const student = (row.student as Record<string, unknown> | null) ?? {};
         const rawStructure =
@@ -3965,14 +4163,19 @@ export async function handleFees(
           fee_item_name: text(category.name, "Fee"),
         };
       });
-      return ok(
-        search
+      return cors({
+        success: true,
+        data: search
           ? normalized.filter((row) =>
             `${row.student_name} ${row.student_identifier} ${row.fee_item_name}`
               .toLowerCase().includes(search)
           )
           : normalized,
-      );
+        total: count ?? 0,
+        page,
+        page_size: size,
+        has_more: page * size < (count ?? 0),
+      });
     }
     if (!seg && method === "POST") {
       const invoiceId = text(body.invoice_id);
@@ -4063,7 +4266,8 @@ export async function handleFees(
         }
       }
       const { data, error } = await svc.from("fee_concessions").update(updates)
-        .eq("id", seg).eq("school_id", school).select().single();
+        .eq("id", seg).eq("school_id", school)
+        .eq("status", text(current.status, "pending")).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }

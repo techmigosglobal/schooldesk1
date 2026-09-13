@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
+import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_preview.dart';
 
 /// Desktop body for the parent portal — true two-column layout.
 ///
@@ -29,6 +30,11 @@ class ParentDashboardDesktopBody extends StatelessWidget {
 
   Map<String, dynamic> get _activeChild =>
       children.isNotEmpty ? children[activeChildIndex] : const {};
+
+  List<Map<String, dynamic>> get _feedPosts => eventPosts
+      .whereType<Map>()
+      .map((row) => Map<String, dynamic>.from(row))
+      .toList();
 
   @override
   Widget build(BuildContext context) {
@@ -62,9 +68,9 @@ class ParentDashboardDesktopBody extends StatelessWidget {
                     ),
                     SizedBox(height: tokens.spacing.lg),
                   ],
-                  _SchoolFeedDesktopPanel(
-                    eventPosts: eventPosts,
-                    parentColor: parentColor,
+                  SchoolFeedPreview(
+                    posts: _feedPosts,
+                    accentColor: parentColor,
                   ),
                   SizedBox(height: tokens.spacing.lg),
                   const TodaysHighlightsCard(role: 'parent'),
@@ -80,9 +86,9 @@ class ParentDashboardDesktopBody extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _SchoolFeedDesktopPanel(
-                          eventPosts: eventPosts,
-                          parentColor: parentColor,
+                        SchoolFeedPreview(
+                          posts: _feedPosts,
+                          accentColor: parentColor,
                         ),
                         SizedBox(height: tokens.spacing.lg),
                         const TodaysHighlightsCard(role: 'parent'),
@@ -130,228 +136,6 @@ class ParentDashboardDesktopBody extends StatelessWidget {
           child: childContent,
         );
       },
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// School feed desktop — horizontal scroll of cards
-// ---------------------------------------------------------------------------
-
-class _SchoolFeedDesktopPanel extends StatelessWidget {
-  final List<dynamic> eventPosts;
-  final Color parentColor;
-
-  const _SchoolFeedDesktopPanel({
-    required this.eventPosts,
-    required this.parentColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-
-    return Container(
-      padding: EdgeInsets.all(tokens.spacing.md),
-      decoration: BoxDecoration(
-        color: tokens.panel,
-        borderRadius: BorderRadius.circular(tokens.radius.card),
-        border: Border.all(color: tokens.panelBorder),
-        boxShadow: tokens.elevation.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _PanelHeader(
-            title: 'School Feed',
-            icon: Icons.campaign_rounded,
-            accentColor: parentColor,
-            action: TextButton.icon(
-              onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.parentDashboard),
-              icon: Icon(
-                Icons.open_in_new_rounded,
-                size: 14,
-                color: parentColor,
-              ),
-              label: Text(
-                'See All',
-                style: TextStyle(
-                  color: parentColor,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ),
-          SizedBox(height: tokens.spacing.md),
-          if (eventPosts.isEmpty)
-            Container(
-              height: 120,
-              decoration: BoxDecoration(
-                color: parentColor.withAlpha(12),
-                borderRadius: BorderRadius.circular(tokens.radius.control),
-                border: Border.all(color: parentColor.withAlpha(40)),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.campaign_outlined,
-                      size: 28,
-                      color: parentColor.withAlpha(120),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No posts yet',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: tokens.textMuted,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            SizedBox(
-              height: 200,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: eventPosts.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final post = eventPosts[index] is Map<String, dynamic>
-                      ? eventPosts[index] as Map<String, dynamic>
-                      : <String, dynamic>{};
-                  return _FeedCard(post: post, accentColor: parentColor);
-                },
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeedCard extends StatefulWidget {
-  final Map<String, dynamic> post;
-  final Color accentColor;
-
-  const _FeedCard({required this.post, required this.accentColor});
-
-  @override
-  State<_FeedCard> createState() => _FeedCardState();
-}
-
-class _FeedCardState extends State<_FeedCard> {
-  bool _hovering = false;
-
-  String _text(Object? val) => '${val ?? ''}'.trim();
-
-  static const List<List<Color>> _gradients = [
-    [Color(0xFF667EEA), Color(0xFF764BA2)],
-    [Color(0xFFF093FB), Color(0xFFF5576C)],
-    [Color(0xFF4FACFE), Color(0xFF00F2FE)],
-    [Color(0xFF43E97B), Color(0xFF38F9D7)],
-    [Color(0xFFFA709A), Color(0xFFFEE140)],
-    [Color(0xFFA8EDEA), Color(0xFFFED6E3)],
-  ];
-
-  List<Color> _gradient(String title) {
-    final idx = title.isEmpty ? 0 : title.codeUnitAt(0) % _gradients.length;
-    return _gradients[idx];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final title = _text(widget.post['title']).isEmpty
-        ? 'School Post'
-        : _text(widget.post['title']);
-    final description = _text(widget.post['description']);
-    final category = _text(widget.post['category']);
-    final gradient = _gradient(title);
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        width: 280,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: gradient,
-          ),
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: _hovering
-              ? [
-                  BoxShadow(
-                    color: gradient.first.withOpacity(0.4),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-              : [],
-        ),
-        transform: Matrix4.identity()..translate(0.0, _hovering ? -4.0 : 0.0),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (category.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    category.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              const Spacer(),
-              Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  height: 1.3,
-                ),
-              ),
-              if (description.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -995,13 +779,11 @@ class _PanelHeader extends StatelessWidget {
   final String title;
   final IconData icon;
   final Color accentColor;
-  final Widget? action;
 
   const _PanelHeader({
     required this.title,
     required this.icon,
     required this.accentColor,
-    this.action,
   });
 
   @override
@@ -1028,7 +810,6 @@ class _PanelHeader extends StatelessWidget {
             ),
           ),
         ),
-        if (action != null) action!,
       ],
     );
   }

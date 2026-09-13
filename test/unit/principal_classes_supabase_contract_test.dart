@@ -11,7 +11,7 @@ void main() {
 
     expect(screen, contains('getPrincipalClassesOverview(forceRefresh: true)'));
     expect(screen, contains('getAcademicYears(forceRefresh: true)'));
-    expect(screen, contains("api.getStaff(page: 1, pageSize: 500"));
+    expect(screen, contains("api.getStaff(page: 1, pageSize: 100"));
     expect(screen, contains("api.getRawList('/subjects'"));
     expect(screen, contains("api.getRawList(\n          '/grade-subjects'"));
     expect(screen, contains("api.getRawList(\n          '/staff-subjects'"));

@@ -326,6 +326,35 @@ List<Map<String, dynamic>> normalizePayments(Map<String, dynamic> invoice) {
   }).toList();
 }
 
+Map<String, dynamic> normalizePaymentRow(Map<String, dynamic> row) {
+  final invoice = _mapValue(row['invoice']);
+  final student = _mapValue(row['student']);
+  final invoiceId = _textValue(row['invoice_id'] ?? invoice['id']);
+  final normalizedStudent = _studentName(student);
+  return {
+    ...row,
+    'name': normalizedStudent,
+    'class': _textValue(row['class'], fallback: 'Class pending'),
+    'student_id': _textValue(row['student_id'] ?? student['id']),
+    'invoice_id': invoiceId,
+    'amount': _numValue(row['amount_paid'] ?? row['amount']),
+    'mode': _textValue(
+      row['payment_method'] ?? row['payment_mode'] ?? row['mode'],
+    ),
+    'date': row['payment_date'] ?? row['paid_at'] ?? row['created_at'],
+    'receipt': _textValue(
+      row['display_receipt_number'] ?? row['receipt_number'] ?? row['receipt'],
+    ),
+    'receipt_number': _textValue(row['receipt_number']),
+    'display_receipt_number': _textValue(row['display_receipt_number']),
+    'status': _textValue(row['status'], fallback: 'completed'),
+    'transaction_id': _textValue(
+      row['transaction_id'] ?? row['reference_number'],
+      fallback: 'N/A',
+    ),
+  };
+}
+
 // ── Common type-safe helpers ─────────────────────────────────────────────────
 
 Map<String, dynamic> _mapValue(Object? value) =>

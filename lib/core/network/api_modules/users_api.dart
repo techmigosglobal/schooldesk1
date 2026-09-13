@@ -18,8 +18,9 @@ extension BackendUsersApi on BackendApiClient {
   Future<PaginatedList<UserAccountModel>> getUsers({
     String? role,
     String? status,
+    String? search,
     int page = 1,
-    int pageSize = 50,
+    int pageSize = 20,
   }) async {
     try {
       final queryParams = <String, dynamic>{
@@ -31,6 +32,9 @@ extension BackendUsersApi on BackendApiClient {
       }
       if (status != null && status.trim().isNotEmpty) {
         queryParams['status'] = status.trim();
+      }
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
       }
 
       final response = await _get('/users', queryParameters: queryParams);
@@ -46,6 +50,47 @@ extension BackendUsersApi on BackendApiClient {
         );
       }
       throw ServerException(message: data['error'] ?? 'Failed to get users');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> getGuardianDirectory({
+    String? search,
+    String? status,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+      };
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
+      if (status != null && status.trim().isNotEmpty) {
+        queryParams['status'] = status.trim();
+      }
+      final response = await _get(
+        '/guardians/directory',
+        queryParameters: queryParams,
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return PaginatedList<Map<String, dynamic>>(
+          data: (data['data'] as List? ?? const [])
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList(growable: false),
+          total: _intValue(data['total']),
+          page: _intValue(data['page'], fallback: page),
+          pageSize: _intValue(data['page_size'], fallback: pageSize),
+        );
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to get guardian directory',
+      );
     } on DioException catch (e) {
       throw _handleError(e);
     }

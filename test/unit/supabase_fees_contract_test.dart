@@ -182,6 +182,25 @@ void main() {
     expect(source, contains('"(cancelled,void,voided)"'));
   });
 
+  test('interactive fee lists use lightweight stable pagination metadata', () {
+    final source = File(
+      'supabase/functions/api/handlers/fees.ts',
+    ).readAsStringSync();
+    final feesApi = File(
+      'lib/core/network/api_modules/fees_api.dart',
+    ).readAsStringSync();
+    final paymentsApi = File(
+      'lib/core/network/api_modules/fee_payments_api.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('const invoiceListSelect ='));
+    expect(source, contains('has_more: page * size < (count ?? 0)'));
+    expect(source, contains('.order("created_at", { ascending: false })'));
+    expect(feesApi, contains('int pageSize = 20'));
+    expect(paymentsApi, contains('getParentPaymentRequestsPage'));
+    expect(paymentsApi, contains('total: _asInt(data[\'total\'])'));
+  });
+
   test('generic invoice creation requires one canonical fee source', () {
     final source = File(
       'supabase/functions/api/handlers/fees.ts',
@@ -574,18 +593,16 @@ void main() {
   });
 
   test(
-    'dashboard handler queries paid_amount not amount_paid for totalPaid',
+    'dashboard handler uses the server-side fee aggregate instead of downloading invoices',
     () {
       final source = File(
         'supabase/functions/api/handlers/dashboard.ts',
       ).readAsStringSync();
 
-      // Must use the correct column name paid_amount
-      expect(source, contains('"paid_amount"'));
-      expect(source, contains('i.paid_amount'));
-      // Must NOT use the wrong column name amount_paid in select or reduce
-      expect(source, isNot(contains('"amount_paid"')));
-      expect(source, isNot(contains('i.amount_paid')));
+      expect(source, contains('fee_dashboard_summary'));
+      expect(source, contains('summary.collected'));
+      expect(source, isNot(contains('from("fee_invoices").select("paid_amount"')));
+      expect(source, isNot(contains('from("fee_invoices").select("balance, status"')));
     },
   );
 

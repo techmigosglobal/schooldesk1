@@ -8,13 +8,44 @@ extension BackendAttendanceApi on BackendApiClient {
     String? date,
     String? startDate,
     String? endDate,
+    String? subjectId,
+    String? staffId,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    return (await getAttendanceSessionsPage(
+      sectionId: sectionId,
+      date: date,
+      startDate: startDate,
+      endDate: endDate,
+      subjectId: subjectId,
+      staffId: staffId,
+      page: page,
+      pageSize: pageSize,
+    )).data;
+  }
+
+  Future<PaginatedList<AttendanceSessionModel>> getAttendanceSessionsPage({
+    String? sectionId,
+    String? date,
+    String? startDate,
+    String? endDate,
+    String? subjectId,
+    String? staffId,
+    int page = 1,
+    int pageSize = 20,
   }) async {
     try {
-      final queryParams = <String, dynamic>{};
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+      };
       if (sectionId != null) queryParams['section_id'] = sectionId;
       if (date != null) queryParams['date'] = date;
       if (startDate != null) queryParams['start_date'] = startDate;
       if (endDate != null) queryParams['end_date'] = endDate;
+      if (subjectId != null) queryParams['subject_id'] = subjectId;
+      if (staffId != null) queryParams['staff_id'] = staffId;
 
       final response = await _get(
         '/attendance/sessions',
@@ -22,16 +53,39 @@ extension BackendAttendanceApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
-        return (data['data'] as List)
+        final sessions = (data['data'] as List? ?? const [])
             .map(
               (e) => AttendanceSessionModel.fromJson(e as Map<String, dynamic>),
             )
             .toList();
+        final merged = await _mergeLocalAttendanceSessions(
+          sessions,
+          sectionId: sectionId,
+          date: date,
+        );
+        return PaginatedList<AttendanceSessionModel>(
+          data: merged,
+          total: _asInt(data['total'], fallback: merged.length),
+          page: _asInt(data['page'], fallback: page),
+          pageSize: _asInt(data['page_size'], fallback: pageSize),
+        );
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to get attendance sessions',
       );
     } on DioException catch (e) {
+      final local = await _readLocalAttendanceSessions(
+        sectionId: sectionId,
+        date: date,
+      );
+      if (local.isNotEmpty) {
+        return PaginatedList<AttendanceSessionModel>(
+          data: local,
+          total: local.length,
+          page: 1,
+          pageSize: local.length,
+        );
+      }
       throw _handleError(e);
     }
   }
@@ -45,6 +99,21 @@ extension BackendAttendanceApi on BackendApiClient {
     int? periodNumber,
     String? timetableSlotId,
   }) async {
+    final localSessionId =
+        'schooldesk-reference-attendance-${DateTime.now().microsecondsSinceEpoch}';
+    // Persist the local row before starting the request. The interceptor may
+    // start replay immediately after enqueueing; writing first prevents a
+    // fast replay from winning the race and losing the server-id update.
+    await _saveLocalAttendanceSession(
+      localId: localSessionId,
+      sectionId: sectionId,
+      academicYearId: academicYearId,
+      subjectId: subjectId,
+      staffId: staffId,
+      date: date,
+      periodNumber: periodNumber ?? 1,
+      timetableSlotId: timetableSlotId ?? '',
+    );
     try {
       final data = {
         'section_id': sectionId,
@@ -56,18 +125,87 @@ extension BackendAttendanceApi on BackendApiClient {
         if (timetableSlotId != null) 'timetable_slot_id': timetableSlotId,
       };
 
-      final response = await _dio.post('/attendance/sessions', data: data);
+      final response = await _dio.post(
+        '/attendance/sessions',
+        data: data,
+        options: Options(
+          extra: {
+            'offlineReferencePlaceholder': localSessionId,
+            'offlineReferenceType': 'attendance_session',
+            'offlineSessionLocalId': localSessionId,
+          },
+        ),
+      );
       final responseData = response.data as Map<String, dynamic>;
       if (responseData['success'] == true) {
-        return AttendanceSessionModel.fromJson(
+        if (responseData['queued'] == true) {
+          final sync = offlineSync;
+          final resolvedId = sync == null
+              ? localSessionId
+              : await sync.database.findSyncReference(
+                      offlineAccountKey,
+                      localSessionId,
+                    ) ??
+                    localSessionId;
+          if (resolvedId != localSessionId) {
+            await sync!.database.updateAttendanceSessionRemoteId(
+              accountKey: offlineAccountKey,
+              localId: localSessionId,
+              remoteId: resolvedId,
+            );
+          }
+          return _localAttendanceSession(
+            localId: resolvedId,
+            sectionId: sectionId,
+            academicYearId: academicYearId,
+            subjectId: subjectId,
+            staffId: staffId,
+            date: date,
+            periodNumber: periodNumber ?? 1,
+            timetableSlotId: timetableSlotId ?? '',
+          );
+        }
+        final model = AttendanceSessionModel.fromJson(
           responseData['data'] as Map<String, dynamic>,
         );
+        final sync = offlineSync;
+        if (sync != null && offlineAccountKey != 'anonymous') {
+          await sync.database.updateAttendanceSessionRemoteId(
+            accountKey: offlineAccountKey,
+            localId: localSessionId,
+            remoteId: model.id,
+          );
+          await sync.database.updateAttendanceSession(
+            accountKey: offlineAccountKey,
+            localId: localSessionId,
+            syncStatus: 'synced',
+          );
+        }
+        return model;
       }
       throw ServerException(
         message: responseData['error'] ?? 'Failed to create attendance session',
       );
     } on DioException catch (e) {
+      final sync = offlineSync;
+      if (sync != null && offlineAccountKey != 'anonymous') {
+        await sync.database.updateAttendanceSession(
+          accountKey: offlineAccountKey,
+          localId: localSessionId,
+          syncStatus: 'failed',
+        );
+      }
       throw _handleError(e);
+    } on Object {
+      final sync = offlineSync;
+      if (sync != null && offlineAccountKey != 'anonymous') {
+        await sync.database.updateAttendanceSession(
+          accountKey: offlineAccountKey,
+          localId: localSessionId,
+          syncStatus: 'failed',
+        );
+      }
+      rethrow;
     }
   }
 
@@ -76,15 +214,59 @@ extension BackendAttendanceApi on BackendApiClient {
     List<Map<String, dynamic>> attendances, {
     bool finalize = true,
   }) async {
+    final payload = {'attendances': attendances, 'finalize': finalize};
+    if (sessionId.startsWith('schooldesk-reference-attendance-')) {
+      final sync = offlineSync;
+      final remoteId = sync == null
+          ? null
+          : await sync.database.findSyncReference(offlineAccountKey, sessionId);
+      if (sync != null &&
+          offlineAccountKey != 'anonymous' &&
+          (remoteId == null || remoteId.isEmpty)) {
+        final queued = await sync.enqueueRequest(
+          RequestOptions(
+            method: 'POST',
+            path: '/attendance/sessions/$sessionId/mark',
+            data: payload,
+            extra: {'offlineSessionLocalId': sessionId},
+          ),
+          idempotencyKey:
+              'schooldesk-attendance-mark-${DateTime.now().microsecondsSinceEpoch}',
+        );
+        if (queued) {
+          await _updateLocalAttendanceSession(
+            localId: sessionId,
+            attendances: attendances,
+            finalize: finalize,
+            syncStatus: 'pending',
+          );
+          return;
+        }
+      }
+    }
     try {
       final response = await _dio.post(
         '/attendance/sessions/$sessionId/mark',
-        data: {'attendances': attendances, 'finalize': finalize},
+        data: payload,
+        options: Options(
+          extra: {
+            if (sessionId.startsWith('schooldesk-reference-attendance-'))
+              'offlineSessionLocalId': sessionId,
+          },
+        ),
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] != true) {
         throw ServerException(
           message: data['error'] ?? 'Failed to mark attendance',
+        );
+      }
+      if (sessionId.startsWith('schooldesk-reference-attendance-')) {
+        await _updateLocalAttendanceSession(
+          localId: sessionId,
+          attendances: attendances,
+          finalize: finalize,
+          syncStatus: data['queued'] == true ? 'pending' : 'synced',
         );
       }
     } on DioException catch (e) {

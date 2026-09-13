@@ -27,9 +27,28 @@ function qp(url: URL, key: string): string | null {
 }
 
 function _paginate(url: URL) {
-  const page = parseInt(qp(url, "page") ?? "1");
-  const size = parseInt(qp(url, "page_size") ?? "50");
-  return { from: (page - 1) * size, to: page * size - 1 };
+  const page = Math.max(parseInt(qp(url, "page") ?? "1") || 1, 1);
+  const size = Math.min(
+    Math.max(parseInt(qp(url, "page_size") ?? "20") || 20, 1),
+    100,
+  );
+  return { page, size, from: (page - 1) * size, to: page * size - 1 };
+}
+
+function pagedResponse<T>(
+  data: T[],
+  count: number | null,
+  page: number,
+  pageSize: number,
+) {
+  const total = count ?? data.length;
+  return {
+    data,
+    total,
+    page,
+    page_size: pageSize,
+    has_more: page * pageSize < total,
+  };
 }
 
 function text(value: unknown): string {
@@ -603,7 +622,10 @@ export async function handleAcademics(
   if (path.startsWith("/subjects")) {
     const id = parseId(path, "/subjects");
     if (!id && method === "GET") {
-      let q = svc.from("subjects").select("*").eq("school_id", sid);
+      let q = svc.from("subjects").select("*", { count: "exact" }).eq(
+        "school_id",
+        sid,
+      );
       if (role === "teacher") {
         if (teacherSubjectIds.length === 0) return ok([]);
         q = q.in("id", teacherSubjectIds);
@@ -611,9 +633,17 @@ export async function handleAcademics(
       if (qp(url, "subject_type")) {
         q = q.eq("subject_type", qp(url, "subject_type")!);
       }
-      const { data, error } = await q;
+      const { data, error, count } = await q.order("subject_name", {
+        ascending: true,
+      }).range(_paginate(url).from, _paginate(url).to);
       if (error) return fail(error.message);
-      return ok(data);
+      const pagination = _paginate(url);
+      return ok(pagedResponse(
+        data ?? [],
+        count,
+        pagination.page,
+        pagination.size,
+      ));
     }
     if (!id && method === "POST") {
       const { data, error } = await svc.from("subjects").insert({
@@ -639,6 +669,7 @@ export async function handleAcademics(
     if (!id && method === "GET") {
       let q = svc.from("grade_subjects").select(
         "*, subject:subjects(*), grade:grades(*), section:sections(*)",
+        { count: "exact" },
       ).eq("school_id", sid);
       if (role === "teacher") {
         if (teacherSectionIds.length === 0) return ok([]);
@@ -649,9 +680,17 @@ export async function handleAcademics(
       }
       if (qp(url, "grade_id")) q = q.eq("grade_id", qp(url, "grade_id")!);
       if (qp(url, "section_id")) q = q.eq("section_id", qp(url, "section_id")!);
-      const { data, error } = await q;
+      const pagination = _paginate(url);
+      const { data, error, count } = await q.order("created_at", {
+        ascending: false,
+      }).range(pagination.from, pagination.to);
       if (error) return fail(error.message);
-      return ok(data);
+      return ok(pagedResponse(
+        data ?? [],
+        count,
+        pagination.page,
+        pagination.size,
+      ));
     }
     if (!id && method === "POST") {
       // Strip marks fields even if old client sends them
@@ -680,6 +719,7 @@ export async function handleAcademics(
     if (!id && method === "GET") {
       let q = svc.from("staff_subjects").select(
         "*, staff:staff(*), subject:subjects(*), grade:grades(*), section:sections(*)",
+        { count: "exact" },
       ).eq("school_id", sid);
       if (role === "teacher") {
         const staffId = linkedStaffId(user);
@@ -691,9 +731,17 @@ export async function handleAcademics(
       if (qp(url, "section_id")) {
         q = q.eq("section_id", qp(url, "section_id")!);
       }
-      const { data, error } = await q;
+      const pagination = _paginate(url);
+      const { data, error, count } = await q.order("created_at", {
+        ascending: false,
+      }).range(pagination.from, pagination.to);
       if (error) return fail(error.message);
-      return ok(data);
+      return ok(pagedResponse(
+        data ?? [],
+        count,
+        pagination.page,
+        pagination.size,
+      ));
     }
     if (!id && method === "POST") {
       const payload = await staffSubjectPayloadWithGrade(svc, sid, {

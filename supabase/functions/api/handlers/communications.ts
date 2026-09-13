@@ -10,6 +10,7 @@ import {
   resolveActiveTeacherScope,
   teacherCanAccessStudent,
 } from "./teacher_scope.ts";
+import { signedPrivateFileUrl, stableStorageReference } from "../storage_helpers.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -1189,6 +1190,15 @@ function normalizeLessonPlannerAttachments(source: Record<string, unknown>) {
   }];
 }
 
+function canonicalLessonPlannerAttachments(
+  attachments: Array<Record<string, unknown>>,
+) {
+  return attachments.map((attachment) => ({
+    ...attachment,
+    url: stableStorageReference(attachment.url),
+  }));
+}
+
 function firstLessonPlannerAttachmentUrl(
   attachments: Array<Record<string, unknown>>,
 ) {
@@ -1290,6 +1300,27 @@ function normalizeLessonPlannerRow(row: Record<string, unknown>) {
   };
 }
 
+async function materializeLessonPlannerRow(
+  svc: SupabaseClient,
+  row: Record<string, unknown>,
+) {
+  const normalized = normalizeLessonPlannerRow(row);
+  const attachments = await Promise.all(
+    (normalized.attachments as Array<Record<string, unknown>>).map(
+      async (attachment) => ({
+        ...attachment,
+        url: await signedPrivateFileUrl(svc, attachment.url) ||
+          text(attachment.url),
+      }),
+    ),
+  );
+  return {
+    ...normalized,
+    attachments,
+    attachment_url: firstLessonPlannerAttachmentUrl(attachments),
+  };
+}
+
 async function enrichLessonPlannerRows(
   svc: SupabaseClient,
   school: string,
@@ -1328,18 +1359,18 @@ async function enrichLessonPlannerRows(
     }
   }
 
-  return rows.map((row) => {
+  return await Promise.all(rows.map(async (row) => {
     const payload = lessonPlannerPayload(row);
     const section = sectionsById.get(
       text(payload.section_id ?? row.section_id),
     );
     const teacher = staffById.get(text(payload.staff_id ?? row.staff_id));
-    return normalizeLessonPlannerRow({
+    return await materializeLessonPlannerRow(svc, {
       ...row,
       ...(section ? { section } : {}),
       ...(teacher ? { teacher } : {}),
     });
-  });
+  }));
 }
 
 async function autoCompleteEndedLessonPlanners(
@@ -1472,7 +1503,12 @@ export async function handleCommunications(
   }
 
   if (path === "/chat/conversations" && method === "GET") {
-    let q = svc.from("message_conversations").select("*").eq(
+    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const pageSize = Math.min(
+      Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
+      100,
+    );
+    let q = svc.from("message_conversations").select("*", { count: "exact" }).eq(
       "school_id",
       school,
     );
@@ -1480,12 +1516,21 @@ export async function handleCommunications(
     const teacherId = text(url.searchParams.get("teacher_id"));
     const parentId = text(url.searchParams.get("parent_id"));
     const studentId = text(url.searchParams.get("student_id"));
+    const search = text(url.searchParams.get("search"));
     const requestedMonitor = text(url.searchParams.get("monitor")) == "true";
     const userRole = role(user);
     if (type) q = q.eq("type", type);
     if (teacherId) q = q.eq("teacher_id", teacherId);
     if (parentId) q = q.eq("parent_id", parentId);
     if (studentId) q = q.eq("student_id", studentId);
+    if (search) {
+      const escaped = search.replace(/[%(),]/g, " ").trim();
+      if (escaped) {
+        q = q.or(
+          `title.ilike.%${escaped}%,last_message.ilike.%${escaped}%,class_label.ilike.%${escaped}%`,
+        );
+      }
+    }
     if (!canManageSchoolContent(user) || !requestedMonitor) {
       if (userRole == "teacher") {
         const teacher = linkedStaffId(user);
@@ -1497,7 +1542,12 @@ export async function handleCommunications(
         return fail("forbidden", 403);
       }
     }
-    const { data, error } = await q.order("updated_at", { ascending: false });
+    const { data, error, count } = await q.order("updated_at", {
+      ascending: false,
+    }).order("id", { ascending: false }).range(
+      (page - 1) * pageSize,
+      page * pageSize - 1,
+    );
     if (error) return fail(error.message);
     let visible = data ?? [];
     if (userRole === "teacher" && !canManageSchoolContent(user)) {
@@ -1540,7 +1590,7 @@ export async function handleCommunications(
         linkedStudents.has(text(conversation.student_id))
       );
     }
-    const rows = await enrichChatConversations(svc, school, visible);
+    const rows = await enrichChatConversations(svc, school, visible) as Record<string, unknown>[];
     const ids = rows.map((row) => text(row["id"])).filter(Boolean);
     let unreadByConversation = new Map<string, number>();
     if (ids.length) {
@@ -1559,12 +1609,20 @@ export async function handleCommunications(
         );
       }
     }
-    return ok(rows.map((row) =>
+    const normalizedRows = rows.map((row) =>
       normalizeChatConversation({
         ...row,
         unread_count: unreadByConversation.get(text(row["id"])) ?? 0,
       }, user.id)
-    ));
+    );
+    const total = count ?? normalizedRows.length;
+    return ok({
+      data: normalizedRows,
+      total,
+      page,
+      page_size: pageSize,
+      has_more: page * pageSize < total,
+    });
   }
 
   if (path === "/chat/conversations" && method === "POST") {
@@ -1673,24 +1731,36 @@ export async function handleCommunications(
     if (!await canReadChatConversation(svc, school, conversation, user)) {
       return fail("forbidden", 403);
     }
+    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
     const pageSize = Math.min(
-      Number(url.searchParams.get("page_size") ?? 80),
-      200,
+      Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
+      100,
     );
-    let q = svc.from("messages").select("*").eq("school_id", school)
+    let q = svc.from("messages").select("*", { count: "exact" }).eq("school_id", school)
       .eq("conversation_id", conversationId);
     const sentAfter = text(url.searchParams.get("sent_after"));
     if (sentAfter) q = q.gt("sent_at", sentAfter);
-    const { data, error } = await q.order("sent_at", { ascending: true }).limit(
-      pageSize,
+    const { data, error, count } = await q.order("sent_at", {
+      ascending: true,
+    }).order("id", { ascending: true }).range(
+      (page - 1) * pageSize,
+      page * pageSize - 1,
     );
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row) => normalizeChatMessage({
+    const rows = (data ?? []).map((row) => normalizeChatMessage({
       ...row,
       student_id: conversation.student_id ?? "",
       student_name: conversation.student_name ?? "",
       class_label: conversation.class_label ?? "",
-    }, user.id)));
+    }, user.id));
+    const total = count ?? rows.length;
+    return ok({
+      data: rows,
+      total,
+      page,
+      page_size: pageSize,
+      has_more: page * pageSize < total,
+    });
   }
 
   if (chatMessagesMatch && method === "POST") {
@@ -1854,7 +1924,15 @@ export async function handleCommunications(
     const seg =
       path.slice("/announcements".length).split("/").filter(Boolean)[0];
     if (!seg && method === "GET") {
-      let q = svc.from("announcements").select("*").eq("school_id", school);
+      const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+      const pageSize = Math.min(
+        Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
+        100,
+      );
+      let q = svc.from("announcements").select("*", { count: "exact" }).eq(
+        "school_id",
+        school,
+      );
       if (!canManageSchoolContent(user)) {
         const audience = role(user);
         if (!audience) return fail("forbidden", 403);
@@ -1869,10 +1947,25 @@ export async function handleCommunications(
       if (url.searchParams.get("audience")) {
         q = q.eq("audience", url.searchParams.get("audience")!);
       }
-      const { data, error } = await q.order("created_at", { ascending: false })
-        .limit(50);
+      const search = text(url.searchParams.get("search"));
+      if (search) {
+        const escaped = search.replace(/[%(),]/g, " ").trim();
+        if (escaped) q = q.or(`title.ilike.%${escaped}%,body.ilike.%${escaped}%`);
+      }
+      const { data, error, count } = await q.order("created_at", {
+        ascending: false,
+      }).order("id", { ascending: false }).range(
+        (page - 1) * pageSize,
+        page * pageSize - 1,
+      );
       if (error) return fail(error.message);
-      return ok(data);
+      return ok({
+        data: data ?? [],
+        total: count ?? data?.length ?? 0,
+        page,
+        page_size: pageSize,
+        has_more: page * pageSize < (count ?? 0),
+      });
     }
     if (!seg && method === "POST") {
       if (!canManageSchoolContent(user)) return fail("forbidden", 403);
@@ -1930,7 +2023,15 @@ export async function handleCommunications(
   if (path.startsWith("/notices")) {
     const seg = path.slice("/notices".length).split("/").filter(Boolean)[0];
     if (!seg && method === "GET") {
-      let q = svc.from("announcements").select("*").eq("school_id", school);
+      const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+      const pageSize = Math.min(
+        Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
+        100,
+      );
+      let q = svc.from("announcements").select("*", { count: "exact" }).eq(
+        "school_id",
+        school,
+      );
       if (!canManageSchoolContent(user)) {
         const audience = role(user);
         if (!audience) return fail("forbidden", 403);
@@ -1945,10 +2046,25 @@ export async function handleCommunications(
       if (url.searchParams.get("status")) {
         q = q.eq("status", url.searchParams.get("status")!);
       }
-      const { data, error } = await q.order("created_at", { ascending: false })
-        .limit(50);
+      const search = text(url.searchParams.get("search"));
+      if (search) {
+        const escaped = search.replace(/[%(),]/g, " ").trim();
+        if (escaped) q = q.or(`title.ilike.%${escaped}%,body.ilike.%${escaped}%`);
+      }
+      const { data, error, count } = await q.order("created_at", {
+        ascending: false,
+      }).order("id", { ascending: false }).range(
+        (page - 1) * pageSize,
+        page * pageSize - 1,
+      );
       if (error) return fail(error.message);
-      return ok(data ?? []);
+      return ok({
+        data: data ?? [],
+        total: count ?? data?.length ?? 0,
+        page,
+        page_size: pageSize,
+        has_more: page * pageSize < (count ?? 0),
+      });
     }
     if (!seg && method === "POST") {
       if (!canManageSchoolContent(user)) return fail("forbidden", 403);
@@ -1983,7 +2099,7 @@ export async function handleCommunications(
   if (path === "/notifications" && method === "GET") {
     const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
     const pageSize = Math.min(
-      Math.max(parseInt(url.searchParams.get("page_size") ?? "50") || 50, 1),
+      Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
       100,
     );
     const from = (page - 1) * pageSize;
@@ -1991,7 +2107,7 @@ export async function handleCommunications(
     // empty page at the end of the notification history.
     const to = from + pageSize;
     let notificationQuery = svc.from("notification_logs")
-      .select("*, student:students(photo_url)")
+      .select("*, student:students(photo_url)", { count: "exact" })
       .eq("school_id", school)
       .eq("user_id", user.id)
       .is("deleted_at", null)
@@ -2011,7 +2127,7 @@ export async function handleCommunications(
           `student_id.is.null,student_id.in.(${linkedStudentIds.join(",")})`,
         );
     }
-    const { data, error } = await notificationQuery.range(from, to);
+    const { data, error, count } = await notificationQuery.range(from, to);
     if (error) return fail(error.message);
     const rows = (data ?? []).slice(0, pageSize);
     const items = rows.map((row: Record<string, unknown>) => ({
@@ -2032,9 +2148,10 @@ export async function handleCommunications(
     }));
     return ok({
       items,
+      total: count ?? 0,
       page,
       page_size: pageSize,
-      has_more: (data ?? []).length > pageSize,
+      has_more: page * pageSize < (count ?? 0),
     });
   }
   if (path === "/notifications/push-diagnostics" && method === "POST") {
@@ -2363,7 +2480,15 @@ export async function handleCommunications(
 
   // ── Diary ─────────────────────────────────────────────────
   if ((path === "/diary" || path === "/diary-entries") && method === "GET") {
-    let q = svc.from("diary_entries").select("*").eq("school_id", school);
+    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const pageSize = Math.min(
+      Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
+      100,
+    );
+    let q = svc.from("diary_entries").select("*", { count: "exact" }).eq(
+      "school_id",
+      school,
+    );
     const staffId = url.searchParams.get("staff_id");
     const requestedStaffId = text(staffId);
     const requestedSectionId = text(url.searchParams.get("section_id"));
@@ -2403,9 +2528,20 @@ export async function handleCommunications(
     if (url.searchParams.get("date")) {
       q = q.eq("date", url.searchParams.get("date")!);
     }
-    const { data, error } = await q.order("date", { ascending: false });
+    const { data, error, count } = await q.order("date", {
+      ascending: false,
+    }).order("id", { ascending: false }).range(
+      (page - 1) * pageSize,
+      page * pageSize - 1,
+    );
     if (error) return fail(error.message);
-    return ok(data);
+    return ok({
+      data: data ?? [],
+      total: count ?? data?.length ?? 0,
+      page,
+      page_size: pageSize,
+      has_more: page * pageSize < (count ?? 0),
+    });
   }
   if ((path === "/diary" || path === "/diary-entries") && method === "POST") {
     const userRole = role(user);
@@ -2585,7 +2721,9 @@ export async function handleCommunications(
       sectionId,
     );
     if (scopeError) return fail(scopeError, 403);
-    const attachments = normalizeLessonPlannerAttachments(body);
+    const attachments = canonicalLessonPlannerAttachments(
+      normalizeLessonPlannerAttachments(body),
+    );
     if (attachments.length === 0) {
       return fail("at least one lesson plan attachment is required", 422);
     }
@@ -2624,7 +2762,7 @@ export async function handleCommunications(
       payload.section_id,
     );
 
-    return ok(normalizeLessonPlannerRow(data));
+    return ok(await materializeLessonPlannerRow(svc, data));
   }
 
   const lessonPlannerCompleteMatch = path.match(
@@ -2666,7 +2804,7 @@ export async function handleCommunications(
       updated_at: new Date().toISOString(),
     }).eq("id", existing.id).eq("school_id", school).select().single();
     if (error) return fail(error.message);
-    return ok(normalizeLessonPlannerRow(data));
+    return ok(await materializeLessonPlannerRow(svc, data));
   }
 
   if (path === "/communications" && method === "GET") {

@@ -7,6 +7,11 @@ import {
   signedPrivateFileUrl,
 } from "../storage_helpers.ts";
 import {
+  legacyStorageWritesEnabled,
+  r2FileReference,
+  uploadToR2,
+} from "../lib/r2_storage.ts";
+import {
   canAssignStaffRole,
   canManageStaff,
   linkedStaffId,
@@ -32,6 +37,13 @@ function subPath(path: string, prefix: string) {
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
+
+// Directory responses stay deliberately narrow. Photos and staff documents
+// are private resources and are signed only by profile/detail endpoints.
+const staffListSelect =
+  "id, school_id, staff_code, first_name, last_name, email, phone, gender, " +
+  "date_of_birth, join_date, designation, employment_type, account_role, " +
+  "department_id, is_active, department:departments(id, department_name)";
 
 function numeric(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -282,15 +294,33 @@ export async function handleStaff(
     const file = form.get("photo") as File;
     if (!file) return fail("photo required");
     const p = `staff/${school}/${id}/${Date.now()}-${file.name}`;
-    await svc.storage.from("school-assets").upload(p, file, {
-      upsert: true,
-      contentType: file.type || "application/octet-stream",
-      cacheControl: "31536000",
+    const contentType = file.type || "application/octet-stream";
+    const r2Upload = await uploadToR2(`private/${p}`, file, contentType);
+    const privateReference = r2Upload ? r2FileReference(r2Upload.key) : "";
+    let photoUrl = privateReference
+      ? await signedPrivateFileUrl(svc, privateReference)
+      : "";
+    if (!photoUrl && !legacyStorageWritesEnabled()) {
+      return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+    }
+    if (!photoUrl) {
+      const { error: uploadError } = await svc.storage.from("school-assets")
+        .upload(p, file, {
+          upsert: true,
+          contentType,
+          cacheControl: "31536000",
+        });
+      if (uploadError) return fail(uploadError.message);
+      photoUrl = svc.storage.from("school-assets").getPublicUrl(p).data
+        .publicUrl;
+    }
+    await svc.from("staff").update({
+      photo_url: privateReference || photoUrl,
+    }).eq("id", id);
+    return ok({
+      photo_url: photoUrl,
+      ...(privateReference ? { storage_ref: privateReference } : {}),
     });
-    const { data: { publicUrl } } = svc.storage.from("school-assets")
-      .getPublicUrl(p);
-    await svc.from("staff").update({ photo_url: publicUrl }).eq("id", id);
-    return ok({ photo_url: publicUrl });
   }
 
   if (id && sub === "documents" && method === "POST") {
@@ -300,40 +330,63 @@ export async function handleStaff(
     const docType = (form.get("doc_type") as string) ?? "other";
     if (!file) return fail("document required");
     const p = `${school}/staff-documents/${id}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await svc.storage.from(PRIVATE_FILES_BUCKET)
-      .upload(p, file, {
-        upsert: true,
-        contentType: file.type || "application/octet-stream",
-        cacheControl: "3600",
-      });
-    if (uploadError) return fail(uploadError.message);
+    const contentType = file.type || "application/octet-stream";
+    const r2Upload = await uploadToR2(`private/${p}`, file, contentType);
+    const fileReference = r2Upload
+      ? r2FileReference(r2Upload.key)
+      : privateFileReference(p);
+    if (!r2Upload) {
+      if (!legacyStorageWritesEnabled()) {
+        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+      }
+      const { error: uploadError } = await svc.storage.from(PRIVATE_FILES_BUCKET)
+        .upload(p, file, {
+          upsert: true,
+          contentType,
+          cacheControl: "3600",
+        });
+      if (uploadError) return fail(uploadError.message);
+    }
     const { data, error } = await svc.from("staff_documents").insert({
       staff_id: id,
       school_id: school,
       doc_type: docType,
       title: ((form.get("title") as string) ?? "").trim(),
-      file_url: privateFileReference(p),
+      file_url: fileReference,
     }).select().single();
     if (error) return fail(error.message);
+    const fileUrl = await signedPrivateFileUrl(svc, data.file_url);
     return ok({
       ...data,
-      file_url: await signedPrivateFileUrl(svc, data.file_url),
+      file_url: fileUrl,
+      ...(fileReference.startsWith("r2://")
+        ? { storage_ref: fileReference }
+        : {}),
     });
   }
 
   if (!id && method === "GET") {
-    const page = parseInt(url.searchParams.get("page") ?? "1");
-    const size = parseInt(url.searchParams.get("page_size") ?? "50");
+    const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+    const size = Math.min(
+      100,
+      Math.max(1, parseInt(url.searchParams.get("page_size") ?? "20")),
+    );
     const search = url.searchParams.get("search") ?? "";
+    const designation = url.searchParams.get("designation") ?? "";
     let q = svc.from("staff").select(
-      "*, department:departments(*), documents:staff_documents(*)",
+      staffListSelect,
       {
-      count: "exact",
+        count: "exact",
       },
-    ).eq("school_id", school).range((page - 1) * size, page * size - 1);
+    ).eq("school_id", school)
+      .order("last_name", { ascending: true })
+      .order("first_name", { ascending: true })
+      .order("id", { ascending: true })
+      .range((page - 1) * size, page * size - 1);
     if (url.searchParams.get("status")) {
       q = q.eq("is_active", url.searchParams.get("status") === "active");
     }
+    if (designation) q = q.eq("designation", designation);
     if (search) {
       q = q.or(
         `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`,
@@ -341,22 +394,13 @@ export async function handleStaff(
     }
     const { data, error, count } = await q;
     if (error) return fail(error.message);
-    for (const row of data ?? []) {
-      row.documents = await Promise.all(
-        (Array.isArray(row.documents) ? row.documents : []).map(
-          async (document) => ({
-            ...document,
-            file_url: await signedPrivateFileUrl(svc, document.file_url),
-          }),
-        ),
-      );
-    }
     return cors({
       success: true,
       data: data ?? [],
       total: count ?? 0,
       page,
       page_size: size,
+      has_more: page * size < (count ?? 0),
     });
   }
 
@@ -403,7 +447,7 @@ export async function handleStaff(
       ...data,
       documents: await Promise.all(
         (Array.isArray(data.documents) ? data.documents : []).map(
-          async (document) => ({
+          async (document: Record<string, unknown>) => ({
             ...document,
             file_url: await signedPrivateFileUrl(svc, document.file_url),
           }),

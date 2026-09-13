@@ -1,5 +1,12 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
+import {
+  deleteR2File,
+  legacyStorageWritesEnabled,
+  r2FileReference,
+  uploadToR2,
+} from "../lib/r2_storage.ts";
+import { signedPrivateFileUrl } from "../storage_helpers.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -86,14 +93,22 @@ export async function handleHelp(
     const pathValue = `${school}/${targetRole}/${crypto.randomUUID()}-${
       safeFileName(file.name)
     }`;
-    const { error } = await svc.storage.from("help-tutorial-videos").upload(
-      pathValue,
-      file,
-      { contentType: file.type, upsert: false },
-    );
-    if (error) return fail(error.message);
+    const r2Key = `private/help-tutorial-videos/${pathValue}`;
+    const r2Upload = await uploadToR2(r2Key, file, file.type);
+    const storedPath = r2Upload ? r2FileReference(r2Upload.key) : pathValue;
+    if (!r2Upload) {
+      if (!legacyStorageWritesEnabled()) {
+        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+      }
+      const { error } = await svc.storage.from("help-tutorial-videos").upload(
+        pathValue,
+        file,
+        { contentType: file.type, upsert: false },
+      );
+      if (error) return fail(error.message);
+    }
     return ok({
-      video_path: pathValue,
+      video_path: storedPath,
       video_file_name: file.name,
       video_mime_type: file.type,
       video_size: file.size,
@@ -111,12 +126,25 @@ export async function handleHelp(
       return fail("forbidden", 403);
     }
     if (data.video_path) {
-      const { data: signed, error: signedError } = await svc.storage
-        .from("help-tutorial-videos").createSignedUrl(data.video_path, 60 * 10);
-      if (signedError || !signed?.signedUrl) {
-        return fail(signedError?.message ?? "Unable to prepare video");
+      if (!`${data.video_path}`.startsWith("r2://")) {
+        const { data: signed, error: signedError } = await svc.storage
+          .from("help-tutorial-videos").createSignedUrl(
+            `${data.video_path}`,
+            60 * 10,
+          );
+        if (signedError || !signed?.signedUrl) {
+          return fail(signedError?.message ?? "Unable to prepare video");
+        }
+        return ok({ url: signed.signedUrl, expires_in: 600 });
       }
-      return ok({ url: signed.signedUrl, expires_in: 600 });
+      const signedUrl = await signedPrivateFileUrl(
+        svc,
+        data.video_path,
+        60 * 10,
+        "help-tutorial-videos",
+      );
+      if (!signedUrl) return fail("Unable to prepare video");
+      return ok({ url: signedUrl, expires_in: 600 });
     }
     if (data.video_url) return ok({ url: data.video_url, legacy: true });
     return fail("No tutorial video is attached", 404);
@@ -250,13 +278,25 @@ export async function handleHelp(
     const id = url.searchParams.get("id");
     if (!id) return fail("id is required to delete help content", 420);
 
-    const { error } = await svc
+    const { data: existing, error: lookupError } = await svc
       .from("help_contents")
-      .delete()
+      .select("video_path")
       .eq("id", id)
+      .eq("school_id", school)
+      .maybeSingle();
+    if (lookupError) return fail(lookupError.message);
+    if (!existing) return fail("help content not found", 404);
+    const { error } = await svc.from("help_contents").delete().eq("id", id)
       .eq("school_id", school);
 
     if (error) return fail(error.message);
+    if (`${existing.video_path ?? ""}`.startsWith("r2://")) {
+      await deleteR2File(existing.video_path);
+    } else if (existing.video_path) {
+      await svc.storage.from("help-tutorial-videos").remove([
+        `${existing.video_path}`,
+      ]);
+    }
     return ok({ deleted: true, id });
   }
 

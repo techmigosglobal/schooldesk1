@@ -1,5 +1,5 @@
-import * as fontkit from "fontkit";
-import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib";
+import * as fontkit from "npm:fontkit";
+import { PDFDocument, PDFFont, PDFPage, rgb } from "npm:pdf-lib";
 
 export type StructuredExportTable = {
   title: string;

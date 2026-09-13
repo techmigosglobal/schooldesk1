@@ -1,4 +1,14 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  r2FileReference,
+  r2Reference,
+  r2KeyFromValue,
+  r2ReferenceInfo,
+  r2VisibilityFromValue,
+  legacyStorageReadsEnabled,
+  storageReadOrder,
+  signedR2FileUrl,
+} from "./lib/r2_storage.ts";
 
 export const PRIVATE_FILES_BUCKET = "school-private-files";
 export const PRIVATE_FILE_URL_TTL_SECONDS = 10 * 60;
@@ -30,15 +40,43 @@ export function privateFileReference(path: string): string {
   return `${PRIVATE_FILES_BUCKET}/${path}`;
 }
 
+export function privateFileReferenceFromValue(value: unknown): string {
+  const r2Key = r2KeyFromValue(value);
+  if (r2Key && r2VisibilityFromValue(value) === "private") {
+    return r2FileReference(r2Key);
+  }
+  const path = storagePathFromValue(value, PRIVATE_FILES_BUCKET);
+  return path ? privateFileReference(path) : `${value ?? ""}`.trim();
+}
+
+/** Converts an R2 URL/signature back to the durable reference for DB writes. */
+export function stableStorageReference(value: unknown): string {
+  const info = r2ReferenceInfo(value);
+  return info ? r2Reference(info.key, info.visibility) : `${value ?? ""}`.trim();
+}
+
 export async function signedPrivateFileUrl(
   svc: SupabaseClient,
   value: unknown,
   ttlSeconds = PRIVATE_FILE_URL_TTL_SECONDS,
+  bucket = PRIVATE_FILES_BUCKET,
 ): Promise<string> {
-  const path = storagePathFromValue(value, PRIVATE_FILES_BUCKET);
-  if (!path) return `${value ?? ""}`.trim();
-  const { data, error } = await svc.storage.from(PRIVATE_FILES_BUCKET)
-    .createSignedUrl(path, ttlSeconds);
-  if (error || !data?.signedUrl) return "";
-  return data.signedUrl;
+  const r2Key = r2KeyFromValue(value);
+  for (const provider of storageReadOrder()) {
+    if (provider === "r2" && r2Key) {
+      const r2Url = await signedR2FileUrl(value, ttlSeconds);
+      if (r2Url) return r2Url;
+      continue;
+    }
+    if (provider !== "supabase" || !legacyStorageReadsEnabled()) continue;
+    const path = storagePathFromValue(value, bucket);
+    if (!path) {
+      if (!r2Key) return `${value ?? ""}`.trim();
+      continue;
+    }
+    const { data, error } = await svc.storage.from(bucket)
+      .createSignedUrl(path, ttlSeconds);
+    if (!error && data?.signedUrl) return data.signedUrl;
+  }
+  return "";
 }

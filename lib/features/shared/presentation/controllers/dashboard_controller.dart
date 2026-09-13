@@ -81,26 +81,24 @@ class PrincipalDashboardController extends BaseDashboardController {
 
     try {
       final api = BackendApiClient.instance;
-      final students = await api.getStudents(page: 1, pageSize: 1);
-      final teachers = await api.getStaff(page: 1, pageSize: 1);
-      final fees = await api.getInvoices();
-      final notifications = await api.getNotifications();
+      final results = await Future.wait([
+        api.getDashboard('principal'),
+        api.getNotifications(),
+      ]);
+      final dashboard = results[0] as Map<String, dynamic>;
+      final notifications = results[1] as List<Map<String, dynamic>>;
+      final fees = dashboard['fees'] is Map
+          ? Map<String, dynamic>.from(dashboard['fees'] as Map)
+          : const <String, dynamic>{};
 
-      _totalStudents = students.total;
-      _totalTeachers = teachers.total;
+      _totalStudents = _asInt(dashboard['total_students']);
+      _totalTeachers = _asInt(dashboard['total_staff']);
       _pendingComplaints = notifications
           .where((c) => '${c['category'] ?? ''}' == 'complaint')
           .where((c) => c['is_read'] != true)
           .length;
 
-      if (fees.isNotEmpty) {
-        final paid = fees
-            .where((f) => '${f['status'] ?? ''}'.toLowerCase() == 'paid')
-            .length;
-        _feeCollectionRate = (paid / fees.length) * 100;
-      } else {
-        _feeCollectionRate = 0;
-      }
+      _feeCollectionRate = _asDouble(fees['collection_pct']);
 
       _attendanceRate = 0;
 
@@ -191,17 +189,11 @@ class AdminDashboardController extends BaseDashboardController {
 
     try {
       final api = BackendApiClient.instance;
-      final students = await api.getStudents(page: 1, pageSize: 1);
-      final teachers = await api.getStaff(page: 1, pageSize: 1);
-      final fees = await api.getInvoices();
-      final leaveRequests = await api.getLeaveApplications();
-
-      final pendingLeaves = leaveRequests
-          .where((r) => r.status.toLowerCase() == 'pending')
-          .length;
-      final pendingFees = fees
-          .where((f) => '${f['status'] ?? ''}'.toLowerCase() != 'paid')
-          .length;
+      final dashboard = await api.getDashboard('admin');
+      final pendingLeaves = _asInt(dashboard['pending_leave_requests']);
+      final pendingFees = _asDouble(dashboard['pending_fee_balance']);
+      final totalStudents = _asInt(dashboard['total_students']);
+      final totalTeachers = _asInt(dashboard['total_staff']);
 
       _systemAlerts = [
         if (pendingLeaves > 0)
@@ -213,30 +205,30 @@ class AdminDashboardController extends BaseDashboardController {
       ];
 
       _quickStats = [
-        {'label': 'Students', 'value': '${students.total}'},
-        {'label': 'Teachers', 'value': '${teachers.total}'},
-        {'label': 'Pending Dues', 'value': '$pendingFees'},
+        {'label': 'Students', 'value': '$totalStudents'},
+        {'label': 'Teachers', 'value': '$totalTeachers'},
+        {'label': 'Pending Dues', 'value': pendingFees.toStringAsFixed(2)},
         {'label': 'Leave Requests', 'value': '$pendingLeaves'},
       ];
 
       setKpis([
         DashboardKpi(
           title: 'Students',
-          value: '${students.total}',
+          value: '$totalStudents',
           icon: Icons.people,
           color: Colors.blue,
           route: '/admin-students-screen',
         ),
         DashboardKpi(
           title: 'Teachers',
-          value: '${teachers.total}',
+          value: '$totalTeachers',
           icon: Icons.school,
           color: Colors.green,
           route: '/admin-teachers-screen',
         ),
         DashboardKpi(
           title: 'Pending Dues',
-          value: '$pendingFees',
+          value: pendingFees.toStringAsFixed(2),
           icon: Icons.payment,
           color: Colors.orange,
           route: '/fee-monitoring-screen',
@@ -255,4 +247,14 @@ class AdminDashboardController extends BaseDashboardController {
       setLoading(false);
     }
   }
+}
+
+int _asInt(Object? value) {
+  if (value is num) return value.toInt();
+  return int.tryParse('${value ?? ''}') ?? 0;
+}
+
+double _asDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse('${value ?? ''}') ?? 0;
 }

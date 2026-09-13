@@ -15,6 +15,7 @@ import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/firebase_runtime_options.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
@@ -27,6 +28,7 @@ Future<void> schoolDeskFirebaseMessagingBackgroundHandler(
   // Firebase must be re-initialised in the background isolate because it runs
   // in a separate Dart VM context. Guard against double-initialisation.
   await PushNotificationService.ensureFirebaseInitialized();
+  await PushNotificationService.syncOfflineDataIfRequested(message.data);
   // Background message handling is intentionally minimal — the OS delivers
   // the notification UI automatically. Any heavy work risks being killed.
 }
@@ -104,6 +106,33 @@ class PushNotificationService {
         name: 'PushNotificationService',
       );
       return false;
+    }
+  }
+
+  /// FCM data messages can ask a running/background isolate to refresh its
+  /// local snapshot. Notification delivery remains independent of this
+  /// best-effort operation, and regular foreground/resume/work-manager
+  /// triggers remain authoritative when the OS does not deliver a data push.
+  static Future<void> syncOfflineDataIfRequested(
+    Map<String, dynamic> data,
+  ) async {
+    final requested =
+        data['schooldesk_sync'] == true ||
+        '${data['schooldesk_sync'] ?? ''}'.toLowerCase() == 'true' ||
+        '${data['type'] ?? ''}'.toLowerCase() == 'data_stale';
+    if (!requested) return;
+
+    try {
+      final sync = await OfflineSyncEngine.initialize();
+      BackendApiClient.instance.attachOfflineSync(sync);
+      await BackendApiClient.initialize();
+      await sync.syncNow();
+      sync.dispose();
+    } on Object catch (error) {
+      developer.log(
+        'FCM-triggered offline sync failed: $error',
+        name: 'PushNotificationService',
+      );
     }
   }
 
@@ -361,6 +390,7 @@ class PushNotificationService {
   }
 
   Future<void> _handleForeground(RemoteMessage message) async {
+    unawaited(syncOfflineDataIfRequested(message.data));
     // Android does not display an FCM notification automatically while the
     // app is foregrounded. Retry the local-notification setup here so a
     // transient startup/plugin failure does not silently turn a delivered

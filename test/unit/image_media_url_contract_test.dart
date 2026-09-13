@@ -14,6 +14,15 @@ void main() {
     expect(resolveOriginalImageUrl(url), url);
   });
 
+  test('R2 public and signed media URLs remain API-provided values', () {
+    const publicUrl =
+        'https://media.arishville.com/website/school/gallery/photo.jpg';
+    const signedPrivateUrl =
+        'https://account.r2.cloudflarestorage.com/schooldesk-private-files/private/event-posts/photo.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256';
+    expect(resolveOriginalImageUrl(publicUrl), publicUrl);
+    expect(resolveOriginalImageUrl(signedPrivateUrl), signedPrivateUrl);
+  });
+
   test('legacy render URLs resolve to the original object URL', () {
     const legacy =
         'https://example.supabase.co/storage/v1/render/image/public/school-assets/logo.png?width=256&height=256&quality=72&resize=contain&download=1';

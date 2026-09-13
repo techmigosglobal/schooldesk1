@@ -18,8 +18,9 @@ class ApiTeacherRepository implements TeacherRepository {
     return guardApi(() async {
       final page = await _api.getStaff(
         status: textValue(status).isEmpty ? null : status,
+        search: textValue(searchQuery).isEmpty ? null : searchQuery,
         page: 1,
-        pageSize: 500,
+        pageSize: 20,
       );
       final query = textValue(searchQuery).toLowerCase();
       return page.data

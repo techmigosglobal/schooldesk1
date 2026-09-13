@@ -555,6 +555,8 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
           : RoleAccessService.teacherClassId;
       final className = _classLabelForSection(sectionId);
       final attachmentUrl = _attachments.map((a) => a.url).join(',');
+      final saveAsDraft =
+          BackendApiClient.instance.offlineSync?.isOffline == true;
 
       await BackendApiClient.instance.createHomework(
         title: _titleController.text.trim(),
@@ -565,6 +567,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
         description: '$_homeworkType: ${_descriptionController.text.trim()}',
         dueDate: _dueDateController.text.trim(),
         studentId: '',
+        status: saveAsDraft ? 'draft' : 'pending',
         attachmentUrl: attachmentUrl,
       );
       if (!mounted) return;
@@ -583,9 +586,13 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
         if (opts.isNotEmpty) _selectedSubjects.add(opts.first);
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Dairy assigned successfully!'),
-          backgroundColor: Color(0xFF0F9F8E),
+        SnackBar(
+          content: Text(
+            saveAsDraft
+                ? '✅ Dairy saved offline as a draft and queued for sync.'
+                : '✅ Dairy assigned successfully!',
+          ),
+          backgroundColor: const Color(0xFF0F9F8E),
         ),
       );
       widget.onHomeworkCreated();

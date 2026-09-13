@@ -1,6 +1,7 @@
 // handlers/health.ts
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ok } from "../index.ts";
+import { r2Config } from "../lib/r2_storage.ts";
 
 type DirectSql = {
   (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
@@ -83,10 +84,12 @@ export async function handleHealth(
   svc: SupabaseClient,
 ): Promise<Response> {
   if (path === "/health") {
+    const r2Configured = Boolean(r2Config());
     return ok({
       status: "ok",
       timestamp: new Date().toISOString(),
-      version: "2.0.0-supabase",
+      version: "2.0.0-supabase-r2",
+      storage: r2Configured ? "r2-configured" : "legacy-compatible",
     });
   }
 
@@ -101,10 +104,17 @@ export async function handleHealth(
     }
   }
 
+  const r2Configured = Boolean(r2Config());
+  const r2Required = (Deno.env.get("STORAGE_WRITE_PROVIDER") ?? "")
+    .trim().toLowerCase() === "r2";
   return ok({
     database: dbOk ? "ok" : "error",
     auth: "ok",
-    storage: "ok",
+    storage: r2Required && !r2Configured
+      ? "error:r2_not_configured"
+      : r2Configured
+      ? "r2-configured"
+      : "legacy-compatible",
     edge_function: "ok",
   });
 }

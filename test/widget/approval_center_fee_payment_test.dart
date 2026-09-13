@@ -41,11 +41,24 @@ void main() {
       _setLargeSurface(tester);
       var decisionCount = 0;
       _registerEmptyApprovalRoutes(adapter);
-      adapter.handlers['GET /fees/payment-requests'] = (_) {
+      adapter.handlers['GET /approvals/feed'] = (options) {
         final status = decisionCount == 0 ? 'submitted' : 'approved';
+        final queryStatus = options.queryParameters['status']?.toString();
+        final visible =
+            queryStatus == 'all' ||
+            queryStatus == null ||
+            queryStatus == 'pending' && status == 'submitted';
         return <String, dynamic>{
           'success': true,
-          'data': <Map<String, dynamic>>[_paymentRequestRow(status: status)],
+          'data': visible
+              ? <Map<String, dynamic>>[_approvalFeedRow(status: status)]
+              : <Map<String, dynamic>>[],
+          'total': visible ? 1 : 0,
+          'pending_count': status == 'submitted' ? 1 : 0,
+          'counts_by_type': <String, dynamic>{'fee': visible ? 1 : 0},
+          'page': 1,
+          'page_size': 20,
+          'has_more': false,
         };
       };
       adapter.handlers['PUT /fees/payment-requests/req-proof/decision'] =
@@ -145,6 +158,25 @@ Map<String, dynamic> _paymentRequestRow({required String status}) {
       'name': 'Y. Sivamani Kanta',
       'email': 'parent@example.com',
     },
+  };
+}
+
+Map<String, dynamic> _approvalFeedRow({required String status}) {
+  return <String, dynamic>{
+    'id': 'req-proof',
+    'type': 'fee',
+    'source': 'fee_payment_proof',
+    'requesterName': 'Rudhighsa Goud Y',
+    'requesterRole': 'Parent: Y. Sivamani Kanta',
+    'requesterClass': 'Payment proof',
+    'submittedDate': '2026-08-07',
+    'summary': 'Payment proof · ₹30000 · FEE-AUTO-TEST',
+    'details':
+        'Invoice: FEE-AUTO-TEST\nParent: Y. Sivamani Kanta\nMethod: UPI\nReference: UTR-TEST\nPaid by parent',
+    'status': status == 'submitted' ? 'pending' : status,
+    'remarks': '',
+    'actionDate': '2026-08-07',
+    'decisionPath': '/fees/payment-requests/req-proof/decision',
   };
 }
 

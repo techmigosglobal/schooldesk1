@@ -109,6 +109,10 @@ android/.kotlin/
 # Internal tooling
 .kimchi/
 
+# Local storage migration runtime state
+/storage-migration.json
+/storage-migration.json.tmp
+
 # Developer convenience dumps — never commit these
 all_files.txt
 flutter_*.log

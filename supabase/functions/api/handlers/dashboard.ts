@@ -575,18 +575,23 @@ export async function handleDashboard(
     }
 
     const [
-      students,
+      assignedStudents,
+      unassignedStudents,
       staff,
       announcements,
       sections,
       pendingLeave,
       attendanceSessions,
-      todayAttendances,
+      todayAttendanceRows,
+      todayPresentRows,
       approvalRequests,
     ] = await Promise.all([
-      svc.from("students").select("id, status, current_section_id, is_test_account", {
-        count: "exact",
-      }).eq("school_id", school).eq("is_test_account", false),
+      svc.from("students").select("id", { count: "exact", head: true })
+        .eq("school_id", school).eq("is_test_account", false)
+        .eq("status", "active").not("current_section_id", "is", null),
+      svc.from("students").select("id", { count: "exact", head: true })
+        .eq("school_id", school).eq("is_test_account", false)
+        .eq("status", "active").is("current_section_id", null),
       svc.from("staff").select("id", { count: "exact", head: true }).eq(
         "school_id",
         school,
@@ -606,39 +611,33 @@ export async function handleDashboard(
         count: "exact",
         head: true,
       }).eq("school_id", school),
-      svc.from("student_attendances").select("id, status").eq(
+      svc.from("student_attendances").select("id", {
+        count: "exact",
+        head: true,
+      }).eq(
         "school_id",
         school,
       ).gte("created_at", todayStart),
+      svc.from("student_attendances").select("id", {
+        count: "exact",
+        head: true,
+      }).eq("school_id", school).eq("status", "present").gte(
+        "created_at",
+        todayStart,
+      ),
       approvalRequestsQuery,
     ]);
 
-    // Calculate today's attendance percentage
-    const todayRows = todayAttendances.data ?? [];
-    const todayMarked = todayRows.length;
-    const todayPresent = todayRows.filter((r: Record<string, unknown>) =>
-      r.status === "present"
-    ).length;
+    // Calculate today's attendance percentage from bounded head-count queries.
+    const todayMarked = todayAttendanceRows.count ?? 0;
+    const todayPresent = todayPresentRows.count ?? 0;
     const attendancePct = todayMarked > 0
       ? Math.round((todayPresent / todayMarked) * 100)
       : 0;
 
-    const isActiveStudent = (student: Record<string, unknown>) =>
-      `${student.status ?? ""}`.trim().toLowerCase() === "active";
-    const activeAssignedStudents = (students.data ?? []).filter(
-      (student: Record<string, unknown>) =>
-        isActiveStudent(student) &&
-        `${student.current_section_id ?? ""}`.trim().length > 0,
-    ).length;
-    const activeUnassignedStudents = (students.data ?? []).filter(
-      (student: Record<string, unknown>) =>
-        isActiveStudent(student) &&
-        `${student.current_section_id ?? ""}`.trim().length === 0,
-    ).length;
-
     const operations = {
-      activeAssignedStudents,
-      activeUnassignedStudents,
+      activeAssignedStudents: assignedStudents.count ?? 0,
+      activeUnassignedStudents: unassignedStudents.count ?? 0,
       staffCount: staff.count ?? 0,
       sectionCount: sections.count ?? 0,
       pendingLeaveCount: pendingLeave.count ?? 0,
@@ -657,37 +656,23 @@ export async function handleDashboard(
       return ok(coordinatorDashboardDto(operations));
     }
 
-    const [invoices, paidInvoices, parentPaymentRequests] = await Promise.all([
-      svc.from("fee_invoices").select("balance, status").eq(
-        "school_id",
-        school,
-      ).eq("status", "pending"),
-      svc.from("fee_invoices").select("paid_amount").eq(
-        "school_id",
-        school,
-      ).eq("status", "paid"),
-      svc.from("parent_payment_requests").select("id, status").eq(
-        "school_id",
-        school,
-      ).eq("status", "pending"),
-    ]);
-
-    const totalOutstanding = (invoices.data ?? []).reduce(
-      (sum: number, invoice: Record<string, number>) =>
-        sum + (invoice.balance ?? 0),
-      0,
+    const { data: feeSummary, error: feeSummaryError } = await svc.rpc(
+      "fee_dashboard_summary",
+      { p_school_id: school },
     );
-    const totalPaid = (paidInvoices.data ?? []).reduce(
-      (sum: number, i: Record<string, number>) => sum + (i.paid_amount ?? 0),
-      0,
-    );
+    if (feeSummaryError) return fail(feeSummaryError.message);
+    const summary = (feeSummary && typeof feeSummary === "object")
+      ? feeSummary as Record<string, unknown>
+      : {};
+    const totalOutstanding = number(summary.outstanding);
+    const totalPaid = number(summary.collected);
     const totalDue = totalOutstanding;
     const collectionPct = totalDue > 0
       ? Math.round((totalPaid / (totalPaid + totalDue)) * 100)
       : 100;
     const base = financeDashboardDto(operations, {
       pendingFeeBalance: totalOutstanding,
-      pendingFeeRequests: parentPaymentRequests.data?.length ?? 0,
+      pendingFeeRequests: number(summary.pending_request_count),
       collectionPercentage: collectionPct,
       totalPaid,
       totalDue,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -19,6 +21,11 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
 
   List<Map<String, dynamic>> _teachers = [];
   List<Map<String, dynamic>> _leaveRequests = [];
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _staffPage = 1;
+  int _staffTotal = 0;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -27,48 +34,65 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     _loadData();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool resetPage = true}) async {
     try {
       final api = BackendApiClient.instance;
-      final staff = await api.getStaff(page: 1, pageSize: 100);
-      final leaves = await api.getLeaveApplications();
+      if (!resetPage) setState(() => _loadingMore = true);
+      final staff = await api.getStaff(
+        search: _search,
+        page: resetPage ? 1 : _staffPage + 1,
+        pageSize: 20,
+      );
+      final leaves = resetPage ? await api.getLeaveApplications() : null;
       if (!mounted) return;
+      final rows = staff.data
+          .map(
+            (s) => {
+              'id': s.id,
+              'name': '${s.firstName} ${s.lastName}'.trim(),
+              'subject': s.designation ?? 'Teacher',
+              'email': s.email ?? '',
+              'phone': s.phone ?? '',
+              'status': s.status,
+              'dept': s.departmentName ?? s.designation ?? '',
+            },
+          )
+          .toList();
+      final existingIds = _teachers.map((teacher) => teacher['id']).toSet();
+      final uniqueRows = resetPage
+          ? rows
+          : rows.where((row) => existingIds.add(row['id'])).toList();
       setState(() {
-        _teachers = staff.data
-            .map(
-              (s) => {
-                'id': s.id,
-                'name': '${s.firstName} ${s.lastName}'.trim(),
-                'subject': s.designation ?? 'Teacher',
-                'email': s.email ?? '',
-                'phone': s.phone ?? '',
-                'status': s.status,
-                'dept': s.departmentName ?? s.designation ?? '',
-              },
-            )
-            .toList();
-        _leaveRequests = leaves
-            .map(
-              (l) => {
-                'id': l.id,
-                'teacher': l.staffName.isNotEmpty ? l.staffName : l.staffId,
-                'type': l.leaveTypeName.isNotEmpty
-                    ? l.leaveTypeName
-                    : l.leaveTypeId,
-                'from': l.fromDate.split('T').first,
-                'to': l.toDate.split('T').first,
-                'reason': l.reason ?? '',
-                'status': l.status,
-                'totalDays': l.totalDays,
-              },
-            )
-            .toList();
+        _teachers = resetPage ? rows : [..._teachers, ...uniqueRows];
+        if (leaves != null) {
+          _leaveRequests = leaves
+              .map(
+                (l) => {
+                  'id': l.id,
+                  'teacher': l.staffName.isNotEmpty ? l.staffName : l.staffId,
+                  'type': l.leaveTypeName.isNotEmpty
+                      ? l.leaveTypeName
+                      : l.leaveTypeId,
+                  'from': l.fromDate.split('T').first,
+                  'to': l.toDate.split('T').first,
+                  'reason': l.reason ?? '',
+                  'status': l.status,
+                  'totalDays': l.totalDays,
+                },
+              )
+              .toList();
+        }
+        _staffPage = staff.page;
+        _staffTotal = staff.total;
+        _hasMore = staff.hasMore;
+        _loadingMore = false;
       });
     } on Object catch (_) {
       if (!mounted) return;
       setState(() {
         _teachers = [];
         _leaveRequests = [];
+        _loadingMore = false;
       });
     }
   }
@@ -76,7 +100,14 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
+  }
+
+  void _scheduleSearch(String value) {
+    setState(() => _search = value);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), _loadData);
   }
 
   List<Map<String, dynamic>> get _filtered => _teachers
@@ -131,7 +162,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
             color: context.appTheme.surface,
             padding: const EdgeInsets.all(12),
             child: TextField(
-              onChanged: (v) => setState(() => _search = v),
+              onChanged: _scheduleSearch,
               decoration: const InputDecoration(
                 hintText: 'Search teachers...',
                 prefixIcon: Icon(Icons.search_rounded, size: 18),
@@ -158,10 +189,34 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
       label: '${_filtered.length} teachers list',
       child: ListView.builder(
         padding: const EdgeInsets.all(12),
-        itemCount: _filtered.length,
+        itemCount: _filtered.length + (_hasMore ? 1 : 0),
         addAutomaticKeepAlives: false,
         addRepaintBoundaries: true,
         itemBuilder: (_, i) {
+          if (i == _filtered.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: OutlinedButton.icon(
+                  onPressed: _loadingMore
+                      ? null
+                      : () => _loadData(resetPage: false),
+                  icon: _loadingMore
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.expand_more_rounded),
+                  label: Text(
+                    _loadingMore
+                        ? 'Loading…'
+                        : 'Load more ($_staffTotal total)',
+                  ),
+                ),
+              ),
+            );
+          }
           if (i > 0) {
             return Column(
               mainAxisSize: MainAxisSize.min,

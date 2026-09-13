@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -26,8 +28,16 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   late TabController _tabController;
   String _filterRole = 'All';
   String _statusFilter = 'Active';
+  String _searchQuery = '';
   bool _loading = false;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  bool _staleData = false;
   String? _error;
+  int _currentPage = 0;
+  int _loadGeneration = 0;
+  Timer? _searchDebounce;
+  final ScrollController _userScrollController = ScrollController();
 
   final List<Map<String, dynamic>> _users = [];
   final List<Map<String, dynamic>> _activities = [];
@@ -69,34 +79,49 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadUsers();
+    _userScrollController.addListener(_onUserScroll);
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _userScrollController.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
-  List<Map<String, dynamic>> get _filtered => _filterRole == 'All'
-      ? _users
-      : _users.where((u) => u['role'] == _filterRole).toList();
+  List<Map<String, dynamic>> get _filtered => _users;
 
-  Future<void> _loadUsers() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  void _onUserScroll() {
+    if (_userScrollController.position.pixels >=
+        _userScrollController.position.maxScrollExtent - 160) {
+      _loadUsers(resetPage: false);
+    }
+  }
+
+  Future<void> _loadUsers({bool resetPage = true}) async {
+    final generation = ++_loadGeneration;
+    final requestedPage = resetPage ? 1 : _currentPage + 1;
+    if (mounted) {
+      setState(() {
+        _loading = resetPage && _users.isEmpty;
+        _loadingMore = !resetPage;
+        _error = null;
+        if (resetPage) _staleData = false;
+      });
+    }
     try {
       final api = BackendApiClient.instance;
-      final roleFilter = null;
+      final roleFilter = _filterRole == 'All' ? null : _filterRole;
       final statusFilter = _statusFilter == 'All'
           ? null
           : _statusFilter.toLowerCase();
       final res = await api.getUsers(
         role: roleFilter,
         status: statusFilter,
-        page: 1,
-        pageSize: 200,
+        search: _searchQuery,
+        page: requestedPage,
+        pageSize: 20,
       );
       final now = DateTime.now();
       final rows = res.data
@@ -130,11 +155,16 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           })
           .where((u) => _manageableRoles.contains(u['role']))
           .toList();
-      final activityRows = await api.getRawList('/audit-logs');
-      final permissionPayload = _isSuperAdminOwner
+      final activityRows = resetPage
+          ? await api.getRawList(
+              '/audit-logs',
+              queryParameters: const {'page': 1, 'page_size': 20},
+            )
+          : const <Map<String, dynamic>>[];
+      final permissionPayload = resetPage && _isSuperAdminOwner
           ? await api.getAccessPermissions()
           : <String, dynamic>{};
-      final activities = activityRows.take(30).map((a) {
+      final activities = activityRows.take(20).map((a) {
         final createdAt = DateTime.tryParse('${a['created_at'] ?? ''}');
         final when = createdAt == null
             ? ''
@@ -147,15 +177,30 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
         };
       }).toList();
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _users
-          ..clear()
-          ..addAll(rows);
-        _activities
-          ..clear()
-          ..addAll(activities);
-        if (_isSuperAdminOwner) {
+        final existingIds = _users.map((user) => '${user['id']}').toSet();
+        final uniqueRows = rows
+            .where((row) => !existingIds.contains('${row['id']}'))
+            .toList(growable: false);
+        if (resetPage) {
+          _users
+            ..clear()
+            ..addAll(rows);
+        } else {
+          _users.addAll(uniqueRows);
+        }
+        if (resetPage) {
+          _activities
+            ..clear()
+            ..addAll(activities);
+        }
+        _currentPage = res.page;
+        _hasMore = res.hasMore && res.data.isNotEmpty;
+        _loading = false;
+        _loadingMore = false;
+        _staleData = false;
+        if (resetPage && _isSuperAdminOwner) {
           final roles = permissionPayload['roles'] as List? ?? const [];
           final permissions =
               permissionPayload['permissions'] as List? ?? const [];
@@ -178,17 +223,21 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
         }
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.toString();
+        _loading = false;
+        _loadingMore = false;
+        _staleData = _users.isNotEmpty;
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
     }
+  }
+
+  void _queueUserSearch() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) _loadUsers();
+    });
   }
 
   String _titleCase(String value) {
@@ -273,10 +322,10 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   }
 
   Widget _buildUsers() {
-    if (_loading) {
+    if (_loading && _users.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null) {
+    if (_error != null && _users.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -310,14 +359,18 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       children: [
         if (_isPrincipalOwner) _buildPrincipalAccessNotice(),
         _buildUserFilters(),
+        if (_staleData) _buildStaleUserBanner(),
         Expanded(
           child: _filtered.isEmpty
               ? _buildEmptyUsers()
               : ListView.separated(
+                  controller: _userScrollController,
                   padding: const EdgeInsets.all(12),
-                  itemCount: _filtered.length,
+                  itemCount: _filtered.length + (_hasMore ? 1 : 0),
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _buildUserCard(_filtered[i]),
+                  itemBuilder: (_, i) => i == _filtered.length
+                      ? _buildUserLoadMore()
+                      : _buildUserCard(_filtered[i]),
                 ),
         ),
       ],
@@ -332,6 +385,18 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          TextField(
+            onChanged: (value) {
+              _searchQuery = value;
+              _queueUserSearch();
+            },
+            decoration: const InputDecoration(
+              hintText: 'Search name, username, email, or phone...',
+              prefixIcon: Icon(Icons.search_rounded, size: 18),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 8),
           _buildChipRow(
             options: const ['Active', 'Inactive', 'All'],
             selected: _statusFilter,
@@ -344,8 +409,53 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           _buildChipRow(
             options: ['All', ..._manageableRoles],
             selected: _filterRole,
-            onSelected: (value) => setState(() => _filterRole = value),
+            onSelected: (value) {
+              setState(() => _filterRole = value);
+              _loadUsers();
+            },
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserLoadMore() {
+    return Center(
+      child: TextButton(
+        onPressed: _loadingMore ? null : () => _loadUsers(resetPage: false),
+        child: Text(_loadingMore ? 'Loading...' : 'Load more users'),
+      ),
+    );
+  }
+
+  Widget _buildStaleUserBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.cloud_off_rounded,
+            size: 17,
+            color: Colors.orange.shade900,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Showing cached accounts. ${_error ?? 'Refresh failed.'}',
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ),
+          TextButton(onPressed: _loadUsers, child: const Text('Retry')),
         ],
       ),
     );

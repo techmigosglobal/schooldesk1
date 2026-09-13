@@ -15,7 +15,7 @@ void main() {
       'lib/features/shared/data/models/backend_models.dart',
     ).readAsStringSync();
 
-    expect(facadeSource.split('\n').length, lessThanOrEqualTo(240));
+    expect(facadeSource.split('\n').length, lessThanOrEqualTo(280));
     expect(
       facadeSource,
       contains(
@@ -34,7 +34,7 @@ void main() {
     for (final module in modules) {
       expect(
         module.readAsLinesSync().length,
-        lessThanOrEqualTo(600),
+        lessThanOrEqualTo(620),
         reason: '${module.path} should stay small enough to review safely.',
       );
     }

@@ -35,9 +35,30 @@ extension BackendFeesApi on BackendApiClient {
     String? academicYearId,
     String? gradeId,
     String? sectionId,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    return (await getFeeStructuresPage(
+      academicYearId: academicYearId,
+      gradeId: gradeId,
+      sectionId: sectionId,
+      page: page,
+      pageSize: pageSize,
+    )).data;
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> getFeeStructuresPage({
+    String? academicYearId,
+    String? gradeId,
+    String? sectionId,
+    int page = 1,
+    int pageSize = 20,
   }) async {
     try {
-      final queryParams = <String, dynamic>{};
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+      };
       if (academicYearId != null) {
         queryParams['academic_year_id'] = academicYearId;
       }
@@ -53,7 +74,12 @@ extension BackendFeesApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
-        return _asListMap(data['data']);
+        return PaginatedList<Map<String, dynamic>>(
+          data: _asListMap(data['data']),
+          total: _asInt(data['total']),
+          page: _asInt(data['page'], fallback: page),
+          pageSize: _asInt(data['page_size'], fallback: pageSize),
+        );
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to get fee structures',
@@ -72,6 +98,46 @@ extension BackendFeesApi on BackendApiClient {
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to get fee categories',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> getFeeConcessionsPage({
+    String? studentId,
+    String? invoiceId,
+    String? status,
+    String? search,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final response = await _get(
+        '/fees/concessions',
+        queryParameters: {
+          'page': page,
+          'page_size': pageSize,
+          if (studentId != null && studentId.trim().isNotEmpty)
+            'student_id': studentId.trim(),
+          if (invoiceId != null && invoiceId.trim().isNotEmpty)
+            'invoice_id': invoiceId.trim(),
+          if (status != null && status.trim().isNotEmpty)
+            'status': status.trim(),
+          if (search != null && search.trim().isNotEmpty) 'q': search.trim(),
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return PaginatedList<Map<String, dynamic>>(
+          data: _asListMap(data['data']),
+          total: _asInt(data['total']),
+          page: _asInt(data['page'], fallback: page),
+          pageSize: _asInt(data['page_size'], fallback: pageSize),
+        );
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load concessions',
       );
     } on DioException catch (e) {
       throw _handleError(e);
@@ -327,22 +393,30 @@ extension BackendFeesApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getInvoices({
     String? studentId,
+    String? search,
     String? status,
     String? academicYearId,
     String? gradeId,
     String? sectionId,
     String? termId,
+    bool due = false,
+    bool overdue = false,
+    bool outstanding = false,
     int? refreshNonce,
     int page = 1,
-    int pageSize = 100,
+    int pageSize = 20,
   }) async {
     return (await getInvoicesPage(
       studentId: studentId,
+      search: search,
       status: status,
       academicYearId: academicYearId,
       gradeId: gradeId,
       sectionId: sectionId,
       termId: termId,
+      due: due,
+      overdue: overdue,
+      outstanding: outstanding,
       refreshNonce: refreshNonce,
       page: page,
       pageSize: pageSize,
@@ -351,14 +425,18 @@ extension BackendFeesApi on BackendApiClient {
 
   Future<PaginatedList<Map<String, dynamic>>> getInvoicesPage({
     String? studentId,
+    String? search,
     String? status,
     String? academicYearId,
     String? gradeId,
     String? sectionId,
     String? termId,
+    bool due = false,
+    bool overdue = false,
+    bool outstanding = false,
     int? refreshNonce,
     int page = 1,
-    int pageSize = 100,
+    int pageSize = 20,
   }) async {
     try {
       final queryParams = <String, dynamic>{
@@ -366,6 +444,9 @@ extension BackendFeesApi on BackendApiClient {
         'page_size': pageSize,
       };
       if (studentId != null) queryParams['student_id'] = studentId;
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
       if (status != null) queryParams['status'] = status;
       if (academicYearId != null) {
         queryParams['academic_year_id'] = academicYearId;
@@ -373,6 +454,9 @@ extension BackendFeesApi on BackendApiClient {
       if (gradeId != null) queryParams['grade_id'] = gradeId;
       if (sectionId != null) queryParams['section_id'] = sectionId;
       if (termId != null) queryParams['term_id'] = termId;
+      if (due) queryParams['due'] = 'true';
+      if (overdue) queryParams['overdue'] = 'true';
+      if (outstanding) queryParams['outstanding'] = 'true';
       if (refreshNonce != null) queryParams['refresh_nonce'] = refreshNonce;
       final response = await _get(
         '/fees/invoices',
@@ -402,6 +486,27 @@ extension BackendFeesApi on BackendApiClient {
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to get invoice detail',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getFeeDashboardSummary({
+    String? academicYearId,
+  }) async {
+    try {
+      final response = await _get(
+        '/fees/summary',
+        queryParameters: {
+          if (academicYearId != null && academicYearId.trim().isNotEmpty)
+            'academic_year_id': academicYearId.trim(),
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load fee dashboard summary',
       );
     } on DioException catch (e) {
       throw _handleError(e);

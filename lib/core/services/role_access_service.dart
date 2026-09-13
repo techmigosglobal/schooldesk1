@@ -100,13 +100,11 @@ class RoleAccessService {
     );
     final teacherSectionId = _sectionId(classTeacherRow);
 
-    // Parents only ever consume `parentChildren` (their linked kids), so
-    // skip the school-wide students/staff/timetable/invoices fetches below
-    // entirely for that role - they were previously always fetched (even
-    // though no parent screen reads `_students`, `_teachers`,
-    // `_teacherTimetable`/`_todayTimetable`, or `_invoices`), adding several
-    // unnecessary sequential network round-trips to every parent login and
-    // app resume.
+    // Bootstrap contains identity, role assignments, timetable, and linked
+    // children only. Operational directories are loaded by their screens.
+    // The one exception is a teacher's assigned section preview, which is
+    // deliberately bounded to one operational page so teacher class access
+    // remains available without downloading the school directory.
     final isParent = effectiveRole == 'parent';
     final assignedSectionIds = _teacherAssignedClasses
         .map(_sectionId)
@@ -117,7 +115,10 @@ class RoleAccessService {
     // another. Start them together after the teacher dashboard has supplied
     // the section/staff identifiers. This reduces login/resume latency without
     // changing the role-specific data boundaries above.
+    final isTeacher = effectiveRole == 'teacher';
     final studentsFuture = isParent
+        ? Future<PaginatedList<StudentModel>?>.value(null)
+        : !isTeacher
         ? Future<PaginatedList<StudentModel>?>.value(null)
         : assignedSectionIds.length > 1
         ? _loadStudentsForSections(api, assignedSectionIds)
@@ -125,14 +126,10 @@ class RoleAccessService {
             () => api.getStudents(
               sectionId: teacherSectionId.isEmpty ? null : teacherSectionId,
               page: 1,
-              pageSize: 100,
+              pageSize: 20,
             ),
           );
-    final staffFuture = (effectiveRole == 'teacher' || isParent)
-        ? Future<PaginatedList<StaffModel>?>.value(null)
-        : _try<PaginatedList<StaffModel>>(
-            () => api.getStaff(page: 1, pageSize: 100),
-          );
+    final staffFuture = Future<PaginatedList<StaffModel>?>.value(null);
     final parentChildrenFuture = isParent
         ? _try<List<Map<String, dynamic>>>(() => api.getMyStudents())
         : Future<List<Map<String, dynamic>>?>.value(<Map<String, dynamic>>[]);
@@ -147,12 +144,7 @@ class RoleAccessService {
     // do not probe the finance endpoint for this role. Apart from avoiding a
     // predictable 403, this keeps bootstrap quiet and removes an unnecessary
     // request from the local Edge worker budget.
-    final invoicesFuture =
-        (effectiveRole == 'teacher' ||
-            effectiveRole == 'coordinator' ||
-            isParent)
-        ? Future<List<Map<String, dynamic>>?>.value(<Map<String, dynamic>>[])
-        : _try<List<Map<String, dynamic>>>(() => api.getInvoices());
+    final invoicesFuture = Future<List<Map<String, dynamic>>?>.value(null);
 
     final scopeResults = await Future.wait<Object?>([
       studentsFuture,
@@ -893,7 +885,7 @@ class RoleAccessService {
     // directory requests.
     for (final sectionId in sectionIds) {
       final result = await _try(
-        () => api.getStudents(sectionId: sectionId, page: 1, pageSize: 100),
+        () => api.getStudents(sectionId: sectionId, page: 1, pageSize: 20),
       );
       for (final student in result?.data ?? const <StudentModel>[]) {
         studentsById[student.id] = student;

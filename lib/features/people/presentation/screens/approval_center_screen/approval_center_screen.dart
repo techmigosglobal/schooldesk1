@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -195,10 +196,16 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   late TabController _tabController;
   List<ApprovalModel> _allApprovals = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _currentPage = 1;
+  int _totalApprovals = 0;
+  int _serverPendingCount = 0;
   String? _error;
-  List<String> _sourceErrors = const [];
   final Set<String> _actionLoadingIds = {};
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
+  int _queryGeneration = 0;
   String _statusFilter = 'pending';
   // Stored reference so we can reliably removeListener on dispose without
   // relying on a second async getInstance() call that may complete after
@@ -233,7 +240,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   }
 
   void _onNotificationChanged() {
-    if (mounted) _loadData();
+    _scheduleReload();
   }
 
   int _initialTabIndex(String initialTab) {
@@ -256,94 +263,38 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   void dispose() {
     _notificationService?.removeListener(_onNotificationChanged);
     _notificationService = null;
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
+  void _scheduleReload() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), _loadData);
+  }
+
   Future<void> _loadData() async {
+    final generation = ++_queryGeneration;
     setState(() {
       _loading = true;
       _error = null;
-      _sourceErrors = const [];
+      _loadingMore = false;
     });
     try {
-      final sources = await Future.wait([
-        _loadApprovalSource('Staff leave', () async {
-          final leaves = await BackendApiClient.instance.getLeaveApplications();
-          return leaves.map((l) => _staffLeaveApprovalFromModel(l)).toList();
-        }),
-        _loadApprovalSource(
-          'Account approvals',
-          () => _loadGenericApprovals(
-            path: '/account-approvals',
-            type: 'account',
-          ),
-        ),
-        _loadApprovalSource(
-          'Principal submissions',
-          () => _loadGenericApprovals(path: '/approvals', type: 'approval'),
-        ),
-        _loadApprovalSource('Student leave', _loadStudentLeaveApprovals),
-        _loadApprovalSource(
-          'Fee concessions',
-          () => _loadGenericApprovals(
-            path: '/fees/concessions',
-            type: 'fee_concession',
-          ),
-        ),
-        _loadApprovalSource('Fee payment proofs', () async {
-          final requests = await BackendApiClient.instance
-              .getParentPaymentRequests(pageSize: 200);
-          return requests
-              .where(
-                (request) =>
-                    FeePaymentRequestStatus.isReviewRecord(request['status']),
-              )
-              .map(_feePaymentApprovalFromRow)
-              .toList();
-        }),
-        _loadApprovalSource(
-          'Events',
-          // The dedicated approval endpoint for event posts is /event-posts/pending
-          // (principal-only). We transform each post into the generic approval map
-          // format so it slots into the shared list and type-filter correctly.
-          () async {
-            final posts = await BackendApiClient.instance
-                .getPendingEventPosts();
-            return posts.map((post) {
-              final creatorName =
-                  '${post['creator_name'] ?? post['created_by_name'] ?? post['author'] ?? post['posted_by'] ?? post['requester_name'] ?? 'Teacher'}';
-              final creatorRole =
-                  '${post['creator_role'] ?? post['created_by_role'] ?? 'teacher'}';
-              return {
-                'id': '${post['id'] ?? ''}',
-                'type': 'event',
-                'requesterName': creatorName,
-                'requesterRole': creatorRole,
-                'requesterClass':
-                    '${post['section_name'] ?? post['class_label'] ?? ''}',
-                'submittedDate': '${post['created_at'] ?? ''}'.split('T').first,
-                'summary': '${post['title'] ?? 'Event Post'}',
-                'details': '${post['body'] ?? post['description'] ?? ''}',
-                'status': _approvalStatus(post['status']),
-                'remarks': post['rejection_reason'],
-                'actionDate': post['approved_at'] ?? post['updated_at'],
-                'decisionPath': '/event-posts/${post['id']}',
-              };
-            }).toList();
-          },
-        ),
-      ]);
-      final approvals = sources.expand((source) => source.rows).toList();
-      final sourceErrors = sources
-          .where((source) => source.errorMessage != null)
-          .map((source) => '${source.label}: ${source.errorMessage}')
-          .toList();
-      if (!mounted) return;
+      final response = await BackendApiClient.instance.getApprovalFeed(
+        status: _statusFilter == 'resolved' ? 'all' : _statusFilter,
+        search: _searchController.text,
+        page: 1,
+        pageSize: 20,
+      );
+      if (!mounted || generation != _queryGeneration) return;
       setState(() {
-        _allApprovals = approvals.map(ApprovalModel.fromMap).toList();
-        _sourceErrors = sourceErrors;
+        _allApprovals = response.page.data.map(ApprovalModel.fromMap).toList();
+        _currentPage = response.page.page;
+        _hasMore = response.page.hasMore;
+        _totalApprovals = response.page.total;
+        _serverPendingCount = response.pendingCount;
         _loading = false;
         _error = null;
       });
@@ -356,254 +307,40 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     }
   }
 
-  Future<List<Map<String, dynamic>>> _loadGenericApprovals({
-    required String path,
-    required String type,
-  }) async {
-    final rows = await BackendApiClient.instance.getRawList(path);
-    return rows.map((row) => _genericApprovalFromRow(row, type, path)).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> _loadStudentLeaveApprovals() async {
-    final rows = await BackendApiClient.instance.getStudentLeaveApplications();
-    return rows.map(_studentLeaveApprovalFromRow).toList();
-  }
-
-  Map<String, dynamic> _staffLeaveApprovalFromModel(LeaveApplicationModel row) {
-    final teacherName = row.staffName.trim().isNotEmpty
-        ? row.staffName.trim()
-        : _text(row.staffId, fallback: 'Teacher');
-    final leaveType = row.leaveTypeName.trim().isNotEmpty
-        ? row.leaveTypeName.trim()
-        : _text(row.leaveTypeId, fallback: 'Leave request');
-    final fromDate = _dateOnly(row.fromDate);
-    final toDate = _dateOnly(row.toDate);
-    final submitted = _dateOnly(row.appliedAt).isNotEmpty
-        ? _dateOnly(row.appliedAt)
-        : fromDate;
-    return {
-      'id': row.id,
-      'type': 'leave',
-      'requesterName': teacherName,
-      'requesterRole': 'Teacher',
-      'requesterClass': row.staffDesignation.trim().isEmpty
-          ? 'Staff leave'
-          : row.staffDesignation.trim(),
-      'submittedDate': submitted,
-      'summary': '$leaveType - ${row.totalDays.toStringAsFixed(1)} day(s)',
-      'details':
-          'Teacher: $teacherName\nFrom: $fromDate\nTo: $toDate\nReason: ${row.reason ?? ''}',
-      'status': _approvalStatus(row.status),
-      'remarks': _text(row.rejectionReason).isEmpty
-          ? null
-          : _text(row.rejectionReason),
-      'actionDate': null,
-      'decisionPath': '/leave/applications/${row.id}/approve',
-    };
-  }
-
-  Future<_ApprovalSourceResult> _loadApprovalSource(
-    String label,
-    Future<List<Map<String, dynamic>>> Function() loader,
-  ) async {
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    final generation = _queryGeneration;
+    setState(() => _loadingMore = true);
     try {
-      return _ApprovalSourceResult(label: label, rows: await loader());
-    } on Object catch (error) {
-      return _ApprovalSourceResult(
-        label: label,
-        rows: const [],
-        errorMessage: _friendlyError(error),
+      final response = await BackendApiClient.instance.getApprovalFeed(
+        status: _statusFilter == 'resolved' ? 'all' : _statusFilter,
+        search: _searchController.text,
+        page: _currentPage + 1,
+        pageSize: 20,
       );
-    }
-  }
-
-  Map<String, dynamic> _studentLeaveApprovalFromRow(Map<String, dynamic> row) {
-    final student = _asMap(row['student']);
-    final parent = _asMap(row['parent_user']);
-    final section = _asMap(student['current_section']);
-    final grade = _asMap(section['grade']);
-    final fromDate = _dateOnly(row['start_date'] ?? row['from_date']);
-    final toDate = _dateOnly(row['end_date'] ?? row['to_date']);
-    final days = _text(row['total_days'], fallback: '1');
-    final status = _text(row['status'], fallback: 'pending').toLowerCase();
-    final studentName = _joinNonEmpty([
-      _text(student['first_name']),
-      _text(student['last_name']),
-    ], fallback: _text(row['student_id'], fallback: 'Student'));
-    final parentName = _text(parent['name'], fallback: 'Parent');
-    final classLabel = _joinNonEmpty([
-      _text(grade['grade_name']),
-      _text(section['section_name']),
-    ], fallback: _text(row['student_id']));
-    return {
-      'id': _text(row['id']),
-      'type': 'student_leave',
-      'requesterName': studentName,
-      'requesterRole': 'Parent: $parentName',
-      'requesterClass': classLabel,
-      'submittedDate': _dateOnly(row['created_at'] ?? row['applied_at']),
-      'summary':
-          '${_text(row['leave_type'], fallback: 'Leave')} — $days day(s)',
-      'details':
-          'Student: $studentName\nParent: $parentName\nFrom: $fromDate\nTo: $toDate\nReason: ${_text(row['reason'])}',
-      'status': status,
-      'remarks': _text(row['rejection_reason']).isEmpty
-          ? null
-          : _text(row['rejection_reason']),
-      'actionDate': _dateOnly(row['decided_at'] ?? row['updated_at']),
-      'decisionPath':
-          '/student-leave/applications/${_text(row['id'])}/decision',
-    };
-  }
-
-  Map<String, dynamic> _genericApprovalFromRow(
-    Map<String, dynamic> row,
-    String type,
-    String path,
-  ) {
-    final resolvedType = type == 'approval' ? _generalApprovalType(row) : type;
-    final requestedBy = row['requested_by'] is Map
-        ? Map<String, dynamic>.from(row['requested_by'] as Map)
-        : const <String, dynamic>{};
-    return {
-      'id': '${row['id'] ?? ''}',
-      'type': resolvedType,
-      'requesterName':
-          '${row['requester_name'] ?? row['student_name'] ?? row['staff_name'] ?? requestedBy['name'] ?? requestedBy['username'] ?? row['requested_by_user_id'] ?? row['created_by'] ?? 'Requester'}',
-      'requesterRole':
-          '${row['requester_role'] ?? row['requested_by_role'] ?? requestedBy['role_name'] ?? row['role'] ?? ''}',
-      'requesterClass':
-          '${row['requesterClass'] ?? row['class_label'] ?? row['class_name'] ?? row['class'] ?? row['section'] ?? ''}',
-      'submittedDate':
-          '${row['submitted_at'] ?? row['created_at'] ?? row['date'] ?? ''}'
-              .split('T')
-              .first,
-      'summary':
-          '${row['title'] ?? row['module_label'] ?? row['summary'] ?? resolvedType}',
-      'details':
-          '${row['details'] ?? row['reason'] ?? row['description'] ?? row['purpose'] ?? row['operation_type'] ?? ''}',
-      'status': _approvalStatus(row['status']),
-      'remarks':
-          row['remarks'] ??
-          row['rejection_reason'] ??
-          row['change_request_note'],
-      'actionDate': row['action_date'] ?? row['applied_at'],
-      'decisionPath': resolvedType == 'fee_concession'
-          ? '$path/${row['id']}/decision'
-          : '$path/${row['id']}',
-      'source': resolvedType == 'fee_concession'
-          ? ApprovalSource.feeConcession.name
-          : ApprovalSource.generic.name,
-    };
-  }
-
-  Map<String, dynamic> _feePaymentApprovalFromRow(Map<String, dynamic> row) {
-    final student = _asMap(row['student']);
-    final parent = _asMap(row['parent_user']);
-    final invoice = _asMap(row['invoice']);
-    final rawStatus = FeePaymentRequestStatus.normalize(row['status']);
-    final state = FeePaymentRequestStatus.state(rawStatus);
-    final status = switch (state) {
-      FeePaymentRequestState.pending => 'pending',
-      FeePaymentRequestState.clarificationRequired => 'changes_requested',
-      FeePaymentRequestState.approved => 'approved',
-      FeePaymentRequestState.rejected => 'rejected',
-      FeePaymentRequestState.reversed => 'reversed',
-      _ => rawStatus,
-    };
-    final studentName = _joinNonEmpty([
-      _text(student['first_name']),
-      _text(student['last_name']),
-    ], fallback: 'Student');
-    final parentName = _text(
-      parent['name'],
-      fallback: _text(parent['email'], fallback: 'Parent'),
-    );
-    final invoiceNumber = _text(
-      invoice['invoice_number'],
-      fallback: _text(row['invoice_id'], fallback: 'Invoice'),
-    );
-    final amount = _text(row['amount'], fallback: '0');
-    final paymentDate = _dateOnly(row['payment_date'] ?? row['created_at']);
-    final method = _text(
-      row['payment_method'] ?? row['payment_mode'],
-      fallback: 'UPI',
-    ).toUpperCase();
-    final transactionRef = _text(
-      row['transaction_id'] ?? row['transaction_ref'],
-      fallback: _text(row['request_reference']),
-    );
-    final parentRemarks = _text(row['remarks']);
-    final reviewerRemarks = _text(row['admin_remarks']);
-    final proofState = _text(row['proof_url']).isEmpty
-        ? 'Proof screenshot: not available'
-        : 'Proof screenshot: uploaded';
-    final details = [
-      'Student: $studentName',
-      'Parent: $parentName',
-      'Invoice: $invoiceNumber',
-      'Amount: ₹$amount',
-      'Paid on: ${paymentDate.isEmpty ? '—' : paymentDate}',
-      'Mode / Reference: $method${transactionRef.isEmpty ? '' : ' / $transactionRef'}',
-      proofState,
-      if (parentRemarks.isNotEmpty) 'Parent note: $parentRemarks',
-      if (reviewerRemarks.isNotEmpty) 'Reviewer remarks: $reviewerRemarks',
-    ].join('\n');
-
-    return {
-      'id': _text(row['id']),
-      'type': 'fee',
-      'source': ApprovalSource.feePaymentProof.name,
-      'requesterName': studentName,
-      'requesterRole': 'Parent: $parentName',
-      'requesterClass': 'Payment proof',
-      'submittedDate': paymentDate,
-      'summary': 'Payment proof · ₹$amount · $invoiceNumber',
-      'details': details,
-      'status': status,
-      'remarks': reviewerRemarks.isEmpty ? null : reviewerRemarks,
-      'actionDate': _dateOnly(row['reviewed_at'] ?? row['updated_at']),
-      'decisionPath': '/fees/payment-requests/${_text(row['id'])}/decision',
-    };
-  }
-
-  String _generalApprovalType(Map<String, dynamic> row) {
-    final module = _text(row['module']).toLowerCase();
-    final type = _text(row['type']).toLowerCase();
-    switch (module.isEmpty ? type : module) {
-      case 'students':
-        return 'student';
-      case 'staff':
-      case 'user_access':
-        return 'account';
-      case 'fees':
-        return 'fee';
-      case 'timetable':
-        return 'timetable';
-      case 'documents':
-        return 'document';
-      case 'communication':
-        return 'communication';
-      case 'academic_info':
-      case 'attendance_operations':
-        return 'class';
-      default:
-        return type.isEmpty ? 'leave' : type;
-    }
-  }
-
-  String _approvalStatus(Object? status) {
-    final normalized = _text(status, fallback: 'pending').toLowerCase();
-    switch (normalized) {
-      case 'submitted':
-      case 'principal_review':
-        return 'pending';
-      case 'changes_requested':
-        return 'changes_requested';
-      case 'applied':
-        return 'approved';
-      default:
-        return normalized;
+      if (!mounted || generation != _queryGeneration) return;
+      final existingIds = _allApprovals.map((item) => item.id).toSet();
+      final additions = response.page.data
+          .map(ApprovalModel.fromMap)
+          .where((item) => existingIds.add(item.id))
+          .toList();
+      setState(() {
+        _allApprovals = [..._allApprovals, ...additions];
+        _currentPage = response.page.page;
+        _hasMore = response.page.hasMore;
+        _totalApprovals = response.page.total;
+        _serverPendingCount = response.pendingCount;
+        _loadingMore = false;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingMore = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not load more approvals: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -905,10 +642,28 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       );
       return;
     }
+    if (path.startsWith('/account-approvals/')) {
+      final action = status == 'approved' ? 'approve' : 'reject';
+      await BackendApiClient.instance.createRaw('$path/$action', {
+        'reason': remarks,
+        'expected_status': 'pending',
+      });
+      return;
+    }
+    if (path.startsWith('/event-posts/')) {
+      final action = status == 'approved' ? 'approve' : 'reject';
+      final eventId = path.split('/').where((part) => part.isNotEmpty).last;
+      await BackendApiClient.instance.createRaw(
+        '/event-posts/$eventId/$action',
+        {'reason': remarks, 'expected_status': 'pending'},
+      );
+      return;
+    }
     await BackendApiClient.instance.updateRaw(path, {
       'type': approval.type.name,
       'status': status,
       'remarks': remarks,
+      'expected_status': 'pending',
     });
   }
 
@@ -969,41 +724,11 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     return months[month - 1];
   }
 
-  Map<String, dynamic> _asMap(Object? value) {
-    if (value is Map<String, dynamic>) return value;
-    if (value is Map) return Map<String, dynamic>.from(value);
-    return const <String, dynamic>{};
-  }
-
-  String _text(Object? value, {String fallback = ''}) {
-    final text = '${value ?? ''}'.trim();
-    if (text.isEmpty || text == 'null') return fallback;
-    return text;
-  }
-
-  String _friendlyError(Object error) {
-    final raw = error.toString().trim();
-    if (raw.isEmpty) return 'Unable to load';
-    final compact = raw.replaceAll(RegExp(r'\s+'), ' ');
-    return compact.length > 90 ? '${compact.substring(0, 90)}...' : compact;
-  }
-
-  String _dateOnly(Object? value) {
-    final text = _text(value);
-    if (text.isEmpty) return '';
-    return text.split('T').first;
-  }
-
-  String _joinNonEmpty(List<String> values, {String fallback = ''}) {
-    final joined = values.where((value) => value.trim().isNotEmpty).join(' ');
-    return joined.trim().isEmpty ? fallback : joined.trim();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final pendingCount = _allApprovals
-        .where((a) => a.status == 'pending')
-        .length;
+    final pendingCount = _serverPendingCount > 0
+        ? _serverPendingCount
+        : _allApprovals.where((a) => a.status == 'pending').length;
     final drawer = PrincipalDrawer(
       selectedIndex: _selectedDrawerIndex,
       onDestinationSelected: (i) => setState(() => _selectedDrawerIndex = i),
@@ -1095,13 +820,12 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
             visibleCount: items.length,
             selectedStatus: _statusFilter,
             searchController: _searchController,
-            onStatusChanged: (value) => setState(() => _statusFilter = value),
-            onSearchChanged: (_) => setState(() {}),
+            onStatusChanged: (value) {
+              setState(() => _statusFilter = value);
+              _scheduleReload();
+            },
+            onSearchChanged: (_) => _scheduleReload(),
           ),
-          if (_sourceErrors.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _ApprovalSourceHealthBanner(errors: _sourceErrors),
-          ],
           const SizedBox(height: 16),
           if (items.isEmpty)
             Padding(
@@ -1151,6 +875,26 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
                   onApprove: () {},
                   onReject: (_) {},
                   onRequestChanges: (_) {},
+                ),
+              ),
+            ),
+          ],
+          if (_hasMore) ...[
+            const SizedBox(height: 12),
+            Center(
+              child: OutlinedButton.icon(
+                onPressed: _loadingMore ? null : _loadMore,
+                icon: _loadingMore
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded),
+                label: Text(
+                  _loadingMore
+                      ? 'Loading…'
+                      : 'Load more (${_allApprovals.length} of $_totalApprovals)',
                 ),
               ),
             ),
@@ -1225,72 +969,6 @@ class _PendingApprovalBadge extends StatelessWidget {
             color: context.appTheme.warning,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ApprovalSourceResult {
-  final String label;
-  final List<Map<String, dynamic>> rows;
-  final String? errorMessage;
-
-  const _ApprovalSourceResult({
-    required this.label,
-    required this.rows,
-    this.errorMessage,
-  });
-}
-
-class _ApprovalSourceHealthBanner extends StatelessWidget {
-  final List<String> errors;
-
-  const _ApprovalSourceHealthBanner({required this.errors});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.appTheme.warningContainer,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.appTheme.warning.withAlpha(70)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.sync_problem_rounded,
-            color: context.appTheme.warning,
-            size: 20,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${errors.length} approval source${errors.length == 1 ? '' : 's'} need attention',
-                  style: GoogleFonts.ibmPlexSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: context.appTheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  errors.take(3).join('\n'),
-                  style: GoogleFonts.ibmPlexSans(
-                    fontSize: 12,
-                    height: 1.35,
-                    color: context.appTheme.muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

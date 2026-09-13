@@ -1,6 +1,8 @@
 /// Fee Ledger & Dues — merged view showing student accounts and outstanding balances.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -19,6 +21,10 @@ class FeeLedgerScreen extends StatefulWidget {
 
 class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  int _totalInvoices = 0;
   String? _error;
   final _searchCtrl = TextEditingController();
   String _query = '';
@@ -26,6 +32,8 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
 
   List<Map<String, dynamic>> _invoices = const [];
   List<Map<String, dynamic>> _payments = const [];
+  Map<String, dynamic> _summary = const {};
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -36,33 +44,62 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool resetPage = true}) async {
     setState(() {
-      _loading = true;
+      _loading = resetPage;
+      _loadingMore = !resetPage;
       _error = null;
     });
     try {
       final api = BackendApiClient.instance;
-      final raw = await api.getInvoices(pageSize: 500);
+      final response = await api.getInvoicesPage(
+        search: _query,
+        status: _filter == 'paid' || _filter == 'partial' ? _filter : null,
+        page: resetPage ? 1 : _page + 1,
+        pageSize: 20,
+      );
+      final summary = resetPage ? await api.getFeeDashboardSummary() : _summary;
+      final payments = resetPage
+          ? await api.getPaymentsPage(pageSize: 20)
+          : null;
       if (!mounted) return;
-      final invoices = raw.map(normalizeInvoice).toList();
-      final allPayments = invoices.expand(normalizePayments).toList()
-        ..sort((a, b) => _sortDate(b['date']).compareTo(_sortDate(a['date'])));
+      final invoices = response.data.map(normalizeInvoice).toList();
+      final existingIds = _invoices.map((invoice) => invoice['id']).toSet();
+      final additions = resetPage
+          ? invoices
+          : invoices
+                .where((invoice) => existingIds.add(invoice['id']))
+                .toList();
       setState(() {
-        _invoices = invoices;
-        _payments = allPayments;
+        _invoices = resetPage ? invoices : [..._invoices, ...additions];
+        if (payments != null) {
+          _payments = payments.data.map(normalizePaymentRow).toList();
+        }
+        _summary = summary;
+        _page = response.page;
+        _totalInvoices = response.total;
+        _hasMore = response.hasMore;
         _loading = false;
+        _loadingMore = false;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = '$e';
         _loading = false;
+        _loadingMore = false;
       });
     }
+  }
+
+  void _scheduleSearch(String value) {
+    _query = value;
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), _loadData);
   }
 
   // ── Student accounts ──────────────────────────────────────────────────────
@@ -117,8 +154,8 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
     return list;
   }
 
-  double get _totalDue => _accounts.fold(0, (s, a) => s + a.balance);
-  double get _totalCollected => _accounts.fold(0.0, (s, a) => s + a.paid);
+  double get _totalDue => numValue(_summary['outstanding']);
+  double get _totalCollected => numValue(_summary['collected']);
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -159,7 +196,7 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                   _LedgerSummary(
                     outstanding: _totalDue,
                     collected: _totalCollected,
-                    students: _accounts.length,
+                    students: numValue(_summary['student_count']).round(),
                   ),
                   const SizedBox(height: 14),
 
@@ -167,7 +204,7 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                   FeeSearchBox(
                     controller: _searchCtrl..text = _query,
                     hint: 'Search student',
-                    onChanged: (v) => setState(() => _query = v),
+                    onChanged: _scheduleSearch,
                   ),
                   const SizedBox(height: 10),
 
@@ -202,7 +239,10 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                                     ? context.appTheme.primary
                                     : context.appTheme.outlineVariant,
                               ),
-                              onSelected: (_) => setState(() => _filter = f.$1),
+                              onSelected: (_) {
+                                setState(() => _filter = f.$1);
+                                _loadData();
+                              },
                             ),
                           ),
                       ],
@@ -298,6 +338,31 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                         ],
                       ),
                     ),
+                  if (_hasMore)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Center(
+                        child: OutlinedButton.icon(
+                          onPressed: _loadingMore
+                              ? null
+                              : () => _loadData(resetPage: false),
+                          icon: _loadingMore
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.expand_more_rounded),
+                          label: Text(
+                            _loadingMore
+                                ? 'Loading…'
+                                : 'Load more (${_invoices.length} of $_totalInvoices)',
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -306,7 +371,35 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
 
   // ── Ledger detail sheet ───────────────────────────────────────────────────
 
-  void _showLedgerSheet(_StudentAccount account) {
+  Future<void> _showLedgerSheet(_StudentAccount account) async {
+    final detailedInvoices = await Future.wait(
+      account.invoices.map((invoice) async {
+        final id = textValue(invoice['id']);
+        if (id.isEmpty) return invoice;
+        try {
+          return normalizeInvoice(
+            await BackendApiClient.instance.getInvoiceDetail(id),
+          );
+        } on Object {
+          // Keep the already-loaded list DTO visible if a detail request fails.
+          return invoice;
+        }
+      }),
+    );
+    if (!mounted) return;
+    final detailPayments = detailedInvoices
+        .expand(
+          (invoice) =>
+              (invoice['payments'] as List? ?? const []).whereType<Map>(),
+        )
+        .map(
+          (payment) => normalizePaymentRow(Map<String, dynamic>.from(payment)),
+        )
+        .toList();
+    final detailedAccount = account.copyWith(
+      invoices: detailedInvoices,
+      payments: detailPayments.isEmpty ? account.payments : detailPayments,
+    );
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -321,7 +414,7 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
           children: [
             Text(
-              '${account.name} — ${account.classLabel}',
+              '${detailedAccount.name} — ${detailedAccount.classLabel}',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 12),
@@ -331,13 +424,16 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                 children: [
                   FeeAmountRow(
                     label: 'Total Fees',
-                    value: money(account.total),
+                    value: money(detailedAccount.total),
                   ),
-                  FeeAmountRow(label: 'Paid', value: money(account.paid)),
+                  FeeAmountRow(
+                    label: 'Paid',
+                    value: money(detailedAccount.paid),
+                  ),
                   FeeAmountRow(
                     label: 'Balance',
-                    value: money(account.balance),
-                    danger: account.balance > 0,
+                    value: money(detailedAccount.balance),
+                    danger: detailedAccount.balance > 0,
                   ),
                 ],
               ),
@@ -346,12 +442,12 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
             // Invoices
             const FeeSectionTitle('Invoices'),
             const SizedBox(height: 8),
-            if (account.invoices.isEmpty)
+            if (detailedAccount.invoices.isEmpty)
               const Text(
                 'No invoices found.',
                 style: TextStyle(color: Colors.grey),
               ),
-            for (final inv in account.invoices)
+            for (final inv in detailedAccount.invoices)
               FeeCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,12 +545,12 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
             // Payment history
             const FeeSectionTitle('Payment History'),
             const SizedBox(height: 8),
-            if (account.payments.isEmpty)
+            if (detailedAccount.payments.isEmpty)
               const Text(
                 'No payments recorded.',
                 style: TextStyle(color: Colors.grey),
               ),
-            for (final p in account.payments)
+            for (final p in detailedAccount.payments)
               FeeCard(
                 child: Row(
                   children: [
@@ -504,7 +600,7 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
               ),
             const SizedBox(height: 16),
             // Print from the single student-ledger workspace.
-            if (account.invoices.isNotEmpty)
+            if (detailedAccount.invoices.isNotEmpty)
               FilledButton.icon(
                 onPressed: () => _previewPdf(account),
                 icon: const Icon(Icons.print_outlined, size: 18),
@@ -1110,6 +1206,7 @@ class _StudentAccount {
     double? paid,
     double? balance,
     List<Map<String, dynamic>>? invoices,
+    List<Map<String, dynamic>>? payments,
   }) => _StudentAccount(
     studentId: studentId,
     name: name,
@@ -1118,6 +1215,6 @@ class _StudentAccount {
     paid: paid ?? this.paid,
     balance: balance ?? this.balance,
     invoices: invoices ?? this.invoices,
-    payments: payments,
+    payments: payments ?? this.payments,
   );
 }

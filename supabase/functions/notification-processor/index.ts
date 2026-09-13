@@ -269,6 +269,8 @@ interface NotificationEvent {
   created_at: string;
   retry_count?: number;
   next_retry_at?: string | null;
+  processing_state?: string | null;
+  processing_lease_until?: string | null;
 }
 
 interface NotificationTemplate {
@@ -346,7 +348,7 @@ interface EventProcessResult {
 
 type ActiveDeviceToken = {
   token: string;
-  source: "notification_devices" | "notification_device_tokens";
+  source: "notification_devices";
 };
 
 /** Build a human-readable notification from the event type + payload. */
@@ -937,25 +939,43 @@ async function unreadNotificationCount(userId: string): Promise<number> {
   return Math.max(0, count ?? 0);
 }
 
-async function markEventProcessed(eventId: string): Promise<void> {
+async function markEventProcessed(
+  eventId: string,
+  deliveryResult: Record<string, unknown> = {},
+): Promise<void> {
   await supabase
     .from("notification_events")
     .update({
       processed: true,
+      processing_state: "completed",
+      processing_started_at: null,
+      processing_lease_until: null,
       sent_at: new Date().toISOString(),
       next_retry_at: null,
       last_error: null,
+      delivery_status: deliveryResult.status ?? "completed",
+      delivery_result: deliveryResult,
     })
     .eq("id", eventId);
 }
 
 async function claimEvent(eventId: string): Promise<boolean> {
+  const now = new Date();
+  const leaseUntil = new Date(now.getTime() + 90_000).toISOString();
   const { data, error } = await supabase
     .from("notification_events")
-    .update({ processed: true })
+    .update({
+      processed: false,
+      processing_state: "processing",
+      processing_started_at: now.toISOString(),
+      processing_lease_until: leaseUntil,
+    })
     .eq("id", eventId)
     .eq("processed", false)
     .lt("retry_count", MAX_EVENT_RETRIES)
+    .or(
+      `processing_state.eq.pending,processing_state.is.null,processing_lease_until.lt.${now.toISOString()}`,
+    )
     .select("id")
     .maybeSingle();
   if (error) throw error;
@@ -978,10 +998,15 @@ async function releaseEvent(eventId: string, lastError: string): Promise<boolean
       : {};
     const { error } = await supabase.from("notification_events").update({
       processed: true,
+      processing_state: "dead_letter",
+      processing_started_at: null,
+      processing_lease_until: null,
       sent_at: null,
       retry_count: retryCount,
       last_error: boundedError,
       next_retry_at: null,
+      delivery_status: "dead_letter",
+      delivery_result: { status: "dead_letter", error: boundedError },
       event_data: { ...eventData, _push_dead_letter: true },
     }).eq("id", eventId);
     if (error) throw error;
@@ -995,10 +1020,15 @@ async function releaseEvent(eventId: string, lastError: string): Promise<boolean
   const nextRetryAt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
   const { error } = await supabase.from("notification_events").update({
     processed: false,
+    processing_state: "pending",
+    processing_started_at: null,
+    processing_lease_until: null,
     sent_at: null,
     retry_count: retryCount,
     last_error: boundedError,
     next_retry_at: nextRetryAt,
+    delivery_status: "retrying",
+    delivery_result: { status: "retrying", error: boundedError },
   }).eq("id", eventId);
   if (error) throw error;
   return false;
@@ -1006,43 +1036,25 @@ async function releaseEvent(eventId: string, lastError: string): Promise<boolean
 
 async function activeDeviceTokensForUser(
   userId: string,
+  schoolId: string,
 ): Promise<ActiveDeviceToken[]> {
-  const [{ data: currentDevices, error: currentError }, {
-    data: legacyDevices,
-    error: legacyError,
-  }] = await Promise.all([
-    supabase
-      .from("notification_devices")
-      .select("fcm_token")
-      .eq("user_id", userId)
-      .eq("is_active", true),
-    supabase
-      .from("notification_device_tokens")
-      .select("token")
-      .eq("user_id", userId),
-  ]);
+  const { data: currentDevices, error: currentError } = await supabase
+    .from("notification_devices")
+    .select("fcm_token")
+    .eq("school_id", schoolId)
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .order("last_registered_at", { ascending: false })
+    .limit(1);
 
   if (currentError) throw currentError;
-  if (legacyError) throw legacyError;
-
-  const tokens = new Map<string, ActiveDeviceToken>();
-  for (const row of currentDevices ?? []) {
+  return (currentDevices ?? []).map((row) => {
     const token = `${row.fcm_token ?? ""}`.trim();
-    if (!token) continue;
-    tokens.set(token, {
+    return {
       token,
-      source: "notification_devices",
-    });
-  }
-  for (const row of legacyDevices ?? []) {
-    const token = `${row.token ?? ""}`.trim();
-    if (!token || tokens.has(token)) continue;
-    tokens.set(token, {
-      token,
-      source: "notification_device_tokens",
-    });
-  }
-  return [...tokens.values()];
+      source: "notification_devices" as const,
+    };
+  }).filter((device) => device.token);
 }
 
 async function deactivateInvalidToken(
@@ -1057,11 +1069,6 @@ async function deactivateInvalidToken(
       .eq("user_id", userId);
     return;
   }
-  await supabase
-    .from("notification_device_tokens")
-    .delete()
-    .eq("token", device.token)
-    .eq("user_id", userId);
 }
 
 // ─── Event Processing ────────────────────────────────────────────────────────
@@ -1098,12 +1105,17 @@ async function processNotificationEvent(
       };
     }
 
-    const devices = await activeDeviceTokensForUser(event.user_id);
+    const devices = await activeDeviceTokensForUser(event.user_id, event.school_id);
     if (devices.length === 0) {
       console.log(`No active devices for user ${event.user_id}`);
       await supabase.from("notification_events").update({
         processed: true,
+        processing_state: "deferred",
+        processing_started_at: null,
+        processing_lease_until: null,
         sent_at: null,
+        delivery_status: "deferred_no_device",
+        delivery_result: { status: "deferred_no_device" },
         event_data: {
           ...event.event_data,
           _push_deferred_no_device: true,
@@ -1206,7 +1218,13 @@ async function processNotificationEvent(
     }
 
     if (sentCount > 0) {
-      await markEventProcessed(event.id);
+      await markEventProcessed(event.id, {
+        status: "sent",
+        sent_count: sentCount,
+        invalid_token_count: invalidTokens.length,
+        transient_failure_count: transientFailureCount,
+        tokens: tokenResults,
+      });
       console.log(
         `Sent notification for event ${event.id} to ${sentCount}/${devices.length} devices`,
       );
@@ -1220,7 +1238,12 @@ async function processNotificationEvent(
     }
 
     if (invalidTokens.length > 0 && transientFailureCount === 0) {
-      await markEventProcessed(event.id);
+      await markEventProcessed(event.id, {
+        status: "invalid_tokens",
+        sent_count: 0,
+        invalid_token_count: invalidTokens.length,
+        tokens: tokenResults,
+      });
       console.log(
         `Event ${event.id} processed; all target tokens were invalid`,
       );
@@ -1315,6 +1338,9 @@ Deno.serve(async (req: Request) => {
       .select("*")
       .eq("processed", false)
       .lt("retry_count", MAX_EVENT_RETRIES)
+      .or(
+        `processing_state.eq.pending,processing_state.is.null,processing_lease_until.lt.${new Date().toISOString()}`,
+      )
       .or(`next_retry_at.is.null,next_retry_at.lte.${new Date().toISOString()}`)
       .order("created_at", { ascending: true });
     query = eventIds.length > 0 ? query.in("id", eventIds) : query.limit(100);

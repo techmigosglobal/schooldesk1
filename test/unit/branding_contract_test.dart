@@ -12,8 +12,6 @@ void main() {
       ).readAsStringSync();
       final main = File('lib/main.dart').readAsStringSync();
       final pubspec = File('pubspec.yaml').readAsStringSync();
-      final webIndex = File('web/index.html').readAsStringSync();
-      final webManifest = File('web/manifest.json').readAsStringSync();
       final androidManifest = File(
         'android/app/src/main/AndroidManifest.xml',
       ).readAsStringSync();
@@ -58,9 +56,11 @@ void main() {
         reason:
             'main.dart should set app title to Arish Ville brand name or constant',
       );
-      expect(webIndex, contains('<title>Arish Ville Preschool</title>'));
-      expect(webManifest, contains('"name": "Arish Ville Preschool"'));
-      expect(webManifest, contains('"short_name": "Arish Ville"'));
+      expect(
+        Directory('web').existsSync(),
+        isFalse,
+        reason: 'Flutter web is intentionally owned by schooldesk-web',
+      );
       expect(androidManifest, contains('android:label="Arish Ville"'));
       expect(iosInfo, contains('<string>Arish Ville</string>'));
       expect(pubspec, contains('name: schooldesk1'));

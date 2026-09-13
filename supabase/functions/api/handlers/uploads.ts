@@ -1,4 +1,4 @@
-// handlers/uploads.ts — multipart file upload → Supabase Storage
+// handlers/uploads.ts — multipart file upload → R2 or Supabase Storage
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, runDbStatements, triggerPushProcessing } from "../index.ts";
 import {
@@ -8,6 +8,7 @@ import {
 import {
   PRIVATE_FILES_BUCKET,
   privateFileReference,
+  privateFileReferenceFromValue,
   signedPrivateFileUrl,
   storagePathFromValue,
 } from "../storage_helpers.ts";
@@ -20,6 +21,19 @@ import {
   studentAccess,
   visibleStudentIds,
 } from "./authorization.ts";
+import {
+  copyR2File,
+  deleteR2File,
+  headR2File,
+  publicR2FileReference,
+  publicR2FileUrl,
+  legacyStorageWritesEnabled,
+  r2FileReference,
+  r2ReferenceInfo,
+  r2VisibilityFromValue,
+  uploadPublicToR2,
+  uploadToR2,
+} from "../lib/r2_storage.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -31,6 +45,31 @@ function textValue(value: unknown, fallback = ""): string {
 
 function roleValue(user: User): string {
   return `${user.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
+}
+
+function listPaging(url: URL) {
+  const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+  const pageSize = Math.min(
+    Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
+    100,
+  );
+  return { page, pageSize, from: (page - 1) * pageSize, to: page * pageSize - 1 };
+}
+
+function listEnvelope<T>(
+  data: T[],
+  count: number | null,
+  page: number,
+  pageSize: number,
+) {
+  const total = count ?? data.length;
+  return {
+    data,
+    total,
+    page,
+    page_size: pageSize,
+    has_more: page * pageSize < total,
+  };
 }
 
 function canUseOwnStaffDocuments(user: User): boolean {
@@ -101,6 +140,13 @@ function approvedEventDestinations(
   // SCHOOL_LANDING-only post is an image carousel item and must not leak into
   // the parent home feed or gallery.
   return normalizeDestinations(value, visibility);
+}
+
+function requiresPublicEventMedia(
+  destinations: string[],
+  publicGalleryVisible: boolean,
+): boolean {
+  return destinations.includes("SCHOOL_LANDING") || publicGalleryVisible;
 }
 
 function _guessMimeFromName(name: string): string {
@@ -193,6 +239,280 @@ function eventPostRow(row: Record<string, unknown>, author = "") {
   };
 }
 
+function eventMediaItemValue(item: unknown): string {
+  if (item && typeof item === "object") {
+    const value = item as Record<string, unknown>;
+    return textValue(
+      value.storage_ref ?? value.storageRef ?? value.url ?? value.media_url ??
+        value.mediaUrl,
+    );
+  }
+  return textValue(item);
+}
+
+async function materializeEventPostMedia(
+  svc: SupabaseClient,
+  row: Record<string, unknown>,
+  publicOnly = false,
+): Promise<unknown[]> {
+  const destinations = normalizeDestinations(row.destinations, row.visibility);
+  const postIsPublic = destinations.includes("SCHOOL_LANDING") ||
+    row.public_gallery_visible === true;
+  const media = Array.isArray(row.media_urls) ? row.media_urls : [];
+  const resolved = await Promise.all(media.map(async (item) => {
+    const stored = eventMediaItemValue(item);
+    if (!stored) return null;
+    const stableRef = r2ReferenceInfo(stored) ? stored : undefined;
+    let url = "";
+    if (postIsPublic) {
+      url = publicR2FileUrl(stored);
+    }
+    if (!url && !publicOnly && stableRef) {
+      url = await signedPrivateFileUrl(svc, stableRef);
+    }
+    if (!url && publicOnly && !stableRef && postIsPublic) {
+      // Legacy landing media was already public in Supabase Storage. Keep it
+      // visible until its reference is rewritten to the public R2 bucket.
+      url = stored;
+    }
+    if (!url && !stableRef && !publicOnly) {
+      // Legacy Supabase public URLs remain readable during the staged cutover.
+      url = stored;
+    }
+    if (!url) return null;
+    if (item && typeof item === "object") {
+      return {
+        ...(item as Record<string, unknown>),
+        url,
+        storage_ref: stableRef ?? (item as Record<string, unknown>).storage_ref,
+      };
+    }
+    return {
+      url,
+      ...(stableRef ? { storage_ref: stableRef } : {}),
+    };
+  }));
+  return resolved.filter(Boolean);
+}
+
+function eventMediaFileName(item: unknown, fallback: string): string {
+  if (item && typeof item === "object") {
+    const value = item as Record<string, unknown>;
+    const name = textValue(value.name ?? value.filename ?? value.file_name);
+    if (name) return name;
+  }
+  const raw = eventMediaItemValue(item).split("?")[0];
+  return raw.split("/").pop() || fallback;
+}
+
+function eventMediaContentType(item: unknown): string {
+  if (item && typeof item === "object") {
+    const value = item as Record<string, unknown>;
+    const mime = textValue(
+      value.mime_type ?? value.mimeType ?? value.content_type ?? value.media_type,
+    );
+    if (mime) return mime;
+  }
+  return _guessMimeFromName(eventMediaFileName(item, "media.bin"));
+}
+
+async function downloadLegacyEventMedia(
+  svc: SupabaseClient,
+  value: string,
+): Promise<Uint8Array | null> {
+  for (const bucket of ["school-assets", "school-public-media"]) {
+    const path = storagePathFromValue(value, bucket) ||
+      (!value.startsWith("http://") && !value.startsWith("https://")
+        ? value
+        : "");
+    if (!path) continue;
+    const { data, error } = await svc.storage.from(bucket).download(path);
+    if (!error && data) return new Uint8Array(await data.arrayBuffer());
+  }
+  return null;
+}
+
+/**
+ * Promotes approved public SchoolPost media before the database row is made
+ * public. The database stores the durable public R2 reference, never a
+ * short-lived signed URL.
+ */
+async function promoteEventPostMedia(
+  svc: SupabaseClient,
+  school: string,
+  postId: string,
+  rawMedia: unknown,
+): Promise<unknown[]> {
+  const media = Array.isArray(rawMedia) ? rawMedia : [];
+  const promoted: unknown[] = [];
+  for (let index = 0; index < media.length; index++) {
+    const item = media[index];
+    const stored = eventMediaItemValue(item);
+    if (!stored) continue;
+    const existing = r2ReferenceInfo(stored);
+    let destination: string;
+    if (existing?.visibility === "public") {
+      destination = stored;
+    } else {
+      const fileName = eventMediaFileName(item, `media-${index}.bin`)
+        .replace(/[^a-zA-Z0-9._-]/g, "-");
+      // The post id and media index make promotion safe to retry after a
+      // database update failure. CopyObject overwrites the same destination
+      // key instead of leaking a new public object on every retry.
+      const destinationKey = `event-posts/${school}/${postId}/${index}-${fileName}`;
+      if (existing?.visibility === "private") {
+        const copied = await copyR2File(stored, destinationKey, "public");
+        if (!copied) throw new Error("R2 is not configured for media promotion");
+        destination = copied.reference;
+      } else {
+        const bytes = await downloadLegacyEventMedia(svc, stored);
+        if (!bytes) throw new Error("Legacy event media could not be read");
+        const uploaded = await uploadPublicToR2(
+          destinationKey,
+          bytes,
+          eventMediaContentType(item),
+        );
+        if (!uploaded) throw new Error("R2 public media is not configured");
+        destination = uploaded.reference;
+      }
+    }
+    if (!publicR2FileUrl(destination)) {
+      throw new Error("R2 public media domain is not configured");
+    }
+    if (!(await headR2File(destination))) {
+      throw new Error("R2 media promotion verification failed");
+    }
+    if (item && typeof item === "object") {
+      promoted.push({
+        ...(item as Record<string, unknown>),
+        url: destination,
+        storage_ref: destination,
+      });
+    } else {
+      promoted.push({ url: destination, storage_ref: destination });
+    }
+  }
+  return promoted;
+}
+
+async function demoteEventPostMedia(
+  svc: SupabaseClient,
+  school: string,
+  postId: string,
+  rawMedia: unknown,
+): Promise<{ media: unknown[]; cleanup: string[] }> {
+  const media = Array.isArray(rawMedia) ? rawMedia : [];
+  const demoted: unknown[] = [];
+  const cleanup: string[] = [];
+  for (let index = 0; index < media.length; index++) {
+    const item = media[index];
+    const stored = eventMediaItemValue(item);
+    if (!stored) continue;
+    const existing = r2ReferenceInfo(stored);
+    if (existing?.visibility !== "public") {
+      demoted.push(item);
+      continue;
+    }
+    const fileName = eventMediaFileName(item, `media-${index}.bin`)
+      .replace(/[^a-zA-Z0-9._-]/g, "-");
+    const destinationKey = `event-posts-private/${school}/${postId}/${index}-${fileName}`;
+    const copied = await copyR2File(stored, destinationKey, "private");
+    if (!copied) throw new Error("R2 is not configured for media demotion");
+    if (!(await headR2File(copied.reference))) {
+      throw new Error("R2 private media demotion verification failed");
+    }
+    cleanup.push(stored);
+    demoted.push(item && typeof item === "object"
+      ? {
+        ...(item as Record<string, unknown>),
+        url: copied.reference,
+        storage_ref: copied.reference,
+      }
+      : { url: copied.reference, storage_ref: copied.reference });
+  }
+  return { media: demoted, cleanup };
+}
+
+async function enqueueStorageCleanup(
+  svc: SupabaseClient,
+  refs: string[],
+  reason: string,
+) {
+  const uniqueRefs = [...new Set(refs)].filter((reference) =>
+    Boolean(r2ReferenceInfo(reference))
+  );
+  if (uniqueRefs.length === 0) return;
+  const { error } = await svc.from("storage_cleanup_queue").upsert(
+    uniqueRefs.map((storage_ref) => ({
+      storage_ref,
+      reason,
+      status: "pending",
+      attempts: 0,
+      available_at: new Date().toISOString(),
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    })),
+    { onConflict: "storage_ref" },
+  );
+  if (error) {
+    console.error("Unable to enqueue R2 cleanup", {
+      reason,
+      refs: uniqueRefs,
+      error: error.message,
+    });
+  }
+}
+
+async function cleanupR2References(
+  svc: SupabaseClient,
+  refs: string[],
+  reason: string,
+) {
+  const uniqueRefs = [...new Set(refs)].filter((reference) =>
+    Boolean(r2ReferenceInfo(reference))
+  );
+  if (uniqueRefs.length === 0) return;
+  await enqueueStorageCleanup(svc, uniqueRefs, reason);
+  await Promise.all(uniqueRefs.map(async (reference) => {
+    try {
+      const deleted = await deleteR2File(reference);
+      if (!deleted) throw new Error("R2 is not configured");
+      await svc.from("storage_cleanup_queue").update({
+        status: "completed",
+        updated_at: new Date().toISOString(),
+      }).eq("storage_ref", reference);
+    } catch (error) {
+      console.error("R2 media cleanup failed", { reference, error });
+      await svc.from("storage_cleanup_queue").update({
+        status: "failed",
+        last_error: `${error}`,
+        available_at: new Date(Date.now() + 60_000).toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("storage_ref", reference);
+    }
+  }));
+}
+
+function eventPostR2References(rawMedia: unknown): string[] {
+  return [...new Set(
+    eventMediaItems(rawMedia).map(eventMediaItemValue).filter((value) =>
+      Boolean(r2ReferenceInfo(value))
+    ),
+  )];
+}
+
+async function eventPostResponse(
+  svc: SupabaseClient,
+  row: Record<string, unknown>,
+  publicOnly = false,
+) {
+  const normalized = eventPostRow(row);
+  return {
+    ...normalized,
+    media_urls: await materializeEventPostMedia(svc, row, publicOnly),
+  };
+}
+
 /// `event_posts` has both `created_by` and `approved_by` foreign keys to
 /// `users`. Do not use a PostgREST embedded relationship here: it becomes
 /// ambiguous as soon as both keys exist. A small explicit author lookup keeps
@@ -219,9 +539,10 @@ async function eventPostRows(
       }
     }
   }
-  return rows.map((row) =>
-    eventPostRow(row, authorNames.get(textValue(row.created_by)) ?? "")
-  );
+  return await Promise.all(rows.map(async (row) => ({
+    ...(await eventPostResponse(svc, row)),
+    author: authorNames.get(textValue(row.created_by)) ?? "",
+  })));
 }
 
 async function notifyUsersByRole(
@@ -458,6 +779,22 @@ async function uploadPrivateReportPdf(
   bytes: Uint8Array,
 ): Promise<string> {
   const filePath = `reports/${school}/${crypto.randomUUID()}.pdf`;
+  const r2Upload = await uploadToR2(
+    `private/${filePath}`,
+    bytes,
+    "application/pdf",
+  );
+  if (r2Upload) {
+    const signedUrl = await signedPrivateFileUrl(
+      svc,
+      r2FileReference(r2Upload.key),
+    );
+    if (!signedUrl) throw new Error("Failed to create report download URL");
+    return signedUrl;
+  }
+  if (!legacyStorageWritesEnabled()) {
+    throw new Error("R2 storage is unavailable; legacy storage writes are disabled");
+  }
   const bucket = "finance-documents";
   const { error: uploadError } = await svc.storage.from(bucket).upload(
     filePath,
@@ -1868,8 +2205,8 @@ export async function handleUploads(
   const folder = form.get("folder") as string ?? "uploads";
   const entityType = form.get("entity_type") as string ?? "";
   const entityId = form.get("entity_id") as string ?? "";
-  const privateUpload = ["true", "1", "yes"].includes(
-    `${form.get("private") ?? ""}`.trim().toLowerCase(),
+  const privateUpload = !["false", "0", "no"].includes(
+    `${form.get("private") ?? "true"}`.trim().toLowerCase(),
   );
   const filePath = privateUpload
     ? `${school}/${folder}/${entityType}/${entityId}/${Date.now()}-${file.name}`
@@ -1879,27 +2216,56 @@ export async function handleUploads(
   // Explicitly forward the content type so Supabase Storage never falls back
   // to application/octet-stream for MP4 and other video files.
   const contentType = file.type || _guessMimeFromName(file.name);
-  const { error: uploadErr } = await svc.storage.from(bucket).upload(
-    filePath,
-    file,
-    {
-      upsert: true,
+  let storedPath = filePath;
+  let url = "";
+  let privateReference = "";
+  if (privateUpload) {
+    const r2Upload = await uploadToR2(
+      `private/${filePath}`,
+      file,
       contentType,
-      cacheControl: privateUpload ? "3600" : "31536000",
-    },
-  );
-  if (uploadErr) return fail(uploadErr.message);
-
-  const url = privateUpload
-    ? await signedPrivateFileUrl(svc, privateFileReference(filePath))
-    : svc.storage.from(bucket).getPublicUrl(filePath).data.publicUrl;
+    );
+    if (r2Upload) {
+      privateReference = r2FileReference(r2Upload.key);
+      storedPath = privateReference;
+      url = await signedPrivateFileUrl(svc, privateReference);
+    }
+  }
+  if (!privateUpload) {
+    const r2Upload = await uploadPublicToR2(filePath, file, contentType);
+    if (r2Upload) {
+      storedPath = publicR2FileReference(r2Upload.key);
+      url = r2Upload.url;
+    }
+  }
+  if (!url) {
+    if (!legacyStorageWritesEnabled()) {
+      return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+    }
+    const { error: uploadErr } = await svc.storage.from(bucket).upload(
+      filePath,
+      file,
+      {
+        upsert: true,
+        contentType,
+        cacheControl: privateUpload ? "3600" : "31536000",
+      },
+    );
+    if (uploadErr) return fail(uploadErr.message);
+    url = privateUpload
+      ? await signedPrivateFileUrl(svc, privateFileReference(filePath))
+      : svc.storage.from(bucket).getPublicUrl(filePath).data.publicUrl;
+  }
   if (!url) return fail("failed to create file URL");
+
+  const persistedPrivateReference = privateReference ||
+    privateFileReference(filePath);
 
   const { data } = await svc.from("uploaded_files").insert({
     school_id: school,
     uploader_id: user.id,
-    url: privateUpload ? privateFileReference(filePath) : url,
-    path: privateUpload ? privateFileReference(filePath) : filePath,
+    url: privateUpload ? persistedPrivateReference : url,
+    path: privateUpload ? persistedPrivateReference : storedPath,
     folder,
     entity_type: entityType,
     entity_id: entityId,
@@ -1910,7 +2276,7 @@ export async function handleUploads(
 
   return ok({
     url,
-    path: privateUpload ? privateFileReference(filePath) : filePath,
+    path: privateUpload ? persistedPrivateReference : storedPath,
     file: data,
   });
 }
@@ -1935,19 +2301,27 @@ export async function handleEvents(
     if (!["principal", "coordinator"].includes(roleValue(user))) {
       return fail("forbidden", 403);
     }
-    const { data, error } = await svc.from("event_posts").select("*").eq(
+    const paging = listPaging(url);
+    const { data, error, count } = await svc.from("event_posts").select("*", {
+      count: "exact",
+    }).eq(
       "school_id",
       school,
     ).in("status", ["pending", "submitted"]).order("created_at", {
       ascending: false,
-    });
+    }).range(paging.from, paging.to);
     if (error) return fail(error.message);
-    return ok(
-      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
+    const rows = await eventPostRows(
+      svc,
+      (data ?? []) as Record<string, unknown>[],
     );
+    return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
   }
   if (path === "/event-posts/gallery" && method === "GET") {
-    const { data, error } = await svc.from("event_posts").select("*").eq(
+    const paging = listPaging(url);
+    const { data, error, count } = await svc.from("event_posts").select("*", {
+      count: "exact",
+    }).eq(
       "school_id",
       school,
     ).in("status", ["approved", "published"])
@@ -1957,35 +2331,49 @@ export async function handleEvents(
       .contains("destinations", JSON.stringify(["SCHOOL_GALLERY"]))
       .order("created_at", {
         ascending: false,
-      }).limit(50);
+      }).range(paging.from, paging.to);
     if (error) return fail(error.message);
-    return ok(
-      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
+    const rows = await eventPostRows(
+      svc,
+      (data ?? []) as Record<string, unknown>[],
     );
+    return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
   }
   if (path === "/event-posts/home-feed" && method === "GET") {
-    const { data, error } = await svc.from("event_posts").select("*").eq(
+    const paging = listPaging(url);
+    const { data, error, count } = await svc.from("event_posts").select("*", {
+      count: "exact",
+    }).eq(
       "school_id",
       school,
     ).in("status", ["approved", "published"])
       .contains("destinations", JSON.stringify(["PARENTS_HOME"]))
       .order("created_at", {
         ascending: false,
-      }).limit(20);
+      }).range(paging.from, paging.to);
     if (error) return fail(error.message);
-    return ok(
-      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
+    const rows = await eventPostRows(
+      svc,
+      (data ?? []) as Record<string, unknown>[],
     );
+    return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
   }
   if (path === "/event-posts/teacher" && method === "GET") {
-    const { data, error } = await svc.from("event_posts").select("*").eq(
+    const paging = listPaging(url);
+    const { data, error, count } = await svc.from("event_posts").select("*", {
+      count: "exact",
+    }).eq(
       "school_id",
       school,
-    ).eq("created_by", user.id).order("created_at", { ascending: false });
+    ).eq("created_by", user.id).order("created_at", {
+      ascending: false,
+    }).range(paging.from, paging.to);
     if (error) return fail(error.message);
-    return ok(
-      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
+    const rows = await eventPostRows(
+      svc,
+      (data ?? []) as Record<string, unknown>[],
     );
+    return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
   }
   if (!seg && method === "GET") {
     if (
@@ -1995,19 +2383,23 @@ export async function handleEvents(
     ) {
       return fail("forbidden", 403);
     }
-    let q = svc.from("event_posts").select("*").eq(
+    const paging = listPaging(url);
+    let q = svc.from("event_posts").select("*", { count: "exact" }).eq(
       "school_id",
       school,
     );
     if (url.searchParams.get("status")) {
       q = q.eq("status", url.searchParams.get("status")!);
     }
-    const { data, error } = await q.order("created_at", { ascending: false })
-      .limit(50);
+    const { data, error, count } = await q.order("created_at", {
+      ascending: false,
+    }).range(paging.from, paging.to);
     if (error) return fail(error.message);
-    return ok(
-      await eventPostRows(svc, (data ?? []) as Record<string, unknown>[]),
+    const rows = await eventPostRows(
+      svc,
+      (data ?? []) as Record<string, unknown>[],
     );
+    return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
   }
   if (!seg && method === "POST") {
     const description = textValue(body.description ?? body.body);
@@ -2015,11 +2407,26 @@ export async function handleEvents(
       body.destinations,
       body.visibility,
     );
-    const media = body.media ?? body.media_urls ?? [];
+    let media = body.media ?? body.media_urls ?? [];
     const mediaError = validateEventMedia(media, destinations);
     if (mediaError) return fail(mediaError, 420);
     const isPrincipal = ["principal", "coordinator"].includes(roleValue(user));
     const directPublish = isPrincipal && body.is_submit === true;
+    const publicGalleryVisible = body.public_gallery_visible === true;
+    const promotionSeed = textValue(req.headers.get("Idempotency-Key"))
+      .replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80) || crypto.randomUUID();
+    if (directPublish && requiresPublicEventMedia(destinations, publicGalleryVisible)) {
+      try {
+        media = await promoteEventPostMedia(
+          svc,
+          school,
+          `direct-${promotionSeed}`,
+          media,
+        );
+      } catch (error) {
+        return fail(`public media promotion failed: ${error}`, 502);
+      }
+    }
     const payload = {
       school_id: school,
       title: textValue(body.title, "Untitled event post"),
@@ -2030,7 +2437,7 @@ export async function handleEvents(
       event_date: body.event_date ?? new Date().toISOString(),
       // Website gallery inclusion is an explicit principal-side selection;
       // app destinations alone must never publish a post publicly.
-      public_gallery_visible: body.public_gallery_visible === true,
+      public_gallery_visible: publicGalleryVisible,
       // Principal posts are already approved by their publisher. Teacher
       // submissions remain pending so the existing review workflow is intact.
       status: directPublish
@@ -2102,11 +2509,30 @@ export async function handleEvents(
       body.destinations ?? existing.destinations,
       body.visibility ?? existing.visibility,
     );
-    const media = body.media ?? body.media_urls ?? existing.media_urls ?? [];
+    let media = body.media ?? body.media_urls ?? existing.media_urls ?? [];
     const mediaError = validateEventMedia(media, destinations);
     if (mediaError) return fail(mediaError, 420);
     const isPrincipal = ["principal", "coordinator"].includes(userRole);
     const directPublish = isPrincipal && body.is_submit === true;
+    const publicGalleryVisible = typeof body.public_gallery_visible === "boolean"
+      ? body.public_gallery_visible
+      : existing.public_gallery_visible === true;
+    let mediaCleanup: string[] = [];
+    if (directPublish && requiresPublicEventMedia(destinations, publicGalleryVisible)) {
+      try {
+        media = await promoteEventPostMedia(svc, school, seg, media);
+      } catch (error) {
+        return fail(`public media promotion failed: ${error}`, 502);
+      }
+    } else if (!requiresPublicEventMedia(destinations, publicGalleryVisible)) {
+      try {
+        const demoted = await demoteEventPostMedia(svc, school, seg, media);
+        media = demoted.media;
+        mediaCleanup = demoted.cleanup;
+      } catch (error) {
+        return fail(`private media demotion failed: ${error}`, 502);
+      }
+    }
     const payload = {
       title: textValue(
         body.title,
@@ -2121,9 +2547,7 @@ export async function handleEvents(
       destinations,
       event_date: body.event_date ?? existing.event_date ??
         new Date().toISOString(),
-      public_gallery_visible: typeof body.public_gallery_visible === "boolean"
-        ? body.public_gallery_visible
-        : existing.public_gallery_visible !== false,
+      public_gallery_visible: publicGalleryVisible,
       status: directPublish
         ? "approved"
         : body.is_submit === true
@@ -2143,6 +2567,7 @@ export async function handleEvents(
       seg,
     ).eq("school_id", school).select().single();
     if (error) return fail(error.message);
+    await cleanupR2References(svc, mediaCleanup, "event_post_media_demoted");
     if (body.is_submit === true && !directPublish) {
       try {
         await notifyUsersByRole(svc, school, "principal", {
@@ -2164,7 +2589,7 @@ export async function handleEvents(
         // notification fan-out is temporarily unavailable.
       }
     }
-    return ok(eventPostRow(data as Record<string, unknown>));
+    return ok((await eventPostRows(svc, [data as Record<string, unknown>]))[0]);
   }
   if (seg && parts[1] === "approve" && method === "POST") {
     if (!["principal", "coordinator"].includes(roleValue(user))) {
@@ -2176,17 +2601,31 @@ export async function handleEvents(
       .select("*").eq("id", seg).eq("school_id", school).maybeSingle();
     if (existingError) return fail(existingError.message);
     if (!existing) return fail("not found", 404);
+    const destinations = approvedEventDestinations(
+      existing.destinations,
+      existing.visibility,
+    );
+    let approvedMedia = existing.media_urls;
+    if (requiresPublicEventMedia(
+      destinations,
+      existing.public_gallery_visible === true,
+    )) {
+      try {
+        approvedMedia = await promoteEventPostMedia(svc, school, seg, approvedMedia);
+      } catch (promotionError) {
+        return fail(`public media promotion failed: ${promotionError}`, 502);
+      }
+    }
     const { data, error } = await svc.from("event_posts").update({
       status: "approved",
-      destinations: approvedEventDestinations(
-        existing.destinations,
-        existing.visibility,
-      ),
+      destinations,
+      media_urls: approvedMedia,
       approved_by: user.id,
       approved_at: new Date().toISOString(),
       rejection_reason: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", seg).eq("school_id", school).select().single();
+    }).eq("id", seg).eq("school_id", school)
+      .in("status", ["pending", "submitted"]).select().single();
     if (error) return fail(error.message);
     try {
       await notifyUser(svc, school, `${existing.created_by ?? ""}`, {
@@ -2206,10 +2645,6 @@ export async function handleEvents(
     // teachers and every parent whose gallery has just gained this post.
     // The post's teacher already receives the more specific approval alert
     // above, so exclude that user from the broad teacher notification.
-    const destinations = approvedEventDestinations(
-      existing.destinations,
-      existing.visibility,
-    );
     if (destinations.includes("SCHOOL_GALLERY")) {
       try {
         const galleryPayload = {
@@ -2233,7 +2668,7 @@ export async function handleEvents(
         // fan-out has a transient failure.
       }
     }
-    return ok(eventPostRow(data as Record<string, unknown>));
+    return ok((await eventPostRows(svc, [data as Record<string, unknown>]))[0]);
   }
   if (seg && parts[1] === "reject" && method === "POST") {
     if (!["principal", "coordinator"].includes(roleValue(user))) {
@@ -2245,12 +2680,29 @@ export async function handleEvents(
       .select("*").eq("id", seg).eq("school_id", school).maybeSingle();
     if (existingError) return fail(existingError.message);
     if (!existing) return fail("not found", 404);
+    let rejectedMedia = existing.media_urls;
+    let rejectedMediaCleanup: string[] = [];
+    if (requiresPublicEventMedia(
+      approvedEventDestinations(existing.destinations, existing.visibility),
+      existing.public_gallery_visible === true,
+    )) {
+      try {
+        const demoted = await demoteEventPostMedia(svc, school, seg, rejectedMedia);
+        rejectedMedia = demoted.media;
+        rejectedMediaCleanup = demoted.cleanup;
+      } catch (error) {
+        return fail(`private media demotion failed: ${error}`, 502);
+      }
+    }
     const { data, error } = await svc.from("event_posts").update({
       status: "rejected",
+      media_urls: rejectedMedia,
       rejection_reason: textValue(body.reason, "Principal requested changes."),
       updated_at: new Date().toISOString(),
-    }).eq("id", seg).eq("school_id", school).select().single();
+    }).eq("id", seg).eq("school_id", school)
+      .in("status", ["pending", "submitted"]).select().single();
     if (error) return fail(error.message);
+    await cleanupR2References(svc, rejectedMediaCleanup, "event_post_rejected");
     try {
       await notifyUser(svc, school, `${existing.created_by ?? ""}`, {
         title: "Event post rejected",
@@ -2262,12 +2714,23 @@ export async function handleEvents(
     } catch {
       // Keep the rejection successful even if the notification insert fails.
     }
-    return ok(eventPostRow(data as Record<string, unknown>));
+    return ok((await eventPostRows(svc, [data as Record<string, unknown>]))[0]);
   }
   if (seg && method === "DELETE") {
     const userRole = roleValue(user);
     if (!["principal", "coordinator", "teacher"].includes(userRole)) {
       return fail("forbidden", 403);
+    }
+    const { data: existing, error: lookupError } = await svc.from("event_posts")
+      .select("media_urls, created_by").eq("id", seg).eq("school_id", school)
+      .maybeSingle();
+    if (lookupError) return fail(lookupError.message);
+    if (!existing) return fail("not found", 404);
+    if (
+      !["principal", "coordinator"].includes(userRole) &&
+      `${existing.created_by ?? ""}` !== user.id
+    ) {
+      return fail("not found", 404);
     }
     let deleteQuery = svc.from("event_posts").delete().eq("id", seg).eq(
       "school_id",
@@ -2278,6 +2741,11 @@ export async function handleEvents(
     }
     const { error } = await deleteQuery;
     if (error) return fail(error.message);
+    await cleanupR2References(
+      svc,
+      eventPostR2References(existing.media_urls),
+      "event_post_deleted",
+    );
     return ok({ success: true });
   }
   return fail("not found", 404);
@@ -2380,10 +2848,7 @@ export async function handleDocuments(
     const title = textValue(body.title);
     if (!fileUrl) return fail("file_url required");
 
-    const privatePath = storagePathFromValue(fileUrl, PRIVATE_FILES_BUCKET);
-    const storedFileUrl = privatePath
-      ? privateFileReference(privatePath)
-      : fileUrl;
+    const storedFileUrl = privateFileReferenceFromValue(fileUrl);
     const { data, error } = await svc.from("student_documents").insert({
       student_id: studentId,
       school_id: school,
@@ -2503,10 +2968,7 @@ export async function handleDocuments(
     const title = textValue(body.title);
     if (!fileUrl) return fail("file_url required");
 
-    const privatePath = storagePathFromValue(fileUrl, PRIVATE_FILES_BUCKET);
-    const storedFileUrl = privatePath
-      ? privateFileReference(privatePath)
-      : fileUrl;
+    const storedFileUrl = privateFileReferenceFromValue(fileUrl);
     const { data, error } = await svc.from("staff_documents").insert({
       staff_id: staffId,
       school_id: school,
@@ -2544,14 +3006,22 @@ export async function handleDocuments(
   }
   if (path === "/documents/requests" && method === "GET") {
     if (!canManageStudents(user)) return fail("forbidden", 403);
-    const { data, error } = await svc.from("frontend_records").select("*").eq(
+    const paging = listPaging(url);
+    const { data, error, count } = await svc.from("frontend_records").select("*", {
+      count: "exact",
+    }).eq(
       "school_id",
       school,
     ).eq("table_name", "document_requests").order("updated_at", {
       ascending: false,
-    });
+    }).range(paging.from, paging.to);
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row) => documentRow(row)));
+    return ok(listEnvelope(
+      (data ?? []).map((row) => documentRow(row)),
+      count,
+      paging.page,
+      paging.pageSize,
+    ));
   }
   if (path === "/documents/requests" && method === "POST") {
     if (!canManageStudents(user)) return fail("forbidden", 403);
@@ -2598,14 +3068,22 @@ export async function handleDocuments(
   }
   if (path === "/documents/templates" && method === "GET") {
     if (!canManageStudents(user)) return fail("forbidden", 403);
-    const { data, error } = await svc.from("frontend_records").select("*").eq(
+    const paging = listPaging(url);
+    const { data, error, count } = await svc.from("frontend_records").select("*", {
+      count: "exact",
+    }).eq(
       "school_id",
       school,
     ).eq("table_name", "document_templates").order("updated_at", {
       ascending: false,
-    });
+    }).range(paging.from, paging.to);
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row) => documentRow(row)));
+    return ok(listEnvelope(
+      (data ?? []).map((row) => documentRow(row)),
+      count,
+      paging.page,
+      paging.pageSize,
+    ));
   }
   if (path === "/documents/templates" && method === "POST") {
     if (!canManageStudents(user)) return fail("forbidden", 403);
@@ -2886,8 +3364,9 @@ export async function handleLandingFeed(
 
   if (error) return fail(error.message);
 
-  const rows = (data ?? [])
-    .map((row) => eventPostRow(row as Record<string, unknown>));
+  const rows = await Promise.all((data ?? []).map((row) =>
+    eventPostResponse(svc, row as Record<string, unknown>, true)
+  ));
 
   return ok(rows);
 }

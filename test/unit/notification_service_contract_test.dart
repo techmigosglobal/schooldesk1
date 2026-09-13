@@ -23,6 +23,9 @@ void main() {
     final api = File(
       'lib/core/network/api_modules/communications_api.dart',
     ).readAsStringSync();
+    final notificationsApi = File(
+      'lib/core/network/api_modules/notifications_api.dart',
+    ).readAsStringSync();
     final communications = File(
       'supabase/functions/api/handlers/communications.ts',
     ).readAsStringSync();
@@ -44,11 +47,13 @@ void main() {
     );
     expect(service, contains('getNotificationsPage(page: _currentPage + 1)'));
     expect(api, contains("'/notifications/mark-read'"));
+    expect(notificationsApi, contains("'/notifications/unread-count'"));
     expect(api, contains("_dio.delete('/notifications/\$notificationId')"));
     expect(api, contains('class NotificationPage'));
     expect(communications, contains('.is("deleted_at", null)'));
     expect(communications, contains('.range(from, to)'));
     expect(communications, contains('notificationDeleteMatch'));
+    expect(communications, contains('total: count ?? 0'));
     expect(communications, contains('body.target_role'));
     expect(preferences, contains('const preferenceKeys = ['));
     expect(preferences, contains('pending_approvals'));
@@ -71,6 +76,7 @@ void main() {
       expect(processor, contains('_push_dead_letter: true'));
       expect(processor, contains('next_retry_at.lte.'));
       expect(processor, contains('const EVENT_BATCH_CONCURRENCY = 10'));
+      expect(processor, contains('.eq("school_id", schoolId)'));
       expect(
         processor,
         contains('Promise.all(batch.map(processNotificationEvent))'),

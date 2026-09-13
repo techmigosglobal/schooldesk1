@@ -13,6 +13,7 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/teacher_dashboard_desktop_shell.dart';
+import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_preview.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final bool loadData;
@@ -41,6 +42,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   List<Map<String, dynamic>> _timetable = const [];
   int _weeklyTimetableCount = 0;
   List<AnnouncementModel> _announcements = const [];
+  List<Map<String, dynamic>> _eventPosts = const [];
   RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
@@ -80,6 +82,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         api.getAnnouncements(forceRefresh: forceRefresh),
         _loadMyAttendanceSafely(api),
         _loadUnreadNotificationsCount(),
+        api.getHomeFeedEventPosts().catchError(
+          (_) => const <Map<String, dynamic>>[],
+        ),
       ]);
       if (!mounted) return;
       setState(() {
@@ -97,6 +102,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _myAttendance = results[1] as StaffAttendanceModel?;
         _announcements = (results[0] as List)
             .whereType<AnnouncementModel>()
+            .toList();
+        _eventPosts = (results[3] as List)
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
             .toList();
         _unreadNotifications = results[2] as int? ?? 0;
         _loading = false;
@@ -210,6 +219,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               assignedSubject: _assignedSubject,
               timetable: _timetable,
               announcements: _announcements,
+              eventPosts: _eventPosts,
               attendancePending: _attendancePending,
               roleScopeLoaded: _roleScopeLoaded,
               hasStaffLink: RoleAccessService.hasTeacherStaffLink,
@@ -283,6 +293,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
                 const SizedBox(height: 10),
                 ..._todayFeed(context),
+                const SizedBox(height: 18),
+                SchoolFeedPreview(
+                  posts: _eventPosts,
+                  accentColor: teacherFlowAccent,
+                  showParentVisibility: true,
+                  actionLabel: 'Manage',
+                  onAction: () =>
+                      Navigator.pushNamed(context, AppRoutes.teacherEventPosts),
+                ),
                 if (_announcements.isNotEmpty) ...[
                   const SizedBox(height: 18),
                   TeacherFlowSectionHeader(

@@ -18,8 +18,9 @@ class ApiStudentRepository implements StudentRepository {
     return guardApi(() async {
       final page = await _api.getStudents(
         sectionId: _sectionFilter(section),
+        search: textValue(searchQuery).isEmpty ? null : searchQuery,
         page: 1,
-        pageSize: 500,
+        pageSize: 20,
       );
       final query = textValue(searchQuery).toLowerCase();
       return page.data
@@ -113,7 +114,7 @@ class ApiStudentRepository implements StudentRepository {
     double threshold = 75.0,
   }) {
     return guardApi(() async {
-      final page = await _api.getStudents(page: 1, pageSize: 500);
+      final page = await _api.getStudents(page: 1, pageSize: 20);
       return page.data
           .where((student) => student.attendancePercent < threshold)
           .map(_toStudent)

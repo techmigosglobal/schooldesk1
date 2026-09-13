@@ -85,7 +85,7 @@ void main() {
       guard,
       contains('AppRoutes.principalPaymentRequests: {\'principal\'}'),
     );
-    expect(requestsScreen, contains('getParentPaymentRequests('));
+    expect(requestsScreen, contains('getParentPaymentRequestsPage('));
     expect(
       requestsScreen,
       contains('AppRoutes.principalPaymentRequestDecision'),

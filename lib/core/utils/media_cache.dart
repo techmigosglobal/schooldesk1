@@ -7,13 +7,14 @@ import 'package:dio/dio.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/utils/secure_media_cache.dart';
 
 /// Shared media loader used by feed, gallery, and document previews.
 ///
-/// Public Storage media is persisted on disk. In-flight requests are shared so
-/// rebuilds of a carousel cannot start duplicate downloads. Signed/private
-/// URLs are intentionally kept out of the persistent cache because their
-/// authorization lifetime is short and the content may be sensitive.
+/// Public media is persisted on disk. Small private feed/profile media is
+/// persisted only in the account-scoped secure cache; signed URLs themselves
+/// are never persisted. Documents, proofs, signatures, help videos, and
+/// attachments remain memory/network-only.
 class MediaCache {
   MediaCache._();
 
@@ -48,7 +49,7 @@ class MediaCache {
       return bytes;
     }
 
-    if (_isPublicStorageUrl(url)) {
+    if (_isPublicStorageUrl(url) && _platformCacheAvailable) {
       try {
         final file = await _disk.getSingleFile(url, key: key);
         final bytes = await file.readAsBytes();
@@ -62,13 +63,37 @@ class MediaCache {
       }
     }
 
+    final accountKey = BackendApiClient.instance.offlineAccountKey;
+    final privateMediaCandidate =
+        !_isPublicStorageUrl(url) &&
+        SecureSelectiveMediaCache.isCacheablePrivateMedia(key);
+    if (privateMediaCandidate) {
+      final secure = await SecureSelectiveMediaCache.read(
+        accountKey: accountKey,
+        stableReference: key,
+      );
+      if (secure != null && secure.isNotEmpty) {
+        _remember(key, secure);
+        return secure;
+      }
+    }
+
     try {
       final response = await BackendApiClient.instance.dio.get<List<int>>(
         url,
         options: Options(responseType: ResponseType.bytes),
       );
       final bytes = Uint8List.fromList(response.data ?? const <int>[]);
-      if (bytes.isNotEmpty) _remember(key, bytes);
+      if (bytes.isNotEmpty) {
+        _remember(key, bytes);
+        if (privateMediaCandidate) {
+          await SecureSelectiveMediaCache.write(
+            accountKey: accountKey,
+            stableReference: key,
+            bytes: bytes,
+          );
+        }
+      }
       return bytes;
     } on DioException catch (error, stackTrace) {
       // Media is optional decoration for a screen. A disconnected device or
@@ -89,8 +114,24 @@ class MediaCache {
     final uri = Uri.tryParse(value);
     if (uri == null || !uri.hasScheme) return false;
     final path = uri.path;
-    return path.contains('/storage/v1/object/public/') &&
-        !path.contains('/storage/v1/object/sign/');
+    if (path.contains('/storage/v1/object/sign/') ||
+        uri.queryParameters.keys.any(
+          (key) => key.toLowerCase().startsWith('x-amz-'),
+        )) {
+      return false;
+    }
+    return path.contains('/storage/v1/object/public/') ||
+        (!uri.host.contains('supabase.co') &&
+            !uri.host.contains('r2.cloudflarestorage.com'));
+  }
+
+  static bool get _platformCacheAvailable {
+    try {
+      ServicesBinding.instance;
+      return true;
+    } on Object {
+      return false;
+    }
   }
 
   static String _cacheKey(String value) {
@@ -98,9 +139,13 @@ class MediaCache {
     if (uri == null || !uri.hasScheme) return value;
     final query = <String, String>{};
     for (final entry in uri.queryParameters.entries) {
-      // Signed URLs rotate their token. Transform dimensions are part of the
-      // representation and must remain in the cache key.
-      if (entry.key.toLowerCase() != 'token') query[entry.key] = entry.value;
+      // Signed URLs rotate their token/signature. Transform dimensions are
+      // part of the representation and must remain in the cache key.
+      final normalizedKey = entry.key.toLowerCase();
+      if (normalizedKey == 'token' || normalizedKey.startsWith('x-amz-')) {
+        continue;
+      }
+      query[entry.key] = entry.value;
     }
     return uri.replace(queryParameters: query, fragment: '').toString();
   }

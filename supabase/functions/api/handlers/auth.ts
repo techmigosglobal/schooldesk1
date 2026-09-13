@@ -5,6 +5,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, serviceClient } from "../index.ts";
 import { recordActivity } from "./activity.ts";
+import {
+  legacyStorageWritesEnabled,
+  r2FileReference,
+  uploadToR2,
+} from "../lib/r2_storage.ts";
+import { signedPrivateFileUrl } from "../storage_helpers.ts";
 
 function svc() {
   return serviceClient();
@@ -78,7 +84,7 @@ async function repairUnambiguousParentStudentLink(
   if (guardianError) return;
   const studentIds = [
     ...new Set(
-      (guardians ?? []).map((guardian) => profileText(guardian.student_id))
+      (guardians ?? []).map((guardian: { student_id?: unknown }) => profileText(guardian.student_id))
         .filter(Boolean),
     ),
   ];
@@ -91,25 +97,26 @@ async function repairUnambiguousParentStudentLink(
   }, { onConflict: "parent_user_id,student_id" });
 }
 
-function normalizeProfileResponse(
+async function normalizeProfileResponse(
   profile: Record<string, unknown> | null | undefined,
   authUser: {
     id?: string;
     email?: string | null;
     app_metadata?: Record<string, unknown>;
   },
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   // Prefer app_metadata.role_name (set at login, always authoritative) over
   // public.users.role_name which can be stale after role changes.
   const appMetaRole = profileText(authUser.app_metadata?.role_name);
   const publicRole = profileText(profile?.role_name);
+  const avatar = await signedPrivateFileUrl(svc(), profile?.avatar);
   return {
     id: profileText(authUser.id ?? profile?.id),
     username: profileText(profile?.username),
     name: profileText(profile?.name, profileText(authUser.email)),
     email: profileText(authUser.email ?? profile?.email),
     phone: profileText(profile?.phone),
-    avatar: profileText(profile?.avatar),
+    avatar: avatar || profileText(profile?.avatar),
     school_id: profileText(profile?.school_id),
     role_id: profileText(profile?.role_id),
     role_name: (appMetaRole || publicRole).toLowerCase(),
@@ -136,6 +143,7 @@ export async function handleAuth(
     if (!password) return fail("password is required");
 
     let resolvedEmail = email?.trim() || "";
+    let expectedAuthUserId = "";
 
     // Resolve username → Auth email.  Alias lookup is the normal path, but older
     // accounts can predate username_aliases or have a stale public profile email.
@@ -150,14 +158,25 @@ export async function handleAuth(
         .maybeSingle();
 
       if (alias?.auth_user_id) {
+        expectedAuthUserId = alias.auth_user_id;
         const { data: authUser, error: authErr } = await svc().auth.admin
           .getUserById(
             alias.auth_user_id,
           );
-        if (authErr || !authUser?.user?.email) {
-          return fail("invalid username or password", 401);
+        if (!authErr && authUser?.user?.email) {
+          resolvedEmail = authUser.user.email;
+        } else {
+          // Local Supabase releases can expose a legacy HS256 service key while
+          // Auth has already moved to its current signing keys.  The scoped
+          // profile email is still safe as a login candidate because the
+          // immutable Auth id is checked after the password grant below.
+          const { data: profile } = await svc()
+            .from("users")
+            .select("email")
+            .eq("id", alias.auth_user_id)
+            .maybeSingle();
+          if (profile?.email) resolvedEmail = profile.email;
         }
-        resolvedEmail = authUser.user.email;
       } else {
         const { data: userRow, error: userErr } = await svc()
           .from("users")
@@ -168,10 +187,12 @@ export async function handleAuth(
         if (userRow?.id) {
           const { data: authUser, error: authErr } = await svc().auth.admin
             .getUserById(userRow.id);
-          if (authErr || !authUser?.user?.email) {
-            return fail("invalid username or password", 401);
+          expectedAuthUserId = userRow.id;
+          if (!authErr && authUser?.user?.email) {
+            resolvedEmail = authUser.user.email;
+          } else if (userRow.email) {
+            resolvedEmail = userRow.email;
           }
-          resolvedEmail = authUser.user.email;
 
           // Best-effort self-healing for a legacy account that has no alias.
           // A conflicting alias is never overwritten and a repair failure must
@@ -183,7 +204,7 @@ export async function handleAuth(
           ) {
             await updateOwnUsernameAlias(
               profileText(userRow.school_id),
-              authUser.user.id,
+              expectedAuthUserId,
               storedUsername,
             );
           }
@@ -212,7 +233,10 @@ export async function handleAuth(
     // Safety check: if the login succeeded but the email we resolved belongs
     // to a different user than what the alias pointed at, abort.  This guards
     // against a stale / cross-school alias pointing to the wrong account.
-    if (username?.trim() && session.user.email !== resolvedEmail) {
+    if (
+      username?.trim() && expectedAuthUserId &&
+      session.user.id !== expectedAuthUserId
+    ) {
       return fail("invalid username or password", 401);
     }
 
@@ -244,6 +268,12 @@ export async function handleAuth(
     );
     const resolvedRole = appMetaRole || profileText(profile?.role_name);
     const normalizedRole = resolvedRole.toLowerCase();
+    const avatar = await signedPrivateFileUrl(svc(), profile?.avatar);
+    const profileResponse = {
+      ...(profile ?? {}),
+      avatar: avatar || profileText(profile?.avatar),
+      role_name: normalizedRole,
+    };
     await repairUnambiguousParentStudentLink(
       profile,
       authUser.id,
@@ -285,7 +315,7 @@ export async function handleAuth(
         name: profile?.name ?? authUser.email,
         email: authUser.email,
         phone: profile?.phone ?? "",
-        avatar: profile?.avatar ?? "",
+        avatar: avatar || profile?.avatar || "",
         school_id: profile?.school_id ?? "",
         role_id: profile?.role_id ?? "",
         role_name: normalizedRole,
@@ -294,7 +324,7 @@ export async function handleAuth(
         is_active: profile?.is_active ?? true,
         is_verified: profile?.is_verified ?? false,
       },
-      profile: { ...(profile ?? {}), role_name: normalizedRole },
+      profile: profileResponse,
       school: profile?.school ?? {},
     });
   }
@@ -352,6 +382,11 @@ export async function handleAuth(
           signed_out_at: now,
           last_active: now,
         }).eq("user_id", user.id).is("signed_out_at", null);
+        // A logout must stop push delivery immediately. The canonical token
+        // row is retained for audit/re-registration but no longer active.
+        await svc().from("notification_devices").update({
+          is_active: false,
+        }).eq("user_id", user.id).eq("is_active", true);
         if (profile?.school_id) {
           await recordActivity(svc(), {
             schoolId: profile.school_id,
@@ -435,7 +470,7 @@ export async function handleAuth(
       .eq("id", user.id)
       .maybeSingle();
 
-    return ok(normalizeProfileResponse(profile, user));
+    return ok(await normalizeProfileResponse(profile, user));
   }
 
   // ── PATCH /auth/profile ──────────────────────────────────────
@@ -499,7 +534,7 @@ export async function handleAuth(
       .single();
 
     if (error) return fail(error.message);
-    return ok(normalizeProfileResponse(profile, user));
+    return ok(await normalizeProfileResponse(profile, user));
   }
 
   if (path === "/auth/profile/avatar" && method === "POST") {
@@ -523,22 +558,37 @@ export async function handleAuth(
     const filePath = `avatars/${
       profile?.school_id ?? "common"
     }/${user.id}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await svc().storage.from("school-assets")
-      .upload(filePath, file, {
-        upsert: true,
-        contentType: file.type || "application/octet-stream",
-        cacheControl: "31536000",
-      });
-    if (uploadError) return fail(uploadError.message);
-    const { data: { publicUrl } } = svc().storage.from("school-assets")
-      .getPublicUrl(filePath);
+    const contentType = file.type || "application/octet-stream";
+    const r2Upload = await uploadToR2(`private/${filePath}`, file, contentType);
+    const privateReference = r2Upload ? r2FileReference(r2Upload.key) : "";
+    let avatarUrl = privateReference
+      ? await signedPrivateFileUrl(svc(), privateReference)
+      : "";
+    if (!avatarUrl && !legacyStorageWritesEnabled()) {
+      return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+    }
+    if (!avatarUrl) {
+      const { error: uploadError } = await svc().storage.from("school-assets")
+        .upload(filePath, file, {
+          upsert: true,
+          contentType,
+          cacheControl: "31536000",
+        });
+      if (uploadError) return fail(uploadError.message);
+      avatarUrl = svc().storage.from("school-assets").getPublicUrl(filePath)
+        .data.publicUrl;
+    }
 
     const { error: updateError } = await svc().from("users").update({
-      avatar: publicUrl,
+      avatar: privateReference || avatarUrl,
       updated_at: new Date().toISOString(),
     }).eq("id", user.id);
     if (updateError) return fail(updateError.message);
-    return ok({ avatar: publicUrl, avatar_url: publicUrl });
+    return ok({
+      avatar: avatarUrl,
+      avatar_url: avatarUrl,
+      ...(privateReference ? { storage_ref: privateReference } : {}),
+    });
   }
 
   return fail("not found", 404);

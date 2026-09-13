@@ -1,5 +1,25 @@
 part of '../backend_api_client.dart';
 
+final Expando<OfflineSyncEngine> _offlineSyncByClient = Expando();
+
+extension BackendOfflineSyncAccess on BackendApiClient {
+  OfflineSyncEngine? get offlineSync => _offlineSyncByClient[this];
+
+  /// Stable account scope for local data. It prevents account, branch, and
+  /// role changes from sharing cached rows or queued mutations.
+  String get offlineAccountKey {
+    final parts = <String?>[currentUserId, activeBranchId, currentRoleName];
+    if (parts.any((part) => part == null || part.trim().isEmpty)) {
+      return 'anonymous';
+    }
+    return parts.cast<String>().join('|');
+  }
+
+  void attachOfflineSync(OfflineSyncEngine engine) {
+    _offlineSyncByClient[this] = engine;
+  }
+}
+
 extension BackendAuthenticatedCache on BackendApiClient {
   String _authenticatedCacheKey(RequestOptions request) {
     final query = Map<String, dynamic>.from(request.queryParameters)
@@ -18,7 +38,6 @@ extension BackendAuthenticatedCache on BackendApiClient {
     );
   }
 
-  @visibleForTesting
   String cacheKeyForRequest(RequestOptions request) =>
       _authenticatedCacheKey(request);
 }
@@ -75,6 +94,10 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
           .copyWith(
             maxStale: Nullable(_ttlForPath(options.path)),
             policy: _policyForRequest(options),
+            // Drift owns offline fallback. Do not let the legacy Hive cache
+            // resolve transport errors before OfflineDioInterceptor can read
+            // the account/branch/role-scoped SQLite snapshot.
+            hitCacheOnErrorExcept: const Nullable<List<int>>(null),
           )
           .toExtra(),
     );
@@ -90,9 +113,9 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
     // even though their data had already been loaded once.
     if ((clean.contains('/auth/') && !clean.contains('/auth/profile')) ||
         clean.contains('/uploads') ||
+        // Payment-request responses may contain expiring proof URLs. Historical
+        // /fees/payments reads are safe to cache for parent history/receipts.
         clean.contains('/payment-requests') ||
-        clean.contains('/payments') ||
-        clean.contains('/attendance/sessions') ||
         clean.contains('/attendance/staff/qr-token')) {
       return false;
     }
@@ -122,7 +145,7 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
         options.queryParameters.containsKey('refresh_nonce');
     return isExplicitRefresh
         ? CachePolicy.refreshForceCache
-        : CachePolicy.forceCache;
+        : CachePolicy.refresh;
   }
 }
 
@@ -149,6 +172,8 @@ class _WriteCacheInvalidationInterceptor extends Interceptor {
     handler.next(response);
   }
 }
+
+// ─── Drift offline cache and outbox ─────────────────────────────────────────
 
 // ─── Logging Interceptor ──────────────────────────────────────────────────────
 

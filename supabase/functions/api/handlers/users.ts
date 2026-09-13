@@ -2,6 +2,12 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
 import {
+  legacyStorageWritesEnabled,
+  r2FileReference,
+  uploadToR2,
+} from "../lib/r2_storage.ts";
+import { signedPrivateFileUrl } from "../storage_helpers.ts";
+import {
   canAssignAccountRole,
   canCreateParentAccount,
   canReadParentAccounts,
@@ -14,6 +20,24 @@ function sid(u: User) {
 }
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+// Account directory rows are intentionally metadata-only. Avatar signing and
+// other private resources belong to the account detail endpoint.
+const userListSelect =
+  "id, school_id, username, name, email, phone, role_id, role_name, " +
+  "linked_type, linked_id, is_active, is_verified, last_login, created_at";
+
+async function withAvatarUrl(
+  svc: SupabaseClient,
+  row: Record<string, unknown>,
+) {
+  const avatar = await signedPrivateFileUrl(svc, row.avatar);
+  return {
+    ...row,
+    avatar: avatar || text(row.avatar),
+    avatar_url: avatar || text(row.avatar),
+  };
 }
 
 function temporaryPassword(): string {
@@ -112,12 +136,17 @@ export async function handleUsers(
   }
 
   if (!seg && method === "GET") {
-    const page = parseInt(url.searchParams.get("page") ?? "1");
-    const size = parseInt(url.searchParams.get("page_size") ?? "100");
-    let q = svc.from("users").select("*", { count: "exact" }).eq(
-      "school_id",
-      school,
-    ).range((page - 1) * size, page * size - 1);
+    const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+    const size = Math.min(
+      100,
+      Math.max(1, parseInt(url.searchParams.get("page_size") ?? "20")),
+    );
+    const search = url.searchParams.get("search")?.trim() ?? "";
+    let q = svc.from("users").select(userListSelect, { count: "exact" })
+      .eq("school_id", school)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range((page - 1) * size, page * size - 1);
     const role = url.searchParams.get("role")?.trim();
     if (role) {
       // Published clients send display-cased roles (for example, "Parent"),
@@ -127,6 +156,11 @@ export async function handleUsers(
     if (url.searchParams.get("status")) {
       q = q.eq("is_active", url.searchParams.get("status") === "active");
     }
+    if (search) {
+      q = q.or(
+        `name.ilike.%${search}%,username.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`,
+      );
+    }
     const { data, error, count } = await q;
     if (error) return fail(error.message);
     return cors({
@@ -135,6 +169,7 @@ export async function handleUsers(
       total: count ?? 0,
       page,
       page_size: size,
+      has_more: page * size < (count ?? 0),
     });
   }
 
@@ -175,14 +210,14 @@ export async function handleUsers(
           : "username unavailable",
       );
     }
-    return ok(data);
+    return ok(await withAvatarUrl(svc, data));
   }
 
   if (seg && method === "GET") {
     const { data, error } = await svc.from("users").select("*").eq("id", seg)
       .eq("school_id", school).single();
     if (error) return fail(error.message);
-    return ok(data);
+    return ok(await withAvatarUrl(svc, data));
   }
 
   if (seg && path.endsWith("/reset-credentials") && method === "POST") {
@@ -311,21 +346,36 @@ export async function handleUsers(
     const file = form?.get("avatar") as File | null;
     if (!file) return fail("avatar required");
     const filePath = `avatars/${school}/${seg}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await svc.storage.from("school-assets")
-      .upload(filePath, file, {
-        upsert: true,
-        contentType: file.type || "application/octet-stream",
-        cacheControl: "31536000",
-      });
-    if (uploadError) return fail(uploadError.message);
-    const { data: { publicUrl } } = svc.storage.from("school-assets")
-      .getPublicUrl(filePath);
+    const contentType = file.type || "application/octet-stream";
+    const r2Upload = await uploadToR2(`private/${filePath}`, file, contentType);
+    const privateReference = r2Upload ? r2FileReference(r2Upload.key) : "";
+    let avatarUrl = privateReference
+      ? await signedPrivateFileUrl(svc, privateReference)
+      : "";
+    if (!avatarUrl && !legacyStorageWritesEnabled()) {
+      return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+    }
+    if (!avatarUrl) {
+      const { error: uploadError } = await svc.storage.from("school-assets")
+        .upload(filePath, file, {
+          upsert: true,
+          contentType,
+          cacheControl: "31536000",
+        });
+      if (uploadError) return fail(uploadError.message);
+      avatarUrl = svc.storage.from("school-assets").getPublicUrl(filePath)
+        .data.publicUrl;
+    }
     const { error } = await svc.from("users").update({
-      avatar: publicUrl,
+      avatar: privateReference || avatarUrl,
       updated_at: new Date().toISOString(),
     }).eq("id", seg).eq("school_id", school);
     if (error) return fail(error.message);
-    return ok({ avatar: publicUrl, avatar_url: publicUrl });
+    return ok({
+      avatar: avatarUrl,
+      avatar_url: avatarUrl,
+      ...(privateReference ? { storage_ref: privateReference } : {}),
+    });
   }
 
   if (seg && method === "DELETE") {

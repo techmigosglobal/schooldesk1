@@ -814,9 +814,10 @@ class _EmptyFeed extends StatelessWidget {
 }
 
 double _feedCardHeight(Size size) {
-  final widthDriven = size.width * 1.22;
-  final heightDriven = size.height * 0.60;
-  return math.max(500, math.min(650, math.max(widthDriven, heightDriven)));
+  // Keep the carousel tied to its card width. Using the full screen height
+  // here made a normal phone viewport produce an oversized, stretched post.
+  final cardWidth = size.width * 0.92;
+  return (cardWidth * 0.9).clamp(350.0, 520.0).toDouble();
 }
 
 // ---------------------------------------------------------------------------
@@ -1247,136 +1248,143 @@ class _PostCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (mediaItems.isNotEmpty)
-                  _PostMediaCarousel(
-                    mediaItems: mediaItems,
-                    isActive: isActive,
-                    height: 240,
-                    onImageTap: onOpenDetails,
-                  )
-                else
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: gradient,
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.campaign_rounded,
-                        color: Colors.white.withOpacity(0.9),
-                        size: 56,
-                      ),
-                    ),
-                  ),
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.black54,
-                            Colors.transparent,
-                            Colors.black45,
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final mediaHeight = constraints.maxHeight;
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (mediaItems.isNotEmpty)
+                      Positioned.fill(
+                        child: _PostMediaCarousel(
+                          mediaItems: mediaItems,
+                          isActive: isActive,
+                          height: mediaHeight,
+                          onImageTap: onOpenDetails,
                         ),
-                      ),
-                    ),
-                  ),
-                ),
-                if (category.isNotEmpty)
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        category.toUpperCase(),
-                        style: GoogleFonts.dmSans(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w900,
-                          color: gradient[0],
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                if (formattedDate.isNotEmpty)
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        formattedDate,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  bottom: 10,
-                  left: 12,
-                  right: 12,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          shadows: [
-                            const Shadow(
-                              color: Colors.black45,
-                              blurRadius: 3,
-                              offset: Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (author.isNotEmpty) ...[
-                        const SizedBox(height: 1),
-                        Text(
-                          'by $author',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 10,
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w500,
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: gradient,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
                         ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
+                        child: Center(
+                          child: Icon(
+                            Icons.campaign_rounded,
+                            color: Colors.white.withOpacity(0.9),
+                            size: 56,
+                          ),
+                        ),
+                      ),
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.black54,
+                                Colors.transparent,
+                                Colors.black45,
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (category.isNotEmpty)
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            category.toUpperCase(),
+                            style: GoogleFonts.dmSans(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w900,
+                              color: gradient[0],
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (formattedDate.isNotEmpty)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            formattedDate,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      bottom: 10,
+                      left: 12,
+                      right: 12,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              shadows: [
+                                const Shadow(
+                                  color: Colors.black45,
+                                  blurRadius: 3,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (author.isNotEmpty) ...[
+                            const SizedBox(height: 1),
+                            Text(
+                              'by $author',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 10,
+                                color: Colors.white70,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],

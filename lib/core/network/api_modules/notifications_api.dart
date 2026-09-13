@@ -26,6 +26,24 @@ extension NotificationsApi on BackendApiClient {
     }
   }
 
+  Future<int> getUnreadNotificationsCount() async {
+    try {
+      final response = await _get('/notifications/unread-count');
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        final value = data['data'] is Map
+            ? (data['data'] as Map)['count']
+            : data['count'];
+        return value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to get unread notification count',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   /// Get notification preferences for current user
   Future<Map<String, dynamic>> getNotificationPreferences() async {
     try {

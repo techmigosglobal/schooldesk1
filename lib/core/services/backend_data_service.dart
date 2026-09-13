@@ -50,8 +50,8 @@ class BackendDataService {
   static const String kRuntimeNotifications = 'app_notifications';
 
   final BackendApiClient _api = BackendApiClient.instance;
-  static const int _defaultDirectoryPageSize = 200;
-  static const int _maxDirectoryPageSize = 500;
+  static const int _defaultDirectoryPageSize = 20;
+  static const int _maxDirectoryPageSize = 100;
 
   Future<List<Map<String, dynamic>>> getList(String key) async {
     switch (key) {

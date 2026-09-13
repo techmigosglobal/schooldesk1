@@ -161,13 +161,87 @@ extension BackendTablesRawApi on BackendApiClient {
       final response = await _get(path, queryParameters: queryParameters);
       final data = _asMap(response.data);
       if (data['success'] == true) {
-        return _asListMap(data['data']);
+        final payload = data['data'];
+        if (payload is Map) {
+          return _asListMap(payload['items'] ?? payload['data']);
+        }
+        return _asListMap(payload);
       }
       throw ServerException(message: data['error'] ?? 'Failed to load $path');
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
+
+  /// Shared page-envelope reader for legacy table resources that have not yet
+  /// earned a dedicated DTO. Interactive callers still receive typed
+  /// `PaginatedList` metadata instead of guessing from a raw list length.
+  Future<PaginatedList<Map<String, dynamic>>> getRawPage(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final params = <String, dynamic>{
+      ...?queryParameters,
+      'page': page,
+      'page_size': pageSize,
+    };
+    try {
+      final response = await _get(path, queryParameters: params);
+      final envelope = _asMap(response.data);
+      if (envelope['success'] != true) {
+        throw ServerException(
+          message: envelope['error'] ?? 'Failed to load $path',
+        );
+      }
+      final rawPayload = envelope['data'];
+      final payload = rawPayload is Map ? _asMap(rawPayload) : null;
+      final rows = _asListMap(
+        payload?['data'] ?? payload?['items'] ?? rawPayload,
+      );
+      final total = _asInt(
+        payload?['total'] ?? envelope['total'],
+        fallback: rows.length,
+      );
+      return PaginatedList<Map<String, dynamic>>(
+        data: rows,
+        total: total,
+        page: _asInt(payload?['page'] ?? envelope['page'], fallback: page),
+        pageSize: _asInt(
+          payload?['page_size'] ?? envelope['page_size'],
+          fallback: pageSize,
+        ),
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> getAdmissionInquiriesPage({
+    String? search,
+    int page = 1,
+    int pageSize = 20,
+  }) {
+    return getRawPage(
+      '/admission-inquiries',
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      },
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> getDocumentRequestsPage({
+    int page = 1,
+    int pageSize = 20,
+  }) => getRawPage('/documents/requests', page: page, pageSize: pageSize);
+
+  Future<PaginatedList<Map<String, dynamic>>> getDocumentTemplatesPage({
+    int page = 1,
+    int pageSize = 20,
+  }) => getRawPage('/documents/templates', page: page, pageSize: pageSize);
 
   Future<Map<String, dynamic>> getRawMap(
     String path, {
@@ -187,11 +261,12 @@ extension BackendTablesRawApi on BackendApiClient {
 
   Future<Map<String, dynamic>> createRaw(
     String path,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    Map<String, dynamic>? extra,
+  }) async {
     try {
       final root = _tablesMDRootListPath(path);
-      if (root != null) {
+      if (root != null && extra == null) {
         final response = await SchoolDeskApi.instance.client.createTablesMdRoot(
           root,
           payload,
@@ -201,10 +276,16 @@ extension BackendTablesRawApi on BackendApiClient {
           message: response.error ?? 'Failed to create $path',
         );
       }
-      final response = await _dio.post(path, data: payload);
+      final response = await _dio.post(
+        path,
+        data: payload,
+        options: extra == null ? null : Options(extra: extra),
+      );
       final data = _asMap(response.data);
       if (data['success'] == true) {
-        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        final result = Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        if (data['queued'] == true) result['queued'] = true;
+        return result;
       }
       throw ServerException(message: data['error'] ?? 'Failed to create $path');
     } on DioException catch (e) {
@@ -214,11 +295,12 @@ extension BackendTablesRawApi on BackendApiClient {
 
   Future<Map<String, dynamic>> updateRaw(
     String path,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    Map<String, dynamic>? extra,
+  }) async {
     try {
       final item = _tablesMDRootItemPath(path);
-      if (item != null) {
+      if (item != null && extra == null) {
         final response = await SchoolDeskApi.instance.client.updateTablesMdRoot(
           item.root,
           item.id,
@@ -229,10 +311,16 @@ extension BackendTablesRawApi on BackendApiClient {
           message: response.error ?? 'Failed to update $path',
         );
       }
-      final response = await _dio.put(path, data: payload);
+      final response = await _dio.put(
+        path,
+        data: payload,
+        options: extra == null ? null : Options(extra: extra),
+      );
       final data = _asMap(response.data);
       if (data['success'] == true) {
-        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        final result = Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        if (data['queued'] == true) result['queued'] = true;
+        return result;
       }
       throw ServerException(message: data['error'] ?? 'Failed to update $path');
     } on DioException catch (e) {

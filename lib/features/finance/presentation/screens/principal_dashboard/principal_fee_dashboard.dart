@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -66,38 +65,36 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
 
       final results = await Future.wait<Object>([
         api.getFeeStructures(),
-        api.getInvoices(pageSize: 1000),
-        api.getParentPaymentRequests(pageSize: 500),
-        api.getRawList('/fees/concessions'),
+        api.getInvoicesPage(pageSize: 20),
+        api.getPaymentsPage(pageSize: 20),
+        api.getParentPaymentRequestsPage(status: 'pending', pageSize: 20),
+        api.getFeeDashboardSummary(),
+        api.getFeeConcessionsPage(pageSize: 20),
       ]);
 
       final structures = (results[0] as List)
           .cast<Map<String, dynamic>>()
           .map(normalizeFeeStructure)
           .toList();
-      final invoices = (results[1] as List)
+      final invoices = (results[1] as PaginatedList<Map<String, dynamic>>).data
           .cast<Map<String, dynamic>>()
           .map(normalizeInvoice)
           .toList();
-      final payments = invoices.expand(normalizePayments).toList()
+      final payments = (results[2] as PaginatedList<Map<String, dynamic>>).data
+          .cast<Map<String, dynamic>>()
+          .map(normalizePaymentRow)
+          .toList()
         ..sort((a, b) => '${b['date'] ?? ''}'.compareTo('${a['date'] ?? ''}'));
 
-      final requests = (results[2] as List)
-          .cast<Map<String, dynamic>>()
-          .where((r) => FeePaymentRequestStatus.isPrincipalPending(r['status']))
-          .toList();
+      final requests =
+          (results[3] as PaginatedList<Map<String, dynamic>>).data.toList();
 
-      final concessions = (results[3] as List).cast<Map<String, dynamic>>();
+      final summary = results[4] as Map<String, dynamic>;
+      final concessions =
+          (results[5] as PaginatedList<Map<String, dynamic>>).data.toList();
 
-      double outstanding = 0.0;
-      for (final inv in invoices) {
-        outstanding += (inv['balance'] as num?)?.toDouble() ?? 0.0;
-      }
-
-      double collected = 0.0;
-      for (final p in payments) {
-        collected += (p['amount'] as num?)?.toDouble() ?? 0.0;
-      }
+      final outstanding = (summary['outstanding'] as num?)?.toDouble() ?? 0.0;
+      final collected = (summary['collected'] as num?)?.toDouble() ?? 0.0;
 
       if (!mounted) return;
       setState(() {
@@ -107,7 +104,9 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
         _concessions = concessions;
         _outstandingTotal = outstanding;
         _collectedTotal = collected;
-        _pendingRequestsCount = requests.length;
+        _pendingRequestsCount =
+            (summary['pending_request_count'] as num?)?.toInt() ??
+            requests.length;
         _loading = false;
       });
       _animCtrl.forward(from: 0);

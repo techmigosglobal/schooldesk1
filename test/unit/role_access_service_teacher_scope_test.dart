@@ -38,7 +38,7 @@ void main() {
     expect(RoleAccessService.teacherClassName, 'Not assigned');
   });
 
-  test('initializes independent principal scope reads concurrently', () async {
+  test('principal bootstrap does not download operational directories', () async {
     BackendApiClient.instance.setCurrentRole('principal');
     BackendApiClient.instance.setCurrentUserId('principal-user-1');
     adapter.responseDelay = const Duration(milliseconds: 20);
@@ -62,11 +62,9 @@ void main() {
 
     await RoleAccessService.initialize();
 
-    expect(
-      adapter.maxConcurrentRequests,
-      greaterThanOrEqualTo(4),
-      reason: 'Independent scope reads should not serialize on login/resume.',
-    );
+    expect(adapter.requests.where((request) => request.startsWith('GET /students')), isEmpty);
+    expect(adapter.requests.where((request) => request.startsWith('GET /staff')), isEmpty);
+    expect(adapter.requests.where((request) => request.startsWith('GET /fees/invoices')), isEmpty);
   });
 
   test(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -28,6 +30,11 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   List<Map<String, dynamic>> _students = [];
   String? _defaultSectionId;
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _studentPage = 1;
+  int _studentTotal = 0;
+  Timer? _searchDebounce;
   List<String> _classes = ['All'];
   List<Map<String, String>> _sectionOptions = [];
   List<Map<String, String>> _parentOptions = [];
@@ -48,20 +55,34 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
     await _refreshFromBackend();
   }
 
-  Future<void> _refreshFromBackend() async {
+  Future<void> _refreshFromBackend({bool resetPage = true}) async {
+    if (resetPage) {
+      setState(() {
+        _loading = true;
+        _loadingMore = false;
+      });
+    } else {
+      setState(() => _loadingMore = true);
+    }
     try {
       final grades = await BackendApiClient.instance.getGrades(
-        forceRefresh: true,
+        forceRefresh: resetPage,
       );
       final sections = await BackendApiClient.instance.getSections(
-        forceRefresh: true,
+        forceRefresh: resetPage,
       );
       final students = await BackendApiClient.instance.getStudents(
-        page: 1,
-        pageSize: 500,
+        search: _search,
+        sectionId: _selectedSectionId,
+        page: resetPage ? 1 : _studentPage + 1,
+        pageSize: 20,
       );
-      final parents = await _loadParentAccounts();
-      final parentByAdmission = await _loadParentMap(parents);
+      final parents = resetPage
+          ? await _loadParentAccounts()
+          : const <UserAccountModel>[];
+      final parentByAdmission = resetPage
+          ? await _loadParentMap(parents)
+          : <String, Map<String, String>>{};
 
       if (sections.isNotEmpty) {
         _defaultSectionId = sections.first.id;
@@ -77,61 +98,78 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
           'label': '$gradeLabel ${section.sectionName}',
         };
       }).toList();
+      final mappedStudents = students.data.map((s) {
+        final sectionLabel = _sectionLabel(
+          s.currentSectionId,
+          sectionMap,
+          gradeMap,
+        );
+        final roll = s.admissionNumber.isNotEmpty
+            ? s.admissionNumber
+            : s.studentCode;
+        final parentOption =
+            s.parentUserId != null && s.parentUserId!.isNotEmpty
+            ? _parentOptions.firstWhere(
+                (p) => p['id'] == s.parentUserId,
+                orElse: () => <String, String>{},
+              )
+            : null;
+        final parentLink = (parentOption != null && parentOption.isNotEmpty)
+            ? parentOption
+            : parentByAdmission[s.admissionNumber.toLowerCase().trim()] ??
+                  parentByAdmission[s.studentCode.toLowerCase().trim()];
+        return {
+          'id': s.id,
+          'name': s.fullName,
+          'class': sectionLabel,
+          'sectionId': s.currentSectionId,
+          'status': s.status,
+          'admissionNumber': s.admissionNumber,
+          'studentCode': s.studentCode,
+          'roll': roll,
+          'parent': parentLink?['label'] ?? '',
+          'parentId': parentLink?['id'] ?? '',
+          'phone': parentLink?['phone'] ?? '',
+          'dob': _dateOnly(s.dateOfBirth),
+          'gender': s.gender ?? '',
+          'docs': <String>[],
+        };
+      }).toList();
+      final existingIds = _students.map((student) => student['id']).toSet();
+      final uniqueStudents = resetPage
+          ? mappedStudents
+          : mappedStudents
+                .where((student) => existingIds.add(student['id']))
+                .toList();
+      if (!mounted) return;
       setState(() {
         _sectionOptions = sectionOptions;
         _classes = ['All', ...sectionOptions.map((e) => e['label']!)];
-        _parentOptions = parents
-            .map(
-              (parent) => {
-                'id': parent.id,
-                'label': _parentLabel(parent),
-                'phone': parent.phone,
-              },
-            )
-            .toList();
-        _students = students.data.map((s) {
-          final sectionLabel = _sectionLabel(
-            s.currentSectionId,
-            sectionMap,
-            gradeMap,
-          );
-          final roll = s.admissionNumber.isNotEmpty
-              ? s.admissionNumber
-              : s.studentCode;
-          final parentOption =
-              s.parentUserId != null && s.parentUserId!.isNotEmpty
-              ? _parentOptions.firstWhere(
-                  (p) => p['id'] == s.parentUserId,
-                  orElse: () => <String, String>{},
-                )
-              : null;
-          final parentLink = (parentOption != null && parentOption.isNotEmpty)
-              ? parentOption
-              : parentByAdmission[s.admissionNumber.toLowerCase().trim()] ??
-                    parentByAdmission[s.studentCode.toLowerCase().trim()];
-          return {
-            'id': s.id,
-            'name': s.fullName,
-            'class': sectionLabel,
-            'sectionId': s.currentSectionId,
-            'status': s.status,
-            'admissionNumber': s.admissionNumber,
-            'studentCode': s.studentCode,
-            'roll': roll,
-            'parent': parentLink?['label'] ?? '',
-            'parentId': parentLink?['id'] ?? '',
-            'phone': parentLink?['phone'] ?? '',
-            'dob': _dateOnly(s.dateOfBirth),
-            'gender': s.gender ?? '',
-            'docs': <String>[],
-          };
-        }).toList();
+        _parentOptions = resetPage
+            ? parents
+                  .map(
+                    (parent) => {
+                      'id': parent.id,
+                      'label': _parentLabel(parent),
+                      'phone': parent.phone,
+                    },
+                  )
+                  .toList()
+            : _parentOptions;
+        _students = resetPage
+            ? mappedStudents
+            : [..._students, ...uniqueStudents];
+        _studentPage = students.page;
+        _studentTotal = students.total;
+        _hasMore = students.hasMore;
         _loading = false;
+        _loadingMore = false;
       });
-    } on Object {
+    } on Object catch (_) {
+      if (!mounted) return;
       setState(() {
-        _students = [];
         _loading = false;
+        _loadingMore = false;
       });
     }
   }
@@ -142,7 +180,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
         role: 'Parent',
         status: 'active',
         page: 1,
-        pageSize: 500,
+        pageSize: 20,
       );
       return result.data
           .where((user) => user.roleName.toLowerCase() == 'parent')
@@ -156,26 +194,39 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
     List<UserAccountModel> parents,
   ) async {
     final mapped = <String, Map<String, String>>{};
-    for (final parent in parents) {
-      try {
-        final linked = await BackendApiClient.instance.getParentStudents(
-          parentUserId: parent.id,
+    try {
+      final directory = await BackendApiClient.instance.getGuardianDirectory(
+        page: 1,
+        pageSize: 20,
+      );
+      for (final row in directory.data) {
+        final parentId = '${row['id'] ?? ''}';
+        final parent = parents.firstWhere(
+          (candidate) => candidate.id == parentId,
+          orElse: () => UserAccountModel.fromJson(row),
         );
-        for (final row in linked) {
-          final admission =
-              '${row['student_admission_number'] ?? row['admission_number'] ?? ''}'
-                  .trim()
-                  .toLowerCase();
-          if (admission.isEmpty) continue;
-          mapped[admission] = {
-            'id': parent.id,
-            'label': _parentLabel(parent),
-            'phone': parent.phone,
-          };
+        final children = row['linked_children'];
+        if (children is! List) continue;
+        for (final child in children.whereType<Map>()) {
+          final childRow = Map<String, dynamic>.from(child);
+          for (final key in [
+            'admission_number',
+            'student_id_number',
+            'student_code',
+          ]) {
+            final value = '${childRow[key] ?? ''}'.trim().toLowerCase();
+            if (value.isEmpty) continue;
+            mapped[value] = {
+              'id': parent.id,
+              'label': _parentLabel(parent),
+              'phone': parent.phone,
+            };
+          }
         }
-      } on Object catch (_) {
-        continue;
       }
+    } on Object catch (_) {
+      // Parent links are supplemental to the student list and must not make
+      // the directory appear empty when the optional lookup is unavailable.
     }
     return mapped;
   }
@@ -191,7 +242,26 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
+  }
+
+  String? get _selectedSectionId {
+    if (_filterClass == 'All') return null;
+    final matches = _sectionOptions
+        .where((option) => option['label'] == _filterClass)
+        .map((option) => option['id'])
+        .toList();
+    return matches.isEmpty ? null : matches.first;
+  }
+
+  void _scheduleSearchRefresh(String value) {
+    setState(() => _search = value);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () => _refreshFromBackend(),
+    );
   }
 
   List<Map<String, dynamic>> get _filtered {
@@ -330,7 +400,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
         children: [
           SchoolDeskDataToolbar(
             searchLabel: 'Search students by name or ID',
-            onSearchChanged: (v) => setState(() => _search = v),
+            onSearchChanged: _scheduleSearchRefresh,
           ),
           SizedBox(height: tokens.spacing.xs),
           SizedBox(
@@ -361,7 +431,10 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                         ? context.appTheme.primary
                         : context.appTheme.onSurface,
                   ),
-                  onSelected: (_) => setState(() => _filterClass = _classes[i]),
+                  onSelected: (_) {
+                    setState(() => _filterClass = _classes[i]);
+                    _refreshFromBackend();
+                  },
                 );
               },
             ),
@@ -391,10 +464,34 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
           tokens.spacing.md,
           96,
         ),
-        itemCount: students.length,
+        itemCount: students.length + (_hasMore ? 1 : 0),
         addAutomaticKeepAlives: false,
         addRepaintBoundaries: true,
         itemBuilder: (_, i) {
+          if (i == students.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: OutlinedButton.icon(
+                  onPressed: _loadingMore
+                      ? null
+                      : () => _refreshFromBackend(resetPage: false),
+                  icon: _loadingMore
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.expand_more_rounded),
+                  label: Text(
+                    _loadingMore
+                        ? 'Loading…'
+                        : 'Load more ($_studentTotal total)',
+                  ),
+                ),
+              ),
+            );
+          }
           if (i > 0) {
             return Column(
               mainAxisSize: MainAxisSize.min,

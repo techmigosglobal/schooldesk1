@@ -4,6 +4,14 @@ import {
   User as _User,
 } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok } from "../index.ts";
+import {
+  deleteR2File,
+  legacyStorageWritesEnabled,
+  r2FileReference,
+  uploadPublicToR2,
+  uploadToR2,
+} from "../lib/r2_storage.ts";
+import { signedPrivateFileUrl } from "../storage_helpers.ts";
 
 function isSchoolAdministrator(user: _User) {
   const role = `${
@@ -19,11 +27,10 @@ async function withAuthorizedSignatureUrl(
 ) {
   const path = `${school.authorized_signature_path ?? ""}`.trim();
   if (!path) return { ...school, authorized_signature_url: "" };
-  const { data, error } = await svc.storage.from("school-signatures")
-    .createSignedUrl(path, 3600);
+  const signedUrl = await signedPrivateFileUrl(svc, path, 3600, "school-signatures");
   return {
     ...school,
-    authorized_signature_url: error ? "" : data.signedUrl,
+    authorized_signature_url: signedUrl,
   };
 }
 
@@ -124,18 +131,26 @@ export async function handleSchools(
       user!.id,
     ).single();
     const path2 = `logos/${profile?.school_id}/${Date.now()}-${file.name}`;
-    const { error } = await svc.storage.from("school-assets").upload(
-      path2,
-      file,
-      {
-        upsert: true,
-        contentType: file.type || "application/octet-stream",
-        cacheControl: "31536000",
-      },
-    );
-    if (error) return fail(error.message);
-    const { data: { publicUrl } } = svc.storage.from("school-assets")
-      .getPublicUrl(path2);
+    const contentType = file.type || "application/octet-stream";
+    const r2Upload = await uploadPublicToR2(path2, file, contentType);
+    let publicUrl = r2Upload?.url ?? "";
+    if (!publicUrl) {
+      if (!legacyStorageWritesEnabled()) {
+        return fail("R2 public storage is unavailable; legacy storage writes are disabled", 503);
+      }
+      const { error } = await svc.storage.from("school-assets").upload(
+        path2,
+        file,
+        {
+          upsert: true,
+          contentType,
+          cacheControl: "31536000",
+        },
+      );
+      if (error) return fail(error.message);
+      publicUrl = svc.storage.from("school-assets").getPublicUrl(path2).data
+        .publicUrl;
+    }
     await svc.from("schools").update({ logo_url: publicUrl }).eq(
       "id",
       profile?.school_id,
@@ -177,38 +192,56 @@ export async function handleSchools(
       : file.type === "image/webp" || fileName.endsWith(".webp")
       ? "webp"
       : "jpg";
-    const signaturePath =
-      `signatures/${profile.school_id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
-    const { error: uploadError } = await svc.storage.from("school-signatures")
-      .upload(signaturePath, file, {
-        contentType: extension === "png"
-          ? "image/png"
-          : extension === "webp"
-          ? "image/webp"
-          : "image/jpeg",
-        upsert: false,
-      });
-    if (uploadError) return fail(uploadError.message);
+    const signatureKey =
+      `private/school-signatures/${profile.school_id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+    const signatureContentType = extension === "png"
+      ? "image/png"
+      : extension === "webp"
+      ? "image/webp"
+      : "image/jpeg";
+    const r2Upload = await uploadToR2(signatureKey, file, signatureContentType);
+    const signaturePath = r2Upload
+      ? r2FileReference(r2Upload.key)
+      : `signatures/${profile.school_id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+    if (!r2Upload) {
+      if (!legacyStorageWritesEnabled()) {
+        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+      }
+      const { error: uploadError } = await svc.storage.from("school-signatures")
+        .upload(signaturePath, file, {
+          contentType: signatureContentType,
+          upsert: false,
+        });
+      if (uploadError) return fail(uploadError.message);
+    }
     const { error: updateError } = await svc.from("schools").update({
       authorized_signature_path: signaturePath,
       updated_at: new Date().toISOString(),
     }).eq("id", profile.school_id);
     if (updateError) {
-      await svc.storage.from("school-signatures").remove([signaturePath]);
+      if (r2Upload) await deleteR2File(signaturePath);
+      else await svc.storage.from("school-signatures").remove([signaturePath]);
       return fail(updateError.message);
     }
     if (previousSignaturePath && previousSignaturePath !== signaturePath) {
-      await svc.storage.from("school-signatures").remove([
-        previousSignaturePath,
-      ]);
+      if (previousSignaturePath.startsWith("r2://")) {
+        await deleteR2File(previousSignaturePath);
+      } else {
+        await svc.storage.from("school-signatures").remove([
+          previousSignaturePath,
+        ]);
+      }
     }
-    const { data: signed, error: signedError } = await svc.storage.from(
+    const signedUrl = await signedPrivateFileUrl(
+      svc,
+      signaturePath,
+      3600,
       "school-signatures",
-    ).createSignedUrl(signaturePath, 3600);
-    if (signedError) return fail(signedError.message);
+    );
+    if (!signedUrl) return fail("Unable to prepare signature URL");
     return ok({
       authorized_signature_path: signaturePath,
-      authorized_signature_url: signed.signedUrl,
+      authorized_signature_url: signedUrl,
     });
   }
 

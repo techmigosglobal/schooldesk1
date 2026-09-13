@@ -445,7 +445,8 @@ export async function handleAttendance(
   // ── Sessions ───────────────────────────────────────────────
   if (path === "/attendance/sessions" && method === "GET") {
     let q = svc.from("attendance_sessions").select(
-      "*, section:sections(*), staff:staff(*), subject:subjects(*), student_attendances(*)",
+      "id, school_id, section_id, academic_year_id, subject_id, staff_id, timetable_slot_id, date, period_number, total_students, present_count, is_finalized, status, submitted_at, reopened_at, reopened_by, reopen_reason, correction_reason, correction_asked_at, corrected_at, section:sections(id, section_name, grade:grades(id, grade_name)), staff:staff(id, first_name, last_name, staff_code), subject:subjects(id, subject_name)",
+      { count: "exact" },
     ).eq("school_id", school);
     const sectionId = url.searchParams.get("section_id") ?? "";
     if (!canManageAttendance(roleName)) {
@@ -479,15 +480,16 @@ export async function handleAttendance(
     if (url.searchParams.get("staff_id")) {
       q = q.eq("staff_id", url.searchParams.get("staff_id")!);
     }
-    const { data, error } = await q.order("date", { ascending: false });
+    const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+    const pageSize = Math.min(
+      100,
+      Math.max(1, Number(url.searchParams.get("page_size") ?? "20") || 20),
+    );
+    const { data, error, count } = await q.order("date", { ascending: false })
+      .order("id", { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1);
     if (error) return fail(error.message);
     const mapped = await Promise.all((data ?? []).map(async (sess: any) => {
-      if (Array.isArray(sess.student_attendances)) {
-        sess.student_attendances = sess.student_attendances.map((row: any) => ({
-          ...row,
-          marked_at: row.created_at || row.updated_at,
-        }));
-      }
       sess.daily_claim = await loadDailyClaim(
         svc,
         school,
@@ -498,7 +500,14 @@ export async function handleAttendance(
       );
       return sess;
     }));
-    return ok(mapped);
+    return cors({
+      success: true,
+      data: mapped,
+      total: count ?? 0,
+      page,
+      page_size: pageSize,
+      has_more: page * pageSize < (count ?? 0),
+    });
   }
 
   if (path === "/attendance/sessions" && method === "POST") {
@@ -742,7 +751,7 @@ export async function handleAttendance(
       svc,
       school,
       `${session.section_id ?? ""}`,
-      records.map((record) => `${record.student_id ?? ""}`),
+      records.map((record: Record<string, unknown>) => `${record.student_id ?? ""}`),
     )) return fail("attendance records must belong to the active session section", 422);
     const { data, error } = await svc.from("student_attendances").upsert(
       records,
@@ -827,7 +836,7 @@ export async function handleAttendance(
       svc,
       school,
       `${session.section_id ?? ""}`,
-      records.map((record) => `${record.student_id ?? ""}`),
+      records.map((record: Record<string, unknown>) => `${record.student_id ?? ""}`),
     )) return fail("attendance records must belong to the active session section", 422);
     const { data, error } = await svc.from("student_attendances").upsert(
       records,

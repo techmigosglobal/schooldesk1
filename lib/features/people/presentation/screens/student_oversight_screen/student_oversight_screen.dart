@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -163,8 +164,11 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
+  bool _staleData = false;
   String? _loadError;
   int _currentPage = 0;
+  int _queryGeneration = 0;
+  Timer? _searchDebounce;
 
   bool get _selectionMode => _selectedStudentIds.isNotEmpty;
 
@@ -189,6 +193,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -211,70 +216,76 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
   String _argumentText(Object? value) => value?.toString().trim() ?? '';
 
-  Future<void> _loadData() async {
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
+  Future<void> _loadData({
+    bool resetPage = true,
+    bool loadMetadata = true,
+  }) async {
+    final generation = ++_queryGeneration;
+    final requestedPage = resetPage ? 1 : _currentPage + 1;
+    if (mounted) {
+      setState(() {
+        _loading = resetPage && _allStudents.isEmpty;
+        _loadingMore = !resetPage;
+        _loadError = null;
+        if (resetPage) _staleData = false;
+      });
+    }
 
     try {
-      final students = <api.StudentModel>[];
-      var page = 1;
-      while (true) {
-        final res = await api.BackendApiClient.instance.getStudents(
-          sectionId: null,
-          page: page,
-          pageSize: 100,
-        );
-        students.addAll(res.data);
-        if (!res.hasMore || res.data.isEmpty) break;
-        page++;
+      final client = api.BackendApiClient.instance;
+      final studentFuture = client.getStudents(
+        sectionId: _serverSectionId(),
+        status: _serverStatusFilter(),
+        search: _searchQuery,
+        page: requestedPage,
+        pageSize: _pageSize,
+      );
+
+      api.PaginatedList<api.StudentModel> response;
+      List<api.SectionModel> sections = _sections;
+      List<api.GradeModel> grades = _grades;
+      List<api.AcademicYearModel> academicYears = _academicYears;
+      Map<String, dynamic> directorySummary = const {};
+      Map<String, dynamic> parentIntegrity = const {};
+      if (loadMetadata) {
+        final results = await Future.wait<dynamic>([
+          studentFuture,
+          client.getSections(forceRefresh: true),
+          client.getGrades(forceRefresh: true),
+          client.getAcademicYears(forceRefresh: true),
+          client.getStudentDirectorySummary(),
+          client.getStudentParentIntegrityReport(),
+        ]);
+        response = results[0] as api.PaginatedList<api.StudentModel>;
+        sections = results[1] as List<api.SectionModel>;
+        grades = results[2] as List<api.GradeModel>;
+        academicYears = results[3] as List<api.AcademicYearModel>;
+        directorySummary = results[4] as Map<String, dynamic>;
+        parentIntegrity = results[5] as Map<String, dynamic>;
+      } else {
+        response = await studentFuture;
       }
 
-      final sections = await api.BackendApiClient.instance.getSections(
-        forceRefresh: true,
-      );
-      final grades = await api.BackendApiClient.instance.getGrades(
-        forceRefresh: true,
-      );
-      final academicYears = await api.BackendApiClient.instance
-          .getAcademicYears(forceRefresh: true);
-      final feeStructures = await _loadFeeStructuresSafely();
-      final parents = await _loadParentAccounts();
-      final directorySummary = await api.BackendApiClient.instance
-          .getStudentDirectorySummary();
-      final parentIntegrity = await api.BackendApiClient.instance
-          .getStudentParentIntegrityReport();
+      if (!mounted || generation != _queryGeneration) return;
       final sectionMap = {for (final s in sections) s.id: s};
       final gradeMap = {for (final g in grades) g.id: g};
-      final parentMap = {for (final p in parents) p.id: p};
-
-      final loaded = students
+      final parentMap = {for (final p in _parents) p.id: p};
+      final loaded = response.data
           .map(
             (student) =>
                 _mapApiStudentToUi(student, sectionMap, gradeMap, parentMap),
           )
-          .toList();
+          .toList(growable: false);
       final classes =
-          {
-                ...sections.map((section) {
-                  final grade = gradeMap[section.gradeId];
-                  final gradeName = _gradeLabel(grade, section);
-                  final sectionName = section.sectionName.trim();
-                  return gradeName.isNotEmpty && sectionName.isNotEmpty
-                      ? 'Class $gradeName / Section $sectionName'
-                      : gradeName.isNotEmpty
-                      ? 'Class $gradeName'
-                      : sectionName.isNotEmpty
-                      ? 'Section $sectionName'
-                      : 'Class not assigned';
-                }),
-                ...loaded.map((student) => student.classSection),
-              }
+          sections
+              .map(
+                (section) => _classLabelForSectionWithMaps(section, gradeMap),
+              )
               .where(
                 (value) =>
                     value.trim().isNotEmpty && value != 'Class not assigned',
               )
+              .toSet()
               .toList()
             ..sort();
       final classOptions = ['All', ...classes];
@@ -285,59 +296,117 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         classOptions.insert(1, scopedClassLabel);
       }
 
-      if (!mounted) return;
+      final existingIds = _allStudents.map((student) => student.id).toSet();
+      final uniqueLoaded = loaded
+          .where((student) => !existingIds.contains(student.id))
+          .toList(growable: false);
+      final isDesktop = DesktopBreakpoints.isDesktopWidth(
+        MediaQuery.sizeOf(context).width,
+      );
+      var selectFirst = false;
       setState(() {
-        _sections = sections;
-        _grades = grades;
-        _academicYears = academicYears;
-        _feeStructures = feeStructures;
-        _parents = parents;
-        _activeStudentTotal =
-            (directorySummary['active_student_count'] as num?)?.toInt() ??
-            loaded.where((student) => _isActiveStudent(student)).length;
-        final rawCounts = directorySummary['active_students_by_section'];
-        _activeStudentsBySection = rawCounts is Map
-            ? rawCounts.map(
-                (key, value) => MapEntry('$key', (value as num?)?.toInt() ?? 0),
-              )
-            : const {};
-        _unlinkedActiveStudents =
-            (parentIntegrity['unlinked_active_student_count'] as num?)
-                ?.toInt() ??
-            0;
-        _allStudents
-          ..clear()
-          ..addAll(loaded);
+        if (loadMetadata) {
+          _sections = sections;
+          _grades = grades;
+          _academicYears = academicYears;
+          _activeStudentTotal =
+              (directorySummary['active_student_count'] as num?)?.toInt() ??
+              response.total;
+          final rawCounts = directorySummary['active_students_by_section'];
+          _activeStudentsBySection = rawCounts is Map
+              ? rawCounts.map(
+                  (key, value) =>
+                      MapEntry('$key', (value as num?)?.toInt() ?? 0),
+                )
+              : const {};
+          _unlinkedActiveStudents =
+              (parentIntegrity['unlinked_active_student_count'] as num?)
+                  ?.toInt() ??
+              0;
+          _classOptions = classOptions;
+          if (!_scopedClassFilterApplied &&
+              scopedClassLabel.isNotEmpty &&
+              scopedClassLabel != 'Class not assigned') {
+            _selectedClass = scopedClassLabel;
+            _scopedClassFilterApplied = true;
+          } else if (!_classOptions.contains(_selectedClass)) {
+            _selectedClass = 'All';
+          }
+        }
+        if (resetPage) {
+          _allStudents
+            ..clear()
+            ..addAll(loaded);
+        } else {
+          _allStudents.addAll(uniqueLoaded);
+        }
         _filteredStudents
           ..clear()
-          ..addAll(loaded);
-        _classOptions = classOptions;
-        if (!_scopedClassFilterApplied &&
-            scopedClassLabel.isNotEmpty &&
-            scopedClassLabel != 'Class not assigned') {
-          _selectedClass = scopedClassLabel;
-          _scopedClassFilterApplied = true;
-        } else if (!_classOptions.contains(_selectedClass)) {
-          _selectedClass = 'All';
-        }
-        _applyFilters(resetState: false);
+          ..addAll(_allStudents);
+        _displayedStudents = List<StudentModel>.from(_allStudents);
+        _currentPage = response.page;
+        _hasMore = response.hasMore && response.data.isNotEmpty;
         _loading = false;
-        final isDesktop = DesktopBreakpoints.isDesktopWidth(
-          MediaQuery.sizeOf(context).width,
-        );
-        if (isDesktop &&
+        _loadingMore = false;
+        _loadError = null;
+        _staleData = false;
+        selectFirst =
+            isDesktop &&
             _selectedStudent == null &&
-            _displayedStudents.isNotEmpty) {
-          _selectStudentForDesktop(_displayedStudents.first);
-        }
+            _displayedStudents.isNotEmpty;
       });
+      if (selectFirst && mounted) {
+        _selectStudentForDesktop(_displayedStudents.first);
+      }
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _queryGeneration) return;
       setState(() {
         _loading = false;
+        _loadingMore = false;
         _loadError = error.toString();
+        _staleData = _allStudents.isNotEmpty;
       });
     }
+  }
+
+  String? _serverSectionId() {
+    if (_scopedSectionId.isNotEmpty) return _scopedSectionId;
+    if (_selectedClass == 'All') return null;
+    for (final section in _sections) {
+      if (_classLabelForSection(section) == _selectedClass) return section.id;
+    }
+    return null;
+  }
+
+  String? _serverStatusFilter() {
+    switch (_selectedStatus.trim().toLowerCase()) {
+      case 'active':
+        return 'active';
+      case 'inactive':
+        return 'inactive';
+      case 'pending':
+        return 'pending';
+      case 'transfer':
+      case 'transferred':
+        return 'transfer';
+      default:
+        return null;
+    }
+  }
+
+  String _classLabelForSectionWithMaps(
+    api.SectionModel section,
+    Map<String, api.GradeModel> gradeMap,
+  ) {
+    final gradeName = _gradeLabel(gradeMap[section.gradeId], section);
+    final sectionName = section.sectionName.trim();
+    return gradeName.isNotEmpty && sectionName.isNotEmpty
+        ? 'Class $gradeName / Section $sectionName'
+        : gradeName.isNotEmpty
+        ? 'Class $gradeName'
+        : sectionName.isNotEmpty
+        ? 'Section $sectionName'
+        : 'Class not assigned';
   }
 
   bool _isActiveStudent(StudentModel student) =>
@@ -415,7 +484,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         role: 'Parent',
         status: 'active',
         page: 1,
-        pageSize: 500,
+        pageSize: _pageSize,
       );
       return result.data;
     } on Object catch (_) {
@@ -429,6 +498,24 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     } on Object catch (_) {
       return const <Map<String, dynamic>>[];
     }
+  }
+
+  Future<void> _ensureFormReferenceData() async {
+    if (_parents.isNotEmpty && _feeStructures.isNotEmpty) return;
+    final results = await Future.wait<dynamic>([
+      if (_parents.isEmpty) _loadParentAccounts(),
+      if (_feeStructures.isEmpty) _loadFeeStructuresSafely(),
+    ]);
+    if (!mounted) return;
+    var index = 0;
+    setState(() {
+      if (_parents.isEmpty) {
+        _parents = results[index++] as List<api.UserAccountModel>;
+      }
+      if (_feeStructures.isEmpty) {
+        _feeStructures = results[index++] as List<Map<String, dynamic>>;
+      }
+    });
   }
 
   StudentModel _mapApiStudentToUi(
@@ -554,66 +641,16 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 
-  void _applyFilters({bool resetState = true}) {
-    final query = _searchQuery.toLowerCase().trim();
-    final next = _allStudents.where((student) {
-      final matchesSearch =
-          query.isEmpty ||
-          student.name.toLowerCase().contains(query) ||
-          student.rollNumber.toLowerCase().contains(query) ||
-          student.classSection.toLowerCase().contains(query);
-      final matchesClass =
-          _selectedClass == 'All' || student.classSection == _selectedClass;
-      final matchesStatus =
-          _selectedStatus == 'All' ||
-          student.directoryStatusLabel == _selectedStatus;
-      return matchesSearch && matchesClass && matchesStatus;
-    }).toList();
-
-    void apply() {
-      _filteredStudents
-        ..clear()
-        ..addAll(next);
-      _resetPagination();
-      final isDesktop = DesktopBreakpoints.isDesktopWidth(
-        MediaQuery.sizeOf(context).width,
-      );
-      if (isDesktop && _displayedStudents.isNotEmpty) {
-        if (!_displayedStudents.any((s) => s.id == _selectedStudent?.id)) {
-          _selectStudentForDesktop(_displayedStudents.first);
-        }
-      }
-    }
-
-    if (resetState) {
-      setState(apply);
-    } else {
-      apply();
-    }
-  }
-
-  void _resetPagination() {
-    _currentPage = 0;
-    _loadingMore = false;
-    _hasMore = _filteredStudents.length > _pageSize;
-    _displayedStudents = _filteredStudents.take(_pageSize).toList();
-  }
-
-  void _loadMoreStudents() {
-    if (_loadingMore || !_hasMore) return;
-    final start = (_currentPage + 1) * _pageSize;
-    if (start >= _filteredStudents.length) {
-      setState(() => _hasMore = false);
-      return;
-    }
-    setState(() {
-      _loadingMore = true;
-      final end = (start + _pageSize).clamp(0, _filteredStudents.length);
-      _displayedStudents.addAll(_filteredStudents.sublist(start, end));
-      _currentPage++;
-      _loadingMore = false;
-      _hasMore = end < _filteredStudents.length;
+  void _queueServerRefresh() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) _loadData(resetPage: true, loadMetadata: false);
     });
+  }
+
+  Future<void> _loadMoreStudents() async {
+    if (_loadingMore || !_hasMore) return;
+    await _loadData(resetPage: false, loadMetadata: false);
   }
 
   void _toggleStudentSelection(StudentModel student) {
@@ -770,29 +807,39 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                   ),
                 )
               else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-                  sliver: SliverList.builder(
-                    itemCount: _displayedStudents.length + (_hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _displayedStudents.length) {
-                        return _buildLoadMoreButton();
-                      }
-                      final student = _displayedStudents[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 13),
-                        child: _StudentDirectoryCard(
-                          student: student,
-                          imageUrl: _absoluteImageUrl(student.photoUrl),
-                          selected: _selectedStudentIds.contains(student.id),
-                          onTap: () => _selectionMode
-                              ? _toggleStudentSelection(student)
-                              : _openStudentDetail(student),
-                          onLongPress: () => _toggleStudentSelection(student),
-                        ),
-                      );
-                    },
-                  ),
+                SliverMainAxisGroup(
+                  slivers: [
+                    if (_staleData)
+                      SliverToBoxAdapter(child: _buildStaleDataBanner()),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+                      sliver: SliverList.builder(
+                        itemCount:
+                            _displayedStudents.length + (_hasMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == _displayedStudents.length) {
+                            return _buildLoadMoreButton();
+                          }
+                          final student = _displayedStudents[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 13),
+                            child: _StudentDirectoryCard(
+                              student: student,
+                              imageUrl: _absoluteImageUrl(student.photoUrl),
+                              selected: _selectedStudentIds.contains(
+                                student.id,
+                              ),
+                              onTap: () => _selectionMode
+                                  ? _toggleStudentSelection(student)
+                                  : _openStudentDetail(student),
+                              onLongPress: () =>
+                                  _toggleStudentSelection(student),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -921,7 +968,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             hint: 'Search students...',
             onChanged: (value) {
               _searchQuery = value;
-              _applyFilters();
+              _queueServerRefresh();
             },
           ),
           const SizedBox(height: 14),
@@ -937,7 +984,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                   onTap: () {
                     _selectedClass = 'All';
                     _selectedStatus = 'All';
-                    _applyFilters();
+                    _queueServerRefresh();
                   },
                 ),
                 const SizedBox(width: 8),
@@ -952,7 +999,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                           selected: _selectedClass == value,
                           onTap: () {
                             _selectedClass = value;
-                            _applyFilters();
+                            _queueServerRefresh();
                           },
                         ),
                       ),
@@ -976,6 +1023,39 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStaleDataBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.cloud_off_rounded,
+            size: 18,
+            color: Colors.orange.shade900,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Showing cached student data. ${_loadError ?? 'Refresh failed.'}',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ),
+          TextButton(onPressed: _loadData, child: const Text('Retry')),
+        ],
       ),
     );
   }
@@ -1160,6 +1240,8 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   }
 
   Future<void> _openAddStudentForm() async {
+    await _ensureFormReferenceData();
+    if (!mounted) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _AddStudentPhotoFormPage(
@@ -1452,6 +1534,8 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     BuildContext detailContext,
     StudentModel student,
   ) async {
+    await _ensureFormReferenceData();
+    if (!detailContext.mounted) return false;
     final updated = await Navigator.of(detailContext).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => _AddStudentPhotoFormPage(
@@ -1615,9 +1699,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                 ),
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
                 Expanded(
-                  child: _loading
+                  child: _loading && _filteredStudents.isEmpty
                       ? const Center(child: CircularProgressIndicator())
-                      : _loadError != null
+                      : _loadError != null && _filteredStudents.isEmpty
                       ? Center(
                           child: EmptyStateWidget(
                             icon: Icons.cloud_off_rounded,
@@ -1641,12 +1725,21 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                           child: ListView.builder(
                             padding: const EdgeInsets.all(16),
                             itemCount:
-                                _displayedStudents.length + (_hasMore ? 1 : 0),
+                                _displayedStudents.length +
+                                (_hasMore ? 1 : 0) +
+                                (_staleData ? 1 : 0),
                             itemBuilder: (context, index) {
-                              if (index == _displayedStudents.length) {
+                              if (_staleData && index == 0) {
+                                return _buildStaleDataBanner();
+                              }
+                              final studentIndex = _staleData
+                                  ? index - 1
+                                  : index;
+                              if (_hasMore &&
+                                  studentIndex == _displayedStudents.length) {
                                 return _buildLoadMoreButton();
                               }
-                              final student = _displayedStudents[index];
+                              final student = _displayedStudents[studentIndex];
                               final isSelected =
                                   _selectedStudent?.id == student.id;
                               return Padding(
@@ -2778,7 +2871,8 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                       children: [
                         SwitchListTile(
                           value: _createParentLogin,
-                          onChanged: _saving || (_isEdit && _parentUserId != null)
+                          onChanged:
+                              _saving || (_isEdit && _parentUserId != null)
                               ? null
                               : (value) {
                                   setState(() {
@@ -2956,7 +3050,9 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                         ],
                       ],
                     ),
-                    if (_isEdit && _parentUserId != null && !_createParentLogin) ...[
+                    if (_isEdit &&
+                        _parentUserId != null &&
+                        !_createParentLogin) ...[
                       const SizedBox(height: 14),
                       _FormCard(
                         title: 'Linked Parent Details',

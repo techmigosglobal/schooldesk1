@@ -7,6 +7,7 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/generated/schooldesk_api_client.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
+import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
 
 class SchoolDeskApi {
   SchoolDeskApi._() {
@@ -24,6 +25,7 @@ class SchoolDeskApi {
     dio.interceptors.addAll([
       _SchoolDeskDemoInterceptor(),
       _SchoolDeskAuthInterceptor(),
+      OfflineDioInterceptor(),
       _SchoolDeskRefreshInterceptor(this),
       if (kDebugMode) _SchoolDeskLogInterceptor(),
       _SchoolDeskErrorInterceptor(),

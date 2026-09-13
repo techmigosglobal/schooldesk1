@@ -453,7 +453,9 @@ class StaffModel {
           (json['department'] as Map<String, dynamic>?)?['department_name']
               as String?,
       joinDate: json['join_date'] as String?,
-      status: json['status'] as String? ?? 'active',
+      status:
+          json['status'] as String? ??
+          (json['is_active'] == false ? 'inactive' : 'active'),
       photoUrl: _photoUrlFromJson(json),
       documents: documents,
       documentCount: documents.length,

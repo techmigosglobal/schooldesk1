@@ -18,6 +18,9 @@ import 'package:schooldesk1/core/di/service_locator.dart';
 import 'package:schooldesk1/firebase_runtime_options.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
+import 'package:schooldesk1/core/offline/offline_status_banner.dart';
+import 'package:schooldesk1/core/offline/offline_background_sync.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/error_reporting_service.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
@@ -38,6 +41,9 @@ void main() async {
   // If this throws in production it means the APK/AAB was built without the
   // required --dart-define-from-file=env.supabase.json flag.
   EnvConfig.validate();
+
+  final offlineSync = await OfflineSyncEngine.initialize();
+  BackendApiClient.instance.attachOfflineSync(offlineSync);
 
   // ── Firebase — MUST be initialised before any Firebase API is called ─────
   // FlutterFire reads GoogleService-Info.plist (iOS) / google-services.json
@@ -90,6 +96,8 @@ void main() async {
     return false;
   };
   await ServiceLocator.initialize();
+  unawaited(offlineSync.start());
+  unawaited(OfflineBackgroundSyncScheduler.initialize());
 
   await DesktopWindowManager.init();
 
@@ -262,6 +270,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       // alive. The probe prevents an offline resume from deleting the only
       // persistent snapshot before the backend is reachable again.
       unawaited(_recoverRoleScopeIfOnline());
+      unawaited(OfflineSyncEngine.instance.syncNow());
     }
     if (state == AppLifecycleState.detached) {
       unawaited(PushNotificationService.instance.dispose());
@@ -270,6 +279,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _recoverRoleScopeIfOnline() async {
     final api = BackendApiClient.instance;
+    // A cached profile is not proof that the backend is reachable. Do not
+    // invalidate the only local snapshot during an offline resume.
+    if (!await OfflineSyncEngine.instance.probeBackend()) return;
     try {
       await api.getProfile(forceRefresh: true);
     } on Object {
@@ -303,7 +315,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 ),
               ),
               child: DesktopLayoutWrapper(
-                child: AnimatedStartupSplash(child: child!),
+                child: OfflineStatusBanner(
+                  child: AnimatedStartupSplash(child: child!),
+                ),
               ),
             );
           },

@@ -43,6 +43,11 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   List<SectionModel> _sections = [];
   List<AttendanceSessionModel> _sessions = [];
   List<AttendanceSessionModel> _monthlySessions = [];
+  int _sessionsPage = 1;
+  int _monthlySessionsPage = 1;
+  bool _sessionsHasMore = false;
+  bool _monthlySessionsHasMore = false;
+  bool _loadingMoreSessions = false;
   List<StudentModel> _sectionStudents = [];
   List<Map<String, dynamic>> _studentAttendanceRecords = [];
   final Map<String, List<StudentModel>> _studentsBySection = {};
@@ -64,6 +69,46 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     _pageController = PageController();
     _load();
     _startStaffAttendancePolling();
+  }
+
+  Future<void> _loadMoreAttendanceSessions({required bool monthly}) async {
+    if (_loadingMoreSessions ||
+        (monthly ? !_monthlySessionsHasMore : !_sessionsHasMore)) {
+      return;
+    }
+    setState(() => _loadingMoreSessions = true);
+    try {
+      final nextPage = monthly ? _monthlySessionsPage + 1 : _sessionsPage + 1;
+      final page = await BackendApiClient.instance.getAttendanceSessionsPage(
+        startDate: monthly ? _monthStartText : null,
+        endDate: monthly ? _monthEndText : null,
+        date: monthly ? null : _selectedDateText,
+        page: nextPage,
+        pageSize: 20,
+      );
+      if (!mounted) return;
+      setState(() {
+        final existing = monthly ? _monthlySessions : _sessions;
+        final ids = existing.map((session) => session.id).toSet();
+        final additions = page.data.where((session) => ids.add(session.id));
+        if (monthly) {
+          _monthlySessions = [..._monthlySessions, ...additions];
+          _monthlySessionsPage = page.page;
+          _monthlySessionsHasMore = page.hasMore;
+        } else {
+          _sessions = [..._sessions, ...additions];
+          _sessionsPage = page.page;
+          _sessionsHasMore = page.hasMore;
+        }
+        _loadingMoreSessions = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingMoreSessions = false;
+        _error = 'Unable to load more attendance sessions. $error';
+      });
+    }
   }
 
   @override
@@ -115,10 +160,10 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           startDate: _monthStartText,
           endDate: _monthEndText,
         ),
-        api.getStaff(page: 1, pageSize: 500, status: 'active'),
+        api.getStaff(page: 1, pageSize: 100, status: 'active'),
         api.getSections(),
-        api.getAttendanceSessions(date: _selectedDateText),
-        api.getAttendanceSessions(
+        api.getAttendanceSessionsPage(date: _selectedDateText),
+        api.getAttendanceSessionsPage(
           startDate: _monthStartText,
           endDate: _monthEndText,
         ),
@@ -131,8 +176,14 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         _monthlyStaffAttendance = results[1] as List<StaffAttendanceModel>;
         _staff = (results[2] as PaginatedList<StaffModel>).data;
         _sections = sections;
-        _sessions = results[4] as List<AttendanceSessionModel>;
-        _monthlySessions = results[5] as List<AttendanceSessionModel>;
+        final todayPage = results[4] as PaginatedList<AttendanceSessionModel>;
+        final monthPage = results[5] as PaginatedList<AttendanceSessionModel>;
+        _sessions = todayPage.data;
+        _monthlySessions = monthPage.data;
+        _sessionsPage = todayPage.page;
+        _monthlySessionsPage = monthPage.page;
+        _sessionsHasMore = todayPage.hasMore;
+        _monthlySessionsHasMore = monthPage.hasMore;
         _staffDailySummary = results[6] as Map<String, dynamic>;
         _selectedSectionId =
             _selectedSectionId.isNotEmpty &&
@@ -172,7 +223,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       final response = await BackendApiClient.instance.getStudents(
         sectionId: sectionId,
         page: 1,
-        pageSize: 120,
+        pageSize: 100,
       );
       if (!mounted) return;
       setState(() {
@@ -799,6 +850,23 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   ),
                 ),
               ),
+          if (_sessionsHasMore)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: OutlinedButton.icon(
+                onPressed: _loadingMoreSessions
+                    ? null
+                    : () => _loadMoreAttendanceSessions(monthly: false),
+                icon: _loadingMoreSessions
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded),
+                label: const Text('Load more sessions'),
+              ),
+            ),
         ],
       ),
     );
@@ -940,44 +1008,63 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           style: _UiText.caption,
         ),
         children: dates.isEmpty
-            ? const [
-                Padding(
+            ? <Widget>[
+                const Padding(
                   padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: _EmptyLine('No class registers for this month.'),
                 ),
               ]
-            : dates.map((date) {
-                final daySessions = byDate[date] ?? const [];
-                final marked = daySessions.fold<int>(
-                  0,
-                  (sum, session) => sum + _effectiveMarkedCount(session),
-                );
-                final present = daySessions.fold<int>(
-                  0,
-                  (sum, session) => sum + _effectivePresentCount(session),
-                );
-                final isComplete = daySessions.every(
-                  (session) => !_isIncompleteSession(session),
-                );
-                return ListTile(
-                  leading: Icon(
-                    isComplete
-                        ? Icons.fact_check_rounded
-                        : Icons.pending_actions_rounded,
-                    color: isComplete
-                        ? const Color(0xFF24A765)
-                        : const Color(0xFFF59E0B),
+            : <Widget>[
+                ...dates.map((date) {
+                  final daySessions = byDate[date] ?? const [];
+                  final marked = daySessions.fold<int>(
+                    0,
+                    (sum, session) => sum + _effectiveMarkedCount(session),
+                  );
+                  final present = daySessions.fold<int>(
+                    0,
+                    (sum, session) => sum + _effectivePresentCount(session),
+                  );
+                  final isComplete = daySessions.every(
+                    (session) => !_isIncompleteSession(session),
+                  );
+                  return ListTile(
+                    leading: Icon(
+                      isComplete
+                          ? Icons.fact_check_rounded
+                          : Icons.pending_actions_rounded,
+                      color: isComplete
+                          ? const Color(0xFF24A765)
+                          : const Color(0xFFF59E0B),
+                    ),
+                    title: Text(
+                      DateFormat('EEE, dd MMM').format(DateTime.parse(date)),
+                    ),
+                    subtitle: Text(
+                      '${daySessions.length} register${daySessions.length == 1 ? '' : 's'} · $present present · $marked marked',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _setAttendanceDate(DateTime.parse(date)),
+                  );
+                }),
+                if (_monthlySessionsHasMore)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: OutlinedButton.icon(
+                      onPressed: _loadingMoreSessions
+                          ? null
+                          : () => _loadMoreAttendanceSessions(monthly: true),
+                      icon: _loadingMoreSessions
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.expand_more_rounded),
+                      label: const Text('Load more history'),
+                    ),
                   ),
-                  title: Text(
-                    DateFormat('EEE, dd MMM').format(DateTime.parse(date)),
-                  ),
-                  subtitle: Text(
-                    '${daySessions.length} register${daySessions.length == 1 ? '' : 's'} · $present present · $marked marked',
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => _setAttendanceDate(DateTime.parse(date)),
-                );
-              }).toList(),
+              ],
       ),
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -94,6 +96,10 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
 
   // ── State ────────────────────────────────────────────────────────────────
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  int _totalInvoices = 0;
   bool _saving = false;
   String? _error;
 
@@ -109,6 +115,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
 
   // ── Data ─────────────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _invoices = const [];
+  Timer? _searchDebounce;
 
   // ── Computed: Due invoices ───────────────────────────────────────────────
 
@@ -225,29 +232,52 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
     _transactionController.dispose();
     _notesController.dispose();
     _searchCtrl.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool resetPage = true}) async {
     setState(() {
-      _loading = true;
+      _loading = resetPage;
+      _loadingMore = !resetPage;
       _error = null;
     });
     try {
       final api = BackendApiClient.instance;
-      final raw = await api.getInvoices(pageSize: 1000);
+      final response = await api.getInvoicesPage(
+        search: _query,
+        outstanding: true,
+        page: resetPage ? 1 : _page + 1,
+        pageSize: 20,
+      );
       if (!mounted) return;
+      final invoices = response.data.map(normalizeInvoice).toList();
+      final existingIds = _invoices.map((invoice) => invoice['id']).toSet();
+      final additions = resetPage
+          ? invoices
+          : invoices.where((invoice) => existingIds.add(invoice['id'])).toList();
       setState(() {
-        _invoices = raw.map(normalizeInvoice).toList();
+        _invoices = resetPage ? invoices : [..._invoices, ...additions];
+        _page = response.page;
+        _totalInvoices = response.total;
+        _hasMore = response.hasMore;
         _loading = false;
+        _loadingMore = false;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = '$e';
         _loading = false;
+        _loadingMore = false;
       });
     }
+  }
+
+  void _scheduleSearch(String value) {
+    _query = value;
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), _loadData);
   }
 
   // ── Navigation helpers ───────────────────────────────────────────────────
@@ -845,7 +875,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
               vertical: 12,
             ),
           ),
-          onChanged: (v) => setState(() => _query = v),
+          onChanged: _scheduleSearch,
         ),
         const SizedBox(height: 16),
 
@@ -874,6 +904,29 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
             ),
           ),
         for (final student in _filteredStudents) _buildStudentCard(student),
+        if (_hasMore)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Center(
+              child: OutlinedButton.icon(
+                onPressed: _loadingMore
+                    ? null
+                    : () => _loadData(resetPage: false),
+                icon: _loadingMore
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded),
+                label: Text(
+                  _loadingMore
+                      ? 'Loading…'
+                      : 'Load more ($_page of $_totalInvoices invoices)',
+                ),
+              ),
+            ),
+          ),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,

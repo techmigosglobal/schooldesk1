@@ -4,7 +4,7 @@
 // Exams, exam-schedules, results, assistant → 404
 // ============================================================
 
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { handleAuth } from "./handlers/auth.ts";
 import { handleHealth } from "./handlers/health.ts";
 import { handleSchools } from "./handlers/schools.ts";
@@ -117,7 +117,7 @@ async function withDirectSql<T>(
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-school-id, x-schooldesk-branch-id, x-job-secret",
+    "authorization, x-client-info, apikey, content-type, idempotency-key, x-school-id, x-schooldesk-branch-id, x-job-secret",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 };
 
@@ -146,6 +146,208 @@ export function fail(message: string, status = 400): Response {
 
 export function notFound(path: string): Response {
   return cors({ success: false, error: "not_found", path }, 404);
+}
+
+type IdempotencyRow = {
+  id: string;
+  method: string;
+  path: string;
+  request_hash: string;
+  state: "processing" | "completed";
+  response_status: number | null;
+  response_body: string | null;
+  response_content_type: string | null;
+};
+
+function isIdempotentMutation(method: string): boolean {
+  return method === "POST" || method === "PUT" || method === "PATCH" ||
+    method === "DELETE";
+}
+
+async function sha256Hex(input: BufferSource): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", input);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+}
+
+async function requestHash(req: Request): Promise<string> {
+  const contentType = req.headers.get("content-type")?.toLowerCase() ?? "";
+  const requestUrl = new URL(req.url);
+  const requestScope = [
+    requestUrl.pathname,
+    requestUrl.search,
+    (req.headers.get("x-schooldesk-branch-id") ?? "").trim(),
+  ].join("\u0000");
+  let bodyHash: string;
+  if (contentType.startsWith("multipart/form-data")) {
+    try {
+      // Multipart boundaries are generated per request, so hash the logical
+      // fields and file content instead of the wire encoding.
+      const form = await req.clone().formData();
+      const parts: string[] = [];
+      // `FormData.entries()` is not present in the Edge runtime's bundled
+      // TypeScript lib. `forEach` is supported by both Deno and the browser,
+      // while collecting promises preserves async file hashing correctly.
+      const partHashes: Promise<void>[] = [];
+      form.forEach((value, name) => {
+        partHashes.push((async () => {
+          if (typeof value === "string") {
+            parts.push(`${name}\u0000text\u0000${value}`);
+            return;
+          }
+          const fileHash = await sha256Hex(await value.arrayBuffer());
+          parts.push(
+            `${name}\u0000file\u0000${value.name}\u0000${value.type}\u0000${fileHash}`,
+          );
+        })());
+      });
+      await Promise.all(partHashes);
+      parts.sort();
+      bodyHash = await sha256Hex(new TextEncoder().encode(parts.join("\n")));
+    } catch (_error) {
+      // Fall back to the raw body if a platform cannot parse FormData.
+      bodyHash = await sha256Hex(await req.clone().arrayBuffer());
+    }
+  } else {
+    bodyHash = await sha256Hex(await req.clone().arrayBuffer());
+  }
+  return sha256Hex(
+    new TextEncoder().encode(`${requestScope}\u0000${bodyHash}`),
+  );
+}
+
+function replayIdempotentResponse(row: IdempotencyRow): Response {
+  return new Response(row.response_body ?? "", {
+    status: row.response_status ?? 200,
+    headers: {
+      ...CORS_HEADERS,
+      "Content-Type": row.response_content_type ?? "application/json",
+      "Idempotency-Replayed": "true",
+    },
+  });
+}
+
+/**
+ * Reserve and complete a mutation replay key around the existing handler
+ * router. The service-role ledger is deliberately not exposed through RLS;
+ * callers can only influence it by presenting a valid authenticated request.
+ */
+async function withIdempotency(
+  req: Request,
+  handler: () => Promise<Response>,
+): Promise<Response> {
+  const method = req.method.toUpperCase();
+  const key = (req.headers.get("Idempotency-Key") ?? "").trim();
+  if (!isIdempotentMutation(method) || !key) return await handler();
+
+  const { user, client, svc } = await authedClient(req);
+  if (!user || !client) return await handler();
+  const schoolId = `${user.app_metadata?.school_id ?? ""}`.trim();
+  if (!schoolId) return await handler();
+
+  const path = new URL(req.url).pathname
+    .replace(/^\/functions\/v1\/api/, "")
+    .replace(/^\/api\/v1/, "") || "/";
+  const hash = await requestHash(req);
+  const baseQuery = svc.from("api_idempotency_keys")
+    .select(
+      "id, method, path, request_hash, state, response_status, response_body, response_content_type",
+    )
+    .eq("user_id", user.id)
+    .eq("school_id", schoolId)
+    .eq("idempotency_key", key)
+    .maybeSingle();
+  const existingResult = await baseQuery;
+  if (existingResult.error) {
+    console.error("Idempotency ledger read failed", existingResult.error);
+    return fail("idempotency store unavailable", 503);
+  }
+  const existing = existingResult.data as IdempotencyRow | null;
+  if (existing) {
+    if (
+      existing.method !== method || existing.path !== path ||
+      existing.request_hash !== hash
+    ) {
+      return fail("idempotency key was reused for a different request", 409);
+    }
+    if (existing.state === "completed") {
+      return replayIdempotentResponse(existing);
+    }
+    return fail("request with this idempotency key is still processing", 409);
+  }
+
+  const inserted = await svc.from("api_idempotency_keys").insert({
+    user_id: user.id,
+    school_id: schoolId,
+    idempotency_key: key,
+    method,
+    path,
+    request_hash: hash,
+  });
+  if (inserted.error) {
+    // A concurrent retry may win the unique insert. Re-read it and let the
+    // normal replay/conflict path decide what the caller should receive.
+    if (`${inserted.error.code ?? ""}` === "23505") {
+      const raced = await svc.from("api_idempotency_keys")
+        .select(
+          "id, method, path, request_hash, state, response_status, response_body, response_content_type",
+        )
+        .eq("user_id", user.id)
+        .eq("school_id", schoolId)
+        .eq("idempotency_key", key)
+        .maybeSingle();
+      if (!raced.error && raced.data) {
+        const row = raced.data as IdempotencyRow;
+        if (
+          row.method !== method || row.path !== path ||
+          row.request_hash !== hash
+        ) return fail("idempotency key was reused for a different request", 409);
+        if (row.state === "completed") return replayIdempotentResponse(row);
+        return fail("request with this idempotency key is still processing", 409);
+      }
+    }
+    console.error("Idempotency ledger reservation failed", inserted.error);
+    return fail("idempotency store unavailable", 503);
+  }
+
+  let response: Response;
+  try {
+    response = await handler();
+  } catch (error) {
+    // No handler response means no committed API result to replay. Releasing
+    // the reservation allows a retry to make progress after a transient
+    // server exception.
+    await svc.from("api_idempotency_keys").delete()
+      .eq("user_id", user.id).eq("school_id", schoolId)
+      .eq("idempotency_key", key);
+    throw error;
+  }
+
+  const responseBody = await response.clone().text();
+  if (response.status >= 500) {
+    // A server failure did not produce a replayable business result. Release
+    // the reservation so the outbox can retry the same key after backoff.
+    await svc.from("api_idempotency_keys").delete()
+      .eq("user_id", user.id).eq("school_id", schoolId)
+      .eq("idempotency_key", key);
+    return response;
+  }
+  const completed = await svc.from("api_idempotency_keys").update({
+    state: "completed",
+    response_status: response.status,
+    response_body: responseBody,
+    response_content_type: response.headers.get("content-type") ??
+      "application/json",
+    completed_at: new Date().toISOString(),
+  }).eq("user_id", user.id).eq("school_id", schoolId)
+    .eq("idempotency_key", key);
+  if (completed.error) {
+    // Preserve the original result. The request itself succeeded, while the
+    // log failure is observable and the next retry will safely fail closed.
+    console.error("Idempotency ledger completion failed", completed.error);
+  }
+  return response;
 }
 
 function requestIp(req: Request): string {
@@ -354,8 +556,12 @@ export async function authedClient(req: Request) {
     const { data: schools } = await svc.from("schools")
       .select("id, organization_id")
       .in("id", [profile.school_id, requestedBranch]);
-    const home = schools?.find((school) => school.id === profile.school_id);
-    const requested = schools?.find((school) => school.id === requestedBranch);
+    const home = (schools as Record<string, unknown>[] | null | undefined)?.find(
+      (school: Record<string, unknown>) => school.id === profile.school_id,
+    );
+    const requested = (schools as Record<string, unknown>[] | null | undefined)?.find(
+      (school: Record<string, unknown>) => school.id === requestedBranch,
+    );
     permitted = Boolean(
       home?.organization_id &&
         requested?.organization_id &&
@@ -468,7 +674,7 @@ export async function invokeNotificationProcessor(
 }
 
 // ── Router ────────────────────────────────────────────────────
-Deno.serve(async (req: Request) => {
+export async function handleApiRequest(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS_HEADERS });
   }
@@ -689,7 +895,7 @@ Deno.serve(async (req: Request) => {
     );
   }
   if (path === "/admission-inquiries" && method === "GET") {
-    return handleAdmissionInquiries(svc, user);
+    return handleAdmissionInquiries(svc, user, url);
   }
   if (
     path.startsWith("/academic-years") || path.startsWith("/grades") ||
@@ -858,6 +1064,8 @@ Deno.serve(async (req: Request) => {
   if (
     path.startsWith("/notifications/register-token") ||
     path.startsWith("/notifications/revoke-token") ||
+    path.startsWith("/notifications/device-tokens") ||
+    path.startsWith("/notifications/unread-count") ||
     path.startsWith("/notifications/preferences") ||
     path.startsWith("/notifications/subscribe") ||
     path.startsWith("/notifications/unsubscribe")
@@ -953,4 +1161,10 @@ Deno.serve(async (req: Request) => {
   }
 
   return notFound(path);
-});
+}
+
+// Keep imports side-effect free for contract/unit tests. Supabase/Deno runs
+// this module as the entrypoint, where import.meta.main is true.
+if (import.meta.main) {
+  Deno.serve((req: Request) => withIdempotency(req, () => handleApiRequest(req)));
+}

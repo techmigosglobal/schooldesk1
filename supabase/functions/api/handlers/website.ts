@@ -1,5 +1,12 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
+import {
+  deleteR2File,
+  legacyStorageWritesEnabled,
+  publicR2FileUrl,
+  publicR2FileReference,
+  uploadPublicToR2,
+} from "../lib/r2_storage.ts";
 
 const bucket = "school-public-media";
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
@@ -11,6 +18,8 @@ const isLeader = (user: User) =>
 const programs = ["Daycare", "Playgroup", "Nursery", "PP1", "PP2"];
 
 function publicUrl(svc: SupabaseClient, path: string) {
+  const r2Url = publicR2FileUrl(path);
+  if (r2Url) return r2Url;
   return svc.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 }
 
@@ -45,9 +54,11 @@ function eventGalleryRows(row: Record<string, unknown>) {
       const object = item !== null && typeof item === "object"
         ? item as Record<string, unknown>
         : {};
-      const mediaUrl = typeof item === "string"
+      const storedMedia = typeof item === "string"
         ? item.trim()
         : text(object.url ?? object.media_url ?? object.mediaUrl ?? object.secure_url);
+      const mediaUrl = publicR2FileUrl(storedMedia) ||
+        (storedMedia.startsWith("r2://") ? "" : storedMedia);
       return {
         id: `event:${text(row.id)}:${index}`,
         source: "event_post",
@@ -153,13 +164,45 @@ export async function handleWebsiteEnquiry(req: Request, url: URL, svc: Supabase
   return ok({ id: data.id, message: "Thank you. Our admissions team will be in touch." });
 }
 
-export async function handleAdmissionInquiries(svc: SupabaseClient, user: User) {
+export async function handleAdmissionInquiries(
+  svc: SupabaseClient,
+  user: User,
+  url?: URL,
+) {
   if (!isLeader(user)) return fail("leadership access required", 403);
   const school = schoolId(user);
   if (!school) return fail("school assignment is required", 403);
-  const { data, error } = await svc.from("admission_inquiries").select("*")
-    .eq("school_id", school).order("submitted_at", { ascending: false });
-  return error ? fail(error.message) : ok(data ?? []);
+  const page = Math.max(parseInt(url?.searchParams.get("page") ?? "1") || 1, 1);
+  const pageSize = Math.min(
+    Math.max(parseInt(url?.searchParams.get("page_size") ?? "20") || 20, 1),
+    100,
+  );
+  let query = svc.from("admission_inquiries").select("*", { count: "exact" })
+    .eq("school_id", school);
+  const search = `${url?.searchParams.get("search") ?? ""}`.trim();
+  if (search) {
+    const escaped = search.replace(/[%(),]/g, " ").trim();
+    if (escaped) {
+      query = query.or(
+        `parent_name.ilike.%${escaped}%,child_name.ilike.%${escaped}%,phone.ilike.%${escaped}%,email.ilike.%${escaped}%`,
+      );
+    }
+  }
+  const { data, error, count } = await query.order("submitted_at", {
+    ascending: false,
+  }).order("id", { ascending: false }).range(
+    (page - 1) * pageSize,
+    page * pageSize - 1,
+  );
+  if (error) return fail(error.message);
+  const total = count ?? data?.length ?? 0;
+  return ok({
+    data: data ?? [],
+    total,
+    page,
+    page_size: pageSize,
+    has_more: page * pageSize < total,
+  });
 }
 
 export async function handleWebsite(
@@ -275,17 +318,26 @@ export async function handleWebsite(
       return fail(file.type.startsWith("video/") ? "videos must be 50 MB or smaller" : "images must be 10 MB or smaller");
     }
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-    const mediaPath = `${school}/${crypto.randomUUID()}-${safeName}`;
-    const { error: uploadError } = await svc.storage.from(bucket).upload(
-      mediaPath,
-      file,
-      {
-        contentType: file.type,
-        cacheControl: "31536000",
-        upsert: false,
-      },
-    );
-    if (uploadError) return fail(uploadError.message);
+    const mediaKey = `website-gallery/${school}/${crypto.randomUUID()}-${safeName}`;
+    const r2Upload = await uploadPublicToR2(mediaKey, file, file.type);
+    const mediaPath = r2Upload
+      ? publicR2FileReference(r2Upload.key)
+      : `${school}/${crypto.randomUUID()}-${safeName}`;
+    if (!r2Upload) {
+      if (!legacyStorageWritesEnabled()) {
+        return fail("R2 public storage is unavailable; legacy storage writes are disabled", 503);
+      }
+      const { error: uploadError } = await svc.storage.from(bucket).upload(
+        mediaPath,
+        file,
+        {
+          contentType: file.type,
+          cacheControl: "31536000",
+          upsert: false,
+        },
+      );
+      if (uploadError) return fail(uploadError.message);
+    }
     const { data, error } = await svc.from("school_website_gallery_items")
       .insert({
         school_id: school,
@@ -299,9 +351,10 @@ export async function handleWebsite(
           ? form.get("is_published") === "true"
           : true,
         created_by: user.id,
-      }).select().single();
+    }).select().single();
     if (error) {
-      await svc.storage.from(bucket).remove([mediaPath]);
+      if (r2Upload) await deleteR2File(mediaPath);
+      else await svc.storage.from(bucket).remove([mediaPath]);
       return fail(error.message);
     }
     return ok(galleryRow(svc, data));
@@ -332,7 +385,11 @@ export async function handleWebsite(
     const { error } = await svc.from("school_website_gallery_items").delete()
       .eq("id", match[1]).eq("school_id", school);
     if (error) return fail(error.message);
-    await svc.storage.from(bucket).remove([existing.media_path]);
+    if (publicR2FileUrl(existing.media_path)) {
+      await deleteR2File(existing.media_path);
+    } else {
+      await svc.storage.from(bucket).remove([existing.media_path]);
+    }
     return ok({ deleted: true });
   }
   return fail("not found", 404);

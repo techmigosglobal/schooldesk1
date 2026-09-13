@@ -6,7 +6,24 @@ extension BackendLeaveApi on BackendApiClient {
     String? status,
     bool forceRefresh = false,
     int page = 1,
-    int pageSize = 100,
+    int pageSize = 20,
+  }) async {
+    return (await getStudentLeaveApplicationsPage(
+      studentId: studentId,
+      status: status,
+      forceRefresh: forceRefresh,
+      page: page,
+      pageSize: pageSize,
+    )).data;
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>>
+  getStudentLeaveApplicationsPage({
+    String? studentId,
+    String? status,
+    bool forceRefresh = false,
+    int page = 1,
+    int pageSize = 20,
   }) async {
     try {
       final queryParams = <String, dynamic>{
@@ -28,7 +45,12 @@ extension BackendLeaveApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
-        return _asListMap(data['data']);
+        return PaginatedList<Map<String, dynamic>>(
+          data: _asListMap(data['data']),
+          total: _asInt(data['total']),
+          page: _asInt(data['page'], fallback: page),
+          pageSize: _asInt(data['page_size'], fallback: pageSize),
+        );
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to load student leave applications',
@@ -134,9 +156,30 @@ extension BackendLeaveApi on BackendApiClient {
     String? staffId,
     String? status,
     bool forceRefresh = false,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    return (await getLeaveApplicationsPage(
+      staffId: staffId,
+      status: status,
+      forceRefresh: forceRefresh,
+      page: page,
+      pageSize: pageSize,
+    )).data;
+  }
+
+  Future<PaginatedList<LeaveApplicationModel>> getLeaveApplicationsPage({
+    String? staffId,
+    String? status,
+    bool forceRefresh = false,
+    int page = 1,
+    int pageSize = 20,
   }) async {
     try {
-      final queryParams = <String, dynamic>{};
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+      };
       if (staffId != null) queryParams['staff_id'] = staffId;
       if (status != null) queryParams['status'] = status;
       if (forceRefresh) {
@@ -149,11 +192,17 @@ extension BackendLeaveApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
-        return (data['data'] as List)
+        final rows = (data['data'] as List? ?? const [])
             .map(
               (e) => LeaveApplicationModel.fromJson(e as Map<String, dynamic>),
             )
             .toList();
+        return PaginatedList<LeaveApplicationModel>(
+          data: rows,
+          total: _asInt(data['total']),
+          page: _asInt(data['page'], fallback: page),
+          pageSize: _asInt(data['page_size'], fallback: pageSize),
+        );
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to get leave applications',

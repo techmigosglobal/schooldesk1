@@ -1,23 +1,43 @@
 part of '../backend_api_client.dart';
 
 extension IssuesApi on BackendApiClient {
-  Future<List<Map<String, dynamic>>> getIssues({String? status}) async {
+  Future<PaginatedList<Map<String, dynamic>>> getIssuesPage({
+    String? status,
+    String? search,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
     try {
       final response = await _get(
         '/issues',
         queryParameters: {
+          'page': page,
+          'page_size': pageSize,
           if (status != null && status.isNotEmpty) 'status': status,
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
         },
       );
-      final data = _asMap(response.data);
-      final payload = _asMap(data['data']);
-      if (data['success'] == true) return _asListMap(payload['data']);
+      final payload = _asMap(response.data);
+      if (payload['success'] == true) {
+        return PaginatedList<Map<String, dynamic>>(
+          data: _asListMap(payload['data']),
+          total: _asInt(payload['total']),
+          page: _asInt(payload['page'], fallback: page),
+          pageSize: _asInt(payload['page_size'], fallback: pageSize),
+        );
+      }
       throw ServerException(
-        message: data['message'] ?? data['error'] ?? 'Unable to load issues',
+        message:
+            payload['message'] ?? payload['error'] ?? 'Unable to load issues',
       );
     } on DioException catch (e) {
       throw _handleError(e);
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getIssues({String? status}) async {
+    return (await getIssuesPage(status: status)).data;
   }
 
   Future<Map<String, dynamic>> createIssue(Map<String, dynamic> body) async {

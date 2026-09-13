@@ -33,6 +33,8 @@ extension BackendStudentsApi on BackendApiClient {
     String? schoolId,
     String? sectionId,
     String? status,
+    String? search,
+    String? academicYearId,
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -44,6 +46,12 @@ extension BackendStudentsApi on BackendApiClient {
       if (schoolId != null) queryParams['school_id'] = schoolId;
       if (sectionId != null) queryParams['section_id'] = sectionId;
       if (status != null) queryParams['status'] = status;
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
+      if (academicYearId != null && academicYearId.trim().isNotEmpty) {
+        queryParams['academic_year_id'] = academicYearId.trim();
+      }
 
       final response = await _get('/students', queryParameters: queryParams);
       final data = response.data as Map<String, dynamic>;

@@ -77,5 +77,9 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>schooldesk-periodic-offline-sync</string>
+	</array>
 </dict>
 </plist>

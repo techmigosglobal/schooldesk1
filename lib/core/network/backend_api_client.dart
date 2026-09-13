@@ -1,8 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:dio/dio.dart';
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:dio_cache_interceptor_hive_store/dio_cache_interceptor_hive_store.dart';
@@ -18,6 +19,8 @@ import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
+import 'package:schooldesk1/core/utils/secure_media_cache.dart';
+import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
 
 export 'package:schooldesk1/features/shared/data/models/backend_models.dart';
 part 'api_modules/auth_api.dart';
@@ -29,7 +32,10 @@ part 'api_modules/staff_api.dart';
 part 'api_modules/users_api.dart';
 part 'api_modules/students_api.dart';
 part 'api_modules/attendance_api.dart';
+part 'api_modules/attendance_offline_api.dart';
 part 'api_modules/events_api.dart';
+part 'api_modules/uploads_api.dart';
+part 'api_modules/homework_offline_api.dart';
 part 'api_modules/fees_api.dart';
 part 'api_modules/fee_payments_api.dart';
 part 'api_modules/leave_api.dart';
@@ -98,6 +104,7 @@ class BackendApiClient {
       _AuthInterceptor(this),
       _ReadCacheOptionsInterceptor(this),
       _WriteCacheInvalidationInterceptor(this),
+      OfflineDioInterceptor(),
       _LoggingInterceptor(),
       _ErrorInterceptor(this),
     ]);
@@ -120,6 +127,7 @@ class BackendApiClient {
       await client.setActiveBranchId(await TokenStorageService.getSchoolId());
     }
   }
+
   Dio get dio => _dio;
   String? _authToken;
   String? _currentRoleName;
@@ -133,13 +141,13 @@ class BackendApiClient {
   String? get currentUserId => _currentUserId;
   String? get activeBranchId => _activeBranchId;
   void setAuthToken(String token) => _authToken = token;
-
   void setCurrentRole(String? roleName) {
     final normalized = roleName?.trim();
     _currentRoleName = normalized?.isEmpty == true ? null : normalized;
   }
 
   void setCurrentUserId(String? userId) {
+    final previousScope = offlineAccountKey;
     final normalized = userId?.trim();
     final nextUserId = normalized?.isEmpty == true ? null : normalized;
     if (_currentUserId != nextUserId) {
@@ -149,8 +157,14 @@ class BackendApiClient {
       _clearCoalescedGets();
     }
     _currentUserId = nextUserId;
+    final nextScope = offlineAccountKey;
+    if (previousScope != nextScope && previousScope != 'anonymous') {
+      unawaited(SecureSelectiveMediaCache.clearAccount(previousScope));
+    }
   }
+
   Future<void> setActiveBranchId(String? schoolId) async {
+    final previousScope = offlineAccountKey;
     final normalized = schoolId?.trim();
     _activeBranchId = normalized?.isEmpty == true ? null : normalized;
     if (_activeBranchId == null) {
@@ -162,9 +176,16 @@ class BackendApiClient {
     _cachedCurrentSchool = null;
     _cachedDashboards.clear();
     _clearCoalescedGets();
+    final nextScope = offlineAccountKey;
+    if (previousScope != nextScope && previousScope != 'anonymous') {
+      unawaited(SecureSelectiveMediaCache.clearAccount(previousScope));
+    }
     await invalidateCachedReads();
+    unawaited(offlineSync?.syncNow() ?? Future<void>.value());
   }
+
   void clearAuthToken() {
+    final previousScope = offlineAccountKey;
     _authToken = null;
     _currentRoleName = null;
     _currentUserId = null;
@@ -174,7 +195,11 @@ class BackendApiClient {
     _clearCoalescedGets();
     _activeBranchId = null;
     _dio.options.headers.remove('x-schooldesk-branch-id');
+    if (previousScope != 'anonymous') {
+      unawaited(SecureSelectiveMediaCache.clearAccount(previousScope));
+    }
   }
+
   void beginLocalDemoSession({
     required String role,
     required String userId,
@@ -186,6 +211,7 @@ class BackendApiClient {
     _activeBranchId = schoolId;
     _dio.options.headers['x-schooldesk-branch-id'] = schoolId;
   }
+
   bool get isAuthenticated => _authToken != null;
 
   Future<void> installPersistentCache() async {
@@ -223,6 +249,7 @@ class BackendApiClient {
     _clearCoalescedGets();
     await _cacheOptions?.store?.clean();
   }
+
   Future<void> _invalidateReadMemoryAndDisk(List<String> pathPatterns) async {
     _cachedDashboards.clear();
     _clearCoalescedGets();

@@ -3,12 +3,16 @@
 SchoolDesk is a Flutter school management app for Principal, Admin, Coordinator,
 Teacher, Parent, and Kiosk roles.
 
+The Flutter product targets Android and iOS only. The separate Next.js
+`schooldesk-web/` application owns the public website and browser portal; this
+Flutter checkout intentionally has no web or Windows platform target.
+
 The current development runtime target is the isolated Docker-local Supabase
 stack (the hosted project is not contacted by local commands):
 
 - API base URL: `http://127.0.0.1:54321/functions/v1/api`
 - Supabase project URL: `http://127.0.0.1:54321`
-- Backend implementation: Supabase Edge Functions under `supabase/functions/api`
+- Backend implementation: Supabase Edge backend using Edge Functions under `supabase/functions/api`
 - Schema changes: Supabase migrations under `supabase/migrations`
 
 The retired backend and mobile-flow automation folders have been removed from this checkout. Do not add alternate backend deployment files or external device-flow suites back into this project unless the runtime target changes intentionally.
@@ -121,6 +125,7 @@ before starting an archive (the current release is `1.0.23+35`). Do not commit
 ```text
 android/                  Android project
 ios/                      iOS project
+schooldesk-web/           Separate Next.js website and browser portal
 lib/                      Flutter app source
 assets/                   Bundled images, fonts, branding, policy assets
 supabase/functions/api/   Supabase Edge Function API gateway and handlers
@@ -137,6 +142,10 @@ flutter analyze
 /home/vinay/.deno/bin/deno check supabase/functions/api/index.ts
 flutter test --no-pub --concurrency=1 <test-file>
 ```
+
+Build and device verification are limited to Android and iOS for the Flutter
+app. Run browser checks from `schooldesk-web/` instead of using a Flutter web
+build.
 
 Do not run multiple Flutter test/build commands in parallel on low-memory machines.
 

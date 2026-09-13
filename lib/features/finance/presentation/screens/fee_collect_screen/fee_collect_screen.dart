@@ -1,6 +1,8 @@
 /// Collect Fee — streamlined single-screen payment recording.
 library;
 
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,6 +49,10 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
   final _notesController = TextEditingController();
   final _searchCtrl = TextEditingController();
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  int _totalInvoices = 0;
   bool _saving = false;
   String? _error;
   String _query = '';
@@ -54,6 +60,7 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
   _PaymentMode _paymentMode = _PaymentMode.cash;
   DateTime _paymentDate = DateTime.now();
   List<Map<String, dynamic>> _invoices = const [];
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -67,29 +74,54 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
     _transactionController.dispose();
     _notesController.dispose();
     _searchCtrl.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool resetPage = true}) async {
     setState(() {
-      _loading = true;
+      _loading = resetPage;
+      _loadingMore = !resetPage;
       _error = null;
     });
     try {
       final api = BackendApiClient.instance;
-      final raw = await api.getInvoices(pageSize: 500);
+      final response = await api.getInvoicesPage(
+        search: _query,
+        outstanding: true,
+        page: resetPage ? 1 : _page + 1,
+        pageSize: 20,
+      );
       if (!mounted) return;
+      final invoices = response.data.map(normalizeInvoice).toList();
+      final existingIds = _invoices.map((invoice) => invoice['id']).toSet();
+      final additions = resetPage
+          ? invoices
+          : invoices
+                .where((invoice) => existingIds.add(invoice['id']))
+                .toList();
       setState(() {
-        _invoices = raw.map(normalizeInvoice).toList();
+        _invoices = resetPage ? invoices : [..._invoices, ...additions];
+        _page = response.page;
+        _totalInvoices = response.total;
+        _hasMore = response.hasMore;
         _loading = false;
+        _loadingMore = false;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = '$e';
         _loading = false;
+        _loadingMore = false;
       });
     }
+  }
+
+  void _scheduleSearch(String value) {
+    _query = value;
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), _loadData);
   }
 
   List<Map<String, dynamic>> get _dueInvoices =>
@@ -198,7 +230,7 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
         FeeSearchBox(
           controller: _searchCtrl..text = _query,
           hint: 'Search student',
-          onChanged: (v) => setState(() => _query = v),
+          onChanged: _scheduleSearch,
         ),
         const SizedBox(height: 12),
         if (_filteredDue.isEmpty)
@@ -247,6 +279,29 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
                   color: const Color(0xFFEA580C),
                 ),
               ],
+            ),
+          ),
+        if (_hasMore)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Center(
+              child: OutlinedButton.icon(
+                onPressed: _loadingMore
+                    ? null
+                    : () => _loadData(resetPage: false),
+                icon: _loadingMore
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded),
+                label: Text(
+                  _loadingMore
+                      ? 'Loading…'
+                      : 'Load more (${_invoices.length} of $_totalInvoices)',
+                ),
+              ),
             ),
           ),
       ],

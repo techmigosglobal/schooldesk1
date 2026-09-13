@@ -1,6 +1,40 @@
 part of '../backend_api_client.dart';
 
 extension BackendFeePaymentsApi on BackendApiClient {
+  Future<PaginatedList<Map<String, dynamic>>> getPaymentsPage({
+    String? studentId,
+    String? status,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final response = await _get(
+        '/fees/payments',
+        queryParameters: {
+          'page': page,
+          'page_size': pageSize,
+          if (studentId != null && studentId.trim().isNotEmpty)
+            'student_id': studentId.trim(),
+          if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return PaginatedList<Map<String, dynamic>>(
+          data: _asListMap(data['data']),
+          total: _asInt(data['total']),
+          page: _asInt(data['page'], fallback: page),
+          pageSize: _asInt(data['page_size'], fallback: pageSize),
+        );
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load payments',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> recordPayment(PaymentRequest request) async {
     try {
       final response = await _dio.post(
@@ -244,7 +278,23 @@ extension BackendFeePaymentsApi on BackendApiClient {
     String? invoiceId,
     String? status,
     int page = 1,
-    int pageSize = 100,
+    int pageSize = 20,
+  }) async {
+    return (await getParentPaymentRequestsPage(
+      studentId: studentId,
+      invoiceId: invoiceId,
+      status: status,
+      page: page,
+      pageSize: pageSize,
+    )).data;
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> getParentPaymentRequestsPage({
+    String? studentId,
+    String? invoiceId,
+    String? status,
+    int page = 1,
+    int pageSize = 20,
   }) async {
     try {
       final queryParams = <String, dynamic>{
@@ -266,7 +316,12 @@ extension BackendFeePaymentsApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
-        return _asListMap(data['data']);
+        return PaginatedList<Map<String, dynamic>>(
+          data: _asListMap(data['data']),
+          total: _asInt(data['total']),
+          page: _asInt(data['page'], fallback: page),
+          pageSize: _asInt(data['page_size'], fallback: pageSize),
+        );
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to load payment requests',

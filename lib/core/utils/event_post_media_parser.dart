@@ -8,6 +8,7 @@ class EventPostMediaItem {
   final String mimeType;
   final EventPostMediaKind kind;
   final int? size;
+  final String storageRef;
 
   const EventPostMediaItem({
     required this.url,
@@ -15,6 +16,7 @@ class EventPostMediaItem {
     this.mimeType = '',
     this.kind = EventPostMediaKind.media,
     this.size,
+    this.storageRef = '',
   });
 
   bool get isImage => kind == EventPostMediaKind.image;
@@ -34,6 +36,7 @@ class EventPostMediaItem {
     if (mimeType.trim().isNotEmpty) 'mime_type': mimeType.trim(),
     'kind': kind.name,
     if (size != null) 'size': size,
+    if (storageRef.trim().isNotEmpty) 'storage_ref': storageRef.trim(),
   };
 
   static List<EventPostMediaItem> parseList(dynamic raw) {
@@ -80,12 +83,14 @@ class EventPostMediaItem {
         map['kind'] ?? map['type'] ?? map['media_kind'],
       ).toLowerCase();
       final size = map['size'];
+      final storageRef = _text(map['storage_ref'] ?? map['storageRef']);
       return EventPostMediaItem(
         url: url,
         name: name,
         mimeType: mimeType,
         kind: _kindFor(url, mimeType, explicitKind),
         size: size is int ? size : int.tryParse(_text(size)),
+        storageRef: storageRef,
       );
     }
     return fromUrl(_text(value));

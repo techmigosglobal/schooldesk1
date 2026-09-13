@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -193,8 +194,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
+  bool _staleData = false;
   String? _loadError;
   int _currentPage = 0;
+  int _queryGeneration = 0;
+  Timer? _searchDebounce;
 
   bool get _isAdminOwner => widget.ownerRole.toLowerCase() == 'admin';
   bool get _selectionMode => _selectedStaffIds.isNotEmpty;
@@ -208,6 +212,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -219,26 +224,41 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     }
   }
 
-  Future<void> _loadStaffFromBackend() async {
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
+  Future<void> _loadStaffFromBackend({
+    bool resetPage = true,
+    bool loadSupportData = true,
+  }) async {
+    final generation = ++_queryGeneration;
+    final requestedPage = resetPage ? 1 : _currentPage + 1;
+    if (mounted) {
+      setState(() {
+        _loading = resetPage && _allStaff.isEmpty;
+        _loadingMore = !resetPage;
+        _loadError = null;
+        if (resetPage) _staleData = false;
+      });
+    }
     try {
-      var page = 1;
-      final fetched = <api.StaffModel>[];
-      while (true) {
-        final res = await api.BackendApiClient.instance.getStaff(
-          page: page,
-          pageSize: 100,
-        );
-        fetched.addAll(res.data);
-        if (!res.hasMore || res.data.isEmpty) break;
-        page++;
-      }
-
-      final supportData = await _loadStaffSupportData();
-      final uiStaff = fetched
+      final response = await api.BackendApiClient.instance.getStaff(
+        search: _searchQuery,
+        status: _serverStatusFilter(),
+        designation: _selectedDesignation == 'All'
+            ? null
+            : _selectedDesignation,
+        page: requestedPage,
+        pageSize: _pageSize,
+      );
+      final supportData = loadSupportData
+          ? await _loadStaffSupportData()
+          : _StaffSupportData(
+              grades: _grades,
+              sections: _sections,
+              subjects: _subjects,
+              staffSubjects: _staffSubjects,
+              users: const [],
+            );
+      if (!mounted || generation != _queryGeneration) return;
+      final uiStaff = response.data
           .map(
             (staff) => _mapApiStaffToUi(
               staff,
@@ -249,7 +269,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
               users: supportData.users,
             ),
           )
-          .toList();
+          .toList(growable: false);
       final designations =
           uiStaff
               .map((item) => item.designation)
@@ -260,29 +280,57 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
 
       if (!mounted) return;
       setState(() {
-        _allStaff
-          ..clear()
-          ..addAll(uiStaff);
+        final existingIds = _allStaff.map((staff) => staff.id).toSet();
+        final uniqueStaff = uiStaff
+            .where((staff) => !existingIds.contains(staff.id))
+            .toList(growable: false);
+        if (resetPage) {
+          _allStaff
+            ..clear()
+            ..addAll(uiStaff);
+        } else {
+          _allStaff.addAll(uniqueStaff);
+        }
         _filteredStaff
           ..clear()
-          ..addAll(uiStaff);
-        _grades = supportData.grades;
-        _sections = supportData.sections;
-        _subjects = supportData.subjects;
-        _staffSubjects = supportData.staffSubjects;
-        _designationOptions = ['All', ...designations];
-        if (!_designationOptions.contains(_selectedDesignation)) {
-          _selectedDesignation = 'All';
+          ..addAll(_allStaff);
+        _displayedStaff = List<StaffModel>.from(_allStaff);
+        if (loadSupportData) {
+          _grades = supportData.grades;
+          _sections = supportData.sections;
+          _subjects = supportData.subjects;
+          _staffSubjects = supportData.staffSubjects;
+          _designationOptions = ['All', ...designations];
+          if (!_designationOptions.contains(_selectedDesignation)) {
+            _selectedDesignation = 'All';
+          }
         }
-        _applyFilters(resetState: false);
+        _currentPage = response.page;
+        _hasMore = response.hasMore && response.data.isNotEmpty;
         _loading = false;
+        _loadingMore = false;
+        _staleData = false;
+        _loadError = null;
       });
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _queryGeneration) return;
       setState(() {
         _loading = false;
+        _loadingMore = false;
         _loadError = error.toString();
+        _staleData = _allStaff.isNotEmpty;
       });
+    }
+  }
+
+  String? _serverStatusFilter() {
+    switch (_selectedStatus.trim().toLowerCase()) {
+      case 'inactive':
+        return 'inactive';
+      case 'available':
+        return 'active';
+      default:
+        return null;
     }
   }
 
@@ -306,7 +354,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     try {
       subjects = await api.BackendApiClient.instance.getRawList(
         '/subjects',
-        queryParameters: const {'page_size': 500},
+        queryParameters: const {'page': 1, 'page_size': 20},
       );
     } on Object catch (_) {
       subjects = const [];
@@ -314,14 +362,15 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     try {
       staffSubjects = await api.BackendApiClient.instance.getRawList(
         '/staff-subjects',
-        queryParameters: const {'page_size': 500},
+        queryParameters: const {'page': 1, 'page_size': 20},
       );
     } on Object catch (_) {
       staffSubjects = const [];
     }
     try {
       users = (await api.BackendApiClient.instance.getUsers(
-        pageSize: 500,
+        page: 1,
+        pageSize: 20,
       )).data;
     } on Object catch (_) {
       users = const [];
@@ -556,59 +605,18 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 
-  void _applyFilters({bool resetState = true}) {
-    final query = _searchQuery.toLowerCase().trim();
-    final next = _allStaff.where((staff) {
-      final matchesSearch =
-          query.isEmpty ||
-          staff.name.toLowerCase().contains(query) ||
-          staff.employeeId.toLowerCase().contains(query) ||
-          staff.designation.toLowerCase().contains(query);
-      final matchesDesignation =
-          _selectedDesignation == 'All' ||
-          staff.designation == _selectedDesignation;
-      final matchesStatus =
-          _selectedStatus == 'All' ||
-          staff.directoryStatusLabel == _selectedStatus;
-      return matchesSearch && matchesDesignation && matchesStatus;
-    }).toList();
-
-    void apply() {
-      _filteredStaff
-        ..clear()
-        ..addAll(next);
-      _resetPagination();
-    }
-
-    if (resetState) {
-      setState(apply);
-    } else {
-      apply();
-    }
-  }
-
-  void _resetPagination() {
-    _currentPage = 0;
-    _loadingMore = false;
-    _hasMore = _filteredStaff.length > _pageSize;
-    _displayedStaff = _filteredStaff.take(_pageSize).toList();
-  }
-
-  void _loadMoreStaff() {
-    if (_loadingMore || !_hasMore) return;
-    final start = (_currentPage + 1) * _pageSize;
-    if (start >= _filteredStaff.length) {
-      setState(() => _hasMore = false);
-      return;
-    }
-    setState(() {
-      _loadingMore = true;
-      final end = (start + _pageSize).clamp(0, _filteredStaff.length);
-      _displayedStaff.addAll(_filteredStaff.sublist(start, end));
-      _currentPage++;
-      _loadingMore = false;
-      _hasMore = end < _filteredStaff.length;
+  void _queueServerRefresh() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        _loadStaffFromBackend(resetPage: true, loadSupportData: false);
+      }
     });
+  }
+
+  Future<void> _loadMoreStaff() async {
+    if (_loadingMore || !_hasMore) return;
+    await _loadStaffFromBackend(resetPage: false, loadSupportData: false);
   }
 
   void _toggleStaffSelection(StaffModel staff) {
@@ -740,11 +748,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
             slivers: [
               SliverToBoxAdapter(child: _buildHeader(context)),
               SliverToBoxAdapter(child: _buildSearchAndFilters()),
-              if (_loading)
+              if (_loading && _filteredStaff.isEmpty)
                 const SliverFillRemaining(
                   child: Center(child: CircularProgressIndicator()),
                 )
-              else if (_loadError != null)
+              else if (_loadError != null && _filteredStaff.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -770,31 +778,37 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   ),
                 )
               else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-                  sliver: SliverList.builder(
-                    itemCount: _displayedStaff.length + (_hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _displayedStaff.length) {
-                        return _buildLoadMoreButton();
-                      }
-                      final staff = _displayedStaff[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 13),
-                        child: _TeacherDirectoryCard(
-                          staff: staff,
-                          imageUrl: _absoluteImageUrl(staff.photoUrl),
-                          selected: _selectedStaffIds.contains(staff.id),
-                          onTap: () => _selectionMode
-                              ? _toggleStaffSelection(staff)
-                              : _openStaffDetail(staff),
-                          onLongPress: _isAdminOwner
-                              ? () {}
-                              : () => _toggleStaffSelection(staff),
-                        ),
-                      );
-                    },
-                  ),
+                SliverMainAxisGroup(
+                  slivers: [
+                    if (_staleData)
+                      SliverToBoxAdapter(child: _buildStaleDataBanner()),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+                      sliver: SliverList.builder(
+                        itemCount: _displayedStaff.length + (_hasMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == _displayedStaff.length) {
+                            return _buildLoadMoreButton();
+                          }
+                          final staff = _displayedStaff[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 13),
+                            child: _TeacherDirectoryCard(
+                              staff: staff,
+                              imageUrl: _absoluteImageUrl(staff.photoUrl),
+                              selected: _selectedStaffIds.contains(staff.id),
+                              onTap: () => _selectionMode
+                                  ? _toggleStaffSelection(staff)
+                                  : _openStaffDetail(staff),
+                              onLongPress: _isAdminOwner
+                                  ? () {}
+                                  : () => _toggleStaffSelection(staff),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -897,7 +911,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
             hint: 'Search staff...',
             onChanged: (value) {
               _searchQuery = value;
-              _applyFilters();
+              _queueServerRefresh();
             },
           ),
           const SizedBox(height: 14),
@@ -914,7 +928,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   onTap: () {
                     _selectedDesignation = 'All';
                     _selectedStatus = 'All';
-                    _applyFilters();
+                    _queueServerRefresh();
                   },
                 ),
                 const SizedBox(width: 8),
@@ -929,7 +943,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                     selected: _selectedDesignation,
                     onSelected: (value) {
                       _selectedDesignation = value;
-                      _applyFilters();
+                      _queueServerRefresh();
                     },
                   ),
                 ),
@@ -941,11 +955,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   selected: _selectedStatus != 'All',
                   onTap: () => _chooseFilter(
                     title: 'Status',
-                    options: const ['All', 'In Class', 'On Leave', 'Available'],
+                    options: const ['All', 'Inactive', 'Available'],
                     selected: _selectedStatus,
                     onSelected: (value) {
                       _selectedStatus = value;
-                      _applyFilters();
+                      _queueServerRefresh();
                     },
                   ),
                 ),
@@ -968,6 +982,42 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
             style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStaleDataBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.cloud_off_rounded,
+            size: 18,
+            color: Colors.orange.shade900,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Showing cached staff data. ${_loadError ?? 'Refresh failed.'}',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _loadStaffFromBackend,
+            child: const Text('Retry'),
+          ),
+        ],
       ),
     );
   }

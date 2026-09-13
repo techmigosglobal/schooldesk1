@@ -19,6 +19,7 @@ import {
   isIsoDate,
   isUuid,
 } from "../lib/homework_legacy.ts";
+import { signedPrivateFileUrl, stableStorageReference } from "../storage_helpers.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -194,6 +195,29 @@ function submissionPayload(row: Record<string, unknown>) {
   };
 }
 
+async function materializeHomeworkAttachments(
+  svc: SupabaseClient,
+  row: Record<string, unknown>,
+) {
+  const raw = Array.isArray(row.attachment_urls)
+    ? row.attachment_urls
+    : Array.isArray(row.file_urls)
+    ? row.file_urls
+    : text(row.attachment_url)
+    ? [row.attachment_url]
+    : [];
+  const urls = await Promise.all(raw.map(async (value) => {
+    const stable = stableStorageReference(value);
+    return await signedPrivateFileUrl(svc, stable) || text(value);
+  }));
+  return {
+    ...row,
+    attachment_urls: urls,
+    attachment_url: text(urls[0]),
+    file_urls: Array.isArray(row.file_urls) ? urls : row.file_urls,
+  };
+}
+
 export async function handleHomework(
   req: Request,
   path: string,
@@ -211,6 +235,17 @@ export async function handleHomework(
   if (path === "/homework") {
     if (method === "GET") {
       const studentId = text(url.searchParams.get("student_id"));
+      const requestedSectionId = text(url.searchParams.get("section_id"));
+      const requestedStaffId = text(url.searchParams.get("staff_id"));
+      const requestedStatus = text(url.searchParams.get("status"));
+      const page = Math.max(
+        parseInt(url.searchParams.get("page") ?? "1") || 1,
+        1,
+      );
+      const pageSize = Math.min(
+        Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
+        100,
+      );
       if (
         studentId && role(user) === "parent" &&
         !(await parentCanAccessStudent(svc, user, school, studentId))
@@ -219,6 +254,17 @@ export async function handleHomework(
       }
       let query = svc.from("frontend_records").select("*", { count: "exact" })
         .eq("school_id", school).eq("table_name", "homework");
+      // These JSONB predicates keep common filters in the database. Teacher
+      // assignment scope still gets a second authoritative check below.
+      if (requestedSectionId) {
+        query = query.eq("data->>section_id", requestedSectionId);
+      }
+      if (requestedStaffId && role(user) !== "teacher") {
+        query = query.eq("data->>staff_id", requestedStaffId);
+      }
+      if (requestedStatus) {
+        query = query.eq("data->>status", requestedStatus);
+      }
       const { data, error } = await query.order("updated_at", {
         ascending: false,
       });
@@ -229,7 +275,7 @@ export async function handleHomework(
 
       if (role(user) === "teacher") {
         const linkedStaffId = text(user.app_metadata?.linked_id);
-        const sectionId = text(url.searchParams.get("section_id"));
+        const sectionId = requestedSectionId;
         const scope = await resolveActiveTeacherScope(
           svc,
           school,
@@ -273,39 +319,9 @@ export async function handleHomework(
         });
       }
 
-      // Resolve teacher UUIDs to names
-      const staffIds = [
-        ...new Set(rows.map((row) => text(row.staff_id)).filter(Boolean)),
-      ];
-      if (staffIds.length > 0) {
-        const { data: staffMembers } = await svc.from("staff")
-          .select("id, first_name, last_name")
-          .in("id", staffIds);
-
-        if (staffMembers) {
-          const staffNameMap = new Map(
-            staffMembers.map((s) => [
-              text(s.id),
-              `${text(s.first_name)} ${text(s.last_name)}`.trim(),
-            ]),
-          );
-          rows = rows.map((row) => {
-            const name = staffNameMap.get(text(row.staff_id));
-            return {
-              ...row,
-              teacher_name: name || text(row.staff_id),
-              created_by_name: name || text(row.staff_id),
-            };
-          });
-        }
-      }
-
-      const sectionId = text(url.searchParams.get("section_id"));
       const linkedSectionId = studentId
         ? await studentSectionId(svc, school, studentId)
         : "";
-      const staffId = text(url.searchParams.get("staff_id"));
-      const status = text(url.searchParams.get("status"));
       if (studentId) {
         rows = rows.filter((row) =>
           text(row.student_id) === studentId ||
@@ -313,23 +329,60 @@ export async function handleHomework(
             text(row.section_id) === linkedSectionId)
         );
       }
-      if (sectionId) {
-        rows = rows.filter((row) => text(row.section_id) === sectionId);
+      if (requestedSectionId) {
+        rows = rows.filter((row) =>
+          text(row.section_id) === requestedSectionId
+        );
       }
-      if (staffId && role(user) !== "teacher") {
-        rows = rows.filter((row) => text(row.staff_id) === staffId);
+      if (requestedStaffId && role(user) !== "teacher") {
+        rows = rows.filter((row) => text(row.staff_id) === requestedStaffId);
       }
-      if (status) rows = rows.filter((row) => text(row.status) === status);
-      rows = await Promise.all(rows.map(async (row) => ({
-        ...row,
+      if (requestedStatus) {
+        rows = rows.filter((row) => text(row.status) === requestedStatus);
+      }
+      const total = rows.length;
+      const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
+      const staffIds = [
+        ...new Set(pageRows.map((row) => text(row.staff_id)).filter(Boolean)),
+      ];
+      if (staffIds.length > 0) {
+        const { data: staffMembers } = await svc.from("staff")
+          .select("id, first_name, last_name")
+          .in("id", staffIds);
+        const staffNameMap = new Map(
+          (staffMembers ?? []).map((s) => [
+            text(s.id),
+            `${text(s.first_name)} ${text(s.last_name)}`.trim(),
+          ]),
+        );
+        for (const row of pageRows) {
+          const name = staffNameMap.get(text(row.staff_id));
+          if (name) {
+            row.teacher_name = name;
+            row.created_by_name = name;
+          }
+        }
+      }
+      const listRows = await Promise.all(pageRows.map(async (row) => {
+        const {
+          attachment_url: _attachmentUrl,
+          attachment_urls: _attachmentUrls,
+          file_urls: _fileUrls,
+          attachments: _attachments,
+          ...lightweight
+        } = row;
+        return {
+          ...lightweight,
         daily_claim: await loadHomeworkDailyClaim(svc, school, row),
-      })));
+        };
+      }));
       return cors({
         success: true,
-        data: rows,
-        total: rows.length,
-        page: 1,
-        page_size: rows.length,
+        data: listRows,
+        total,
+        page,
+        page_size: pageSize,
+        has_more: page * pageSize < total,
       });
     }
 
@@ -409,6 +462,10 @@ export async function handleHomework(
       const id = crypto.randomUUID();
       const record = {
         ...body,
+        attachment_url: stableStorageReference(body.attachment_url),
+        attachment_urls: Array.isArray(body.attachment_urls)
+          ? body.attachment_urls.map(stableStorageReference)
+          : body.attachment_urls,
         id,
         homework_id: id,
         status: text(body.status, "pending"),
@@ -532,7 +589,10 @@ export async function handleHomework(
       }
 
       return ok({
-        ...payload(data as Record<string, unknown>),
+        ...(await materializeHomeworkAttachments(
+          svc,
+          payload(data as Record<string, unknown>),
+        )),
         daily_claim: claim,
       });
     }
@@ -648,6 +708,10 @@ export async function handleHomework(
     const next = {
       ...existing,
       ...teacherMutableBody,
+      attachment_url: stableStorageReference(
+        (teacherMutableBody as Record<string, unknown>).attachment_url ??
+          existing.attachment_url,
+      ),
       id: homeworkId,
       homework_id: homeworkId,
       updated_at: new Date().toISOString(),
@@ -660,7 +724,12 @@ export async function handleHomework(
       homeworkId,
     ).select().single();
     if (error) return fail(error.message);
-    return ok(payload(data as Record<string, unknown>));
+    return ok(
+      await materializeHomeworkAttachments(
+        svc,
+        payload(data as Record<string, unknown>),
+      ),
+    );
   }
 
   if (!suffix && method === "DELETE") {
@@ -780,9 +849,9 @@ export async function handleHomework(
       return fail("homework is not assigned to this student", 403);
     }
     const fileUrls = Array.isArray(body.attachment_urls)
-      ? body.attachment_urls.map((value) => text(value)).filter(Boolean)
+      ? body.attachment_urls.map(stableStorageReference).filter(Boolean)
       : [];
-    const attachmentUrl = text(body.attachment_url);
+    const attachmentUrl = stableStorageReference(body.attachment_url);
     if (attachmentUrl) fileUrls.unshift(attachmentUrl);
     const submission = {
       school_id: school,
@@ -876,7 +945,12 @@ export async function handleHomework(
       }
     }
 
-    return ok(submissionPayload(data as Record<string, unknown>));
+    return ok(
+      await materializeHomeworkAttachments(
+        svc,
+        submissionPayload(data as Record<string, unknown>),
+      ),
+    );
   }
 
   const reviewMatch = suffix.match(/^submissions\/([^/]+)\/review$/);
@@ -991,7 +1065,12 @@ export async function handleHomework(
       }
     }
 
-    return ok(submissionPayload(submissionRow));
+    return ok(
+      await materializeHomeworkAttachments(
+        svc,
+        submissionPayload(submissionRow),
+      ),
+    );
   }
 
   if (suffix === "attachment-requests" && method === "POST") {

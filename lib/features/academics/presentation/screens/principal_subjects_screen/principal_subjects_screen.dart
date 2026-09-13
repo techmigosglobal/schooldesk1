@@ -44,7 +44,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         api.getPrincipalClassesOverview(),
         api.getRawList(
           '/grade-subjects',
-          queryParameters: const {'page_size': 500},
+          queryParameters: const {'page_size': 100},
         ),
       ]);
 

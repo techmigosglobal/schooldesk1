@@ -226,6 +226,8 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       _error = null;
     });
     try {
+      final saveAsDraft =
+          BackendApiClient.instance.offlineSync?.isOffline == true;
       final homeworkId = _homeworkRecordId;
       if (homeworkId.isEmpty) {
         await BackendApiClient.instance.createHomework(
@@ -237,6 +239,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           description: '$_homeworkType: ${_descriptionController.text.trim()}',
           dueDate: _dueDateController.text.trim(),
           studentId: _studentId,
+          status: saveAsDraft ? 'draft' : 'pending',
           attachmentUrl: _attachmentUrl,
         );
         await _writeDiaryEntry();
@@ -251,6 +254,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           description: '$_homeworkType: ${_descriptionController.text.trim()}',
           dueDate: _dueDateController.text.trim(),
           studentId: _studentId,
+          status: saveAsDraft ? 'draft' : 'pending',
           attachmentUrl: _attachmentUrl,
         );
       }
@@ -258,7 +262,11 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
         Navigator.pop(
           context,
           TeacherHomeworkResult(
-            widget.args.isEditing ? 'Dairy updated' : 'Dairy shared',
+            saveAsDraft
+                ? 'Dairy saved offline as draft'
+                : widget.args.isEditing
+                ? 'Dairy updated'
+                : 'Dairy shared',
           ),
         );
       }

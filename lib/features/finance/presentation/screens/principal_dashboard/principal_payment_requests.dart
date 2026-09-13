@@ -15,6 +15,10 @@ class PrincipalPaymentRequests extends StatefulWidget {
 
 class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  int _totalRequests = 0;
   String _statusFilter = 'pending';
   List<Map<String, dynamic>> _requests = [];
 
@@ -37,22 +41,33 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
     super.dispose();
   }
 
-  Future<void> _loadRequests({bool showSpinner = true}) async {
+  Future<void> _loadRequests({
+    bool showSpinner = true,
+    bool resetPage = true,
+  }) async {
     if (showSpinner) {
       setState(() {
-        _loading = true;
+        _loading = resetPage;
+        _loadingMore = !resetPage;
       });
+    } else if (!resetPage) {
+      setState(() => _loadingMore = true);
     }
     try {
-      final rows =
-          (await BackendApiClient.instance.getParentPaymentRequests(
-                pageSize: 200,
-              ))
-              .where(
-                (row) => FeePaymentRequestStatus.isReviewRecord(row['status']),
-              )
-              .toList();
+      final response = await BackendApiClient.instance
+          .getParentPaymentRequestsPage(
+            status: _statusFilter == 'all' ? null : _statusFilter,
+            page: resetPage ? 1 : _page + 1,
+            pageSize: 20,
+          );
+      final rows = response.data
+          .where((row) => FeePaymentRequestStatus.isReviewRecord(row['status']))
+          .toList();
       if (!mounted) return;
+      final existingIds = _requests.map((row) => '${row['id'] ?? ''}').toSet();
+      final additions = resetPage
+          ? rows
+          : rows.where((row) => existingIds.add('${row['id'] ?? ''}')).toList();
 
       // Seed controllers
       for (final r in rows) {
@@ -64,13 +79,18 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
       }
 
       setState(() {
-        _requests = rows;
+        _requests = resetPage ? rows : [..._requests, ...additions];
+        _page = response.page;
+        _totalRequests = response.total;
+        _hasMore = response.hasMore;
         _loading = false;
+        _loadingMore = false;
       });
     } on Object {
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _loadingMore = false;
       });
     }
   }
@@ -177,8 +197,12 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                           ? _buildEmptyState()
                           : ListView.builder(
                               padding: const EdgeInsets.all(16),
-                              itemCount: _visibleRequests.length,
+                              itemCount:
+                                  _visibleRequests.length + (_hasMore ? 1 : 0),
                               itemBuilder: (context, index) {
+                                if (index == _visibleRequests.length) {
+                                  return _buildLoadMoreButton();
+                                }
                                 return _buildRequestCard(
                                   _visibleRequests[index],
                                 );
@@ -300,10 +324,38 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                     : context.appTheme.onSurfaceVariant,
                 fontWeight: FontWeight.w700,
               ),
-              onSelected: (_) => setState(() => _statusFilter = f.$1),
+              onSelected: (_) {
+                setState(() => _statusFilter = f.$1);
+                _loadRequests();
+              },
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Center(
+        child: OutlinedButton.icon(
+          onPressed: _loadingMore
+              ? null
+              : () => _loadRequests(showSpinner: false, resetPage: false),
+          icon: _loadingMore
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.expand_more_rounded),
+          label: Text(
+            _loadingMore
+                ? 'Loading…'
+                : 'Load more (${_requests.length} of $_totalRequests)',
+          ),
+        ),
       ),
     );
   }

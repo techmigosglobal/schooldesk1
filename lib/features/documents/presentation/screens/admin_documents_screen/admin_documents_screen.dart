@@ -25,6 +25,9 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
 
   List<Map<String, dynamic>> _requests = [];
   List<Map<String, dynamic>> _templates = [];
+  int _requestsPage = 1;
+  bool _requestsHasMore = false;
+  bool _loadingMoreRequests = false;
   bool _loading = true;
   String? _error;
 
@@ -85,27 +88,55 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     }
   }
 
-  Future<void> _loadRequests() async {
+  Future<void> _loadRequests({bool reset = true}) async {
+    if (!reset && (_loadingMoreRequests || !_requestsHasMore)) return;
+    if (!reset) {
+      setState(() => _loadingMoreRequests = true);
+    }
     try {
-      final results = await Future.wait([
-        BackendApiClient.instance.getRawList('/documents/requests'),
-        BackendApiClient.instance.getRawList('/documents/templates'),
-      ]);
+      final requestPage = await BackendApiClient.instance
+          .getDocumentRequestsPage(
+            page: reset ? 1 : _requestsPage + 1,
+            pageSize: 20,
+          );
+      final templatePage = reset
+          ? await BackendApiClient.instance.getDocumentTemplatesPage(
+              page: 1,
+              pageSize: 20,
+            )
+          : null;
       if (!mounted) return;
+      final existingIds = _requests.map((row) => '${row['id']}').toSet();
+      final requestRows = requestPage.data
+          .map(_mapDocumentRequest)
+          .where((row) => existingIds.add('${row['id']}'))
+          .toList();
       setState(() {
-        _requests = results[0].map(_mapDocumentRequest).toList();
-        _templates = results[1].map(_mapTemplate).toList();
+        if (reset) {
+          _requests = requestRows;
+        } else {
+          _requests = [..._requests, ...requestRows];
+        }
+        if (templatePage != null) {
+          _templates = templatePage.data.map(_mapTemplate).toList();
+        }
+        _requestsPage = requestPage.page;
+        _requestsHasMore = requestPage.hasMore && requestPage.data.isNotEmpty;
+        _loadingMoreRequests = false;
         _loading = false;
         _error = null;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
+        _loadingMoreRequests = false;
         _loading = false;
         _error = e.toString();
       });
     }
   }
+
+  Future<void> _loadMoreRequests() => _loadRequests(reset: false);
 
   Map<String, dynamic> _mapDocumentRequest(Map<String, dynamic> row) {
     return {
@@ -792,9 +823,19 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            itemCount: _requests.length,
+            itemCount: _requests.length + (_requestsHasMore ? 1 : 0),
             separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => _buildRequestCard(_requests[i]),
+            itemBuilder: (_, i) {
+              if (i == _requests.length) {
+                return OutlinedButton(
+                  onPressed: _loadingMoreRequests ? null : _loadMoreRequests,
+                  child: Text(
+                    _loadingMoreRequests ? 'Loading…' : 'Load more requests',
+                  ),
+                );
+              }
+              return _buildRequestCard(_requests[i]);
+            },
           ),
         ),
       ],
@@ -1041,9 +1082,17 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     final issued = _requests.where((r) => r['status'] == 'Issued').toList();
     return ListView.separated(
       padding: const EdgeInsets.all(12),
-      itemCount: issued.length,
+      itemCount: issued.length + (_requestsHasMore ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
+        if (i == issued.length) {
+          return OutlinedButton(
+            onPressed: _loadingMoreRequests ? null : _loadMoreRequests,
+            child: Text(
+              _loadingMoreRequests ? 'Loading…' : 'Load more records',
+            ),
+          );
+        }
         final r = issued[i];
         return Container(
           padding: const EdgeInsets.all(14),

@@ -1,6 +1,13 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
 import { recordActivity } from "./activity.ts";
+import {
+  deleteR2File,
+  r2FileReference,
+  r2KeyFromValue,
+  r2ReferenceInfo,
+  r2Reference,
+} from "../lib/r2_storage.ts";
 
 function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -33,7 +40,14 @@ function addStoragePath(
   targets: Map<string, Set<string>>,
   bucket: string,
   value: unknown,
+  r2Targets: Set<string>,
 ) {
+  const r2Key = r2KeyFromValue(value);
+  if (r2Key) {
+    const info = r2ReferenceInfo(value);
+    r2Targets.add(info ? r2Reference(info.key, info.visibility) : r2FileReference(r2Key));
+    return;
+  }
   const path = storagePathFromUrl(value, bucket);
   if (path) (targets.get(bucket) ?? new Set<string>()).add(path);
   if (path && !targets.has(bucket)) targets.set(bucket, new Set([path]));
@@ -140,6 +154,7 @@ async function wipeSchoolStorage(
   retainedAccountIds: readonly string[],
 ) {
   const targets = new Map<string, Set<string>>();
+  const r2Targets = new Set<string>();
   for (const bucket of wipeStorageBuckets) targets.set(bucket, new Set());
 
   const [
@@ -188,26 +203,30 @@ async function wipeSchoolStorage(
   }
   for (const row of issueResult.data ?? []) {
     const path = text(row.storage_path);
-    if (path) targets.get("issue-attachments")?.add(path);
+    const r2Key = r2KeyFromValue(path);
+    if (r2Key) {
+      const info = r2ReferenceInfo(path);
+      r2Targets.add(info ? r2Reference(info.key, info.visibility) : r2FileReference(r2Key));
+    }
+    else if (path) targets.get("issue-attachments")?.add(path);
   }
   for (const row of paymentResult.data ?? []) {
-    addStoragePath(targets, "payment-proofs", row.proof_url);
+    addStoragePath(targets, "payment-proofs", row.proof_url, r2Targets);
   }
   for (const row of studentDocumentResult.data ?? []) {
-    addStoragePath(targets, "school-assets", row.file_url);
+    addStoragePath(targets, "school-assets", row.file_url, r2Targets);
   }
   for (const row of staffDocumentResult.data ?? []) {
-    addStoragePath(targets, "school-assets", row.file_url);
+    addStoragePath(targets, "school-assets", row.file_url, r2Targets);
   }
   for (const row of uploadResult.data ?? []) {
-    const path = text(row.path);
-    if (path) targets.get("school-assets")?.add(path);
+    addStoragePath(targets, "school-assets", row.path, r2Targets);
   }
   for (const row of studentResult.data ?? []) {
-    addStoragePath(targets, "school-assets", row.photo_url);
+    addStoragePath(targets, "school-assets", row.photo_url, r2Targets);
   }
   for (const row of staffResult.data ?? []) {
-    addStoragePath(targets, "school-assets", row.photo_url);
+    addStoragePath(targets, "school-assets", row.photo_url, r2Targets);
   }
 
   let removed = 0;
@@ -228,6 +247,13 @@ async function wipeSchoolStorage(
       } catch (err) {
         console.error(`Exception while removing storage files in bucket ${bucket}:`, err);
       }
+    }
+  }
+  for (const key of r2Targets) {
+    try {
+      if (await deleteR2File(key)) removed++;
+    } catch (error) {
+      console.error(`Failed to remove R2 object ${key}:`, error);
     }
   }
   return removed;

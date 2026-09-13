@@ -104,96 +104,96 @@ extension BackendEventsApi on BackendApiClient {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getEvents({String? academicYearId}) async {
+  Future<PaginatedList<Map<String, dynamic>>> getEventsPage({
+    String? academicYearId,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
     try {
-      final filters = <String, dynamic>{'page_size': 200};
+      final filters = <String, dynamic>{'page': page, 'page_size': pageSize};
       if (academicYearId != null && academicYearId.trim().isNotEmpty) {
         filters['academic_year_id'] = academicYearId.trim();
       }
       // The generated client remains the real-user transport contract. Demo
       // sessions use BackendApiClient's intercepted Dio because the generated
       // client owns a separate Dio instance.
-      final events = DemoLocalApiService.instance.isActive
-          ? _asListMap(
-              (await _get('/events', queryParameters: filters)).data['data'],
+      final pageResult = DemoLocalApiService.instance.isActive
+          ? _eventPageFromPayload(
+              _asMap((await _get('/events', queryParameters: filters)).data),
+              page: page,
+              pageSize: pageSize,
             )
-          : (await SchoolDeskApi.instance.client.events(filters)).data
-                .whereType<Map>()
-                .map((event) => Map<String, dynamic>.from(event))
-                .toList();
-      return events.map((event) {
-        final normalized = Map<String, dynamic>.from(event);
-        normalized['id'] ??= normalized['event_id'];
-        normalized['event_title'] ??=
-            normalized['event_name'] ?? normalized['title'];
-        normalized['location'] ??= normalized['venue'];
-        normalized['start_date'] ??= normalized['event_date'];
-        normalized['end_date'] ??= normalized['event_date'];
-        normalized['start_datetime'] ??=
-            '${normalized['start_date'] ?? ''}T${normalized['start_time'] ?? '00:00:00'}';
-        normalized['end_datetime'] ??=
-            '${normalized['end_date'] ?? normalized['start_date'] ?? ''}T${normalized['end_time'] ?? '23:59:59'}';
-        return normalized;
-      }).toList();
+          : await _generatedEventPage(filters, page: page, pageSize: pageSize);
+      return PaginatedList<Map<String, dynamic>>(
+        data: pageResult.data.map((event) {
+          final normalized = Map<String, dynamic>.from(event);
+          normalized['id'] ??= normalized['event_id'];
+          normalized['event_title'] ??=
+              normalized['event_name'] ?? normalized['title'];
+          normalized['location'] ??= normalized['venue'];
+          normalized['start_date'] ??= normalized['event_date'];
+          normalized['end_date'] ??= normalized['event_date'];
+          normalized['start_datetime'] ??=
+              '${normalized['start_date'] ?? ''}T${normalized['start_time'] ?? '00:00:00'}';
+          normalized['end_datetime'] ??=
+              '${normalized['end_date'] ?? normalized['start_date'] ?? ''}T${normalized['end_time'] ?? '23:59:59'}';
+          return normalized;
+        }).toList(),
+        total: pageResult.total,
+        page: pageResult.page,
+        pageSize: pageResult.pageSize,
+      );
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
 
-  Future<String> uploadFile(
-    String filePath, {
-    required String filename,
-    Uint8List? fileBytes,
-    String? mimeType,
-    String folder = 'uploads',
-    String entityType = '',
-    String entityId = '',
-    bool private = false,
+  Future<List<Map<String, dynamic>>> getEvents({String? academicYearId}) async {
+    return (await getEventsPage(
+      academicYearId: academicYearId,
+      page: 1,
+      pageSize: 100,
+    )).data;
+  }
+
+  PaginatedList<Map<String, dynamic>> _eventPageFromPayload(
+    Map<String, dynamic> envelope, {
+    required int page,
+    required int pageSize,
+  }) {
+    final raw = envelope['data'];
+    final payload = raw is Map ? _asMap(raw) : <String, dynamic>{};
+    final rows = _asListMap(payload['data'] ?? payload['items'] ?? raw);
+    final total = _asInt(
+      payload['total'] ?? envelope['total'],
+      fallback: rows.length,
+    );
+    return PaginatedList<Map<String, dynamic>>(
+      data: rows,
+      total: total,
+      page: _asInt(payload['page'] ?? envelope['page'], fallback: page),
+      pageSize: _asInt(
+        payload['page_size'] ?? envelope['page_size'],
+        fallback: pageSize,
+      ),
+    );
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> _generatedEventPage(
+    Map<String, dynamic> filters, {
+    required int page,
+    required int pageSize,
   }) async {
-    try {
-      var uploadFilename = filename;
-      var uploadMimeType = mimeType;
-      var uploadBytes = fileBytes;
-      if (ImageUploadOptimizer.isImage(filename, mimeType)) {
-        final optimized = uploadBytes != null
-            ? ImageUploadOptimizer.fromBytes(
-                uploadBytes,
-                filename: filename,
-                mimeType: mimeType,
-                preset: ImageUploadPreset.content,
-              )
-            : await ImageUploadOptimizer.fromPath(
-                filePath,
-                filename: filename,
-                mimeType: mimeType,
-                preset: ImageUploadPreset.content,
-              );
-        uploadFilename = optimized.filename;
-        uploadMimeType = optimized.mimeType;
-        uploadBytes = optimized.bytes;
-      }
-      final contentType = _resolveMediaType(uploadMimeType, uploadFilename);
-      final formData = FormData.fromMap({
-        'folder': folder,
-        'entity_type': entityType,
-        'entity_id': entityId,
-        'private': private,
-        'file': await _multipartUpload(
-          filePath: filePath,
-          fileBytes: uploadBytes,
-          filename: uploadFilename,
-          contentType: contentType,
-        ),
-      });
-      final response = await _dio.post('/uploads', data: formData);
-      final data = _asMap(response.data);
-      final nested = _asMap(data['data']);
-      final url = _firstNonEmpty([data['url'], nested['url']]);
-      if (url.isNotEmpty) return url;
-      throw ServerException(message: data['error'] ?? 'Upload failed');
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
+    final response = await SchoolDeskApi.instance.client.events(filters);
+    return PaginatedList<Map<String, dynamic>>(
+      data: response.data
+          .whereType<Map>()
+          .map((event) => Map<String, dynamic>.from(event))
+          .toList(),
+      total: response.total,
+      page: response.page,
+      pageSize: response.pageSize,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getTeacherEventPosts() async {
@@ -533,43 +533,5 @@ extension BackendEventsApi on BackendApiClient {
     } on DioException catch (e) {
       throw _handleError(e);
     }
-  }
-}
-
-// Resolves a Dio MediaType from an explicit MIME string or falls back to the
-// file extension. This ensures MP4 and other video files are never uploaded
-// with application/octet-stream, which breaks Supabase video playback.
-DioMediaType? _resolveMediaType(String? mimeType, String filename) {
-  final mime = mimeType?.trim() ?? '';
-  if (mime.isNotEmpty) {
-    final parts = mime.split('/');
-    if (parts.length == 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
-      return DioMediaType(parts[0], parts[1]);
-    }
-  }
-  switch (filename.split('.').last.toLowerCase()) {
-    case 'mp4':
-      return DioMediaType('video', 'mp4');
-    case 'mov':
-      return DioMediaType('video', 'quicktime');
-    case 'm4v':
-      return DioMediaType('video', 'x-m4v');
-    case 'webm':
-      return DioMediaType('video', 'webm');
-    case 'jpg':
-    case 'jpeg':
-      return DioMediaType('image', 'jpeg');
-    case 'png':
-      return DioMediaType('image', 'png');
-    case 'webp':
-      return DioMediaType('image', 'webp');
-    case 'gif':
-      return DioMediaType('image', 'gif');
-    case 'heic':
-      return DioMediaType('image', 'heic');
-    case 'pdf':
-      return DioMediaType('application', 'pdf');
-    default:
-      return null;
   }
 }

@@ -4,13 +4,16 @@ import 'package:test/test.dart';
 
 void main() {
   test(
-    'notification processor reads legacy rows but current writes stay canonical',
+    'notification processor delivers only the canonical active device',
     () {
       final processor = File(
         'supabase/functions/notification-processor/index.ts',
       ).readAsStringSync();
       final communications = File(
         'supabase/functions/api/handlers/communications.ts',
+      ).readAsStringSync();
+      final notifications = File(
+        'supabase/functions/api/handlers/notifications.ts',
       ).readAsStringSync();
       final healthReminders = File(
         'supabase/functions/api/handlers/health_reminders.ts',
@@ -28,9 +31,12 @@ void main() {
         'supabase/migrations/20260705170759_unify_notification_device_tokens.sql',
       ).readAsStringSync();
 
-      expect(processor, contains('notification_device_tokens'));
+      expect(processor, isNot(contains('notification_device_tokens')));
       expect(processor, contains('activeDeviceTokensForUser'));
       expect(processor, contains('deactivateInvalidToken'));
+      expect(processor, contains('.limit(1)'));
+      expect(notifications, contains('path === "/notifications/device-tokens"'));
+      expect(notifications, contains('body.fcm_token ?? body.token'));
       expect(
         communications,
         contains('path === "/notifications/device-tokens"'),

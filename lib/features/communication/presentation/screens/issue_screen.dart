@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/paging/paged_list_controller.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -24,7 +27,9 @@ class IssueScreen extends StatefulWidget {
 class _IssueScreenState extends State<IssueScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  List<Map<String, dynamic>> _issues = const [];
+  late final PagedListController<Map<String, dynamic>> _paging;
+  final _searchController = TextEditingController();
+  Timer? _searchDebounce;
   bool _loading = true;
   String? _error;
   bool get _isSuperAdmin => widget.role == IssueScreenRole.superAdmin;
@@ -34,13 +39,29 @@ class _IssueScreenState extends State<IssueScreen>
     super.initState();
     _tabs = TabController(length: 3, vsync: this)
       ..addListener(() {
-        if (!_tabs.indexIsChanging) setState(() {});
+        if (!_tabs.indexIsChanging) {
+          setState(() {});
+          _load();
+        }
       });
+    _paging = PagedListController<Map<String, dynamic>>(
+      loadPage: ({required page, required pageSize}) =>
+          BackendApiClient.instance.getIssuesPage(
+            status: _statusForCurrentTab,
+            search: _searchController.text,
+            page: page,
+            pageSize: pageSize,
+          ),
+      itemKey: (row) => '${row['id'] ?? ''}',
+    );
     _load();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _paging.dispose();
     _tabs.dispose();
     super.dispose();
   }
@@ -50,39 +71,31 @@ class _IssueScreenState extends State<IssueScreen>
       _loading = true;
       _error = null;
     });
-    try {
-      final issues = await BackendApiClient.instance.getIssues();
-      if (mounted) setState(() => _issues = issues);
-    } on Object {
-      if (mounted) {
-        setState(() => _error = 'Issues are unavailable. Please retry.');
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    await _paging.refresh();
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = _paging.error == null
+          ? null
+          : 'Issues are unavailable. Please retry.';
+    });
   }
 
-  List<Map<String, dynamic>> get _visible {
+  String? get _statusForCurrentTab {
     if (_isSuperAdmin) {
       const statuses = ['pending', 'in_progress', 'resolved'];
-      return _issues
-          .where((issue) => '${issue['status']}' == statuses[_tabs.index])
-          .toList();
+      return statuses[_tabs.index];
     }
-    if (_tabs.index == 0) {
-      return _issues
-          .where(
-            (issue) =>
-                ['pending', 'in_progress'].contains('${issue['status']}'),
-          )
-          .toList();
-    }
-    if (_tabs.index == 1) {
-      return _issues
-          .where((issue) => '${issue['status']}' == 'resolved')
-          .toList();
-    }
-    return _issues;
+    return switch (_tabs.index) {
+      0 => 'pending,in_progress',
+      1 => 'resolved',
+      _ => null,
+    };
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), _load);
   }
 
   Future<void> _raiseIssue() async {
@@ -269,33 +282,81 @@ class _IssueScreenState extends State<IssueScreen>
           tooltip: 'Refresh',
         ),
       ],
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: FilledButton(onPressed: _load, child: Text(_error!)),
-            )
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: _visible.isEmpty
-                  ? ListView(
-                      children: const [
-                        SizedBox(height: 180),
-                        Center(child: Text('No issues found.')),
-                      ],
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _visible.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) => _IssueCard(
-                        issue: _visible[index],
-                        superAdmin: _isSuperAdmin,
-                        onUpdate: _update,
-                        onOpenAttachment: _openAttachment,
-                      ),
-                    ),
-            ),
+      body: AnimatedBuilder(
+        animation: _paging,
+        builder: (context, _) {
+          final issues = _paging.items;
+          final hasError = _error != null || _paging.error != null;
+          if (_loading && issues.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (hasError && issues.isEmpty) {
+            return Center(
+              child: FilledButton(onPressed: _load, child: const Text('Retry')),
+            );
+          }
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search_rounded),
+                    hintText: 'Search issues',
+                  ),
+                ),
+              ),
+              if (_paging.isStale)
+                MaterialBanner(
+                  content: const Text(
+                    'Showing cached issues. Retry to refresh.',
+                  ),
+                  actions: [
+                    TextButton(onPressed: _load, child: const Text('Retry')),
+                  ],
+                ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _load,
+                  child: issues.isEmpty
+                      ? ListView(
+                          children: const [
+                            SizedBox(height: 180),
+                            Center(child: Text('No issues found.')),
+                          ],
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: issues.length + (_paging.hasMore ? 1 : 0),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            if (index == issues.length) {
+                              return OutlinedButton(
+                                onPressed: _paging.isBusy
+                                    ? null
+                                    : _paging.loadMore,
+                                child: Text(
+                                  _paging.isBusy ? 'Loading…' : 'Load more',
+                                ),
+                              );
+                            }
+                            return _IssueCard(
+                              issue: issues[index],
+                              superAdmin: _isSuperAdmin,
+                              onUpdate: _update,
+                              onOpenAttachment: _openAttachment,
+                            );
+                          },
+                        ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

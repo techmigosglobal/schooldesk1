@@ -681,6 +681,36 @@ void _seedAllFeeRoutes(TestBackendAdapter adapter) {
     'page_size': 500,
   };
 
+  // Dashboard aggregates and payment history are separate bounded requests.
+  adapter.routes['GET /fees/summary'] = <String, dynamic>{
+    'success': true,
+    'data': <String, dynamic>{
+      'billed': 135000.0,
+      'collected': 50000.0,
+      'outstanding': 85000.0,
+      'overdue': 0.0,
+      'pending_requests': 1,
+      'students': 1,
+      'fee_structures': 2,
+    },
+  };
+  adapter.routes['GET /fees/payments'] = <String, dynamic>{
+    'success': true,
+    'data': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'id': 'pay-1',
+        'invoice_id': 'inv-1',
+        'amount_paid': 25000.0,
+        'payment_date': '2026-01-15',
+        'payment_mode': 'upi',
+        'status': 'completed',
+      },
+    ],
+    'total': 1,
+    'page': 1,
+    'page_size': 20,
+  };
+
   // Payment requests
   adapter.routes['GET /fees/payment-requests'] = <String, dynamic>{
     'success': true,

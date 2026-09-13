@@ -6,6 +6,8 @@ extension BackendStaffApi on BackendApiClient {
   Future<PaginatedList<StaffModel>> getStaff({
     String? schoolId,
     String? status,
+    String? search,
+    String? designation,
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -16,6 +18,12 @@ extension BackendStaffApi on BackendApiClient {
       };
       if (schoolId != null) queryParams['school_id'] = schoolId;
       if (status != null) queryParams['status'] = status;
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
+      if (designation != null && designation.trim().isNotEmpty) {
+        queryParams['designation'] = designation.trim();
+      }
 
       final response = await _get('/staff', queryParameters: queryParams);
       final data = _asMap(response.data);

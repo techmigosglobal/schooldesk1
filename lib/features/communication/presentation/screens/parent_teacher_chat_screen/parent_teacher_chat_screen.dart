@@ -456,10 +456,18 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
             );
         conversationId = _text(created['id']);
       }
-      await BackendApiClient.instance.sendUnifiedChatMessage(
+      final sent = await BackendApiClient.instance.sendUnifiedChatMessage(
         conversationId: conversationId,
         body: body,
       );
+      if (sent['queued'] == true) {
+        if (mounted) {
+          setState(() {
+            optimistic['_offlineQueued'] = true;
+          });
+        }
+        return;
+      }
       await _load(background: true);
     } on Object catch (error) {
       if (!mounted) return;

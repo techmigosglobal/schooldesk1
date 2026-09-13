@@ -40,10 +40,8 @@ void main() {
     expect(highlights, contains("Icons.cake_rounded"));
     expect(highlights, contains("if (acknowledged)"));
 
-    expect(
-      communications,
-      contains('.select("*, student:students(photo_url)")'),
-    );
+    expect(communications, contains('student:students(photo_url)'));
+    expect(communications, contains('count: "exact"'));
     expect(communications, contains('student_photo_url:'));
     expect(birthdayJob, contains('student_id: student.id'));
     expect(birthdayJob, contains('one notification per birthday student'));

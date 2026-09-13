@@ -8,8 +8,28 @@ extension BackendHomeworkApi on BackendApiClient {
     String? sectionId,
     String? teacherId,
     String? status,
+    int page = 1,
+    int pageSize = 20,
   }) async {
-    final queryParams = <String, dynamic>{};
+    return (await getHomeworkPage(
+      studentId: studentId,
+      sectionId: sectionId,
+      teacherId: teacherId,
+      status: status,
+      page: page,
+      pageSize: pageSize,
+    )).data;
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> getHomeworkPage({
+    String? studentId,
+    String? sectionId,
+    String? teacherId,
+    String? status,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final queryParams = <String, dynamic>{'page': page, 'page_size': pageSize};
     if (studentId != null && studentId.trim().isNotEmpty) {
       queryParams['student_id'] = studentId.trim();
     }
@@ -23,14 +43,47 @@ extension BackendHomeworkApi on BackendApiClient {
       queryParams['status'] = status.trim();
     }
     try {
-      final response = await SchoolDeskApi.instance.client.homework(
-        queryParams.isEmpty ? null : queryParams,
-      );
-      if (response.success == true) {
-        return _asListMap(response.data);
+      final response = await _get('/homework', queryParameters: queryParams);
+      final envelope = _asMap(response.data);
+      if (envelope['success'] == true) {
+        final rawPayload = envelope['data'];
+        final payload = rawPayload is Map ? _asMap(rawPayload) : null;
+        final merged = await _mergeLocalHomeworkDrafts(
+          _asListMap(payload?['data'] ?? payload?['items'] ?? rawPayload),
+          sectionId: sectionId,
+          studentId: studentId,
+          status: status,
+        );
+        return PaginatedList<Map<String, dynamic>>(
+          data: merged,
+          total: _asInt(
+            payload?['total'] ?? envelope['total'],
+            fallback: merged.length,
+          ),
+          page: _asInt(payload?['page'] ?? envelope['page'], fallback: page),
+          pageSize: _asInt(
+            payload?['page_size'] ?? envelope['page_size'],
+            fallback: pageSize,
+          ),
+        );
       }
-      throw const ServerException(message: 'Failed to load homework');
+      throw ServerException(
+        message: envelope['error'] ?? 'Failed to load homework',
+      );
     } on DioException catch (e) {
+      final local = await _readLocalHomeworkDrafts(
+        sectionId: sectionId,
+        studentId: studentId,
+        status: status,
+      );
+      if (local.isNotEmpty) {
+        return PaginatedList<Map<String, dynamic>>(
+          data: local,
+          total: local.length,
+          page: page,
+          pageSize: pageSize,
+        );
+      }
       throw _handleError(e);
     }
   }
@@ -89,27 +142,86 @@ extension BackendHomeworkApi on BackendApiClient {
     String status = 'pending',
     String attachmentUrl = '',
   }) async {
+    // A queued upload is a durable dependency. Persist the assignment as a
+    // draft until that upload resolves; publishing a pending assignment still
+    // requires an online request and an authoritative server state.
+    final effectiveStatus =
+        status.trim().toLowerCase() == 'draft' ||
+            _homeworkNeedsOfflineDraft(attachmentUrl)
+        ? 'draft'
+        : status;
+    final localId = effectiveStatus.trim().toLowerCase() == 'draft'
+        ? 'local-homework-${DateTime.now().microsecondsSinceEpoch}'
+        : null;
+    if (localId != null) {
+      await _saveLocalHomeworkDraft(
+        localId: localId,
+        title: title,
+        subject: subject,
+        className: className,
+        sectionId: sectionId,
+        teacherId: teacherId,
+        description: description,
+        dueDate: dueDate,
+        studentId: studentId,
+        attachmentUrl: attachmentUrl,
+        status: effectiveStatus,
+        syncStatus: 'pending',
+      );
+    }
     try {
-      final response = await SchoolDeskApi.instance.client.createHomework(
-        HomeworkDto(
+      // Keep draft writes on the primary Dio pipeline so the offline
+      // interceptor sees a JSON map and can persist the mutation in Drift.
+      // Retrofit serializes the DTO internally, after interceptors have
+      // already classified the request, which bypasses the draft allow-list.
+      final response = await _dio.post(
+        '/homework',
+        data: _homeworkPayload(
           title: title,
-          subjectId: subject,
-          classId: className,
+          subject: subject,
+          className: className,
           sectionId: sectionId,
-          staffId: teacherId,
-          studentId: studentId,
+          teacherId: teacherId,
           description: description,
-          submissionDate: dueDate,
+          dueDate: dueDate,
+          studentId: studentId,
+          status: effectiveStatus,
           attachmentUrl: attachmentUrl,
-          status: status,
+        ),
+        options: Options(
+          extra: {
+            if (localId != null) 'offlineLocalId': localId,
+            if (localId != null) 'offlineResourceType': 'homework',
+          },
         ),
       );
-      if (response.success == true) return _asMap(response.data);
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        final result = _asMap(data['data']);
+        if (data['queued'] == true) {
+          result['queued'] = true;
+          if (localId != null) result['id'] = localId;
+        } else if (localId != null) {
+          await _markLocalHomeworkDraftSynced(
+            localId,
+            '${result['id'] ?? result['homework_id'] ?? ''}'.trim(),
+          );
+        }
+        return result;
+      }
       throw ServerException(
-        message: response.error ?? 'Failed to create homework',
+        message: data['error'] ?? 'Failed to create homework',
       );
     } on DioException catch (e) {
+      if (localId != null) {
+        await _markLocalHomeworkDraftFailed(localId);
+      }
       throw _handleError(e);
+    } on Object {
+      if (localId != null) {
+        await _markLocalHomeworkDraftFailed(localId);
+      }
+      rethrow;
     }
   }
 
@@ -126,28 +238,77 @@ extension BackendHomeworkApi on BackendApiClient {
     String status = 'pending',
     String attachmentUrl = '',
   }) async {
+    final effectiveStatus =
+        status.trim().toLowerCase() == 'draft' ||
+            _homeworkNeedsOfflineDraft(attachmentUrl)
+        ? 'draft'
+        : status;
+    final localId = effectiveStatus.trim().toLowerCase() == 'draft'
+        ? 'local-homework-server-$id'
+        : null;
+    if (localId != null) {
+      await _saveLocalHomeworkDraft(
+        localId: localId,
+        serverId: id,
+        title: title,
+        subject: subject,
+        className: className,
+        sectionId: sectionId,
+        teacherId: teacherId,
+        description: description,
+        dueDate: dueDate,
+        studentId: studentId,
+        attachmentUrl: attachmentUrl,
+        status: effectiveStatus,
+        syncStatus: 'pending',
+      );
+    }
     try {
-      final response = await SchoolDeskApi.instance.client.updateHomework(
-        id,
-        HomeworkDto(
+      final response = await _dio.put(
+        '/homework/$id',
+        data: _homeworkPayload(
+          id: id,
           title: title,
-          subjectId: subject,
-          classId: className,
+          subject: subject,
+          className: className,
           sectionId: sectionId,
-          staffId: teacherId,
-          studentId: studentId,
+          teacherId: teacherId,
           description: description,
-          submissionDate: dueDate,
+          dueDate: dueDate,
+          studentId: studentId,
+          status: effectiveStatus,
           attachmentUrl: attachmentUrl,
-          status: status,
+        ),
+        options: Options(
+          extra: {
+            if (localId != null) 'offlineLocalId': localId,
+            if (localId != null) 'offlineResourceType': 'homework',
+          },
         ),
       );
-      if (response.success == true) return _asMap(response.data);
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        final result = _asMap(data['data']);
+        if (data['queued'] == true) {
+          result['queued'] = true;
+        } else if (localId != null) {
+          await _markLocalHomeworkDraftSynced(localId, id);
+        }
+        return result;
+      }
       throw ServerException(
-        message: response.error ?? 'Failed to update homework',
+        message: data['error'] ?? 'Failed to update homework',
       );
     } on DioException catch (e) {
+      if (localId != null) {
+        await _markLocalHomeworkDraftFailed(localId);
+      }
       throw _handleError(e);
+    } on Object {
+      if (localId != null) {
+        await _markLocalHomeworkDraftFailed(localId);
+      }
+      rethrow;
     }
   }
 
@@ -233,5 +394,33 @@ extension BackendHomeworkApi on BackendApiClient {
     } on DioException catch (e) {
       throw _handleError(e);
     }
+  }
+
+  Map<String, dynamic> _homeworkPayload({
+    String? id,
+    required String title,
+    required String subject,
+    required String className,
+    required String sectionId,
+    required String teacherId,
+    required String description,
+    required String dueDate,
+    required String studentId,
+    required String status,
+    required String attachmentUrl,
+  }) {
+    return HomeworkDto(
+      id: id,
+      title: title,
+      subjectId: subject,
+      classId: className,
+      sectionId: sectionId,
+      staffId: teacherId,
+      studentId: studentId,
+      description: description,
+      submissionDate: dueDate,
+      attachmentUrl: attachmentUrl,
+      status: status,
+    ).toJson();
   }
 }

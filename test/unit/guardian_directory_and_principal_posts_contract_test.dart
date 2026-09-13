@@ -13,10 +13,10 @@ void main() {
         'supabase/functions/api/handlers/uploads.ts',
       ).readAsStringSync();
 
-      expect(directory, contains("final nested = row['student'] is Map"));
-      expect(directory, contains("row['student_id']"));
-      expect(directory, contains("source['admission_number']"));
-      expect(directory, contains('final seenStudentIds = <String>{};'));
+      expect(directory, contains("row['linked_students']"));
+      expect(directory, contains("student['student_id']"));
+      expect(directory, contains("student['admission_number']"));
+      expect(directory, contains('linkedStudents'));
       expect(parentHandler, contains('student_id, student:students('));
       expect(parentHandler, contains('student_admission_number'));
       expect(parentHandler, contains('canManageParentLinks'));

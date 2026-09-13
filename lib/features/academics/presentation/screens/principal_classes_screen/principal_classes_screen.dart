@@ -119,15 +119,15 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       final results = await Future.wait<Object>([
         api.getPrincipalClassesOverview(forceRefresh: true),
         api.getAcademicYears(forceRefresh: true),
-        api.getStaff(page: 1, pageSize: 500, status: 'active'),
-        api.getRawList('/subjects', queryParameters: const {'page_size': 500}),
+        api.getStaff(page: 1, pageSize: 100, status: 'active'),
+        api.getRawList('/subjects', queryParameters: const {'page_size': 100}),
         api.getRawList(
           '/grade-subjects',
-          queryParameters: const {'page_size': 500},
+          queryParameters: const {'page_size': 100},
         ),
         api.getRawList(
           '/staff-subjects',
-          queryParameters: const {'page_size': 500},
+          queryParameters: const {'page_size': 100},
         ),
       ]);
       final optionalRows = await Future.wait<List<Map<String, dynamic>>>([
@@ -5083,14 +5083,14 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
       final results = await Future.wait<List<Map<String, dynamic>>>([
         BackendApiClient.instance.getRawList(
           '/subjects',
-          queryParameters: const {'page_size': 500},
+          queryParameters: const {'page_size': 100},
         ),
         BackendApiClient.instance.getRawList(
           '/grade-subjects',
           queryParameters: {
             'grade_id': _gradeId,
             'section_id': _sectionId,
-            'page_size': 500,
+            'page_size': 100,
           },
         ),
         BackendApiClient.instance.getRawList(
@@ -5098,7 +5098,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
           queryParameters: {
             'grade_id': _gradeId,
             'section_id': _sectionId,
-            'page_size': 500,
+            'page_size': 100,
           },
         ),
       ]);
@@ -6025,7 +6025,7 @@ class _AddSelectSubjectSetupPageState
     try {
       final subjects = await BackendApiClient.instance.getRawList(
         '/subjects',
-        queryParameters: const {'page_size': 500},
+        queryParameters: const {'page_size': 100},
       );
       if (!mounted) return;
       setState(() {

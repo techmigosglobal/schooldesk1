@@ -329,10 +329,18 @@ class _TeacherCommunicationScreenState
             );
         conversationId = _text(created['id']);
       }
-      await BackendApiClient.instance.sendUnifiedChatMessage(
+      final sent = await BackendApiClient.instance.sendUnifiedChatMessage(
         conversationId: conversationId,
         body: body,
       );
+      if (sent['queued'] == true) {
+        if (mounted) {
+          setState(() {
+            optimistic['_offlineQueued'] = true;
+          });
+        }
+        return;
+      }
       // Full reload to sync confirmed message, updated conversation list, etc.
       await _load(background: true);
     } on Object catch (error) {

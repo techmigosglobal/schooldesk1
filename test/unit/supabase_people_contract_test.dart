@@ -79,6 +79,106 @@ void main() {
   );
 
   test(
+    'student directory list is server-filtered and uses a lightweight paged DTO',
+    () {
+      final students = File(
+        'supabase/functions/api/handlers/students.ts',
+      ).readAsStringSync();
+
+      expect(students, contains('const studentListSelect ='));
+      expect(students, contains('url.searchParams.get("search")'));
+      expect(students, contains('url.searchParams.get("academic_year_id")'));
+      expect(students, contains('studentListSelect'));
+      expect(students, contains('has_more: page * size < (count ?? 0)'));
+      expect(
+        students,
+        isNot(
+          contains(
+            'hydrateStudentDirectory(\n        svc,\n        school,\n        (data ?? [])',
+          ),
+        ),
+      );
+    },
+  );
+
+  test('Principal student directory keeps paging on the backend', () {
+    final screen = File(
+      'lib/features/people/presentation/screens/student_oversight_screen/student_oversight_screen.dart',
+    ).readAsStringSync();
+
+    expect(screen, contains('search: _searchQuery'));
+    expect(screen, contains('hasMore'));
+    expect(screen, contains('response.data'));
+    expect(screen, isNot(contains('while (true) {')));
+    expect(screen, isNot(contains('pageSize: 100')));
+    expect(screen, isNot(contains('pageSize: 500')));
+  });
+
+  test('staff list uses a narrow, searchable server-paged contract', () {
+    final staff = File(
+      'supabase/functions/api/handlers/staff.ts',
+    ).readAsStringSync();
+    final api = File(
+      'lib/core/network/api_modules/staff_api.dart',
+    ).readAsStringSync();
+    final screen = File(
+      'lib/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart',
+    ).readAsStringSync();
+
+    expect(staff, contains('const staffListSelect ='));
+    expect(staff, contains('url.searchParams.get("search")'));
+    expect(staff, contains('has_more: page * size < (count ?? 0)'));
+    expect(api, contains("queryParams['search']"));
+    expect(screen, contains('search: _searchQuery'));
+    expect(screen, contains('response.data'));
+    expect(screen, isNot(contains('while (true) {')));
+    expect(screen, isNot(contains('pageSize: 100')));
+    expect(screen, isNot(contains('pageSize: 500')));
+  });
+
+  test('user access directory is server-searchable and page based', () {
+    final users = File(
+      'supabase/functions/api/handlers/users.ts',
+    ).readAsStringSync();
+    final api = File(
+      'lib/core/network/api_modules/users_api.dart',
+    ).readAsStringSync();
+    final screen = File(
+      'lib/features/people/presentation/screens/admin_user_access_screen/admin_user_access_screen.dart',
+    ).readAsStringSync();
+
+    expect(users, contains('const userListSelect ='));
+    expect(users, contains('url.searchParams.get("search")'));
+    expect(users, contains('has_more: page * size < (count ?? 0)'));
+    expect(api, contains("queryParams['search']"));
+    expect(screen, contains('search: _searchQuery'));
+    expect(screen, contains('_hasMore'));
+    expect(screen, isNot(contains('pageSize: 200')));
+  });
+
+  test('guardian directory avoids full student loads and parent N+1 calls', () {
+    final students = File(
+      'supabase/functions/api/handlers/students.ts',
+    ).readAsStringSync();
+    final api = File(
+      'lib/core/network/api_modules/users_api.dart',
+    ).readAsStringSync();
+    final screen = File(
+      'lib/features/people/presentation/screens/guardian_directory_screen/guardian_directory_screen.dart',
+    ).readAsStringSync();
+
+    expect(students, contains('path === "/guardians/directory"'));
+    expect(students, contains('has_more: page * size < (count ?? 0)'));
+    expect(api, contains("'/guardians/directory'"));
+    expect(screen, contains('getGuardianDirectory'));
+    expect(screen, contains('response.data'));
+    expect(screen, isNot(contains('while (true) {')));
+    expect(screen, isNot(contains('pageSize: 100')));
+    expect(screen, isNot(contains('pageSize: 500')));
+    expect(screen, isNot(contains('getParentStudents')));
+  });
+
+  test(
     'staff-subject assignment routes are available for staff and classes workflows',
     () {
       final index = File('supabase/functions/api/index.ts').readAsStringSync();
@@ -134,19 +234,13 @@ void main() {
 
     expect(schoolApi, contains('bool forceRefresh = false'));
     expect(schoolApi, contains("queryParams['refresh_nonce']"));
-    expect(
-      studentOversight,
-      contains('getSections(\n        forceRefresh: true,'),
-    );
-    expect(
-      studentOversight,
-      contains('getGrades(\n        forceRefresh: true,'),
-    );
+    expect(studentOversight, contains('getSections(forceRefresh: true)'));
+    expect(studentOversight, contains('getGrades(forceRefresh: true)'));
     expect(
       adminStudents,
-      contains('getSections(\n        forceRefresh: true,'),
+      contains('forceRefresh: resetPage'),
     );
-    expect(adminStudents, contains('getGrades(\n        forceRefresh: true,'));
+    expect(adminStudents, contains('forceRefresh: resetPage'));
   });
 
   test(
@@ -237,7 +331,7 @@ void main() {
 
     expect(client, contains("_dio.put('/students/\$id'"));
     expect(students, contains('return cors({'));
-    expect(students, contains('data: directory.data'));
+    expect(students, contains('data: data ?? []'));
     expect(students, contains('total: count ?? 0'));
     expect(students, contains('page_size: size'));
     expect(students, contains('method === "PATCH" || method === "PUT"'));
@@ -245,7 +339,10 @@ void main() {
     expect(students, contains('["transferred", "transfer"]'));
     expect(students, contains('["withdrawn", "inactive"]'));
     expect(students, contains('parent_accounts: parentAccounts'));
-    expect(students, contains('parent_user_id: text(links[0]?.parent_user_id) || null'));
+    expect(
+      students,
+      contains('parent_user_id: text(links[0]?.parent_user_id) || null'),
+    );
   });
 
   test(

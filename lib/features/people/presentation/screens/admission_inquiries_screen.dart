@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/paging/paged_list_controller.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 
 class AdmissionInquiriesScreen extends StatefulWidget {
@@ -11,12 +14,38 @@ class AdmissionInquiriesScreen extends StatefulWidget {
 }
 
 class _AdmissionInquiriesScreenState extends State<AdmissionInquiriesScreen> {
-  Future<List<Map<String, dynamic>>>? _future;
+  late final PagedListController<Map<String, dynamic>> _paging;
+  final _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
-    _future = BackendApiClient.instance.getRawList('/admission-inquiries');
+    _paging = PagedListController<Map<String, dynamic>>(
+      loadPage: ({required page, required pageSize}) =>
+          BackendApiClient.instance.getAdmissionInquiriesPage(
+            search: _searchController.text,
+            page: page,
+            pageSize: pageSize,
+          ),
+      itemKey: (row) => '${row['id'] ?? ''}',
+    );
+    _paging.load();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _paging.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      _paging.refresh();
+    });
   }
 
   @override
@@ -26,52 +55,99 @@ class _AdmissionInquiriesScreenState extends State<AdmissionInquiriesScreen> {
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: () => setState(
-            () => _future = BackendApiClient.instance.getRawList(
-              '/admission-inquiries',
-            ),
-          ),
+          onPressed: _paging.refresh,
         ),
       ],
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Unable to load admission inquiries: ${snapshot.error}',
-              ),
-            );
-          }
-          final rows = snapshot.data ?? const <Map<String, dynamic>>[];
-          if (rows.isEmpty) {
-            return const Center(child: Text('No admission inquiries yet.'));
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: rows.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, index) {
-              final row = rows[index];
-              return Card(
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.markunread_outlined),
+      body: AnimatedBuilder(
+        animation: _paging,
+        builder: (context, _) {
+          final rows = _paging.items;
+          final hasError = _paging.error != null;
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search_rounded),
+                    hintText: 'Search parent, child, phone, or email',
                   ),
-                  title: Text(
-                    '${row['parent_name'] ?? ''} · ${row['program'] ?? ''}',
-                  ),
-                  subtitle: Text(
-                    '${row['child_name'] ?? 'Child not named'} · ${row['child_age'] ?? ''}\n${row['phone'] ?? ''} · ${row['email'] ?? ''}',
-                  ),
-                  isThreeLine: true,
-                  onTap: () => _showDetail(context, row),
                 ),
-              );
-            },
+              ),
+              if (_paging.isStale)
+                MaterialBanner(
+                  content: const Text(
+                    'Showing cached inquiries. Retry to refresh.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: _paging.refresh,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              if (hasError && rows.isEmpty)
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Admission inquiries are unavailable.'),
+                        const SizedBox(height: 8),
+                        FilledButton(
+                          onPressed: _paging.refresh,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else if (_paging.status == PagedListStatus.loading &&
+                  rows.isEmpty)
+                const Expanded(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (rows.isEmpty)
+                const Expanded(
+                  child: Center(child: Text('No admission inquiries yet.')),
+                )
+              else
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: rows.length + (_paging.hasMore ? 1 : 0),
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, index) {
+                      if (index == rows.length) {
+                        return OutlinedButton(
+                          onPressed: _paging.isBusy ? null : _paging.loadMore,
+                          child: Text(
+                            _paging.isBusy ? 'Loading…' : 'Load more',
+                          ),
+                        );
+                      }
+                      final row = rows[index];
+                      return Card(
+                        child: ListTile(
+                          leading: const CircleAvatar(
+                            child: Icon(Icons.markunread_outlined),
+                          ),
+                          title: Text(
+                            '${row['parent_name'] ?? ''} · ${row['program'] ?? ''}',
+                          ),
+                          subtitle: Text(
+                            '${row['child_name'] ?? 'Child not named'} · ${row['child_age'] ?? ''}\n${row['phone'] ?? ''} · ${row['email'] ?? ''}',
+                          ),
+                          isThreeLine: true,
+                          onTap: () => _showDetail(context, row),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
           );
         },
       ),

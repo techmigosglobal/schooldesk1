@@ -75,14 +75,14 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         api.getSections(forceRefresh: true),
         api.getTimetableWorkingDays().catchError((_) => _defaultWorkingDays),
         api.getTimetableSlots(),
-        api.getRawList('/subjects', queryParameters: const {'page_size': 500}),
+        api.getRawList('/subjects', queryParameters: const {'page_size': 100}),
         api.getRawList(
           '/grade-subjects',
-          queryParameters: const {'page_size': 500},
+          queryParameters: const {'page_size': 100},
         ),
         api.getRawList(
           '/staff-subjects',
-          queryParameters: const {'page_size': 500},
+          queryParameters: const {'page_size': 100},
         ),
       ]);
       if (!mounted) return;

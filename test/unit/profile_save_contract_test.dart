@@ -41,6 +41,12 @@ void main() {
     expect(authApi, contains('_profilePayloadFromEnvelope('));
     expect(authApi, contains("payload['profile']"));
     expect(authHandler, contains('function normalizeProfileResponse'));
-    expect(authHandler, contains('return ok(normalizeProfileResponse'));
+    expect(
+      authHandler,
+      anyOf(
+        contains('return ok(normalizeProfileResponse'),
+        contains('return ok(await normalizeProfileResponse'),
+      ),
+    );
   });
 }

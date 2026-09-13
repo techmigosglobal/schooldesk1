@@ -1410,14 +1410,15 @@ class _ImportLookup {
     };
     final grades = await _safe(() => api.getGrades());
     final sections = await _safe(() => api.getSections());
-    final staff = await _safePaginated(
-      () => api.getStaff(page: 1, pageSize: 500),
+    final staff = await _safePaginatedAll(
+      (page, pageSize) => api.getStaff(page: page, pageSize: pageSize),
     );
-    final students = await _safePaginated(
-      () => api.getStudents(page: 1, pageSize: 500),
+    final students = await _safePaginatedAll(
+      (page, pageSize) => api.getStudents(page: page, pageSize: pageSize),
     );
-    final parents = await _safePaginated(
-      () => api.getUsers(role: 'Parent', page: 1, pageSize: 500),
+    final parents = await _safePaginatedAll(
+      (page, pageSize) =>
+          api.getUsers(role: 'Parent', page: page, pageSize: pageSize),
     );
     return _ImportLookup(
       academicYears: years,
@@ -1438,11 +1439,20 @@ class _ImportLookup {
     }
   }
 
-  static Future<List<T>> _safePaginated<T>(
-    Future<PaginatedList<T>> Function() load,
-  ) async {
+  static Future<List<T>> _safePaginatedAll<T>(
+    Future<PaginatedList<T>> Function(int page, int pageSize) load, {
+    int pageSize = 100,
+  }) async {
     try {
-      return (await load()).data;
+      final rows = <T>[];
+      var page = 1;
+      while (true) {
+        final result = await load(page, pageSize);
+        rows.addAll(result.data);
+        if (!result.hasMore || result.data.isEmpty) break;
+        page += 1;
+      }
+      return rows;
     } on Object catch (_) {
       return const [];
     }

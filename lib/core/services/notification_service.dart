@@ -20,9 +20,11 @@ class NotificationService extends ChangeNotifier {
   int _currentPage = 1;
   bool _hasMore = false;
   bool _loadingMore = false;
+  int? _serverUnreadCount;
 
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
-  int get totalUnread => _notifications.where((n) => !n.isRead).length;
+  int get totalUnread =>
+      _serverUnreadCount ?? _notifications.where((n) => !n.isRead).length;
   bool get hasMore => _hasMore;
   bool get isLoadingMore => _loadingMore;
 
@@ -48,6 +50,11 @@ class NotificationService extends ChangeNotifier {
       _notifications = page.items.map(AppNotification.fromJson).toList();
       _currentPage = page.page;
       _hasMore = page.hasMore;
+      try {
+        _serverUnreadCount = await _api.getUnreadNotificationsCount();
+      } on Object catch (_) {
+        _serverUnreadCount = null;
+      }
       try {
         final preferences = await _api.getNotificationPreferences();
         _hydrateSettings(preferences);
@@ -90,6 +97,9 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> addNotification(AppNotification notification) async {
     _notifications.insert(0, notification);
+    if (!notification.isRead && _serverUnreadCount != null) {
+      _serverUnreadCount = _serverUnreadCount! + 1;
+    }
     notifyListeners();
   }
 
@@ -100,6 +110,9 @@ class NotificationService extends ChangeNotifier {
     final idx = _notifications.indexWhere((n) => n.id == id);
     if (idx >= 0) {
       _notifications[idx] = _notifications[idx].copyWith(isRead: true);
+      if (_serverUnreadCount != null && _serverUnreadCount! > 0) {
+        _serverUnreadCount = _serverUnreadCount! - 1;
+      }
       notifyListeners();
     }
   }
@@ -115,6 +128,11 @@ class NotificationService extends ChangeNotifier {
     _notifications = _notifications
         .map((n) => _isVisibleToRole(n, role) ? n.copyWith(isRead: true) : n)
         .toList();
+    try {
+      _serverUnreadCount = await _api.getUnreadNotificationsCount();
+    } on Object catch (_) {
+      _serverUnreadCount = null;
+    }
     notifyListeners();
   }
 

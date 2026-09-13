@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -48,8 +49,11 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
+  bool _staleData = false;
   String? _loadError;
   int _currentPage = 0;
+  int _queryGeneration = 0;
+  Timer? _searchDebounce;
 
   bool get _isAdminOwner => widget.ownerRole.toLowerCase() == 'admin';
   bool get _selectionMode => _selectedGuardianIds.isNotEmpty;
@@ -63,6 +67,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -74,217 +79,103 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     }
   }
 
-  Future<void> _loadData() async {
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
-
-    try {
-      final parents = await _loadParentAccounts();
-      final students = await _loadStudents();
-      final guardianRows = await _loadGuardianRows();
-      final entries = <GuardianDirectoryEntry>[];
-
-      for (final parent in parents) {
-        final linkedRows = await _safeParentStudents(parent.id);
-        var linkedStudents = _mapLinkedStudents(linkedRows, students);
-        if (linkedStudents.isEmpty) {
-          linkedStudents = _linkedStudentsFromGuardianRows(
-            parent,
-            guardianRows: guardianRows,
-            students: students,
-          );
-        }
-        entries.add(
-          _mapParentToEntry(
-            parent,
-            linkedStudents: linkedStudents,
-            guardianRows: guardianRows,
-          ),
-        );
-      }
-
-      if (!mounted) return;
+  Future<void> _loadData({bool resetPage = true}) async {
+    final generation = ++_queryGeneration;
+    final requestedPage = resetPage ? 1 : _currentPage + 1;
+    if (mounted) {
       setState(() {
-        _students = students;
-        _guardianRows = guardianRows;
-        _allGuardians
-          ..clear()
-          ..addAll(entries);
+        _loading = resetPage && _allGuardians.isEmpty;
+        _loadingMore = !resetPage;
+        _loadError = null;
+        if (resetPage) _staleData = false;
+      });
+    }
+    try {
+      final response = await api.BackendApiClient.instance.getGuardianDirectory(
+        search: _searchQuery,
+        status: _selectedStatus == 'All' ? null : _selectedStatus.toLowerCase(),
+        page: requestedPage,
+        pageSize: _pageSize,
+      );
+      if (!mounted || generation != _queryGeneration) return;
+      final entries = response.data
+          .map(_mapDirectoryRow)
+          .toList(growable: false);
+      final guardianRows = response.data
+          .expand(
+            (row) => (row['guardians'] as List? ?? const [])
+                .whereType<Map>()
+                .map((raw) => Map<String, dynamic>.from(raw)),
+          )
+          .toList(growable: false);
+      final existingIds = _allGuardians.map((guardian) => guardian.id).toSet();
+      final uniqueEntries = entries
+          .where((entry) => !existingIds.contains(entry.id))
+          .toList(growable: false);
+      setState(() {
+        if (resetPage) {
+          _allGuardians
+            ..clear()
+            ..addAll(entries);
+        } else {
+          _allGuardians.addAll(uniqueEntries);
+        }
         _filteredGuardians
           ..clear()
-          ..addAll(entries);
-        _applyFilters(resetState: false);
+          ..addAll(_allGuardians);
+        if (resetPage) {
+          _guardianRows = guardianRows;
+        } else {
+          _guardianRows = [..._guardianRows, ...guardianRows];
+        }
+        _displayedGuardians = List<GuardianDirectoryEntry>.from(_allGuardians);
+        _currentPage = response.page;
+        _hasMore = response.hasMore && response.data.isNotEmpty;
         _loading = false;
+        _loadingMore = false;
+        _loadError = null;
+        _staleData = false;
       });
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _queryGeneration) return;
       setState(() {
         _loading = false;
+        _loadingMore = false;
         _loadError = error.toString();
+        _staleData = _allGuardians.isNotEmpty;
       });
     }
   }
 
-  Future<List<api.UserAccountModel>> _loadParentAccounts() async {
-    final parents = <api.UserAccountModel>[];
-    var page = 1;
-    while (true) {
-      final response = await api.BackendApiClient.instance.getUsers(
-        role: 'Parent',
-        page: page,
-        pageSize: 100,
-      );
-      parents.addAll(response.data);
-      if (!response.hasMore || response.data.isEmpty) break;
-      page++;
-    }
-    return parents;
-  }
-
-  Future<List<api.StudentModel>> _loadStudents() async {
-    final students = <api.StudentModel>[];
-    var page = 1;
-    while (true) {
-      final response = await api.BackendApiClient.instance.getStudents(
-        page: page,
-        pageSize: 100,
-      );
-      students.addAll(response.data);
-      if (!response.hasMore || response.data.isEmpty) break;
-      page++;
-    }
-    return students;
-  }
-
-  Future<List<Map<String, dynamic>>> _loadGuardianRows() async {
-    try {
-      return await api.BackendApiClient.instance.getRawList(
-        '/guardians',
-        queryParameters: const {'page_size': 500},
-      );
-    } on Object catch (_) {
-      return const [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _safeParentStudents(
-    String parentUserId,
-  ) async {
-    try {
-      return await api.BackendApiClient.instance.getParentStudents(
-        parentUserId: parentUserId,
-      );
-    } on Object catch (_) {
-      return const [];
-    }
-  }
-
-  List<GuardianStudentLink> _mapLinkedStudents(
-    List<Map<String, dynamic>> rows,
-    List<api.StudentModel> students,
-  ) {
-    final byAdmission = <String, api.StudentModel>{};
-    for (final student in students) {
-      final admission = student.admissionNumber.toLowerCase().trim();
-      final code = student.studentCode.toLowerCase().trim();
-      if (admission.isNotEmpty) byAdmission[admission] = student;
-      if (code.isNotEmpty) byAdmission[code] = student;
-    }
-    final byId = {
-      for (final student in students) student.id.toLowerCase().trim(): student,
-    };
-    final links = <GuardianStudentLink>[];
-    final seenStudentIds = <String>{};
-    for (final row in rows) {
-      // The parent endpoint returns flattened student rows, while older
-      // deployments can still return a nested `student` object. Support both
-      // shapes so a valid parent_student_links row is never shown as zero
-      // children just because its response aliases differ.
-      final nested = row['student'] is Map
-          ? Map<String, dynamic>.from(row['student'] as Map)
-          : const <String, dynamic>{};
-      final source = nested.isEmpty ? row : nested;
-      final id = _firstNonEmpty([
-        row['student_id'],
-        source['id'],
-        source['student_id'],
-      ]);
-      final admission = _firstNonEmpty([
-        row['student_admission_number'],
-        source['admission_number'],
-        source['student_code'],
-      ]);
-      final student =
-          byId[id.toLowerCase()] ?? byAdmission[admission.toLowerCase()];
-      final resolvedId = student?.id ?? id;
-      if (resolvedId.isEmpty || !seenStudentIds.add(resolvedId)) continue;
-      final name = student?.fullName.trim().isNotEmpty == true
-          ? student!.fullName.trim()
-          : _firstNonEmpty([
-              source['full_name'],
-              '${source['first_name'] ?? source['student_first_name'] ?? ''} ${source['last_name'] ?? source['student_last_name'] ?? ''}',
-            ]);
-      links.add(
-        GuardianStudentLink(
-          studentId: resolvedId,
-          admissionNumber: _studentLookupCode(student) ?? admission,
-          studentName: name,
-        ),
-      );
-    }
-    return links;
-  }
-
-  List<GuardianStudentLink> _linkedStudentsFromGuardianRows(
-    api.UserAccountModel parent, {
-    required List<Map<String, dynamic>> guardianRows,
-    required List<api.StudentModel> students,
-  }) {
-    final parentEmail = parent.email.toLowerCase().trim();
-    final parentPhone = parent.phone.trim();
-    final parentName = parent.name.toLowerCase().trim();
-    final byId = {for (final s in students) s.id.toLowerCase().trim(): s};
-    final links = <GuardianStudentLink>[];
-    final seenStudentIds = <String>{};
-    for (final row in guardianRows) {
-      final emailMatches =
-          parentEmail.isNotEmpty &&
-          _stringValue(row['email']).toLowerCase() == parentEmail;
-      final phoneMatches =
-          parentPhone.isNotEmpty && _stringValue(row['phone']) == parentPhone;
-      final nameMatches =
-          parentName.isNotEmpty &&
-          _stringValue(row['full_name']).toLowerCase() == parentName;
-      if (!emailMatches && !phoneMatches && !nameMatches) continue;
-      final studentId = _stringValue(row['student_id']);
-      if (studentId.isEmpty || !seenStudentIds.add(studentId)) continue;
-      final student = byId[studentId.toLowerCase()];
-      final name = student?.fullName.trim().isNotEmpty == true
-          ? student!.fullName.trim()
-          : _firstNonEmpty([
-              row['student_name'],
-              '${row['first_name'] ?? ''} ${row['last_name'] ?? ''}',
-            ]);
-      links.add(
-        GuardianStudentLink(
-          studentId: studentId,
-          admissionNumber: _studentLookupCode(student) ?? studentId,
-          studentName: name,
-        ),
-      );
-    }
-    return links;
-  }
-
-  String? _studentLookupCode(api.StudentModel? student) {
-    if (student == null) return null;
-    final admission = student.admissionNumber.trim();
-    if (admission.isNotEmpty) return admission;
-    final code = student.studentCode.trim();
-    if (code.isNotEmpty) return code;
-    return student.id;
+  GuardianDirectoryEntry _mapDirectoryRow(Map<String, dynamic> row) {
+    final parent = api.UserAccountModel.fromJson(row);
+    final linkedStudents = (row['linked_students'] as List? ?? const [])
+        .whereType<Map>()
+        .map((raw) {
+          final student = Map<String, dynamic>.from(raw);
+          return GuardianStudentLink(
+            studentId: _stringValue(student['student_id']),
+            admissionNumber: _firstNonEmpty([
+              student['admission_number'],
+              student['student_id_number'],
+            ]),
+            studentName: _firstNonEmpty([
+              student['full_name'],
+              '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}',
+            ]),
+          );
+        })
+        .where((student) => student.studentId.isNotEmpty)
+        .toList(growable: false);
+    final guardianRows = (row['guardians'] as List? ?? const [])
+        .whereType<Map>()
+        .map((raw) => Map<String, dynamic>.from(raw))
+        .toList(growable: false);
+    return _mapParentToEntry(
+      parent,
+      linkedStudents: linkedStudents,
+      guardianRows: guardianRows,
+    );
   }
 
   GuardianDirectoryEntry _mapParentToEntry(
@@ -369,64 +260,16 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     );
   }
 
-  void _applyFilters({bool resetState = true}) {
-    final query = _searchQuery.toLowerCase().trim();
-    final next = _allGuardians.where((guardian) {
-      final childText = guardian.linkedStudents
-          .map((student) => '${student.studentName} ${student.admissionNumber}')
-          .join(' ')
-          .toLowerCase();
-      final matchesSearch =
-          query.isEmpty ||
-          guardian.name.toLowerCase().contains(query) ||
-          guardian.username.toLowerCase().contains(query) ||
-          guardian.phone.toLowerCase().contains(query) ||
-          guardian.email.toLowerCase().contains(query) ||
-          childText.contains(query);
-      final matchesStatus =
-          _selectedStatus == 'All' || guardian.statusLabel == _selectedStatus;
-      final matchesRelationship =
-          _selectedRelationship == 'All' ||
-          guardian.relationship == _selectedRelationship;
-      return matchesSearch && matchesStatus && matchesRelationship;
-    }).toList();
-
-    void apply() {
-      _filteredGuardians
-        ..clear()
-        ..addAll(next);
-      _resetPagination();
-    }
-
-    if (resetState) {
-      setState(apply);
-    } else {
-      apply();
-    }
-  }
-
-  void _resetPagination() {
-    _currentPage = 0;
-    _loadingMore = false;
-    _hasMore = _filteredGuardians.length > _pageSize;
-    _displayedGuardians = _filteredGuardians.take(_pageSize).toList();
-  }
-
-  void _loadMoreGuardians() {
-    if (_loadingMore || !_hasMore) return;
-    final start = (_currentPage + 1) * _pageSize;
-    if (start >= _filteredGuardians.length) {
-      setState(() => _hasMore = false);
-      return;
-    }
-    setState(() {
-      _loadingMore = true;
-      final end = (start + _pageSize).clamp(0, _filteredGuardians.length);
-      _displayedGuardians.addAll(_filteredGuardians.sublist(start, end));
-      _currentPage++;
-      _loadingMore = false;
-      _hasMore = end < _filteredGuardians.length;
+  void _queueServerRefresh() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) _loadData();
     });
+  }
+
+  Future<void> _loadMoreGuardians() async {
+    if (_loadingMore || !_hasMore) return;
+    await _loadData(resetPage: false);
   }
 
   void _toggleGuardianSelection(GuardianDirectoryEntry guardian) {
@@ -547,11 +390,11 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
             slivers: [
               SliverToBoxAdapter(child: _buildHeader(context)),
               SliverToBoxAdapter(child: _buildSearchAndFilters()),
-              if (_loading)
+              if (_loading && _filteredGuardians.isEmpty)
                 const SliverFillRemaining(
                   child: Center(child: CircularProgressIndicator()),
                 )
-              else if (_loadError != null)
+              else if (_loadError != null && _filteredGuardians.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -577,28 +420,38 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                   ),
                 )
               else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-                  sliver: SliverList.builder(
-                    itemCount: _displayedGuardians.length + (_hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _displayedGuardians.length) {
-                        return _buildLoadMoreButton();
-                      }
-                      final guardian = _displayedGuardians[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 13),
-                        child: _GuardianDirectoryCard(
-                          guardian: guardian,
-                          selected: _selectedGuardianIds.contains(guardian.id),
-                          onTap: () => _selectionMode
-                              ? _toggleGuardianSelection(guardian)
-                              : _openGuardianDetail(guardian),
-                          onLongPress: () => _toggleGuardianSelection(guardian),
-                        ),
-                      );
-                    },
-                  ),
+                SliverMainAxisGroup(
+                  slivers: [
+                    if (_staleData)
+                      SliverToBoxAdapter(child: _buildStaleDataBanner()),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+                      sliver: SliverList.builder(
+                        itemCount:
+                            _displayedGuardians.length + (_hasMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == _displayedGuardians.length) {
+                            return _buildLoadMoreButton();
+                          }
+                          final guardian = _displayedGuardians[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 13),
+                            child: _GuardianDirectoryCard(
+                              guardian: guardian,
+                              selected: _selectedGuardianIds.contains(
+                                guardian.id,
+                              ),
+                              onTap: () => _selectionMode
+                                  ? _toggleGuardianSelection(guardian)
+                                  : _openGuardianDetail(guardian),
+                              onLongPress: () =>
+                                  _toggleGuardianSelection(guardian),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -704,7 +557,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
             hint: 'Search parents or students...',
             onChanged: (value) {
               _searchQuery = value;
-              _applyFilters();
+              _queueServerRefresh();
             },
           ),
           const SizedBox(height: 14),
@@ -722,7 +575,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                   onTap: () {
                     _selectedStatus = 'All';
                     _selectedRelationship = 'All';
-                    _applyFilters();
+                    _queueServerRefresh();
                   },
                 ),
                 const SizedBox(width: 8),
@@ -737,7 +590,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                     selected: _selectedRelationship,
                     onSelected: (value) {
                       _selectedRelationship = value;
-                      _applyFilters();
+                      _queueServerRefresh();
                     },
                   ),
                 ),
@@ -753,7 +606,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                     selected: _selectedStatus,
                     onSelected: (value) {
                       _selectedStatus = value;
-                      _applyFilters();
+                      _queueServerRefresh();
                     },
                   ),
                 ),
@@ -776,6 +629,39 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
             style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStaleDataBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.cloud_off_rounded,
+            size: 18,
+            color: Colors.orange.shade900,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Showing cached parent data. ${_loadError ?? 'Refresh failed.'}',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ),
+          TextButton(onPressed: _loadData, child: const Text('Retry')),
+        ],
       ),
     );
   }
@@ -828,6 +714,8 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   }
 
   Future<void> _openGuardianForm([GuardianDirectoryEntry? guardian]) async {
+    await _ensureGuardianFormStudents();
+    if (!mounted) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _GuardianProfileFormPage(
@@ -838,6 +726,21 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _ensureGuardianFormStudents() async {
+    if (_students.isNotEmpty) return;
+    try {
+      final response = await api.BackendApiClient.instance.getStudents(
+        page: 1,
+        pageSize: _pageSize,
+      );
+      if (!mounted) return;
+      setState(() => _students = response.data);
+    } on Object catch (_) {
+      // Keep the form available; the picker will show no students and the
+      // surrounding directory will retain its explicit error state.
+    }
   }
 
   Future<void> _saveGuardian(_GuardianProfileInput input) async {

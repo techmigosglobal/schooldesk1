@@ -25,14 +25,33 @@ export async function handleNotifications(
     return fail("unauthorized", 401);
   }
 
-  // POST /notifications/register-token — Register device FCM token
-  if (path === "/notifications/register-token" && method === "POST") {
+  // Canonical registration path. The legacy device-tokens path is accepted
+  // only as a compatibility alias and uses this same implementation.
+  if (
+    (path === "/notifications/register-token" ||
+      path === "/notifications/device-tokens") && method === "POST"
+  ) {
     return registerDeviceToken(req, svc, school, uid);
   }
 
   // POST /notifications/revoke-token — Revoke device FCM token
   if (path === "/notifications/revoke-token" && method === "POST") {
     return revokeDeviceToken(req, svc, school, uid);
+  }
+  if (path === "/notifications/device-tokens" && method === "DELETE") {
+    return revokeDeviceToken(req, svc, school, uid);
+  }
+
+  if (path === "/notifications/unread-count" && method === "GET") {
+    const { count, error } = await svc
+      .from("notification_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("school_id", school)
+      .eq("user_id", uid)
+      .eq("is_read", false)
+      .is("deleted_at", null);
+    if (error) return fail(`Failed to get unread notification count: ${error.message}`);
+    return ok({ count: count ?? 0 });
   }
 
   // GET /notifications/preferences — Get user notification preferences
@@ -66,10 +85,10 @@ async function registerDeviceToken(
 ): Promise<Response> {
   try {
     const body = await req.json() as Record<string, unknown>;
-    const fcmToken = body.fcm_token as string;
-    const deviceType = body.device_type as string;
+    const fcmToken = `${body.fcm_token ?? body.token ?? ""}`.trim();
+    const deviceType = `${body.device_type ?? body.platform ?? ""}`.trim();
 
-    if (!fcmToken || !fcmToken.trim()) {
+    if (!fcmToken) {
       return fail("fcm_token required");
     }
 
@@ -159,7 +178,12 @@ async function registerDeviceToken(
             : {};
           return svc.from("notification_events").update({
             processed: false,
+            processing_state: "pending",
+            processing_started_at: null,
+            processing_lease_until: null,
             sent_at: null,
+            next_retry_at: null,
+            delivery_status: "resumed",
             event_data: { ...eventData, _push_deferred_no_device: false },
           }).eq("id", event.id);
         }),
@@ -185,9 +209,9 @@ async function revokeDeviceToken(
 ): Promise<Response> {
   try {
     const body = await req.json() as Record<string, unknown>;
-    const fcmToken = body.fcm_token as string;
+    const fcmToken = `${body.fcm_token ?? body.token ?? ""}`.trim();
 
-    if (!fcmToken || !fcmToken.trim()) {
+    if (!fcmToken) {
       return fail("fcm_token required");
     }
 

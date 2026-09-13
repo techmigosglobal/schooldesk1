@@ -1,6 +1,6 @@
 // handlers/leave.ts
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok, triggerPushProcessing } from "../index.ts";
+import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -224,9 +224,24 @@ export async function handleLeave(
     if (requestedStaffId || ownStaffId) {
       q = q.eq("staff_id", requestedStaffId || ownStaffId);
     }
-    const { data, error } = await q.order("created_at", { ascending: false });
+    const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+    const pageSize = Math.min(
+      100,
+      Math.max(1, Number(url.searchParams.get("page_size") ?? "20") || 20),
+    );
+    const { data, error, count } = await q
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1);
     if (error) return fail(error.message);
-    return ok(data);
+    return cors({
+      success: true,
+      data: data ?? [],
+      total: count ?? 0,
+      page,
+      page_size: pageSize,
+      has_more: page * pageSize < (count ?? 0),
+    });
   }
 
   if (path === "/leave/applications" && method === "POST") {
@@ -561,6 +576,7 @@ export async function handleLeave(
     }
     let q = svc.from("student_leave_applications").select(
       "*, student:students(first_name, last_name)",
+      { count: "exact" },
     ).eq("school_id", school);
     if (url.searchParams.get("status")) {
       q = q.eq("status", url.searchParams.get("status")!);
@@ -575,9 +591,24 @@ export async function handleLeave(
     if (requestedStudentId) {
       q = q.eq("student_id", requestedStudentId);
     }
-    const { data, error } = await q;
+    const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+    const pageSize = Math.min(
+      100,
+      Math.max(1, Number(url.searchParams.get("page_size") ?? "20") || 20),
+    );
+    const { data, error, count } = await q
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1);
     if (error) return fail(error.message);
-    return ok(data);
+    return cors({
+      success: true,
+      data: data ?? [],
+      total: count ?? 0,
+      page,
+      page_size: pageSize,
+      has_more: page * pageSize < (count ?? 0),
+    });
   }
 
   if (path === "/student-leave/applications" && method === "POST") {
@@ -691,8 +722,8 @@ export async function handleLeave(
         decided_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
-    ).eq("id", studentDecisionMatch[1]).eq("school_id", school).select()
-      .single();
+    ).eq("id", studentDecisionMatch[1]).eq("school_id", school)
+      .in("status", ["pending", "submitted", "resubmitted"]).select().single();
     if (error) return fail(error.message);
     // Notify the parent about student leave decision
     try {

@@ -22,13 +22,19 @@ void main() {
         "import 'package:schooldesk1/core/network/schooldesk_api.dart';",
       ),
     );
-    expect(backendApi, contains('SchoolDeskApi.instance.client.homework('));
+    expect(
+      backendApi,
+      contains('Future<PaginatedList<Map<String, dynamic>>> getHomeworkPage'),
+    );
     expect(backendApi, contains("part 'api_modules/notifications_api.dart';"));
     expect(
       backendApi,
       contains('Future<NotificationPage> getNotificationsPage'),
     );
-    expect(backendApi, contains('SchoolDeskApi.instance.client.events('));
+    expect(
+      backendApi,
+      contains('Future<List<Map<String, dynamic>>> getEvents'),
+    );
     expect(backendApi, isNot(contains('SchoolDeskApi.instance.client.exams(')));
     expect(backendApi, contains('listTablesMdRoot('));
     expect(backendApi, contains('createTablesMdRoot('));

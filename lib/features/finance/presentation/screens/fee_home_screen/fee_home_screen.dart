@@ -34,6 +34,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
   List<GradeModel> _grades = const [];
   List<SectionModel> _sections = const [];
   Map<String, dynamic> _paymentConfig = const {};
+  Map<String, dynamic> _feeSummary = const {};
 
   @override
   void initState() {
@@ -50,10 +51,11 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
       final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
         api.getFeeStructures(),
-        api.getInvoices(pageSize: 500),
+        api.getInvoicesPage(pageSize: 20),
         api.getAcademicYears(),
         api.getGrades(),
         api.getSections(),
+        api.getFeeDashboardSummary(),
       ]);
 
       final structures = (results[0] as List)
@@ -61,14 +63,13 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           .map(normalizeFeeStructure)
           .where((row) => !isDaycareFeeStructure(row))
           .toList();
-      final invoices = (results[1] as List)
+      final invoices = (results[1] as PaginatedList<Map<String, dynamic>>).data
           .cast<Map<String, dynamic>>()
           .map(normalizeInvoice)
           .toList();
       List<Map<String, dynamic>> prList = const [];
       try {
-        prList = (await api.getParentPaymentRequests())
-            .whereType<Map<String, dynamic>>()
+        prList = (await api.getParentPaymentRequestsPage(pageSize: 20)).data
             .where((r) => _isPendingRequest(r))
             .toList();
       } on Object catch (_) {}
@@ -108,6 +109,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         _grades = results[3] as List<GradeModel>;
         _sections = results[4] as List<SectionModel>;
         _paymentConfig = paymentConfig;
+        _feeSummary = results[5] as Map<String, dynamic>;
         _selectedAcademicYearId = selectedYear;
         _loading = false;
       });
@@ -214,10 +216,8 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
     return map.values.toList()..sort((a, b) => b.balance.compareTo(a.balance));
   }
 
-  double get _totalDue => _studentAccounts.fold(0, (s, a) => s + a.balance);
-  double get _totalCollected => _yearInvoices
-      .expand(normalizePayments)
-      .fold(0.0, (sum, payment) => sum + numValue(payment['amount']));
+  double get _totalDue => numValue(_feeSummary['outstanding']);
+  double get _totalCollected => numValue(_feeSummary['collected']);
   double get _totalExpected => _totalCollected + _totalDue;
   double get _collectionRate =>
       _totalExpected > 0 ? _totalCollected / _totalExpected : 0;

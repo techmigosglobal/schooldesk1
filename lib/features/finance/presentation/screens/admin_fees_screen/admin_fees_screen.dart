@@ -13,6 +13,7 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
+import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 
@@ -46,6 +47,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   List<GradeModel> _grades = [];
   List<SectionModel> _sections = [];
   Map<String, dynamic> _paymentConfig = const {};
+  Map<String, dynamic> _feeSummary = const {};
   List<Map<String, dynamic>> _paymentConfigs = [];
   final _upiIdController = TextEditingController();
   final _payeeNameController = TextEditingController();
@@ -90,20 +92,23 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final api = BackendApiClient.instance;
       final feeStructures = await api.getFeeStructures();
       await api.applyLateFineAdjustments();
-      final invoices = await api.getInvoices();
+      final invoicePage = await api.getInvoicesPage(pageSize: 20);
+      final paymentPage = await api.getPaymentsPage(pageSize: 20);
       final feeCategories = await api.getRawList('/fees/categories');
-      final concessions = await api.getRawList('/fees/concessions');
+      final concessionPage = await api.getFeeConcessionsPage(pageSize: 20);
+      final feeSummary = await api.getFeeDashboardSummary();
       final paymentConfig = await api.getPaymentConfig();
       final paymentConfigs = await api.getPaymentConfigs();
       final academicYears = await api.getAcademicYears();
       final grades = await api.getGrades();
       final sections = await api.getSections();
-      final normalizedInvoices = invoices.map(_normalizeInvoice).toList();
+      final normalizedInvoices = invoicePage.data.map(_normalizeInvoice).toList();
       if (!mounted) return;
       setState(() {
         _feeStructures = feeStructures.map(_normalizeFeeStructure).toList();
         _feeCategories = feeCategories;
-        _concessions = concessions;
+        _concessions = concessionPage.data;
+        _feeSummary = feeSummary;
         _paymentConfig = paymentConfig;
         _paymentConfigs = paymentConfigs;
         _upiIdController.text = _textValue(paymentConfig['upi_id']);
@@ -115,7 +120,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _pendingDues = normalizedInvoices
             .where((invoice) => _numValue(invoice['balance']) > 0)
             .toList();
-        _recentPayments = invoices.expand(_normalizePayments).toList();
+        _recentPayments = paymentPage.data.map(normalizePaymentRow).toList();
         _loading = false;
       });
     } on Object catch (error) {
@@ -2025,38 +2030,9 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     };
   }
 
-  Iterable<Map<String, dynamic>> _normalizePayments(
-    Map<String, dynamic> invoice,
-  ) {
-    final normalized = _normalizeInvoice(invoice);
-    final payments = invoice['payments'];
-    if (payments is! List) return const [];
-    return payments.whereType<Map>().map((payment) {
-      final row = Map<String, dynamic>.from(payment);
-      return {
-        ...row,
-        'name': normalized['name'],
-        'class': normalized['class'],
-        'student_id': normalized['student_id'],
-        'invoice_id': normalized['id'],
-        'amount': _numValue(row['amount_paid'] ?? row['amount']),
-        'mode': _textValue(row['payment_mode'] ?? row['mode']),
-        'date': row['payment_date'] ?? row['created_at'],
-        'receipt':
-            row['display_receipt_number'] ??
-            row['receipt_number'] ??
-            row['receipt'],
-        'status': _textValue(row['status'], fallback: 'completed'),
-        'transaction_id': _textValue(row['transaction_id'], fallback: 'N/A'),
-      };
-    });
-  }
+  double get _pendingTotal => _numValue(_feeSummary['outstanding']);
 
-  double get _pendingTotal =>
-      _pendingDues.fold(0, (sum, row) => sum + _numValue(row['balance']));
-
-  double get _collectedTotal =>
-      _recentPayments.fold(0, (sum, row) => sum + _numValue(row['amount']));
+  double get _collectedTotal => _numValue(_feeSummary['collected']);
 
   (int, int, int) get _agingBuckets {
     var bucket0To30 = 0;

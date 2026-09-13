@@ -16,6 +16,7 @@ import 'package:schooldesk1/features/shared/domain/repositories/student_reposito
 import 'package:schooldesk1/features/shared/domain/repositories/teacher_repository.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
+import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
 
 /// Service locator — provides singleton instances of all controllers and repositories.
 /// Replace with proper DI framework (get_it) when scaling to production.
@@ -31,14 +32,17 @@ class ServiceLocator {
   static LeaveRepository? _leaveRepository;
   static NoticeRepository? _noticeRepository;
   static AuthController? _authController;
+  static OfflineSyncEngine? _offlineSync;
 
-  static Future<void> initialize() async {
+  static Future<void> initialize({OfflineSyncEngine? offlineSync}) async {
     _apiClient = BackendApiClient.instance;
+    _offlineSync ??= offlineSync ?? OfflineSyncEngine.instance;
     _storage ??= await BackendDataService.getInstance();
     _studentRepository ??= ApiStudentRepository(apiClient);
     _teacherRepository ??= ApiTeacherRepository(apiClient);
     _feeRepository ??= ApiFeeRepository(apiClient);
-    _attendanceRepository ??= ApiAttendanceRepository(apiClient);
+    _attendanceRepository ??= ApiAttendanceRepository(apiClient)
+      ..attachOfflineDatabase(_offlineSync!.database);
     _leaveRepository ??= ApiLeaveRepository(apiClient);
     _noticeRepository ??= ApiNoticeRepository(apiClient);
     _authController ??= AuthController();
@@ -106,6 +110,13 @@ class ServiceLocator {
     }
     return _authController!;
   }
+
+  static OfflineSyncEngine get offlineSync {
+    if (_offlineSync == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
+    return _offlineSync!;
+  }
 }
 
 /// Provider widget that makes controllers available to the widget tree.
@@ -123,6 +134,9 @@ class AppProviders extends StatelessWidget {
       providers: [
         ChangeNotifierProvider<AuthController>.value(
           value: ServiceLocator.authController,
+        ),
+        ChangeNotifierProvider<OfflineSyncEngine>.value(
+          value: ServiceLocator.offlineSync,
         ),
       ],
       child: child,

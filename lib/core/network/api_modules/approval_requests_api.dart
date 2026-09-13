@@ -1,6 +1,57 @@
 part of '../backend_api_client.dart';
 
+class ApprovalFeedPage {
+  final PaginatedList<Map<String, dynamic>> page;
+  final int pendingCount;
+  final Map<String, int> countsByType;
+
+  const ApprovalFeedPage({
+    required this.page,
+    required this.pendingCount,
+    required this.countsByType,
+  });
+}
+
 extension BackendApprovalRequestsApi on BackendApiClient {
+  Future<ApprovalFeedPage> getApprovalFeed({
+    String status = 'pending',
+    String type = '',
+    String search = '',
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final query = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+        if (status.trim().isNotEmpty) 'status': status.trim(),
+        if (type.trim().isNotEmpty) 'type': type.trim(),
+        if (search.trim().isNotEmpty) 'search': search.trim(),
+      };
+      final response = await _get('/approvals/feed', queryParameters: query);
+      final payload = _asMap(response.data);
+      if (payload['success'] == true) {
+        return ApprovalFeedPage(
+          page: PaginatedList<Map<String, dynamic>>(
+            data: _asListMap(payload['data']),
+            total: _asInt(payload['total']),
+            page: _asInt(payload['page'], fallback: page),
+            pageSize: _asInt(payload['page_size'], fallback: pageSize),
+          ),
+          pendingCount: _asInt(payload['pending_count']),
+          countsByType: _asMap(payload['counts_by_type']).map(
+            (key, value) => MapEntry(key, _asInt(value)),
+          ),
+        );
+      }
+      throw ServerException(
+        message: payload['error'] ?? 'Failed to load approval feed',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getApprovalRequests({
     String status = '',
     String module = '',

@@ -15,7 +15,7 @@ void main() {
     expect(source, contains('/attendance/staff/me/today'));
     expect(source, contains('/attendance/staff/qr-token'));
     expect(source, contains('/attendance/staff/qr-scan'));
-    expect(source, contains('student_attendances(*)'));
+    expect(source, contains('student_attendances(*, student:students(*)'));
     expect(source, contains('enrollment_id: r.enrollment_id || null'));
     expect(source, contains('reason: r.reason ?? r.remarks ?? ""'));
     expect(source, contains('status: "submitted"'));

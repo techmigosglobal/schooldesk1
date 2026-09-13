@@ -20,8 +20,35 @@ extension BackendCommunicationsApi on BackendApiClient {
     String? parentId,
     String? studentId,
     bool monitor = false,
+    String? search,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    return (await getUnifiedChatConversationsPage(
+      type: type,
+      teacherId: teacherId,
+      parentId: parentId,
+      studentId: studentId,
+      monitor: monitor,
+      search: search,
+      page: page,
+      pageSize: pageSize,
+    )).data;
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> getUnifiedChatConversationsPage({
+    String? type,
+    String? teacherId,
+    String? parentId,
+    String? studentId,
+    bool monitor = false,
+    String? search,
+    int page = 1,
+    int pageSize = 20,
   }) async {
     final params = <String, dynamic>{};
+    params['page'] = page;
+    params['page_size'] = pageSize;
     if (type != null && type.trim().isNotEmpty) params['type'] = type.trim();
     if (teacherId != null && teacherId.trim().isNotEmpty) {
       params['teacher_id'] = teacherId.trim();
@@ -32,12 +59,33 @@ extension BackendCommunicationsApi on BackendApiClient {
     if (studentId != null && studentId.trim().isNotEmpty) {
       params['student_id'] = studentId.trim();
     }
+    if (search != null && search.trim().isNotEmpty) {
+      params['search'] = search.trim();
+    }
     if (monitor) params['monitor'] = 'true';
-    final rows = await getRawList(
-      monitor ? '/chat/monitor' : '/chat/conversations',
-      queryParameters: params.isEmpty ? null : params,
-    );
-    return rows.map(normalizeChatContextMap).toList();
+    try {
+      final response = await _get(
+        monitor ? '/chat/monitor' : '/chat/conversations',
+        queryParameters: params,
+      );
+      final envelope = _asMap(response.data);
+      if (envelope['success'] != true) {
+        throw ServerException(
+          message: envelope['error'] ?? 'Failed to load conversations',
+        );
+      }
+      final rows = _asListMap(
+        envelope['data'],
+      ).map(normalizeChatContextMap).toList();
+      return PaginatedList<Map<String, dynamic>>(
+        data: rows,
+        total: _asInt(envelope['total'], fallback: rows.length),
+        page: _asInt(envelope['page'], fallback: page),
+        pageSize: _asInt(envelope['page_size'], fallback: pageSize),
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
   Future<Map<String, dynamic>> createUnifiedChatConversation({
@@ -61,17 +109,50 @@ extension BackendCommunicationsApi on BackendApiClient {
   Future<List<Map<String, dynamic>>> getUnifiedChatMessages({
     required String conversationId,
     int? pageSize,
+    int page = 1,
     DateTime? sentAfter,
   }) {
+    return getUnifiedChatMessagesPage(
+      conversationId: conversationId,
+      page: page,
+      pageSize: pageSize ?? 20,
+      sentAfter: sentAfter,
+    ).then((result) => result.data);
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> getUnifiedChatMessagesPage({
+    required String conversationId,
+    int page = 1,
+    int pageSize = 20,
+    DateTime? sentAfter,
+  }) async {
     final params = <String, dynamic>{};
-    if (pageSize != null) params['page_size'] = pageSize;
+    params['page'] = page;
+    params['page_size'] = pageSize;
     if (sentAfter != null) {
       params['sent_after'] = sentAfter.toUtc().toIso8601String();
     }
-    return getRawList(
-      '/chat/conversations/${conversationId.trim()}/messages',
-      queryParameters: params.isEmpty ? null : params,
-    );
+    try {
+      final response = await _get(
+        '/chat/conversations/${conversationId.trim()}/messages',
+        queryParameters: params,
+      );
+      final envelope = _asMap(response.data);
+      if (envelope['success'] != true) {
+        throw ServerException(
+          message: envelope['error'] ?? 'Failed to load messages',
+        );
+      }
+      final rows = _asListMap(envelope['data']);
+      return PaginatedList<Map<String, dynamic>>(
+        data: rows,
+        total: _asInt(envelope['total'], fallback: rows.length),
+        page: _asInt(envelope['page'], fallback: page),
+        pageSize: _asInt(envelope['page_size'], fallback: pageSize),
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
   Future<Map<String, dynamic>> sendUnifiedChatMessage({
@@ -96,10 +177,35 @@ extension BackendCommunicationsApi on BackendApiClient {
   Future<List<AnnouncementModel>> getAnnouncements({
     String? schoolId,
     bool forceRefresh = false,
+    String? search,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    return (await getAnnouncementsPage(
+      schoolId: schoolId,
+      forceRefresh: forceRefresh,
+      search: search,
+      page: page,
+      pageSize: pageSize,
+    )).data;
+  }
+
+  Future<PaginatedList<AnnouncementModel>> getAnnouncementsPage({
+    String? schoolId,
+    bool forceRefresh = false,
+    String? search,
+    int page = 1,
+    int pageSize = 20,
   }) async {
     try {
-      final queryParams = <String, dynamic>{};
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+      };
       if (schoolId != null) queryParams['school_id'] = schoolId;
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
       if (forceRefresh) {
         queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
       }
@@ -109,9 +215,26 @@ extension BackendCommunicationsApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
-        return (data['data'] as List)
+        final payload = data['data'];
+        final rows = payload is Map ? payload['data'] : payload;
+        final announcements = (rows as List? ?? const [])
             .map((e) => AnnouncementModel.fromJson(e as Map<String, dynamic>))
             .toList();
+        final payloadMap = payload is Map
+            ? _asMap(payload)
+            : const <String, dynamic>{};
+        return PaginatedList<AnnouncementModel>(
+          data: announcements,
+          total: _asInt(
+            payloadMap['total'] ?? data['total'],
+            fallback: announcements.length,
+          ),
+          page: _asInt(payloadMap['page'] ?? data['page'], fallback: page),
+          pageSize: _asInt(
+            payloadMap['page_size'] ?? data['page_size'],
+            fallback: pageSize,
+          ),
+        );
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to get announcements',

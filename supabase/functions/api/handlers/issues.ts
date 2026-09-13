@@ -1,5 +1,12 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
+import {
+  deleteR2File,
+  legacyStorageWritesEnabled,
+  r2FileReference,
+  uploadToR2,
+} from "../lib/r2_storage.ts";
+import { signedPrivateFileUrl } from "../storage_helpers.ts";
 
 const allowedRoles = new Set(["principal", "coordinator", "teacher", "parent"]);
 const allowedMimeTypes = new Set([
@@ -41,6 +48,17 @@ function attachmentMime(file: File): string {
   if (name.endsWith(".webm")) return "video/webm";
   if (name.endsWith(".mov")) return "video/quicktime";
   return provided;
+}
+
+async function removeAttachment(
+  svc: SupabaseClient,
+  storagePath: string,
+) {
+  if (storagePath.startsWith("r2://")) {
+    await deleteR2File(storagePath);
+  } else {
+    await svc.storage.from("issue-attachments").remove([storagePath]);
+  }
 }
 
 async function roleOf(svc: SupabaseClient, user: User): Promise<string> {
@@ -194,19 +212,32 @@ export async function handleIssues(
         const storagePath = `${school}/${issue.id}/${crypto.randomUUID()}-${
           safeName(file.name)
         }`;
-        const { error: uploadError } = await svc.storage.from(
-          "issue-attachments",
-        ).upload(storagePath, file, {
-          contentType: mime,
-          upsert: false,
-        });
-        if (uploadError) throw uploadError;
-        uploadedPaths.push(storagePath);
+        const r2Upload = await uploadToR2(
+          `private/issue-attachments/${storagePath}`,
+          file,
+          mime,
+        );
+        const storedPath = r2Upload
+          ? r2FileReference(r2Upload.key)
+          : storagePath;
+        if (!r2Upload) {
+          if (!legacyStorageWritesEnabled()) {
+            throw new Error("R2 storage is unavailable; legacy storage writes are disabled");
+          }
+          const { error: uploadError } = await svc.storage.from(
+            "issue-attachments",
+          ).upload(storagePath, file, {
+            contentType: mime,
+            upsert: false,
+          });
+          if (uploadError) throw uploadError;
+        }
+        uploadedPaths.push(storedPath);
         const { error: attachmentError } = await svc.from("issue_attachments")
           .insert({
             issue_id: issue.id,
             school_id: school,
-            storage_path: storagePath,
+            storage_path: storedPath,
             file_name: file.name,
             mime_type: mime,
             file_size: file.size,
@@ -214,8 +245,11 @@ export async function handleIssues(
         if (attachmentError) throw attachmentError;
       }
     } catch (attachmentError) {
-      if (uploadedPaths.length) {
+      const legacyPaths = uploadedPaths.filter((path) => !path.startsWith("r2://"));
+      if (legacyPaths.length === uploadedPaths.length && legacyPaths.length) {
         await svc.storage.from("issue-attachments").remove(uploadedPaths);
+      } else {
+        for (const path of uploadedPaths) await removeAttachment(svc, path);
       }
       await svc.from("issues").delete().eq("id", issue.id).eq(
         "school_id",
@@ -237,17 +271,45 @@ export async function handleIssues(
   }
 
   if (path == "/issues" && method == "GET") {
-    let query = svc.from("issues").select("*, issue_attachments(*)", {
+    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const pageSize = Math.min(
+      Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
+      100,
+    );
+    let query = svc.from("issues").select(
+      "id,school_id,raised_by,raised_by_role,title,description,category,priority,status,resolution_note,resolved_by,resolved_at,created_at,updated_at",
+      {
       count: "exact",
-    }).eq("school_id", school);
+      },
+    ).eq("school_id", school);
     if (!isSuperAdmin) query = query.eq("raised_by", user.id);
     const status = text(url.searchParams.get("status"));
-    if (status) query = query.eq("status", status);
+    const statuses = status.split(",").map((value) => value.trim()).filter(Boolean);
+    if (statuses.length === 1) query = query.eq("status", statuses[0]);
+    if (statuses.length > 1) query = query.in("status", statuses);
+    const search = text(url.searchParams.get("search"));
+    if (search) {
+      const escaped = search.replace(/[%(),]/g, " ").trim();
+      if (escaped) {
+        query = query.or(
+          `title.ilike.%${escaped}%,description.ilike.%${escaped}%`,
+        );
+      }
+    }
     const { data, error, count } = await query.order("created_at", {
       ascending: false,
-    });
+    }).order("id", { ascending: false }).range(
+      (page - 1) * pageSize,
+      page * pageSize - 1,
+    );
     if (error) return fail(error.message);
-    return ok({ data: data ?? [], total: count ?? 0 });
+    return ok({
+      data: data ?? [],
+      total: count ?? data?.length ?? 0,
+      page,
+      page_size: pageSize,
+      has_more: page * pageSize < (count ?? 0),
+    });
   }
 
   if (path == "/issues" && method == "POST") {
@@ -310,23 +372,35 @@ export async function handleIssues(
     const storagePath = `${school}/${issue.id}/${crypto.randomUUID()}-${
       safeName(file.name)
     }`;
-    const { error: uploadError } = await svc.storage.from("issue-attachments")
-      .upload(storagePath, file, {
-        contentType: attachmentMime(file),
-        upsert: false,
-      });
-    if (uploadError) return fail(uploadError.message);
+    const mime = attachmentMime(file);
+    const r2Upload = await uploadToR2(
+      `private/issue-attachments/${storagePath}`,
+      file,
+      mime,
+    );
+    const storedPath = r2Upload ? r2FileReference(r2Upload.key) : storagePath;
+    if (!r2Upload) {
+      if (!legacyStorageWritesEnabled()) {
+        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+      }
+      const { error: uploadError } = await svc.storage.from("issue-attachments")
+        .upload(storagePath, file, {
+          contentType: mime,
+          upsert: false,
+        });
+      if (uploadError) return fail(uploadError.message);
+    }
     const { data, error: insertError } = await svc.from("issue_attachments")
       .insert({
         issue_id: issue.id,
         school_id: school,
-        storage_path: storagePath,
+        storage_path: storedPath,
         file_name: file.name,
-        mime_type: attachmentMime(file),
+        mime_type: mime,
         file_size: file.size,
       }).select().single();
     if (insertError) {
-      await svc.storage.from("issue-attachments").remove([storagePath]);
+      await removeAttachment(svc, storedPath);
       return fail(insertError.message);
     }
     return ok(data);
@@ -350,13 +424,23 @@ export async function handleIssues(
         row,
       ) => text(row.id) == signedMatch[2]);
     if (!attachment) return fail("Attachment not found", 404);
-    const { data, error: signedError } = await svc.storage.from(
-      "issue-attachments",
-    ).createSignedUrl(text(attachment.storage_path), 600);
-    if (signedError || !data?.signedUrl) {
-      return fail(signedError?.message ?? "Unable to prepare attachment");
+    if (!text(attachment.storage_path).startsWith("r2://")) {
+      const { data, error: signedError } = await svc.storage.from(
+        "issue-attachments",
+      ).createSignedUrl(text(attachment.storage_path), 600);
+      if (signedError || !data?.signedUrl) {
+        return fail(signedError?.message ?? "Unable to prepare attachment");
+      }
+      return ok({ url: data.signedUrl, expires_in: 600 });
     }
-    return ok({ url: data.signedUrl, expires_in: 600 });
+    const signedUrl = await signedPrivateFileUrl(
+      svc,
+      text(attachment.storage_path),
+      600,
+      "issue-attachments",
+    );
+    if (!signedUrl) return fail("Unable to prepare attachment");
+    return ok({ url: signedUrl, expires_in: 600 });
   }
 
   const issueMatch = path.match(/^\/issues\/([^/]+)$/);

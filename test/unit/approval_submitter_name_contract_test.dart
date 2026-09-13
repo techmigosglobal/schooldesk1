@@ -8,8 +8,8 @@ void main() {
       'lib/features/people/presentation/screens/approval_center_screen/approval_center_screen.dart',
     ).readAsStringSync();
 
-    expect(source, contains("post['author']"));
-    expect(source, contains("requestedBy['name']"));
-    expect(source, contains("requestedBy['role_name']"));
+    expect(source, contains('requesterName'));
+    expect(source, contains('requesterRole'));
+    expect(source, contains('getApprovalFeed'));
   });
 }

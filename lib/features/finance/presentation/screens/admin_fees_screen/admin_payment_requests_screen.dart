@@ -27,6 +27,10 @@ class AdminPaymentRequestsScreen extends StatefulWidget {
 class _AdminPaymentRequestsScreenState
     extends State<AdminPaymentRequestsScreen> {
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  int _totalRequests = 0;
   String? _error;
   String _statusFilter = 'pending';
   List<Map<String, dynamic>> _requests = [];
@@ -37,32 +41,48 @@ class _AdminPaymentRequestsScreenState
     _loadRequests();
   }
 
-  Future<void> _loadRequests({bool showSpinner = true}) async {
+  Future<void> _loadRequests({
+    bool showSpinner = true,
+    bool resetPage = true,
+  }) async {
     if (showSpinner) {
       setState(() {
-        _loading = true;
+        _loading = resetPage;
+        _loadingMore = !resetPage;
         _error = null;
       });
+    } else if (!resetPage) {
+      setState(() => _loadingMore = true);
     }
     try {
-      final rows =
-          (await BackendApiClient.instance.getParentPaymentRequests(
-                pageSize: 100,
-              ))
-              .where(
-                (row) => FeePaymentRequestStatus.isReviewRecord(row['status']),
-              )
-              .toList();
+      final response = await BackendApiClient.instance
+          .getParentPaymentRequestsPage(
+            status: _statusFilter == 'all' ? null : _statusFilter,
+            page: resetPage ? 1 : _page + 1,
+            pageSize: 20,
+          );
+      final rows = response.data
+          .where((row) => FeePaymentRequestStatus.isReviewRecord(row['status']))
+          .toList();
       if (!mounted) return;
+      final existingIds = _requests.map((row) => _text(row['id'])).toSet();
+      final additions = resetPage
+          ? rows
+          : rows.where((row) => existingIds.add(_text(row['id']))).toList();
       setState(() {
-        _requests = rows;
+        _requests = resetPage ? rows : [..._requests, ...additions];
+        _page = response.page;
+        _totalRequests = response.total;
+        _hasMore = response.hasMore;
         _loading = false;
+        _loadingMore = false;
         _error = null;
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _loadingMore = false;
         _error = error.toString();
       });
     }
@@ -113,6 +133,7 @@ class _AdminPaymentRequestsScreenState
                     )
                   else
                     ..._visibleRequests.map(_requestCard),
+                  if (_hasMore) _buildLoadMoreButton(),
                 ],
               ),
       );
@@ -158,6 +179,7 @@ class _AdminPaymentRequestsScreenState
                     )
                   else
                     ..._visibleRequests.map(_requestCard),
+                  if (_hasMore) _buildLoadMoreButton(),
                 ],
               ),
             ),
@@ -291,10 +313,38 @@ class _AdminPaymentRequestsScreenState
             child: ChoiceChip(
               selected: selected,
               label: Text(filter.$2),
-              onSelected: (_) => setState(() => _statusFilter = filter.$1),
+              onSelected: (_) {
+                setState(() => _statusFilter = filter.$1);
+                _loadRequests();
+              },
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: OutlinedButton.icon(
+          onPressed: _loadingMore
+              ? null
+              : () => _loadRequests(showSpinner: false, resetPage: false),
+          icon: _loadingMore
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.expand_more_rounded),
+          label: Text(
+            _loadingMore
+                ? 'Loading…'
+                : 'Load more (${_requests.length} of $_totalRequests)',
+          ),
+        ),
       ),
     );
   }

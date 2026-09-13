@@ -102,11 +102,9 @@ class _RecentGetResponse {
 /// local Docker Edge runtime. The queue is shared by all GET callers on one
 /// API client, while writes retain their existing behavior.
 class _GetConcurrencyGate {
-  // The local Supabase CLI runs this large API bundle in a constrained Edge
-  // worker. One in-flight read avoids 546 worker-limit responses during the
-  // dashboard bootstrap burst while the persistent cache keeps navigation
-  // responsive after the first successful load.
-  static const int _maxConcurrent = 1;
+  // Keep a small bounded burst for independent role-scope reads without
+  // allowing a dashboard bootstrap to flood the local Edge worker.
+  static const int _maxConcurrent = 4;
 
   final List<_QueuedGet<dynamic>> _queue = <_QueuedGet<dynamic>>[];
   int _running = 0;

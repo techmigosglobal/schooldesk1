@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
+import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_preview.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 
 /// Desktop body for the teacher dashboard — true two-column layout.
@@ -18,6 +19,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
   final String assignedSubject;
   final List<Map<String, dynamic>> timetable;
   final List<dynamic> announcements;
+  final List<Map<String, dynamic>> eventPosts;
   final int attendancePending;
   final bool roleScopeLoaded;
   final bool hasStaffLink;
@@ -32,6 +34,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
     required this.assignedSubject,
     required this.timetable,
     required this.announcements,
+    this.eventPosts = const [],
     required this.attendancePending,
     required this.roleScopeLoaded,
     required this.hasStaffLink,
@@ -87,6 +90,8 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
                   _buildActionQueuePanel(context, tokens),
                   SizedBox(height: tokens.spacing.lg),
                   _buildTodayFeedPanel(context, tokens),
+                  SizedBox(height: tokens.spacing.lg),
+                  _buildSchoolFeedPanel(context),
                   if (announcements.isNotEmpty) ...[
                     SizedBox(height: tokens.spacing.lg),
                     _buildNoticesPanel(context, tokens),
@@ -106,6 +111,8 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
                         const TodaysHighlightsCard(role: 'teacher'),
                         SizedBox(height: tokens.spacing.lg),
                         _buildTodayFeedPanel(context, tokens),
+                        SizedBox(height: tokens.spacing.lg),
+                        _buildSchoolFeedPanel(context),
                         if (announcements.isNotEmpty) ...[
                           SizedBox(height: tokens.spacing.lg),
                           _buildNoticesPanel(context, tokens),
@@ -392,6 +399,16 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
               ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSchoolFeedPanel(BuildContext context) {
+    return SchoolFeedPreview(
+      posts: eventPosts,
+      accentColor: teacherFlowAccent,
+      showParentVisibility: true,
+      actionLabel: 'Manage',
+      onAction: () => Navigator.pushNamed(context, AppRoutes.teacherEventPosts),
     );
   }
 

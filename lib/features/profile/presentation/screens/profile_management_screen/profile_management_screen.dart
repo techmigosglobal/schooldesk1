@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -41,6 +43,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
   UserResponse? _profile;
   StaffModel? _teacherStaff;
   String _avatarPath = '';
+  Uint8List? _pendingAvatarBytes;
 
   bool get _isPrincipal => widget.role.toLowerCase() == 'principal';
   bool get _isTeacher => widget.role.toLowerCase() == 'teacher';
@@ -214,14 +217,22 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         fileName: optimized.filename,
         mimeType: optimized.mimeType,
       );
-      final profile = await BackendApiClient.instance.getProfile();
+      final queued = avatarPath.startsWith('schooldesk-upload://');
+      final profile = queued
+          ? _profile
+          : await BackendApiClient.instance.getProfile();
       if (!mounted) return;
       setState(() {
-        _avatarPath = avatarPath;
-        _profile = profile;
+        _avatarPath = queued ? '' : avatarPath;
+        _pendingAvatarBytes = queued ? optimized.bytes : null;
+        if (profile != null) _profile = profile;
         _saving = false;
       });
-      _showSnack('Profile picture uploaded.');
+      _showSnack(
+        queued
+            ? 'Profile picture saved offline and queued for sync.'
+            : 'Profile picture uploaded.',
+      );
     } on Object catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -425,6 +436,11 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         ? _nameCtrl.text.trim()
         : (_profile?.email ?? 'User');
     final roleColor = context.appTheme.roleColor(_roleEnum);
+    final ImageProvider? avatarImage = _pendingAvatarBytes != null
+        ? MemoryImage(_pendingAvatarBytes!)
+        : avatar.isEmpty
+        ? null
+        : NetworkImage(_avatarUrl(avatar));
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -436,10 +452,8 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
           CircleAvatar(
             radius: 32,
             backgroundColor: context.appTheme.surface24,
-            backgroundImage: avatar.isEmpty
-                ? null
-                : NetworkImage(_avatarUrl(avatar)),
-            child: avatar.isEmpty
+            backgroundImage: avatarImage,
+            child: avatarImage == null
                 ? Text(
                     name[0].toUpperCase(),
                     style: GoogleFonts.dmSans(

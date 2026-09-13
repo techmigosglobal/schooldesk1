@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -20,10 +22,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
   List<_SearchResult> _staffResults = [];
   List<_SearchResult> _noticeResults = [];
 
-  // All data caches
-  List<Map<String, dynamic>> _allStudents = [];
-  List<Map<String, dynamic>> _allStaff = [];
   List<Map<String, dynamic>> _allNotices = [];
+  Timer? _searchDebounce;
+  int _searchGeneration = 0;
 
   @override
   void initState() {
@@ -34,31 +35,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
 
   Future<void> _initData() async {
     final api = BackendApiClient.instance;
-    final students = await _try(() => api.getStudents(page: 1, pageSize: 100));
-    final staff = await _try(() => api.getStaff(page: 1, pageSize: 100));
     final notices = await _try(() => api.getAnnouncements());
-    _allStudents = (students?.data ?? [])
-        .map(
-          (student) => {
-            'id': student.id,
-            'name': student.fullName,
-            'rollNo': student.studentCode,
-            'className': student.currentSectionId ?? '',
-            'admissionNo': student.admissionNumber,
-          },
-        )
-        .toList();
-    _allStaff = (staff?.data ?? [])
-        .map(
-          (member) => {
-            'id': member.id,
-            'name': member.fullName,
-            'subject': member.designation ?? '',
-            'employeeId': member.staffCode,
-            'designation': member.designation ?? '',
-          },
-        )
-        .toList();
     _allNotices = (notices ?? [])
         .map(
           (notice) => {
@@ -83,11 +60,21 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
   void dispose() {
     _searchCtrl.dispose();
     _tabController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
   void _search(String query) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () => _searchServer(query),
+    );
+  }
+
+  Future<void> _searchServer(String query) async {
     if (query.trim().isEmpty) {
+      if (!mounted) return;
       setState(() {
         _studentResults = [];
         _staffResults = [];
@@ -96,73 +83,93 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
       return;
     }
 
-    final q = query.toLowerCase();
-
     setState(() {
       _loading = true;
-      _studentResults = _allStudents
-          .where(
-            (s) =>
-                (s['name'] as String? ?? '').toLowerCase().contains(q) ||
-                (s['rollNo'] as String? ?? '').toLowerCase().contains(q) ||
-                (s['className'] as String? ?? '').toLowerCase().contains(q) ||
-                (s['admissionNo'] as String? ?? '').toLowerCase().contains(q),
-          )
-          .map(
-            (s) => _SearchResult(
-              type: 'student',
-              title: s['name'] as String? ?? 'Unknown',
-              subtitle:
-                  'Class ${s['className'] ?? ''} • Roll ${s['rollNo'] ?? ''}',
-              icon: Icons.school_rounded,
-              color: context.appTheme.primary,
-              data: s,
-            ),
-          )
-          .toList();
-
-      _staffResults = _allStaff
-          .where(
-            (t) =>
-                (t['name'] as String? ?? '').toLowerCase().contains(q) ||
-                (t['subject'] as String? ?? '').toLowerCase().contains(q) ||
-                (t['employeeId'] as String? ?? '').toLowerCase().contains(q) ||
-                (t['designation'] as String? ?? '').toLowerCase().contains(q),
-          )
-          .map(
-            (t) => _SearchResult(
-              type: 'staff',
-              title: t['name'] as String? ?? 'Unknown',
-              subtitle:
-                  '${t['designation'] ?? 'Teacher'} • ${t['subject'] ?? ''}',
-              icon: Icons.person_rounded,
-              color: const Color(0xFF1A5276),
-              data: t,
-            ),
-          )
-          .toList();
-
-      _noticeResults = _allNotices
-          .where(
-            (n) =>
-                (n['title'] as String? ?? '').toLowerCase().contains(q) ||
-                (n['content'] as String? ?? '').toLowerCase().contains(q) ||
-                (n['category'] as String? ?? '').toLowerCase().contains(q),
-          )
-          .map(
-            (n) => _SearchResult(
-              type: 'notice',
-              title: n['title'] as String? ?? 'Notice',
-              subtitle: n['category'] as String? ?? 'General',
-              icon: Icons.campaign_rounded,
-              color: context.appTheme.secondary,
-              data: n,
-            ),
-          )
-          .toList();
-
-      _loading = false;
     });
+    final generation = ++_searchGeneration;
+    try {
+      final api = BackendApiClient.instance;
+      final results = await Future.wait([
+        api.getStudents(search: query.trim(), page: 1, pageSize: 20),
+        api.getStaff(search: query.trim(), page: 1, pageSize: 20),
+      ]);
+      if (!mounted || generation != _searchGeneration) return;
+      final students = results[0] as PaginatedList<StudentModel>;
+      final staff = results[1] as PaginatedList<StaffModel>;
+      setState(() {
+        _studentResults = students.data
+            .map(
+              (student) => _SearchResult(
+                type: 'student',
+                title: student.fullName,
+                subtitle:
+                    'Class ${student.currentSectionId ?? ''} • Roll ${student.studentCode}',
+                icon: Icons.school_rounded,
+                color: context.appTheme.primary,
+                data: {
+                  'id': student.id,
+                  'name': student.fullName,
+                  'rollNo': student.studentCode,
+                  'className': student.currentSectionId ?? '',
+                  'admissionNo': student.admissionNumber,
+                },
+              ),
+            )
+            .toList();
+        _staffResults = staff.data
+            .map(
+              (member) => _SearchResult(
+                type: 'staff',
+                title: member.fullName,
+                subtitle:
+                    '${member.designation ?? 'Teacher'} • ${member.email ?? ''}',
+                icon: Icons.person_rounded,
+                color: const Color(0xFF1A5276),
+                data: {
+                  'id': member.id,
+                  'name': member.fullName,
+                  'subject': member.designation ?? '',
+                  'employeeId': member.staffCode,
+                  'designation': member.designation ?? '',
+                },
+              ),
+            )
+            .toList();
+        _noticeResults = _allNotices
+            .where(
+              (n) =>
+                  (n['title'] as String? ?? '').toLowerCase().contains(
+                    query.toLowerCase(),
+                  ) ||
+                  (n['content'] as String? ?? '').toLowerCase().contains(
+                    query.toLowerCase(),
+                  ) ||
+                  (n['category'] as String? ?? '').toLowerCase().contains(
+                    query.toLowerCase(),
+                  ),
+            )
+            .map(
+              (n) => _SearchResult(
+                type: 'notice',
+                title: n['title'] as String? ?? 'Notice',
+                subtitle: n['category'] as String? ?? 'General',
+                icon: Icons.campaign_rounded,
+                color: context.appTheme.secondary,
+                data: n,
+              ),
+            )
+            .toList();
+        _loading = false;
+      });
+    } on Object catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _loading = false;
+        _studentResults = [];
+        _staffResults = [];
+        _noticeResults = [];
+      });
+    }
   }
 
   int get _totalResults =>

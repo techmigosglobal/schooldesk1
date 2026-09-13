@@ -70,7 +70,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   bool _destSchoolGallery = false;
   bool _destSchoolLanding = false;
 
-  // Uploaded file URLs (returned by backend after upload)
+  // Display URLs plus durable storage references returned by the Edge API.
   final List<String> _uploadedUrls = [];
   final List<EventPostMediaItem> _uploadedMedia = [];
   String? _editingPostId;
@@ -224,12 +224,17 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   }) async {
     setState(() => _uploading = true);
     try {
-      final url = await BackendApiClient.instance.uploadFile(
+      final result = await BackendApiClient.instance.uploadFileResult(
         path,
         filename: name,
         fileBytes: fileBytes,
         mimeType: mimeType,
+        folder: 'event-posts',
+        entityType: 'event_post',
+        private: true,
       );
+      final url = result['url']?.toString() ?? '';
+      final storageRef = result['storage_ref']?.toString() ?? '';
       if (url.isNotEmpty && mounted) {
         final item = EventPostMediaItem.fromUrl(url, mimeType: mimeType ?? '');
         setState(() {
@@ -240,6 +245,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
               name: name,
               mimeType: mimeType ?? '',
               kind: item.kind,
+              storageRef: storageRef,
             ),
           );
         });

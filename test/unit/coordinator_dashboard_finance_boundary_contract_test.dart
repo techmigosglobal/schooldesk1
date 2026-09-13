@@ -14,14 +14,13 @@ void main() {
     final coordinatorResponse = handler.indexOf(
       'if (!financeAuthorized) {\n      return ok(coordinatorDashboardDto(operations));',
     );
-    final financeQueries = handler.indexOf(
-      'const [invoices, paidInvoices, parentPaymentRequests] = await Promise.all',
-    );
+    final financeQueries = handler.indexOf('fee_dashboard_summary');
 
     expect(coordinatorResponse, greaterThanOrEqualTo(0));
     expect(financeQueries, greaterThan(coordinatorResponse));
     expect(handler, contains('approvalRequestsQuery.not('));
     expect(handler, contains('"fee","fees","finance","payment"'));
+    expect(handler, isNot(contains('const [invoices, paidInvoices, parentPaymentRequests] = await Promise.all')));
 
     final coordinatorTypeStart = dto.indexOf(
       'export type CoordinatorDashboardDto',
