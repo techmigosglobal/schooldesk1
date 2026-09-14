@@ -47,6 +47,19 @@ function roleValue(user: User): string {
   return `${user.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
 }
 
+const feedRoles = new Set([
+  "principal",
+  "coordinator",
+  "admin",
+  "teacher",
+  "parent",
+]);
+
+function canViewSchoolFeed(user: User): boolean {
+  // kiosk and student accounts must never inherit communication surfaces.
+  return feedRoles.has(roleValue(user));
+}
+
 function listPaging(url: URL) {
   const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
   const pageSize = Math.min(
@@ -2318,6 +2331,7 @@ export async function handleEvents(
     return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
   }
   if (path === "/event-posts/gallery" && method === "GET") {
+    if (!canViewSchoolFeed(user)) return fail("forbidden", 403);
     const paging = listPaging(url);
     const { data, error, count } = await svc.from("event_posts").select("*", {
       count: "exact",
@@ -2331,6 +2345,8 @@ export async function handleEvents(
       .contains("destinations", JSON.stringify(["SCHOOL_GALLERY"]))
       .order("created_at", {
         ascending: false,
+      }).order("id", {
+        ascending: false,
       }).range(paging.from, paging.to);
     if (error) return fail(error.message);
     const rows = await eventPostRows(
@@ -2340,6 +2356,7 @@ export async function handleEvents(
     return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
   }
   if (path === "/event-posts/home-feed" && method === "GET") {
+    if (!canViewSchoolFeed(user)) return fail("forbidden", 403);
     const paging = listPaging(url);
     const { data, error, count } = await svc.from("event_posts").select("*", {
       count: "exact",
@@ -2349,6 +2366,38 @@ export async function handleEvents(
     ).in("status", ["approved", "published"])
       .contains("destinations", JSON.stringify(["PARENTS_HOME"]))
       .order("created_at", {
+        ascending: false,
+      }).order("id", {
+        ascending: false,
+      }).range(paging.from, paging.to);
+    if (error) return fail(error.message);
+    const rows = await eventPostRows(
+      svc,
+      (data ?? []) as Record<string, unknown>[],
+    );
+    return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
+  }
+  if (path === "/event-posts/teacher-feed" && method === "GET") {
+    if (roleValue(user) !== "teacher") return fail("forbidden", 403);
+    const paging = listPaging(url);
+    // Teacher feed is a staff-facing surface. Existing parent-home posts are
+    // school-wide updates, while TEACHERS_HOME is an explicit staff-only
+    // destination. Gallery posts are included because they are approved
+    // school activity updates, but landing-only posts remain public-site-only.
+    const teacherDestinations = [
+      `destinations.cs.${JSON.stringify(["TEACHERS_HOME"])}`,
+      `destinations.cs.${JSON.stringify(["PARENTS_HOME"])}`,
+      `destinations.cs.${JSON.stringify(["SCHOOL_GALLERY"])}`,
+    ].join(",");
+    const { data, error, count } = await svc.from("event_posts").select("*", {
+      count: "exact",
+    }).eq(
+      "school_id",
+      school,
+    ).in("status", ["approved", "published"]).or(teacherDestinations)
+      .order("created_at", {
+        ascending: false,
+      }).order("id", {
         ascending: false,
       }).range(paging.from, paging.to);
     if (error) return fail(error.message);

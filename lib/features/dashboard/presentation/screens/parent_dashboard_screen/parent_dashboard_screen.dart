@@ -21,6 +21,8 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/parent_dashboard_desktop_shell.dart';
+import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_preview.dart';
+import 'package:schooldesk1/features/shared/data/models/school_feed_models.dart';
 
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
@@ -40,6 +42,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
   Map<String, dynamic> _dashboard = const {};
   List<Map<String, dynamic>> _children = const [];
   List<dynamic> _eventPosts = [];
+  String? _feedError;
+  bool _feedStale = false;
   String _schoolName = 'School';
   Timer? _autoRefreshTimer;
   RealtimeRefreshSubscription? _realtimeSubscription;
@@ -92,11 +96,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         api.getDashboard('parent', forceRefresh: forceRefresh),
       ];
       if (includeFeedPosts) {
-        futures.add(
-          api.getHomeFeedEventPosts().catchError(
-            (_) => const <Map<String, dynamic>>[],
-          ),
-        );
+        futures.add(_loadFeedPage(api));
       }
       final results = await Future.wait(futures);
       if (!mounted) return;
@@ -113,16 +113,23 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         dashboardChildren,
         fallback: _activeChildIndex,
       );
-      final feedItems = includeFeedPosts
-          ? _mapFeedItems(results[1] as List)
-          : _eventPosts
+      final feedResult = includeFeedPosts
+          ? results[1] as SchoolFeedLoadResult
+          : null;
+      final feedItems = feedResult?.page == null
+          ? _eventPosts
                 .whereType<Map>()
                 .map((row) => Map<String, dynamic>.from(row))
-                .toList();
+                .toList()
+          : _mapFeedItems(feedResult!.page!.data);
       setState(() {
         _dashboard = dashboard;
         _children = dashboardChildren;
         _eventPosts = feedItems;
+        if (feedResult != null) {
+          _feedError = feedResult.error?.toString();
+          _feedStale = feedResult.isStale;
+        }
         _schoolName = (dashboard['school_name'] ?? _schoolName)
             .toString()
             .trim();
@@ -135,6 +142,15 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         _error = 'Unable to load parent dashboard.';
         _loading = false;
       });
+    }
+  }
+
+  Future<SchoolFeedLoadResult> _loadFeedPage(BackendApiClient api) async {
+    try {
+      final page = await api.getHomeFeedEventPostsPage(page: 1, pageSize: 20);
+      return SchoolFeedLoadResult(page: page);
+    } on Object catch (error) {
+      return SchoolFeedLoadResult(error: error);
     }
   }
 
@@ -224,6 +240,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
       dashboard: _dashboard,
       activeChildIndex: _activeChildIndex,
       eventPosts: _eventPosts,
+      feedError: _feedError,
+      feedStale: _feedStale,
+      onFeedRetry: () => _loadDashboardData(forceRefresh: true),
       onChildSelected: _selectChild,
     );
   }
@@ -259,6 +278,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         activeChildIndex: _activeChildIndex,
         onChildSelected: _selectChild,
         eventPosts: _eventPosts,
+        feedError: _feedError,
+        feedStale: _feedStale,
+        onFeedRetry: () => _loadDashboardData(forceRefresh: true),
       );
     }
 
@@ -431,6 +453,9 @@ class _ParentFeedView extends StatelessWidget {
   final int activeChildIndex;
   final ValueChanged<int> onChildSelected;
   final List<dynamic> eventPosts;
+  final String? feedError;
+  final bool feedStale;
+  final VoidCallback onFeedRetry;
 
   const _ParentFeedView({
     required this.children,
@@ -438,6 +463,9 @@ class _ParentFeedView extends StatelessWidget {
     required this.activeChildIndex,
     required this.onChildSelected,
     required this.eventPosts,
+    this.feedError,
+    this.feedStale = false,
+    required this.onFeedRetry,
   });
 
   @override
@@ -460,6 +488,13 @@ class _ParentFeedView extends StatelessWidget {
               color: parentColor,
             ),
             SizedBox(height: tokens.spacing.sm),
+            if (feedStale || feedError != null)
+              SchoolFeedStatusNotice(
+                accentColor: parentColor,
+                isStale: feedStale,
+                errorMessage: feedError,
+                onRetry: onFeedRetry,
+              ),
             // ── Auto-scrolling carousel ──────────────────────────────────
             _SchoolFeedCarousel(eventPosts: eventPosts),
             SizedBox(height: tokens.spacing.lg),
@@ -1081,7 +1116,7 @@ class _PostMediaCarousel extends StatefulWidget {
     required this.isActive,
     required this.height,
     this.autoAdvance = true,
-    this.imageFit = BoxFit.cover,
+    this.imageFit = BoxFit.contain,
     this.onImageTap,
   });
 
@@ -1159,7 +1194,11 @@ class _PostMediaCarouselState extends State<_PostMediaCarousel> {
                 height: widget.height,
                 autoPlay: widget.isActive && index == _currentIndex,
                 muted: true,
-                loadOnInit: false,
+                loadOnInit: true,
+                thumbnailUrl: item.thumbnailUrl.trim().isEmpty
+                    ? null
+                    : resolveEventPostMediaUrl(item.thumbnailUrl),
+                videoFit: BoxFit.contain,
                 onTap: () => openEventPostMediaPreview(context, item),
               );
             }

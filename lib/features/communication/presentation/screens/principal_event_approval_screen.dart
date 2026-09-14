@@ -58,6 +58,7 @@ class _PrincipalEventApprovalScreenState
     with WidgetsBindingObserver {
   static const List<String> _destinationOptions = <String>[
     'PARENTS_HOME',
+    'TEACHERS_HOME',
     'SCHOOL_GALLERY',
     'SCHOOL_LANDING',
   ];
@@ -1066,6 +1067,8 @@ class _PrincipalEventApprovalScreenState
         return 'Parents Home';
       case 'SCHOOL_GALLERY':
         return 'School Gallery';
+      case 'TEACHERS_HOME':
+        return 'Teacher School Feed';
       case 'SCHOOL_LANDING':
         return 'Public Landing Page';
       default:

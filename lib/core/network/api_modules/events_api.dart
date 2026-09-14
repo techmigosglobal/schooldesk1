@@ -198,16 +198,10 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getTeacherEventPosts() async {
     try {
-      final response = await _get('/event-posts/teacher');
-      final data = response.data;
-      if (data is List) return _asListMap(data);
-      final mapped = _asMap(data);
-      if (mapped['success'] == false) {
-        throw ServerException(
-          message: mapped['error'] ?? 'Failed to load event posts',
-        );
-      }
-      return _asListMap(mapped['data']);
+      return (await _getEventPostsPage(
+        '/event-posts/teacher',
+        pageSize: 100,
+      )).data;
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -215,15 +209,10 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getPendingEventPosts() async {
     try {
-      final response = await _get('/event-posts/pending');
-      final data = response.data;
-      final rows = data is List
-          ? data
-          : (data is Map ? data['data'] as List? ?? const [] : const []);
-      return rows
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList();
+      return (await _getEventPostsPage(
+        '/event-posts/pending',
+        pageSize: 100,
+      )).data;
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -234,15 +223,7 @@ extension BackendEventsApi on BackendApiClient {
   /// appeared in a school surface.
   Future<List<Map<String, dynamic>>> getPrincipalEventPosts() async {
     try {
-      final response = await _get('/event-posts');
-      final data = response.data;
-      final rows = data is List
-          ? data
-          : (data is Map ? data['data'] as List? ?? const [] : const []);
-      return rows
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList();
+      return (await _getEventPostsPage('/event-posts', pageSize: 100)).data;
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -258,31 +239,81 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getGalleryEventPosts() async {
     try {
-      final response = await _get('/event-posts/gallery');
-      final data = response.data;
-      final rows = data is List
-          ? data
-          : (data is Map ? data['data'] as List? ?? const [] : const []);
-      return rows
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList();
+      return (await _getEventPostsPage(
+        '/event-posts/gallery',
+        pageSize: 100,
+      )).data;
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
 
+  Future<PaginatedList<Map<String, dynamic>>> getHomeFeedEventPostsPage({
+    int page = 1,
+    int pageSize = 20,
+  }) {
+    return _getEventPostsPage(
+      '/event-posts/home-feed',
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
+  /// Teacher feed is intentionally not the parent home feed. It includes
+  /// approved teacher-targeted updates plus school-wide parent/gallery posts,
+  /// while the backend remains responsible for role and school scope.
+  Future<PaginatedList<Map<String, dynamic>>> getTeacherSchoolFeedPage({
+    int page = 1,
+    int pageSize = 20,
+  }) {
+    return _getEventPostsPage(
+      '/event-posts/teacher-feed',
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getHomeFeedEventPosts() async {
+    return (await getHomeFeedEventPostsPage(page: 1, pageSize: 100)).data;
+  }
+
+  Future<PaginatedList<Map<String, dynamic>>> _getEventPostsPage(
+    String path, {
+    int page = 1,
+    int pageSize = 20,
+  }) async {
     try {
-      final response = await _get('/event-posts/home-feed');
-      final data = response.data;
-      final rows = data is List
-          ? data
-          : (data is Map ? data['data'] as List? ?? const [] : const []);
-      return rows
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList();
+      final response = await _get(
+        path,
+        queryParameters: {'page': page, 'page_size': pageSize},
+      );
+      final envelope = _asMap(response.data);
+      if (envelope['success'] == false) {
+        throw ServerException(
+          message: envelope['error'] ?? 'Failed to load event posts',
+        );
+      }
+      final rawPayload = envelope['data'];
+      final payload = rawPayload is Map ? _asMap(rawPayload) : null;
+      final rows = _asListMap(
+        payload?['data'] ?? payload?['items'] ?? rawPayload,
+      );
+      return PaginatedList<Map<String, dynamic>>(
+        data: rows,
+        total: _asInt(
+          payload?['total'] ?? envelope['total'],
+          fallback: rows.length,
+        ),
+        page: _asInt(payload?['page'] ?? envelope['page'], fallback: page),
+        pageSize: _asInt(
+          payload?['page_size'] ?? envelope['page_size'],
+          fallback: pageSize,
+        ),
+        isStale: response.extra['schooldeskOfflineCache'] == true,
+        cacheStoredAt: DateTime.tryParse(
+          response.headers.value('x-schooldesk-cache-stored-at') ?? '',
+        ),
+      );
     } on DioException catch (e) {
       throw _handleError(e);
     }

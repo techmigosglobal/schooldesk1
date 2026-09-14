@@ -25,6 +25,9 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
   final bool hasStaffLink;
   final bool hasAssignedClasses;
   final StaffAttendanceModel? myAttendance;
+  final String? feedError;
+  final bool feedStale;
+  final VoidCallback? onFeedRetry;
   final VoidCallback onRefresh;
 
   const TeacherDashboardDesktopBody({
@@ -40,6 +43,9 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
     required this.hasStaffLink,
     required this.hasAssignedClasses,
     this.myAttendance,
+    this.feedError,
+    this.feedStale = false,
+    this.onFeedRetry,
     required this.onRefresh,
   });
 
@@ -407,6 +413,10 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
       posts: eventPosts,
       accentColor: teacherFlowAccent,
       showParentVisibility: true,
+      audienceLabel: 'Staff & school updates',
+      isStale: feedStale,
+      errorMessage: feedError,
+      onRetry: onFeedRetry,
       actionLabel: 'Manage',
       onAction: () => Navigator.pushNamed(context, AppRoutes.teacherEventPosts),
     );

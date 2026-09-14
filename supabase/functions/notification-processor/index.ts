@@ -65,6 +65,23 @@ function maskEmail(email: string): string {
   return `${maskValue(localPart, 2, 1)}@${domainPart}`;
 }
 
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const value = error as Record<string, unknown>;
+    const fields = [value.message, value.code, value.details, value.hint]
+      .map((field) => `${field ?? ""}`.trim())
+      .filter(Boolean);
+    if (fields.length > 0) return fields.join(" | ");
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "unknown object error";
+    }
+  }
+  return `${error ?? "unknown error"}`;
+}
+
 /** Base64url-encode without padding (RFC 7515 §2). */
 function base64url(data: Uint8Array): string {
   let binary = "";
@@ -962,7 +979,28 @@ async function markEventProcessed(
 async function claimEvent(eventId: string): Promise<boolean> {
   const now = new Date();
   const leaseUntil = new Date(now.getTime() + 90_000).toISOString();
-  const { data, error } = await supabase
+  const { data: current, error: currentError } = await supabase
+    .from("notification_events")
+    .select(
+      "id, processed, retry_count, processing_state, processing_lease_until, next_retry_at",
+    )
+    .eq("id", eventId)
+    .maybeSingle();
+  if (currentError) throw currentError;
+  if (!current || current.processed === true) return false;
+  if (Number(current.retry_count ?? 0) >= MAX_EVENT_RETRIES) return false;
+  const retryAt = current.next_retry_at
+    ? new Date(`${current.next_retry_at}`).getTime()
+    : 0;
+  if (retryAt > now.getTime()) return false;
+  const leaseAt = current.processing_lease_until
+    ? new Date(`${current.processing_lease_until}`).getTime()
+    : 0;
+  if (current.processing_state === "processing" && leaseAt > now.getTime()) {
+    return false;
+  }
+
+  let update = supabase
     .from("notification_events")
     .update({
       processed: false,
@@ -971,13 +1009,11 @@ async function claimEvent(eventId: string): Promise<boolean> {
       processing_lease_until: leaseUntil,
     })
     .eq("id", eventId)
-    .eq("processed", false)
-    .lt("retry_count", MAX_EVENT_RETRIES)
-    .or(
-      `processing_state.eq.pending,processing_state.is.null,processing_lease_until.lt.${now.toISOString()}`,
-    )
-    .select("id")
-    .maybeSingle();
+    .eq("processed", false);
+  update = current.processing_state == null
+    ? update.is("processing_state", null)
+    : update.eq("processing_state", current.processing_state);
+  const { data, error } = await update.select("id").maybeSingle();
   if (error) throw error;
   return data?.id === eventId;
 }
@@ -1272,10 +1308,11 @@ async function processNotificationEvent(
       debug_info: tokenResults,
     };
   } catch (error) {
-    console.error(`Error processing notification event ${event.id}: ${error}`);
+    const failure = errorText(error);
+    console.error(`Error processing notification event ${event.id}: ${failure}`);
     let deadLettered = false;
     try {
-      deadLettered = await releaseEvent(event.id, String(error));
+      deadLettered = await releaseEvent(event.id, failure);
     } catch (releaseError) {
       console.error(
         `Failed to release notification event ${event.id}: ${releaseError}`,
@@ -1287,8 +1324,8 @@ async function processNotificationEvent(
       invalidTokenCount: 0,
       transientFailureCount: 1,
       reason: deadLettered
-        ? `dead_lettered: ${String(error).slice(0, 220)}`
-        : String(error).slice(0, 240),
+        ? `dead_lettered: ${failure.slice(0, 220)}`
+        : failure.slice(0, 240),
     };
   }
 }

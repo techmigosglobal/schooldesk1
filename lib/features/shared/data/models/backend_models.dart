@@ -171,11 +171,18 @@ class PaginatedList<T> {
   final int page;
   final int pageSize;
 
+  /// True when the page came from the account-scoped offline cache rather
+  /// than the current backend request.
+  final bool isStale;
+  final DateTime? cacheStoredAt;
+
   const PaginatedList({
     required this.data,
     required this.total,
     required this.page,
     required this.pageSize,
+    this.isStale = false,
+    this.cacheStoredAt,
   });
 
   bool get hasMore => page * pageSize < total;

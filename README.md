@@ -35,6 +35,12 @@ flutter run --dart-define-from-file=env.local.json
 two-school fixtures. Keep the Edge Function server running in a second
 terminal. Hosted promotion is a separate, explicitly approved workflow.
 
+The read-only hosted cutover check is available at
+`scripts/verify_production_storage_cutover.sh`. It verifies the production
+health/readiness contract and R2 configuration from `env.supabase.json`; set
+`SUPABASE_DB_URL` and `SUPABASE_ACCESS_TOKEN` only in the protected environment
+to enable hosted migration-history and Edge Function listing checks.
+
 ### Telangana holiday calendar
 
 `Holiday calender - Telangana.pdf` is the source of truth for the 24 official

@@ -55,6 +55,9 @@ class EventPostMediaPreview extends StatelessWidget {
       return EventPostVideoPreview(
         url: url,
         height: height,
+        thumbnailUrl: item.thumbnailUrl.isEmpty
+            ? null
+            : resolveEventPostMediaUrl(item.thumbnailUrl),
         loadOnInit: false,
         onTap: onImageTap ?? () => openEventPostMediaPreview(context, item),
       );
@@ -118,6 +121,153 @@ Future<void> openEventPostMediaPreview(
       builder: (_) => EventPostMediaPreviewScreen(item: item),
     ),
   );
+}
+
+/// Shared media surface for school-feed and gallery cards. It keeps each
+/// source asset inside its natural aspect ratio, initializes video items early
+/// enough to render their first frame as a thumbnail, and advances attachments
+/// without making the surrounding post card jump in height.
+class EventPostMediaCarousel extends StatefulWidget {
+  final List<EventPostMediaItem> mediaItems;
+  final double height;
+  final bool isActive;
+  final bool autoAdvance;
+  final BoxFit imageFit;
+  final VoidCallback? onOpen;
+
+  const EventPostMediaCarousel({
+    super.key,
+    required this.mediaItems,
+    required this.height,
+    this.isActive = true,
+    this.autoAdvance = true,
+    this.imageFit = BoxFit.contain,
+    this.onOpen,
+  });
+
+  @override
+  State<EventPostMediaCarousel> createState() => _EventPostMediaCarouselState();
+}
+
+class _EventPostMediaCarouselState extends State<EventPostMediaCarousel> {
+  late final PageController _controller;
+  Timer? _timer;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+    _scheduleNext();
+  }
+
+  @override
+  void didUpdateWidget(EventPostMediaCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.mediaItems.isEmpty) return;
+    if (oldWidget.mediaItems.length != widget.mediaItems.length ||
+        oldWidget.isActive != widget.isActive) {
+      if (_currentIndex >= widget.mediaItems.length) {
+        _currentIndex = 0;
+        if (_controller.hasClients) _controller.jumpToPage(0);
+      }
+      _scheduleNext();
+    }
+  }
+
+  void _scheduleNext() {
+    _timer?.cancel();
+    if (!widget.autoAdvance ||
+        !widget.isActive ||
+        widget.mediaItems.length <= 1) {
+      return;
+    }
+    final current = widget.mediaItems[_currentIndex];
+    _timer = Timer(Duration(seconds: current.isVideo ? 8 : 3), () {
+      if (!mounted || !widget.isActive || widget.mediaItems.length <= 1) {
+        return;
+      }
+      final next = (_currentIndex + 1) % widget.mediaItems.length;
+      _controller.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.mediaItems.isEmpty) return const SizedBox.shrink();
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: widget.mediaItems.length,
+          onPageChanged: (index) {
+            setState(() => _currentIndex = index);
+            _scheduleNext();
+          },
+          itemBuilder: (context, index) {
+            final item = widget.mediaItems[index];
+            if (item.isVideo) {
+              return EventPostVideoPreview(
+                key: ValueKey('shared-event-video-${item.url}'),
+                url: resolveEventPostMediaUrl(item.url),
+                thumbnailUrl: item.thumbnailUrl.trim().isEmpty
+                    ? null
+                    : resolveEventPostMediaUrl(item.thumbnailUrl),
+                height: widget.height,
+                autoPlay: widget.isActive && index == _currentIndex,
+                muted: true,
+                loadOnInit: true,
+                onTap:
+                    widget.onOpen ??
+                    () => openEventPostMediaPreview(context, item),
+              );
+            }
+            return EventPostMediaPreview(
+              key: ValueKey('shared-event-media-${item.url}'),
+              item: item,
+              height: widget.height,
+              imageFit: widget.imageFit,
+              onImageTap:
+                  widget.onOpen ??
+                  () => openEventPostMediaPreview(context, item),
+            );
+          },
+        ),
+        if (widget.mediaItems.length > 1)
+          Positioned(
+            bottom: 8,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_currentIndex + 1}/${widget.mediaItems.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class EventPostMediaPreviewScreen extends StatelessWidget {
@@ -307,6 +457,8 @@ class EventPostVideoPreview extends StatefulWidget {
   final bool muted;
   final bool showFullscreen;
   final bool loadOnInit;
+  final String? thumbnailUrl;
+  final BoxFit videoFit;
   final VoidCallback? onTap;
 
   const EventPostVideoPreview({
@@ -317,6 +469,8 @@ class EventPostVideoPreview extends StatefulWidget {
     this.muted = true,
     this.showFullscreen = true,
     this.loadOnInit = true,
+    this.thumbnailUrl,
+    this.videoFit = BoxFit.contain,
     this.onTap,
   });
 
@@ -345,7 +499,10 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
     _controller = controller;
     try {
       await controller.initialize();
-      if (!mounted) return;
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
       await controller.setLooping(true);
       await controller.setVolume(_muted ? 0 : 1);
       if (widget.autoPlay) await controller.play();
@@ -380,12 +537,26 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
   @override
   void didUpdateWidget(EventPostVideoPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_ready || oldWidget.autoPlay == widget.autoPlay) return;
+    if (oldWidget.url != widget.url) {
+      final oldController = _controller;
+      _controller = null;
+      _ready = false;
+      _error = null;
+      _loading = false;
+      unawaited(oldController?.dispose());
+      if (widget.loadOnInit) unawaited(_startVideo());
+      return;
+    }
     final controller = _controller;
-    if (controller == null) return;
-    if (widget.autoPlay) {
+    if (controller == null) {
+      if (widget.loadOnInit) unawaited(_startVideo());
+      return;
+    }
+    if (widget.autoPlay && !oldWidget.autoPlay) {
       controller.play();
-    } else if (controller.value.isPlaying) {
+    } else if (!widget.autoPlay &&
+        oldWidget.autoPlay &&
+        controller.value.isPlaying) {
       controller.pause();
     }
   }
@@ -403,13 +574,23 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              const Center(
-                child: Icon(
-                  Icons.video_library_rounded,
-                  color: Colors.white70,
-                  size: 46,
+              if (widget.thumbnailUrl?.trim().isNotEmpty == true)
+                EventPostImagePreview(
+                  widget.thumbnailUrl!,
+                  fit: BoxFit.contain,
+                  fallbackBuilder: () => const ColoredBox(color: Colors.black),
+                )
+              else
+                const ColoredBox(
+                  color: Colors.black,
+                  child: Center(
+                    child: Icon(
+                      Icons.video_library_rounded,
+                      color: Colors.white70,
+                      size: 46,
+                    ),
+                  ),
                 ),
-              ),
               Center(
                 child: IconButton.filled(
                   tooltip: 'Open video',
@@ -435,7 +616,7 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
         fit: StackFit.expand,
         children: [
           FittedBox(
-            fit: BoxFit.cover,
+            fit: widget.videoFit,
             child: SizedBox(
               width: controller.value.size.width,
               height: controller.value.size.height,

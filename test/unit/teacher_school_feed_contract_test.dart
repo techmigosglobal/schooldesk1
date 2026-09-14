@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  test('teacher dashboard reads the same parent-visible school feed', () {
+  test('teacher dashboard reads the staff school feed', () {
     final screen = File(
       'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
     ).readAsStringSync();
@@ -11,26 +11,27 @@ void main() {
       'lib/features/dashboard/presentation/widgets/teacher_dashboard_desktop_shell.dart',
     ).readAsStringSync();
 
-    expect(screen, contains('api.getHomeFeedEventPosts()'));
+    expect(screen, contains('api.getTeacherSchoolFeedPage'));
     expect(screen, contains('List<Map<String, dynamic>> _eventPosts'));
     expect(screen, contains('showParentVisibility: true'));
+    expect(screen, contains("audienceLabel: 'Staff & school updates'"));
     expect(screen, contains('SchoolFeedPreview('));
     expect(desktop, contains('final List<Map<String, dynamic>> eventPosts'));
     expect(desktop, contains('SchoolFeedPreview('));
   });
 
-  test('teacher feed remains backed by the authorized parent destination', () {
-    final handler = File(
-      'supabase/functions/api/handlers/uploads.ts',
-    ).readAsStringSync();
+  test(
+    'teacher feed remains backed by authorized staff and school destinations',
+    () {
+      final handler = File(
+        'supabase/functions/api/handlers/uploads.ts',
+      ).readAsStringSync();
 
-    expect(handler, contains('path === "/event-posts/home-feed"'));
-    expect(handler, contains('.in("status", ["approved", "published"])'));
-    expect(
-      handler,
-      contains('.contains("destinations", JSON.stringify(["PARENTS_HOME"]))'),
-    );
-  });
+      expect(handler, contains('path === "/event-posts/teacher-feed"'));
+      expect(handler, contains('.in("status", ["approved", "published"])'));
+      expect(handler, contains('TEACHERS_HOME'));
+    },
+  );
 
   test('feed cards use bounded media space instead of viewport height', () {
     final parent = File(

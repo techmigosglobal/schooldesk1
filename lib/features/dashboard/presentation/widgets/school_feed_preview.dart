@@ -16,6 +16,10 @@ class SchoolFeedPreview extends StatelessWidget {
   final List<Map<String, dynamic>> posts;
   final Color accentColor;
   final bool showParentVisibility;
+  final String? audienceLabel;
+  final bool isStale;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -24,6 +28,10 @@ class SchoolFeedPreview extends StatelessWidget {
     required this.posts,
     required this.accentColor,
     this.showParentVisibility = false,
+    this.audienceLabel,
+    this.isStale = false,
+    this.errorMessage,
+    this.onRetry,
     this.actionLabel,
     this.onAction,
   });
@@ -70,7 +78,7 @@ class SchoolFeedPreview extends StatelessWidget {
                     ),
                     if (showParentVisibility)
                       Text(
-                        'Visible to parents',
+                        audienceLabel ?? 'Visible to parents',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: accentColor,
                           fontWeight: FontWeight.w700,
@@ -93,30 +101,46 @@ class SchoolFeedPreview extends StatelessWidget {
             ],
           ),
           SizedBox(height: tokens.spacing.md),
-          if (posts.isEmpty)
-            _EmptySchoolFeed(accentColor: accentColor)
-          else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final cardWidth = math.min(
-                  310.0,
-                  math.max(258.0, constraints.maxWidth * 0.82),
-                );
-                return SizedBox(
-                  height: 304,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: posts.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) => _SchoolFeedPostCard(
-                      post: posts[index],
-                      accentColor: accentColor,
-                      width: cardWidth,
+          if (errorMessage != null && posts.isEmpty)
+            SchoolFeedStatusNotice(
+              accentColor: accentColor,
+              isStale: isStale,
+              errorMessage: errorMessage,
+              onRetry: onRetry,
+            )
+          else ...[
+            if (isStale || errorMessage != null)
+              SchoolFeedStatusNotice(
+                accentColor: accentColor,
+                isStale: isStale,
+                errorMessage: errorMessage,
+                onRetry: onRetry,
+              ),
+            if (posts.isEmpty)
+              _EmptySchoolFeed(accentColor: accentColor)
+            else
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cardWidth = math.min(
+                    310.0,
+                    math.max(258.0, constraints.maxWidth * 0.82),
+                  );
+                  return SizedBox(
+                    height: 304,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: posts.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) => _SchoolFeedPostCard(
+                        post: posts[index],
+                        accentColor: accentColor,
+                        width: cardWidth,
+                      ),
                     ),
-                  ),
-                );
-              },
-            ),
+                  );
+                },
+              ),
+          ],
         ],
       ),
     );
@@ -162,9 +186,7 @@ class _SchoolFeedPostCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(tokens.radius.control + 2),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: media.isEmpty
-              ? null
-              : () => openEventPostMediaPreview(context, media.first),
+          onTap: media.isEmpty ? null : () => _openMedia(context, media.first),
           child: Container(
             decoration: BoxDecoration(
               border: Border.all(color: tokens.panelBorder),
@@ -178,21 +200,12 @@ class _SchoolFeedPostCard extends StatelessWidget {
                   width: double.infinity,
                   child: media.isEmpty
                       ? _PostPlaceholder(title: title, accentColor: accentColor)
-                      : Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            EventPostMediaPreview(
-                              item: media.first,
-                              height: 156,
-                              imageFit: BoxFit.cover,
-                            ),
-                            if (media.length > 1)
-                              Positioned(
-                                right: 10,
-                                top: 10,
-                                child: _MediaCount(count: media.length),
-                              ),
-                          ],
+                      : EventPostMediaCarousel(
+                          mediaItems: media,
+                          height: 156,
+                          autoAdvance: false,
+                          imageFit: BoxFit.contain,
+                          onOpen: () => _openMedia(context, media.first),
                         ),
                 ),
                 Expanded(
@@ -274,6 +287,66 @@ class _SchoolFeedPostCard extends StatelessWidget {
     if (parsed == null) return value;
     return '${parsed.day}/${parsed.month}/${parsed.year}';
   }
+
+  void _openMedia(BuildContext context, EventPostMediaItem item) {
+    openEventPostMediaPreview(context, item);
+  }
+}
+
+class SchoolFeedStatusNotice extends StatelessWidget {
+  final Color accentColor;
+  final bool isStale;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
+
+  const SchoolFeedStatusNotice({
+    super.key,
+    required this.accentColor,
+    this.isStale = false,
+    this.errorMessage,
+    this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasError = errorMessage != null;
+    final message = hasError
+        ? (isStale
+              ? 'Unable to refresh. Showing the last available school feed.'
+              : 'School feed is temporarily unavailable.')
+        : 'Showing the last available school feed while offline.';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: (hasError ? Colors.deepOrange : accentColor).withAlpha(18),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: (hasError ? Colors.deepOrange : accentColor).withAlpha(60),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            hasError ? Icons.cloud_off_rounded : Icons.cloud_queue_rounded,
+            size: 18,
+            color: hasError ? Colors.deepOrange : accentColor,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (onRetry != null)
+            TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
 }
 
 class _PostPlaceholder extends StatelessWidget {
@@ -298,33 +371,6 @@ class _PostPlaceholder extends StatelessWidget {
           Icons.campaign_rounded,
           size: 42,
           color: Colors.white.withAlpha(225),
-        ),
-      ),
-    );
-  }
-}
-
-class _MediaCount extends StatelessWidget {
-  final int count;
-
-  const _MediaCount({required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.black.withAlpha(170),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Text(
-          '$count items',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
         ),
       ),
     );

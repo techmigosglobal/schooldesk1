@@ -14,6 +14,7 @@ import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highl
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/teacher_dashboard_desktop_shell.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_preview.dart';
+import 'package:schooldesk1/features/shared/data/models/school_feed_models.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final bool loadData;
@@ -43,6 +44,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   int _weeklyTimetableCount = 0;
   List<AnnouncementModel> _announcements = const [];
   List<Map<String, dynamic>> _eventPosts = const [];
+  String? _feedError;
+  bool _feedStale = false;
   RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
@@ -82,9 +85,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         api.getAnnouncements(forceRefresh: forceRefresh),
         _loadMyAttendanceSafely(api),
         _loadUnreadNotificationsCount(),
-        api.getHomeFeedEventPosts().catchError(
-          (_) => const <Map<String, dynamic>>[],
-        ),
+        _loadFeedPage(api),
       ]);
       if (!mounted) return;
       setState(() {
@@ -103,10 +104,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _announcements = (results[0] as List)
             .whereType<AnnouncementModel>()
             .toList();
-        _eventPosts = (results[3] as List)
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList();
+        final feedResult = results[3] as SchoolFeedLoadResult;
+        if (feedResult.page != null) {
+          _eventPosts = feedResult.page!.data
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList();
+        }
+        _feedError = feedResult.error?.toString();
+        _feedStale = feedResult.isStale;
         _unreadNotifications = results[2] as int? ?? 0;
         _loading = false;
       });
@@ -119,6 +124,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ? 'Unable to load offline demo data.'
             : 'Unable to load teacher dashboard from backend.';
       });
+    }
+  }
+
+  Future<SchoolFeedLoadResult> _loadFeedPage(BackendApiClient api) async {
+    try {
+      final page = await api.getTeacherSchoolFeedPage(page: 1, pageSize: 20);
+      return SchoolFeedLoadResult(page: page);
+    } on Object catch (error) {
+      return SchoolFeedLoadResult(error: error);
     }
   }
 
@@ -225,6 +239,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               hasStaffLink: RoleAccessService.hasTeacherStaffLink,
               hasAssignedClasses: RoleAccessService.hasAssignedClasses,
               myAttendance: _myAttendance,
+              feedError: _feedError,
+              feedStale: _feedStale,
+              onFeedRetry: () => _loadDashboardData(forceRefresh: true),
               onRefresh: () => _loadDashboardData(forceRefresh: true),
             )
           : TeacherFlowScrollView(
@@ -298,6 +315,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   posts: _eventPosts,
                   accentColor: teacherFlowAccent,
                   showParentVisibility: true,
+                  audienceLabel: 'Staff & school updates',
+                  isStale: _feedStale,
+                  errorMessage: _feedError,
+                  onRetry: () => _loadDashboardData(forceRefresh: true),
                   actionLabel: 'Manage',
                   onAction: () =>
                       Navigator.pushNamed(context, AppRoutes.teacherEventPosts),

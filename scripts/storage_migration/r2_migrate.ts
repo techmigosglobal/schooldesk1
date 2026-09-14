@@ -22,6 +22,17 @@
  *   DATABASE_URL (writes service-only migration tracking rows)
  */
 
+import {
+  REFERENCE_TARGETS,
+  referenceKey,
+  rewriteJson,
+  rewriteString,
+  r2ReferenceFor,
+  type MigrationMapEntry,
+  type ReferenceTarget,
+  type StorageLocation,
+} from "./storage_references.ts";
+
 type Visibility = "private" | "public";
 
 type S3Config = {
@@ -59,6 +70,8 @@ type MigrationState = {
 
 const MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024;
 const MULTIPART_PART_BYTES = 16 * 1024 * 1024;
+const DEFAULT_TARGET_BYTES = 900_000_000;
+const SOURCE_DELETE_GUARD = "ALLOW_SUPABASE_SOURCE_DELETE";
 
 function required(name: string): string {
   const value = Deno.env.get(name)?.trim() ?? "";
@@ -493,6 +506,589 @@ async function syncDatabaseState(state: MigrationState, mode: string) {
   }
 }
 
+type DatabaseClient = any;
+
+type TargetRow = {
+  __row_id: string;
+  __value: unknown;
+};
+
+type PlannedRewrite = {
+  target: ReferenceTarget;
+  rowId: string;
+  value: unknown;
+  changes: Array<{
+    path: string;
+    source: string;
+    target: string;
+    location: StorageLocation;
+  }>;
+};
+
+type SourceObject = {
+  bucket: string;
+  key: string;
+  size: number;
+};
+
+function quoteIdentifier(value: string): string {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(value)) {
+    throw new Error(`Unsafe SQL identifier: ${value}`);
+  }
+  return `"${value}"`;
+}
+
+async function withDatabase<T>(callback: (sql: DatabaseClient) => Promise<T>) {
+  const databaseUrl = required("DATABASE_URL");
+  const postgres = (await import("npm:postgres@3.4.5")).default;
+  const sql = postgres(databaseUrl, {
+    max: 1,
+    prepare: false,
+    idle_timeout: 0,
+    connect_timeout: 10,
+  });
+  try {
+    return await callback(sql);
+  } finally {
+    await sql.end({ timeout: 5 }).catch(() => undefined);
+  }
+}
+
+async function availableReferenceTargets(sql: DatabaseClient) {
+  const rows = await sql`
+    select table_name, column_name
+    from information_schema.columns
+    where table_schema = 'public'
+  ` as Array<{ table_name: string; column_name: string }>;
+  const available = new Set(rows.map((row) => `${row.table_name}.${row.column_name}`));
+  const missing = REFERENCE_TARGETS.filter((target) =>
+    !available.has(`${target.table}.${target.column}`) ||
+    !available.has(`${target.table}.${target.rowIdColumn}`)
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `Reference audit schema is incomplete; missing ${missing.map((target) =>
+        `${target.table}.${target.column}/${target.rowIdColumn}`).join(", ")}`,
+    );
+  }
+  return REFERENCE_TARGETS;
+}
+
+async function readReferenceRows(
+  sql: DatabaseClient,
+  target: ReferenceTarget,
+): Promise<TargetRow[]> {
+  const table = quoteIdentifier(target.table);
+  const column = quoteIdentifier(target.column);
+  const rowId = quoteIdentifier(target.rowIdColumn);
+  const query = `select ${rowId}::text as "__row_id", ${column} as "__value"\n` +
+    `from public.${table}\nwhere ${column} is not null`;
+  return await sql.unsafe(query) as TargetRow[];
+}
+
+function migrationMap(
+  state: MigrationState,
+): ReadonlyMap<string, MigrationMapEntry> {
+  const map = new Map<string, MigrationMapEntry>();
+  for (const item of state.items) {
+    map.set(referenceKey({ bucket: item.sourceBucket, key: item.sourceKey }), item);
+  }
+  return map;
+}
+
+function sourceLocationCount(
+  value: unknown,
+  target: ReferenceTarget,
+  mapping: ReadonlyMap<string, MigrationMapEntry>,
+) {
+  const result = target.json
+    ? rewriteJson(value, mapping, target.defaultBucket)
+    : typeof value === "string"
+    ? rewriteString(value, mapping, target.defaultBucket)
+    : { changes: [], unresolved: [] };
+  return result;
+}
+
+async function sha256Text(value: string): Promise<string> {
+  return hex(
+    new Uint8Array(
+      await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(value),
+      ),
+    ),
+  );
+}
+
+async function rewriteReferences(statePath: string, execute: boolean) {
+  const state = await readState(statePath);
+  const unverified = state.items.filter((item) => item.status !== "verified");
+  if (unverified.length > 0) {
+    throw new Error(
+      `Reference rewrite blocked: ${unverified.length} migration objects are not verified`,
+    );
+  }
+  const mapping = migrationMap(state);
+
+  await withDatabase(async (sql) => {
+    const targets = await availableReferenceTargets(sql);
+    const plans: PlannedRewrite[] = [];
+    const unresolved: Array<{ target: ReferenceTarget; rowId: string; location: StorageLocation }> = [];
+
+    for (const target of targets) {
+      for (const row of await readReferenceRows(sql, target)) {
+        const result = sourceLocationCount(row.__value, target, mapping);
+        if (result.unresolved.length > 0) {
+          unresolved.push(...result.unresolved.map((location) => ({
+            target,
+            rowId: row.__row_id,
+            location,
+          })));
+        }
+        if (result.changes.length === 0) continue;
+        const rewritten = target.json
+          ? rewriteJson(row.__value, mapping, target.defaultBucket)
+          : rewriteString(`${row.__value}`, mapping, target.defaultBucket);
+        plans.push({
+          target,
+          rowId: row.__row_id,
+          value: rewritten.value,
+          changes: rewritten.changes,
+        });
+      }
+    }
+
+    if (unresolved.length > 0) {
+      const sample = unresolved.slice(0, 10).map((item) =>
+        `${item.target.table}.${item.target.column}[${item.rowId}] -> ${item.location.bucket}/${item.location.key}`
+      ).join("; ");
+      throw new Error(
+        `Reference rewrite blocked: ${unresolved.length} legacy references have no verified R2 mapping. ${sample}`,
+      );
+    }
+
+    const summary = {
+      mode: "rewrite",
+      execute,
+      rows: plans.length,
+      values: plans.reduce((count, plan) => count + plan.changes.length, 0),
+      tables: [...new Set(plans.map((plan) => plan.target.table))].sort(),
+    };
+    console.log(JSON.stringify(summary, null, 2));
+    if (!execute || plans.length === 0) return;
+
+    const batchRows = await sql`
+      insert into schooldesk_internal.storage_migration_batches
+        (mode, status, started_at, object_count, report)
+      values
+        ('rewrite', 'running', now(), ${plans.length}, ${sql.json(summary)})
+      returning id
+    ` as Array<{ id: string }>;
+    const batchId = batchRows[0]?.id;
+    if (!batchId) throw new Error("Failed to create rewrite audit batch");
+
+    try {
+      for (const plan of plans) {
+        const setColumn = quoteIdentifier(plan.target.column);
+        const rowColumn = quoteIdentifier(plan.target.rowIdColumn);
+        const update = `update public.${quoteIdentifier(plan.target.table)}\n` +
+          `set ${setColumn} = $1${plan.target.json ? "::jsonb" : ""}\n` +
+          `where ${rowColumn}::text = $2\nreturning ${rowColumn}`;
+        const encodedValue = plan.target.json
+          ? JSON.stringify(plan.value)
+          : `${plan.value ?? ""}`;
+
+        for (const change of plan.changes) {
+          const rewriteKey = await sha256Text([
+            plan.target.table,
+            plan.rowId,
+            plan.target.column,
+            change.path,
+            change.source,
+          ].join("\n"));
+          await sql`
+            insert into schooldesk_internal.storage_migration_rewrites
+              (batch_id, rewrite_key, table_name, row_id, column_name,
+               json_path, source_value, target_value, status)
+            values
+              (${batchId}, ${rewriteKey}, ${plan.target.table}, ${plan.rowId},
+               ${plan.target.column}, ${change.path}, ${change.source},
+               ${change.target}, 'pending')
+            on conflict (rewrite_key) do update set
+              batch_id = excluded.batch_id,
+              target_value = excluded.target_value,
+              status = 'pending',
+              error = null,
+              updated_at = now(),
+              applied_at = null,
+              rolled_back_at = null
+          `;
+        }
+
+        const updatedRows = await sql.unsafe(update, [encodedValue, plan.rowId]);
+        if (updatedRows.length !== 1) {
+          throw new Error(
+            `Rewrite update affected ${updatedRows.length} rows for ${plan.target.table}.${plan.target.column}[${plan.rowId}]`,
+          );
+        }
+        for (const change of plan.changes) {
+          const rewriteKey = await sha256Text([
+            plan.target.table,
+            plan.rowId,
+            plan.target.column,
+            change.path,
+            change.source,
+          ].join("\n"));
+          await sql`
+            update schooldesk_internal.storage_migration_rewrites
+            set status = 'applied', applied_at = now(), updated_at = now()
+            where rewrite_key = ${rewriteKey}
+          `;
+        }
+      }
+      await sql`
+        update schooldesk_internal.storage_migration_batches
+        set status = 'completed', completed_at = now(), completed_count = ${plans.length},
+            report = ${sql.json(summary)}, updated_at = now()
+        where id = ${batchId}::uuid
+      `;
+      console.log(JSON.stringify({ rewriteBatchId: batchId, status: "completed" }));
+    } catch (error) {
+      await sql`
+        update schooldesk_internal.storage_migration_batches
+        set status = 'failed', report = ${sql.json({ ...summary, error: `${error}` })},
+            updated_at = now()
+        where id = ${batchId}::uuid
+      `;
+      throw error;
+    }
+  });
+}
+
+async function collectLiveLegacyReferences(sql: DatabaseClient) {
+  const targets = await availableReferenceTargets(sql);
+  const references = new Map<string, number>();
+  for (const target of targets) {
+    for (const row of await readReferenceRows(sql, target)) {
+      const result = sourceLocationCount(row.__value, target, new Map());
+      for (const location of result.unresolved) {
+        const key = referenceKey(location);
+        references.set(key, (references.get(key) ?? 0) + 1);
+      }
+    }
+  }
+  return references;
+}
+
+async function currentSourceInventory(source: S3Client): Promise<SourceObject[]> {
+  const objects: SourceObject[] = [];
+  for (const bucket of parseBuckets()) {
+    for (const object of await listObjects(source, bucket.name)) {
+      objects.push({ bucket: bucket.name, key: object.key, size: object.size });
+    }
+  }
+  return objects;
+}
+
+function cleanupSelection(
+  objects: SourceObject[],
+  liveReferences: ReadonlyMap<string, number>,
+  mapping: ReadonlyMap<string, MigrationMapEntry>,
+  targetBytes: number,
+  allowReferenced = false,
+) {
+  const sourceBytes = objects.reduce((sum, object) => sum + object.size, 0);
+  const candidates = objects.flatMap((object) => {
+    const location = { bucket: object.bucket, key: object.key };
+    const map = mapping.get(referenceKey(location));
+    const liveReferenceCount = liveReferences.get(referenceKey(location)) ?? 0;
+    if (liveReferenceCount > 0 && !allowReferenced) return [];
+    const r2Reference = r2ReferenceFor(location, mapping);
+    if (!map || !r2Reference) return [];
+    return [{
+      ...object,
+      r2Reference,
+      liveReferenceCount,
+    }];
+  });
+  const needed = Math.max(0, sourceBytes - targetBytes);
+  let selectedBytes = 0;
+  const selected = [...candidates].sort((left, right) => right.size - left.size)
+    .filter((candidate) => {
+      if (selectedBytes >= needed) return false;
+      selectedBytes += candidate.size;
+      return true;
+    });
+  return {
+    sourceBytes,
+    protectedBytes: objects.filter((object) =>
+      (liveReferences.get(referenceKey({ bucket: object.bucket, key: object.key })) ?? 0) > 0
+    ).reduce((sum, object) => sum + object.size, 0),
+    unmappedBytes: objects.filter((object) =>
+      !mapping.has(referenceKey({ bucket: object.bucket, key: object.key }))
+    ).reduce((sum, object) => sum + object.size, 0),
+    candidates,
+    selected,
+    targetBytes,
+    projectedBytes: Math.max(0, sourceBytes - selectedBytes),
+  };
+}
+
+async function cleanupDryRun(
+  statePath: string,
+  targetBytes: number,
+  allowReferenced: boolean,
+) {
+  const state = await readState(statePath);
+  const mapping = migrationMap(state);
+  const source = new S3Client(endpointConfig("SOURCE_S3"));
+  const objects = await currentSourceInventory(source);
+  const selection = await withDatabase((sql) =>
+    collectLiveLegacyReferences(sql).then((liveReferences) => ({
+      liveReferences,
+      ...cleanupSelection(
+        objects,
+        liveReferences,
+        mapping,
+        targetBytes,
+        allowReferenced,
+      ),
+    }))
+  );
+
+  const batch = await withDatabase(async (sql) => {
+    const rows = await sql`
+      insert into schooldesk_internal.storage_source_cleanup_batches
+        (status, target_bytes, source_bytes_before, candidate_bytes, report)
+      values
+        ('dry_run', ${targetBytes}, ${selection.sourceBytes},
+         ${selection.selected.reduce((sum, item) => sum + item.size, 0)},
+        ${sql.json({
+           allowReferenced,
+           policy: allowReferenced
+             ? "largest_verified_r2_backed_objects_including_live_references"
+             : "verified_r2_backed_orphans_only",
+           selected: selection.selected.length,
+           candidates: selection.candidates.length,
+           protectedBytes: selection.protectedBytes,
+           unmappedBytes: selection.unmappedBytes,
+           projectedBytes: selection.projectedBytes,
+         })})
+      returning id
+    ` as Array<{ id: string }>;
+    const batchId = rows[0]?.id;
+    if (!batchId) throw new Error("Failed to create cleanup dry-run batch");
+    for (const item of selection.selected) {
+      const reason = item.liveReferenceCount > 0
+        ? "user_approved_referenced_delete_largest_first"
+        : "orphaned_source_after_verified_r2_copy";
+      await sql`
+        insert into schooldesk_internal.storage_source_cleanup_items
+      (batch_id, source_bucket, source_key, r2_reference, source_size,
+           live_reference_count, reason, status)
+        values
+          (${batchId}, ${item.bucket}, ${item.key}, ${item.r2Reference}, ${item.size},
+           ${item.liveReferenceCount ?? 0}, ${reason}, 'pending')
+        on conflict (batch_id, source_bucket, source_key) do nothing
+      `;
+      const storageRef = `supabase://${item.bucket}/${item.key}`;
+      await sql`
+        insert into public.storage_cleanup_queue
+          (storage_ref, provider, source_bucket, source_key, destination_ref,
+           reason, status, attempts, available_at, updated_at)
+        values
+          (${storageRef}, 'supabase_storage', ${item.bucket}, ${item.key},
+           ${item.r2Reference}, ${reason}, 'pending', 0, now(), now())
+        on conflict (storage_ref) do nothing
+      `;
+    }
+    return batchId;
+  });
+
+  console.log(JSON.stringify({
+    mode: "cleanup",
+    dryRun: true,
+    batchId: batch,
+    sourceBytes: selection.sourceBytes,
+    sourceMegabytes: Number((selection.sourceBytes / 1_000_000).toFixed(2)),
+    targetBytes,
+    targetMegabytes: Number((targetBytes / 1_000_000).toFixed(2)),
+    candidateObjects: selection.candidates.length,
+    selectedObjects: selection.selected.length,
+    selectedBytes: selection.selected.reduce((sum, item) => sum + item.size, 0),
+    projectedBytes: selection.projectedBytes,
+    protectedBytes: selection.protectedBytes,
+    unmappedBytes: selection.unmappedBytes,
+  }, null, 2));
+}
+
+async function cleanupExecute(batchId: string) {
+  if (Deno.env.get(SOURCE_DELETE_GUARD) !== "1") {
+    throw new Error(
+      `Source deletion is blocked. Set ${SOURCE_DELETE_GUARD}=1 only for an approved dry-run batch.`,
+    );
+  }
+  const source = new S3Client(endpointConfig("SOURCE_S3"));
+  const destination = new S3Client(endpointConfig("R2"));
+  await withDatabase(async (sql) => {
+    const batches = await sql`
+      select id, status, target_bytes, source_bytes_before, report
+      from schooldesk_internal.storage_source_cleanup_batches
+      where id = ${batchId}::uuid
+    ` as Array<{
+      id: string;
+      status: string;
+      target_bytes: number;
+      source_bytes_before: number;
+      report: { allowReferenced?: boolean };
+    }>;
+    const batch = batches[0];
+    if (!batch) throw new Error(`Cleanup batch not found: ${batchId}`);
+    if (batch.status !== "dry_run" && batch.status !== "approved") {
+      throw new Error(`Cleanup batch ${batchId} is not executable: ${batch.status}`);
+    }
+    const allowReferenced = batch.report?.allowReferenced === true;
+    if (
+      allowReferenced &&
+      Deno.env.get("ALLOW_SUPABASE_REFERENCED_SOURCE_DELETE") !== "1"
+    ) {
+      throw new Error(
+        "Referenced-source deletion is blocked. Set ALLOW_SUPABASE_REFERENCED_SOURCE_DELETE=1 only for an approved batch.",
+      );
+    }
+    const items = await sql`
+      select id, source_bucket, source_key, r2_reference, source_size
+      from schooldesk_internal.storage_source_cleanup_items
+      where batch_id = ${batchId}::uuid and status = 'pending'
+      order by source_size desc, id
+    ` as Array<{
+      id: string;
+      source_bucket: string;
+      source_key: string;
+      r2_reference: string;
+      source_size: number;
+    }>;
+    const liveReferences = await collectLiveLegacyReferences(sql);
+    let deletedCount = 0;
+    let deletedBytes = 0;
+    let failedCount = 0;
+    await sql`
+      update schooldesk_internal.storage_source_cleanup_batches
+      set status = 'running', updated_at = now()
+      where id = ${batchId}::uuid
+    `;
+
+    for (const item of items) {
+      const location = { bucket: item.source_bucket, key: item.source_key };
+      const liveCount = liveReferences.get(referenceKey(location)) ?? 0;
+      if (liveCount > 0 && !allowReferenced) {
+        await sql`
+          update schooldesk_internal.storage_source_cleanup_items
+          set status = 'skipped', live_reference_count = ${liveCount},
+              error = 'reference appeared after dry-run', updated_at = now()
+          where id = ${item.id}::uuid
+        `;
+        await sql`
+          update public.storage_cleanup_queue
+          set status = 'failed', last_error = 'source cleanup skipped: live reference appeared', updated_at = now()
+          where storage_ref = ${`supabase://${item.source_bucket}/${item.source_key}`}
+        `;
+        continue;
+      }
+
+      try {
+        const [sourceResponse, destinationResponse] = await Promise.all([
+          source.request("GET", item.source_bucket, item.source_key),
+          destination.request(
+            "GET",
+            item.r2_reference.startsWith("r2://private/")
+              ? required("R2_PRIVATE_BUCKET")
+              : required("R2_PUBLIC_BUCKET"),
+            item.r2_reference.replace(/^r2:\/\/(private|public)\//, ""),
+          ),
+        ]);
+        if (!sourceResponse.ok || !destinationResponse.ok) {
+          throw new Error(
+            `integrity read failed source=${sourceResponse.status} r2=${destinationResponse.status}`,
+          );
+        }
+        const [sourceBytes, destinationBytes] = await Promise.all([
+          new Uint8Array(await sourceResponse.arrayBuffer()),
+          new Uint8Array(await destinationResponse.arrayBuffer()),
+        ]);
+        const [sourceHash, destinationHash] = await Promise.all([
+          sha256Async(sourceBytes),
+          sha256Async(destinationBytes),
+        ]);
+        if (sourceHash !== destinationHash) {
+          throw new Error("source/R2 SHA-256 mismatch; deletion blocked");
+        }
+        const deleted = await source.request("DELETE", item.source_bucket, item.source_key);
+        if (!deleted.ok && deleted.status !== 404) {
+          throw new Error(`source delete failed with HTTP ${deleted.status}`);
+        }
+        const afterDelete = await source.request(
+          "HEAD",
+          item.source_bucket,
+          item.source_key,
+        );
+        if (afterDelete.status !== 404) {
+          throw new Error(
+            `source post-delete verification failed with HTTP ${afterDelete.status}`,
+          );
+        }
+        await sql`
+          update schooldesk_internal.storage_source_cleanup_items
+          set status = 'deleted', source_sha256 = ${sourceHash},
+              destination_sha256 = ${destinationHash}, deleted_at = now(), updated_at = now()
+          where id = ${item.id}::uuid
+        `;
+        await sql`
+          update public.storage_cleanup_queue
+          set status = 'completed', updated_at = now()
+          where storage_ref = ${`supabase://${item.source_bucket}/${item.source_key}`}
+        `;
+        deletedCount += 1;
+        deletedBytes += item.source_size;
+      } catch (error) {
+        failedCount += 1;
+        await sql`
+          update schooldesk_internal.storage_source_cleanup_items
+          set status = 'failed', error = ${`${error}`}, updated_at = now()
+          where id = ${item.id}::uuid
+        `;
+        await sql`
+          update public.storage_cleanup_queue
+          set status = 'failed', last_error = ${`${error}`}, updated_at = now()
+          where storage_ref = ${`supabase://${item.source_bucket}/${item.source_key}`}
+        `;
+      }
+    }
+
+    const remaining = await currentSourceInventory(source);
+    const remainingBytes = remaining.reduce((sum, item) => sum + item.size, 0);
+    await sql`
+      update schooldesk_internal.storage_source_cleanup_batches
+      set status = ${failedCount > 0 ? "failed" : "completed"},
+          source_bytes_after = ${remainingBytes}, deleted_count = ${deletedCount},
+          failed_count = ${failedCount}, completed_at = now(), updated_at = now(),
+          report = ${sql.json({ deletedCount, deletedBytes, remainingBytes })}
+      where id = ${batchId}::uuid
+    `;
+    console.log(JSON.stringify({
+      mode: "cleanup",
+      dryRun: false,
+      batchId,
+      deletedCount,
+      deletedBytes,
+      remainingBytes,
+      targetBytes: batch.target_bytes,
+      failedCount,
+    }, null, 2));
+    if (failedCount > 0) Deno.exitCode = 1;
+  });
+}
+
 async function inventory(statePath: string) {
   const source = new S3Client(endpointConfig("SOURCE_S3"));
   const items: MigrationItem[] = [];
@@ -798,6 +1394,17 @@ const statePath = stateIndex >= 0
   ? Deno.args[stateIndex + 1]
   : "storage-migration.json";
 if (!statePath) throw new Error("--state requires a file path");
+const execute = Deno.args.includes("--execute");
+const allowReferenced = Deno.args.includes("--include-referenced");
+const batchIndex = Deno.args.indexOf("--batch");
+const batchId = batchIndex >= 0 ? Deno.args[batchIndex + 1] : "";
+const targetIndex = Deno.args.indexOf("--target-bytes");
+const targetBytes = targetIndex >= 0
+  ? Number(Deno.args[targetIndex + 1])
+  : DEFAULT_TARGET_BYTES;
+if (!Number.isSafeInteger(targetBytes) || targetBytes <= 0) {
+  throw new Error("--target-bytes must be a positive safe integer");
+}
 
 switch (command) {
   case "inventory":
@@ -809,11 +1416,22 @@ switch (command) {
   case "verify":
     await verify(statePath);
     break;
+  case "rewrite":
+    await rewriteReferences(statePath, execute);
+    break;
+  case "cleanup":
+    if (execute) {
+      if (!batchId) throw new Error("cleanup --execute requires --batch <dry-run-id>");
+      await cleanupExecute(batchId);
+    } else {
+      await cleanupDryRun(statePath, targetBytes, allowReferenced);
+    }
+    break;
   case "report":
     await report(statePath);
     break;
   default:
     throw new Error(
-      `Unknown command ${command}; use inventory, copy, verify, or report`,
+      `Unknown command ${command}; use inventory, copy, verify, rewrite, cleanup, or report`,
     );
 }

@@ -68,6 +68,7 @@ SET search_path = public, pg_temp
 AS $$
   WITH invoices AS (
     SELECT
+      fi.student_id,
       fi.net_amount,
       fi.paid_amount,
       fi.balance,

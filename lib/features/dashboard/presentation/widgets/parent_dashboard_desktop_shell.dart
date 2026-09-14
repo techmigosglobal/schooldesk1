@@ -17,6 +17,9 @@ class ParentDashboardDesktopBody extends StatelessWidget {
   final Map<String, dynamic> dashboard;
   final int activeChildIndex;
   final List<dynamic> eventPosts;
+  final String? feedError;
+  final bool feedStale;
+  final VoidCallback? onFeedRetry;
   final ValueChanged<int> onChildSelected;
 
   const ParentDashboardDesktopBody({
@@ -25,6 +28,9 @@ class ParentDashboardDesktopBody extends StatelessWidget {
     required this.dashboard,
     required this.activeChildIndex,
     required this.eventPosts,
+    this.feedError,
+    this.feedStale = false,
+    this.onFeedRetry,
     required this.onChildSelected,
   });
 
@@ -71,6 +77,9 @@ class ParentDashboardDesktopBody extends StatelessWidget {
                   SchoolFeedPreview(
                     posts: _feedPosts,
                     accentColor: parentColor,
+                    isStale: feedStale,
+                    errorMessage: feedError,
+                    onRetry: onFeedRetry,
                   ),
                   SizedBox(height: tokens.spacing.lg),
                   const TodaysHighlightsCard(role: 'parent'),
@@ -89,6 +98,9 @@ class ParentDashboardDesktopBody extends StatelessWidget {
                         SchoolFeedPreview(
                           posts: _feedPosts,
                           accentColor: parentColor,
+                          isStale: feedStale,
+                          errorMessage: feedError,
+                          onRetry: onFeedRetry,
                         ),
                         SizedBox(height: tokens.spacing.lg),
                         const TodaysHighlightsCard(role: 'parent'),

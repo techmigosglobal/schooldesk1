@@ -212,6 +212,10 @@ extension BackendTablesRawApi on BackendApiClient {
           payload?['page_size'] ?? envelope['page_size'],
           fallback: pageSize,
         ),
+        isStale: response.extra['schooldeskOfflineCache'] == true,
+        cacheStoredAt: DateTime.tryParse(
+          response.headers.value('x-schooldesk-cache-stored-at') ?? '',
+        ),
       );
     } on DioException catch (e) {
       throw _handleError(e);

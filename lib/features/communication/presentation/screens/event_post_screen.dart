@@ -67,6 +67,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   final _dateController = TextEditingController();
 
   bool _destParentHome = true;
+  bool _destTeacherHome = false;
   bool _destSchoolGallery = false;
   bool _destSchoolLanding = false;
 
@@ -358,6 +359,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   Future<void> _submit(bool isSubmit) async {
     final destinations = <String>[];
     if (_destParentHome) destinations.add('PARENTS_HOME');
+    if (_destTeacherHome) destinations.add('TEACHERS_HOME');
     if (_destSchoolGallery) destinations.add('SCHOOL_GALLERY');
     if (_destSchoolLanding) destinations.add('SCHOOL_LANDING');
 
@@ -470,6 +472,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     _editingPostId = null;
     _editingRejectedPost = false;
     _destParentHome = true;
+    _destTeacherHome = false;
     _destSchoolGallery = false;
     _destSchoolLanding = false;
   }
@@ -497,6 +500,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
           destinations.isEmpty ||
           destinations.contains('PARENTS_HOME') ||
           destinations.contains('Parent Home Feed');
+      _destTeacherHome =
+          destinations.contains('TEACHERS_HOME') ||
+          destinations.contains('Teacher School Feed');
       _destSchoolGallery =
           destinations.contains('SCHOOL_GALLERY') ||
           destinations.contains('School Gallery');
@@ -1238,6 +1244,17 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                     onChanged: (v) =>
                         setState(() => _destParentHome = v ?? false),
                   ),
+                  if (widget.principalMode)
+                    CheckboxListTile(
+                      title: const Text('Teacher School Feed'),
+                      subtitle: const Text(
+                        'Shows approved school updates in the staff dashboard.',
+                      ),
+                      value: _destTeacherHome,
+                      dense: true,
+                      onChanged: (v) =>
+                          setState(() => _destTeacherHome = v ?? false),
+                    ),
                   CheckboxListTile(
                     title: const Text('School Gallery'),
                     value: _destSchoolGallery,
