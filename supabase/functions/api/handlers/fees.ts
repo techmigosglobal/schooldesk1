@@ -82,6 +82,49 @@ function isReviewablePaymentRequestStatus(value: unknown) {
   return reviewablePaymentRequestStatuses.has(text(value).toLowerCase());
 }
 
+function nonNegativeInteger(value: unknown, fallback = 0): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/**
+ * Build the legacy JSON payment-request shape from client-owned fields only.
+ * Approval state and audit/settlement references are server-owned and must
+ * never be accepted from a parent request body.
+ */
+function parentPaymentRequestPayload(
+  body: Record<string, unknown>,
+  school: string,
+  parentUserId: string,
+) {
+  const now = new Date().toISOString();
+  const transactionRef = text(body.transaction_ref ?? body.transaction_id);
+  return {
+    school_id: school,
+    student_id: text(body.student_id),
+    invoice_id: text(body.invoice_id) || null,
+    amount: body.amount,
+    payment_method: text(body.payment_method, "upi"),
+    proof_url: text(body.proof_url) || null,
+    proof_file_name: text(body.proof_file_name) || null,
+    proof_content_type: text(body.proof_content_type) || null,
+    proof_size: nonNegativeInteger(body.proof_size, 0) || null,
+    remarks: text(body.remarks),
+    request_reference: text(body.request_reference) ||
+      `FPR-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+    transaction_ref: transactionRef || null,
+    transaction_id: text(body.transaction_id ?? body.transaction_ref) || null,
+    payment_date: text(body.payment_date) || null,
+    selected_months: nonNegativeInteger(body.selected_months),
+    selected_terms: nonNegativeInteger(body.selected_terms),
+    idempotency_key: text(body.idempotency_key) || crypto.randomUUID(),
+    parent_user_id: parentUserId,
+    status: "pending_verification",
+    submitted_at: now,
+    updated_at: now,
+  };
+}
+
 function normalizeFrequency(value: unknown) {
   const raw = text(value, "term").toLowerCase().replaceAll("-", "_").replaceAll(
     " ",
@@ -3616,13 +3659,13 @@ export async function handleFees(
             : "failed to verify parent access",
         );
       }
-      const { data, error } = await svc.from("parent_payment_requests").insert({
-        ...body,
-        school_id: school,
-        parent_user_id: isAdminOrPrincipal(user)
-          ? body.parent_user_id ?? null
-          : user.id,
-      }).select().single();
+      const { data, error } = await svc.from("parent_payment_requests").insert(
+        parentPaymentRequestPayload(
+          body as Record<string, unknown>,
+          school,
+          user.id,
+        ),
+      ).select().single();
       if (error) return fail(error.message);
       try {
         return ok(
@@ -4541,12 +4584,13 @@ export async function handleFees(
     ) {
       return fail("payment request must belong to a linked child", 403);
     }
-    const { data, error } = await svc.from("parent_payment_requests").insert({
-      ...body,
-      school_id: school,
-      parent_user_id: user.id,
-      status: "pending_verification",
-    }).select().single();
+    const { data, error } = await svc.from("parent_payment_requests").insert(
+      parentPaymentRequestPayload(
+        body as Record<string, unknown>,
+        school,
+        user.id,
+      ),
+    ).select().single();
     if (error) return fail(error.message);
     return ok(data);
   }

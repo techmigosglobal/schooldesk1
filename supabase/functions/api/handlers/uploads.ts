@@ -25,6 +25,7 @@ import {
   copyR2File,
   deleteR2File,
   headR2File,
+  legacyR2Reference,
   publicR2FileReference,
   publicR2FileUrl,
   legacyStorageWritesEnabled,
@@ -276,20 +277,24 @@ async function materializeEventPostMedia(
     const stored = eventMediaItemValue(item);
     if (!stored) return null;
     const stableRef = r2ReferenceInfo(stored) ? stored : undefined;
+    const migratedLegacyRef = stableRef ??
+      legacyR2Reference(stored, "school-assets");
     let url = "";
     if (postIsPublic) {
-      url = publicR2FileUrl(stored);
+      url = publicR2FileUrl(migratedLegacyRef ?? stored);
     }
-    if (!url && !publicOnly && stableRef) {
-      url = await signedPrivateFileUrl(svc, stableRef);
+    if (!url && (!publicOnly || postIsPublic)) {
+      url = await signedPrivateFileUrl(svc, stored, undefined, "school-assets");
     }
-    if (!url && publicOnly && !stableRef && postIsPublic) {
-      // Legacy landing media was already public in Supabase Storage. Keep it
-      // visible until its reference is rewritten to the public R2 bucket.
+    if (!url && publicOnly && postIsPublic) {
+      // Preserve the legacy URL only when the R2 copy is unavailable. This
+      // keeps rollback possible while allowing deleted Supabase objects to be
+      // served from their deterministic R2 destination.
       url = stored;
     }
-    if (!url && !stableRef && !publicOnly) {
-      // Legacy Supabase public URLs remain readable during the staged cutover.
+    if (!url && !publicOnly) {
+      // Legacy Supabase URLs remain the final fallback during the staged
+      // cutover when neither the R2 copy nor a signed legacy URL is usable.
       url = stored;
     }
     if (!url) return null;
@@ -297,12 +302,13 @@ async function materializeEventPostMedia(
       return {
         ...(item as Record<string, unknown>),
         url,
-        storage_ref: stableRef ?? (item as Record<string, unknown>).storage_ref,
+        storage_ref: migratedLegacyRef ??
+          (item as Record<string, unknown>).storage_ref,
       };
     }
     return {
       url,
-      ...(stableRef ? { storage_ref: stableRef } : {}),
+      ...(migratedLegacyRef ? { storage_ref: migratedLegacyRef } : {}),
     };
   }));
   return resolved.filter(Boolean);
@@ -3403,7 +3409,7 @@ export async function handleLandingFeed(
 
   const { data, error } = await svc.from("event_posts")
     .select(
-      "id, title, body, description, media_urls, event_date, created_at, destinations, visibility",
+      "id, title, body, media_urls, event_date, created_at, destinations, visibility",
     )
     .eq("school_id", schoolId)
     .in("status", ["approved", "published"])

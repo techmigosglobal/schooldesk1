@@ -71,6 +71,31 @@ void main() {
       api.dio.httpClientAdapter = previousAdapter;
     }
   });
+
+  test(
+    'does not forward the Supabase bearer to an external R2 signature',
+    () async {
+      final api = BackendApiClient.instance;
+      final previousAdapter = api.dio.httpClientAdapter;
+      final previousBaseUrl = api.dio.options.baseUrl;
+      final adapter = _CaptureBytesAdapter();
+      api.dio.httpClientAdapter = adapter;
+      api.dio.options.baseUrl = 'https://api.schooldesk.test/api/v1';
+      api.setAuthToken('supabase-test-token');
+      try {
+        await api.dio.get<List<int>>(
+          'https://account.r2.cloudflarestorage.com/schooldesk-private-files/private/event-posts/photo.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=test',
+          options: Options(responseType: ResponseType.bytes),
+        );
+
+        expect(adapter.lastRequest?.headers['Authorization'], isNull);
+      } finally {
+        api.clearAuthToken();
+        api.dio.options.baseUrl = previousBaseUrl;
+        api.dio.httpClientAdapter = previousAdapter;
+      }
+    },
+  );
 }
 
 class _OfflineAdapter implements HttpClientAdapter {
@@ -83,6 +108,29 @@ class _OfflineAdapter implements HttpClientAdapter {
     throw DioException(
       requestOptions: options,
       type: DioExceptionType.connectionError,
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _CaptureBytesAdapter implements HttpClientAdapter {
+  RequestOptions? lastRequest;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    lastRequest = options;
+    return ResponseBody.fromBytes(
+      <int>[0xFF, 0xD8, 0xFF],
+      200,
+      headers: {
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      },
     );
   }
 

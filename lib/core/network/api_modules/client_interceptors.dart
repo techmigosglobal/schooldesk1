@@ -63,10 +63,28 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    if (_client._authToken != null) {
+    if (_client._authToken != null && !_isExternalSignedMedia(options)) {
       options.headers['Authorization'] = 'Bearer ${_client._authToken}';
     }
     handler.next(options);
+  }
+
+  bool _isExternalSignedMedia(RequestOptions options) {
+    final uri = options.uri;
+    if (!uri.hasScheme) return false;
+    final hasAmzSignature = uri.queryParameters.keys.any(
+      (key) => key.toLowerCase().startsWith('x-amz-'),
+    );
+    if (!hasAmzSignature) return false;
+
+    // R2 presigned URLs authenticate through their query signature. Adding a
+    // Supabase JWT Authorization header changes the request seen by S3/R2 and
+    // produces a 400/403 even though the URL itself is valid. Keep the app
+    // JWT on API requests, but never forward it to an external signed object.
+    final apiOrigin = Uri.tryParse(_client.baseUrl);
+    return apiOrigin == null ||
+        uri.host.toLowerCase() != apiOrigin.host.toLowerCase() ||
+        uri.port != apiOrigin.port;
   }
 }
 

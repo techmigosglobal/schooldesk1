@@ -30,6 +30,35 @@ export type R2Upload = {
   visibility: R2Visibility;
 };
 
+const LEGACY_STORAGE_BUCKETS = new Set([
+  "school-assets",
+  "school-private-files",
+  "finance-documents",
+  "payment-proofs",
+  "issue-attachments",
+  "help-tutorial-videos",
+  "school-signatures",
+  "school-public-media",
+]);
+
+const LEGACY_STORAGE_KEY_PREFIXES = new Set([
+  "avatars",
+  "documents",
+  "exports",
+  "gallery",
+  "health",
+  "homework",
+  "issues",
+  "logos",
+  "payment-config",
+  "payment-proofs",
+  "reports",
+  "signatures",
+  "students",
+  "uploads",
+  "website",
+]);
+
 type SignedRequest = {
   method: string;
   visibility: R2Visibility;
@@ -127,6 +156,86 @@ export function r2FileReference(key: string): string {
 
 export function publicR2FileReference(key: string): string {
   return r2Reference(key, "public");
+}
+
+function decodeLegacyPath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function cleanLegacyKey(value: string): string {
+  return decodeLegacyPath(value).replace(/^\/+/, "").replace(/\/{2,}/g, "/")
+    .trim();
+}
+
+/** Extracts a known Supabase Storage bucket/key from a legacy reference. */
+function legacyStorageLocation(
+  value: unknown,
+  defaultBucket = "",
+): { bucket: string; key: string } | null {
+  const raw = `${value ?? ""}`.trim();
+  if (!raw || raw.startsWith("r2://")) return null;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      const marker = "/storage/v1/object/";
+      const markerIndex = url.pathname.indexOf(marker);
+      if (markerIndex < 0) return null;
+      const rest = url.pathname.slice(markerIndex + marker.length)
+        .replace(/^public\//, "")
+        .replace(/^sign\//, "")
+        .replace(/^authenticated\//, "");
+      const slash = rest.indexOf("/");
+      if (slash < 1) return null;
+      const bucket = decodeLegacyPath(rest.slice(0, slash));
+      const key = cleanLegacyKey(rest.slice(slash + 1));
+      return LEGACY_STORAGE_BUCKETS.has(bucket) && key ? { bucket, key } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const normalized = raw.replace(/^\/+/, "");
+  const slash = normalized.indexOf("/");
+  if (slash > 0) {
+    const bucket = normalized.slice(0, slash);
+    const key = cleanLegacyKey(normalized.slice(slash + 1));
+    if (LEGACY_STORAGE_BUCKETS.has(bucket) && key) return { bucket, key };
+  }
+
+  if (
+    defaultBucket && LEGACY_STORAGE_BUCKETS.has(defaultBucket) &&
+    !/^([a-z]+:)?\/\//i.test(normalized) && slash > 0 &&
+    LEGACY_STORAGE_KEY_PREFIXES.has(normalized.slice(0, slash).toLowerCase())
+  ) {
+    const key = cleanLegacyKey(normalized);
+    return key ? { bucket: defaultBucket, key } : null;
+  }
+  return null;
+}
+
+/**
+ * Derives the deterministic R2 reference used by the storage migration from
+ * a legacy Supabase Storage URL. This lets reads recover objects before the
+ * database rewrite has completed; the source URL is never persisted here.
+ */
+export function legacyR2Reference(
+  value: unknown,
+  defaultBucket = "",
+): string | null {
+  const location = legacyStorageLocation(value, defaultBucket);
+  if (!location) return null;
+
+  const isPublic = location.bucket === "school-public-media" ||
+    (location.bucket === "school-assets" && /^logos\//i.test(location.key));
+  const destinationKey = isPublic && location.bucket === "school-public-media"
+    ? `website/${location.key}`
+    : `legacy/${location.bucket}/${location.key}`;
+  return r2Reference(destinationKey, isPublic ? "public" : "private");
 }
 
 function hex(value: ArrayBuffer | Uint8Array): string {

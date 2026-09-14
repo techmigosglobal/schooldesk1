@@ -6,6 +6,7 @@ import {
 import {
   publicR2FileReference,
   publicR2FileUrl,
+  legacyR2Reference,
   r2FileReference,
   r2KeyFromValue,
   r2ReferenceInfo,
@@ -89,4 +90,29 @@ Deno.test("legacy unscoped references infer private only for private keys", asyn
     assertEquals(r2VisibilityFromValue("r2://private/docs/a.pdf"), "private");
     assertEquals(r2VisibilityFromValue("r2://website-gallery/a.jpg"), "public");
   });
+});
+
+Deno.test("legacy Supabase Storage references map to migrated R2 keys", () => {
+  assertEquals(
+    legacyR2Reference(
+      "https://ouvwogguttybmpgfgctc.supabase.co/storage/v1/object/public/" +
+        "school-assets/uploads/school/post/video.mp4",
+    ),
+    "r2://private/legacy/school-assets/uploads/school/post/video.mp4",
+  );
+  assertEquals(
+    legacyR2Reference(
+      "https://ouvwogguttybmpgfgctc.supabase.co/storage/v1/object/public/" +
+        "school-public-media/gallery/photo.jpg",
+    ),
+    "r2://public/website/gallery/photo.jpg",
+  );
+  assertEquals(
+    legacyR2Reference("uploads/school/post/photo.jpg", "school-assets"),
+    "r2://private/legacy/school-assets/uploads/school/post/photo.jpg",
+  );
+  assertEquals(
+    legacyR2Reference("https://example.test/not-storage/photo.jpg"),
+    null,
+  );
 });

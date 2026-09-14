@@ -17,6 +17,6 @@ Deno.test("coordinator dashboard returns its operations-only DTO before fee read
   );
   assertMatch(
     source,
-    /const \[invoices, paidInvoices, parentPaymentRequests\] = await Promise\.all/,
+    /const \{ data: feeSummary, error: feeSummaryError \} = await svc\.rpc\(\s+"fee_dashboard_summary",/,
   );
 });

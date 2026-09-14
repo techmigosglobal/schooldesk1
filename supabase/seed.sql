@@ -325,6 +325,7 @@ begin
       'title','Read page 10',
       'description','Seed homework for QA',
       'section_id',v_section,
+      'academic_year_id',v_year,
       'subject_id',v_subject,
       'staff_id',v_teacher_staff,
       'due_date',(current_date + 1)::text,

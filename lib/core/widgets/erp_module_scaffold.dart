@@ -684,7 +684,54 @@ class _ToolbarIconButton extends StatelessWidget {
       ),
     );
     if (badgeCount <= 0) return button;
-    return Badge.count(count: badgeCount > 99 ? 99 : badgeCount, child: button);
+    // Keep the count visually attached to the button without allowing the
+    // badge overlay to consume taps. Users naturally tap the red count, and
+    // that must activate the same notification action as tapping the bell.
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            IgnorePointer(child: button),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Semantics(
+                  container: true,
+                  label: '${badgeCount > 99 ? 99 : badgeCount}',
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.error,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${badgeCount > 99 ? 99 : badgeCount}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onError,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

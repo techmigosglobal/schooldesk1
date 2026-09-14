@@ -5,6 +5,8 @@ import {
   r2KeyFromValue,
   r2ReferenceInfo,
   r2VisibilityFromValue,
+  headR2File,
+  legacyR2Reference,
   legacyStorageReadsEnabled,
   storageReadOrder,
   signedR2FileUrl,
@@ -61,10 +63,25 @@ export async function signedPrivateFileUrl(
   ttlSeconds = PRIVATE_FILE_URL_TTL_SECONDS,
   bucket = PRIVATE_FILES_BUCKET,
 ): Promise<string> {
-  const r2Key = r2KeyFromValue(value);
+  const explicitR2Reference = r2KeyFromValue(value) ? `${value}`.trim() : "";
+  const legacyReference = explicitR2Reference
+    ? ""
+    : legacyR2Reference(value, bucket) ?? "";
+  const r2Value = explicitR2Reference || legacyReference;
+  const r2Key = r2KeyFromValue(r2Value);
   for (const provider of storageReadOrder()) {
     if (provider === "r2" && r2Key) {
-      const r2Url = await signedR2FileUrl(value, ttlSeconds);
+      // A legacy URL can be deterministically mapped to R2, but the copy may
+      // be missing. Probe only derived references so a missing copy can still
+      // fall through to the legacy provider during the staged cutover.
+      if (legacyReference) {
+        try {
+          if (!(await headR2File(r2Value))) continue;
+        } catch {
+          continue;
+        }
+      }
+      const r2Url = await signedR2FileUrl(r2Value, ttlSeconds);
       if (r2Url) return r2Url;
       continue;
     }

@@ -28,7 +28,7 @@ const studentDirectorySelect =
 // signed media, and attendance belong to the detail/summary endpoints; they
 // must not be hydrated for every row in a paged list.
 const studentListSelect =
-  "id, school_id, student_id_number, first_name, last_name, admission_number, current_section_id, status, section:sections(id, section_name, grade:grades(id, grade_name, grade_number, academic_year_id))";
+  "id, school_id, student_id_number, first_name, last_name, admission_number, current_section_id, status, section:sections(id, section_name, grade:grades(id, grade_name, grade_number))";
 
 // Restricted readers never receive financial totals, parent account details,
 // medical records, or permanent/signed document references through the student

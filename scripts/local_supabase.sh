@@ -192,6 +192,51 @@ reset_db() {
   # `--local` is intentional: it rejects a linked project as the reset target.
   local_cli db reset --local
   write_runtime_env
+  grant_sanity_check
+}
+
+grant_sanity_check() {
+  need docker
+
+  local db_container missing_service_grants missing_client_grants
+  db_container="supabase_db_${LOCAL_PROJECT_ID}"
+  docker inspect --format '{{.State.Running}}' "$db_container" 2>/dev/null | grep -qx true || \
+    die "Local database container is not running: $db_container"
+
+  missing_service_grants="$(docker exec "$db_container" psql -U postgres -d postgres \
+    -v ON_ERROR_STOP=1 -Atqc "
+      select coalesce(string_agg(c.relname, ', ' order by c.relname), '')
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relkind in ('r', 'p')
+        and not (
+          has_table_privilege('service_role', c.oid, 'SELECT')
+          and has_table_privilege('service_role', c.oid, 'INSERT')
+          and has_table_privilege('service_role', c.oid, 'UPDATE')
+          and has_table_privilege('service_role', c.oid, 'DELETE')
+        );
+    ")"
+  [[ -z "$missing_service_grants" ]] || \
+    die "service_role is missing table DML grants after reset: $missing_service_grants"
+
+  missing_client_grants="$(docker exec "$db_container" psql -U postgres -d postgres \
+    -v ON_ERROR_STOP=1 -Atqc "
+      select coalesce(string_agg(c.relname, ', ' order by c.relname), '')
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relkind in ('r', 'p')
+        and c.relname in ('users', 'students', 'sections', 'notification_logs')
+        and not (
+          has_table_privilege('anon', c.oid, 'SELECT')
+          and has_table_privilege('authenticated', c.oid, 'SELECT')
+        );
+    ")"
+  [[ -z "$missing_client_grants" ]] || \
+    die "anon/authenticated are missing required read grants after reset: $missing_client_grants"
+
+  printf '[local-supabase] Grant sanity check passed.\n'
 }
 
 prepare() {
