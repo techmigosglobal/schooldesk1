@@ -105,34 +105,55 @@ export async function handleApprovals(
     const [accounts, generic, staffLeave, studentLeave, concessions, payments, events] =
       await Promise.all([
         svc.from("account_approvals").select(
-          "id, user_id, role, status, created_at, updated_at, user:users(name, role_name)",
+          "id, user_id, role, status, created_at, updated_at",
         ).eq("school_id", school).limit(100),
         svc.from("approval_requests").select(
-          "id, module, operation_type, entity_type, entity_id, status, submitted_at, created_at, review_note, requested_by:users(name, role_name)",
+          "id, module, operation_type, entity_type, entity_id, status, submitted_at, created_at, review_note, requested_by:users!approval_requests_requested_by_fkey(name, role_name)",
         ).eq("school_id", school).limit(100),
         svc.from("leave_applications").select(
-          "id, staff_id, status, from_date, to_date, reason, created_at, staff:staff(first_name, last_name, designation)",
+          "id, staff_id, status, start_date, end_date, reason, created_at, staff:staff(first_name, last_name, designation)",
         ).eq("school_id", school).limit(100),
         svc.from("student_leave_applications").select(
-          "id, student_id, parent_user_id, status, start_date, end_date, reason, created_at, updated_at, student:students(first_name, last_name, current_section:sections(section_name, grade:grades(grade_name))), parent_user:users(name, role_name)",
+          "id, student_id, status, start_date, end_date, reason, created_at, updated_at, student:students(first_name, last_name, current_section:sections(section_name, grade:grades(grade_name)))",
         ).eq("school_id", school).limit(100),
         svc.from("fee_concessions").select(
           "id, student_id, status, amount, reason, created_at, updated_at, student:students(first_name, last_name, current_section:sections(section_name, grade:grades(grade_name)))",
         ).eq("school_id", school).limit(100),
         svc.from("parent_payment_requests").select(
-          "id, student_id, parent_user_id, status, amount, payment_method, transaction_ref, remarks, admin_remarks, payment_date, created_at, updated_at, student:students(first_name, last_name), parent_user:users(name, email), invoice:fee_invoices(invoice_number)",
+          "id, student_id, parent_user_id, status, amount, payment_method, transaction_ref, remarks, admin_remarks, payment_date, created_at, updated_at, student:students(first_name, last_name), invoice:fee_invoices(invoice_number)",
         ).eq("school_id", school).limit(100),
         svc.from("event_posts").select(
-          "id, title, body, status, created_at, updated_at, created_by, section_id",
+          "id, title, body, status, created_at, updated_at, created_by",
         ).eq("school_id", school).in("status", ["pending", "submitted"]).limit(100),
       ]);
     const results = [accounts, generic, staffLeave, studentLeave, concessions, payments, events];
     const queryError = results.find((result) => result.error);
     if (queryError?.error) return fail(queryError.error.message ?? "failed to load approval feed");
 
+    const accountUserIds = [...new Set(
+      (accounts.data ?? []).map((row) => text(row.user_id)).filter(Boolean),
+    )];
+    const accountUsers = accountUserIds.length === 0
+      ? { data: [], error: null }
+      : await svc.from("users").select("id, name, role_name").in("id", accountUserIds);
+    if (accountUsers.error) return fail(accountUsers.error.message ?? "failed to load account requesters");
+    const accountUsersById = new Map(
+      (accountUsers.data ?? []).map((row) => [text(row.id), row]),
+    );
+    const paymentParentIds = [...new Set(
+      (payments.data ?? []).map((row) => text(row.parent_user_id)).filter(Boolean),
+    )];
+    const paymentUsers = paymentParentIds.length === 0
+      ? { data: [], error: null }
+      : await svc.from("users").select("id, name, email").in("id", paymentParentIds);
+    if (paymentUsers.error) return fail(paymentUsers.error.message ?? "failed to load payment requesters");
+    const paymentUsersById = new Map(
+      (paymentUsers.data ?? []).map((row) => [text(row.id), row]),
+    );
+
     const items: Record<string, unknown>[] = [];
     for (const row of accounts.data ?? []) {
-      const userRow = (row.user ?? {}) as unknown as Record<string, unknown>;
+      const userRow = accountUsersById.get(text(row.user_id)) ?? {};
       items.push({
         id: text(row.id), type: "account", source: "generic",
         requesterName: text(userRow.name, "Account request"),
@@ -163,7 +184,7 @@ export async function handleApprovals(
         requesterName: [text(staff.first_name), text(staff.last_name)].filter(Boolean).join(" ") || "Teacher",
         requesterRole: "Teacher", requesterClass: text(staff.designation, "Staff leave"),
         submittedDate: dateOnly(row.created_at), summary: "Staff leave request",
-        details: `From: ${dateOnly(row.from_date)}\nTo: ${dateOnly(row.to_date)}\nReason: ${text(row.reason)}`,
+        details: `From: ${dateOnly(row.start_date)}\nTo: ${dateOnly(row.end_date)}\nReason: ${text(row.reason)}`,
         status: pendingStatus(row.status), remarks: null, actionDate: null,
         decisionPath: `/leave/applications/${text(row.id)}/approve`,
       });
@@ -195,7 +216,7 @@ export async function handleApprovals(
     }
     for (const row of payments.data ?? []) {
       const student = (row.student ?? {}) as unknown as Record<string, unknown>;
-      const parent = (row.parent_user ?? {}) as unknown as Record<string, unknown>;
+      const parent = paymentUsersById.get(text(row.parent_user_id)) ?? {};
       const invoice = (row.invoice ?? {}) as unknown as Record<string, unknown>;
       items.push({
         id: text(row.id), type: "fee", source: "fee_payment_proof",
@@ -248,15 +269,26 @@ export async function handleApprovals(
     const seg =
       path.slice("/account-approvals".length).split("/").filter(Boolean)[0];
     if (!seg && method === "GET") {
-      let q = svc.from("account_approvals").select(
-        "*, user:users!account_approvals_user_id_fkey(*)",
-      ).eq("school_id", school);
+      let q = svc.from("account_approvals").select("*").eq("school_id", school);
       if (url.searchParams.get("status")) {
         q = q.eq("status", url.searchParams.get("status")!);
       }
       const { data, error } = await q;
       if (error) return fail(error.message);
-      return ok(data);
+      const userIds = [...new Set(
+        (data ?? []).map((row) => text(row.user_id)).filter(Boolean),
+      )];
+      const users = userIds.length === 0
+        ? { data: [], error: null }
+        : await svc.from("users").select("*").in("id", userIds);
+      if (users.error) return fail(users.error.message ?? "failed to load account requesters");
+      const usersById = new Map(
+        (users.data ?? []).map((row) => [text(row.id), row]),
+      );
+      return ok((data ?? []).map((row) => ({
+        ...row,
+        user: usersById.get(text(row.user_id)) ?? null,
+      })));
     }
     if (!seg && method === "POST") {
       const { data, error } = await svc.from("account_approvals").insert({

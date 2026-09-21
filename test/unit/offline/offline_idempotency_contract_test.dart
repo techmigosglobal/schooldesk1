@@ -34,7 +34,7 @@ void main() {
   test('Edge API persists and replays keyed authenticated mutations', () {
     final api = File('supabase/functions/api/index.ts').readAsStringSync();
     final migration = File(
-      'supabase/migrations/20260912100000_api_idempotency_keys.sql',
+      'supabase/migrations/20260913014816_api_idempotency_keys.sql',
     ).readAsStringSync();
 
     expect(api, contains('withIdempotency'));

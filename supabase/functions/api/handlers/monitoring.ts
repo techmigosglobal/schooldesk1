@@ -1,12 +1,12 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { cors, fail, ok } from "../index.ts";
+import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
 import { recordActivity } from "./activity.ts";
 import {
   deleteR2File,
   r2FileReference,
   r2KeyFromValue,
-  r2ReferenceInfo,
   r2Reference,
+  r2ReferenceInfo,
 } from "../lib/r2_storage.ts";
 
 function schoolId(user: User): string {
@@ -15,6 +15,69 @@ function schoolId(user: User): string {
 
 function isSuperAdmin(user: User): boolean {
   return user.app_metadata?.role_name === "super_admin";
+}
+
+async function alertSuperAdminsOfNewError(
+  svc: SupabaseClient,
+  school: string,
+  errorId: string,
+  approvalAuditFailure: boolean,
+) {
+  const { data: admins, error: adminError } = await svc.from("users")
+    .select("id")
+    .eq("school_id", school)
+    .eq("role_name", "super_admin");
+  if (adminError) throw adminError;
+  const userIds = (admins ?? []).map((row) => text(row.id)).filter(Boolean);
+  if (userIds.length === 0) return;
+
+  const title = approvalAuditFailure
+    ? "Approval audit failure detected"
+    : "New SchoolDesk server error";
+  const message =
+    "A new server error was recorded. Open System Monitor to review it.";
+  const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const { count, error: rateLimitError } = await svc.from("notification_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("school_id", school)
+    .eq("type", "system_alert")
+    .gte("created_at", since);
+  if (rateLimitError) throw rateLimitError;
+  if ((count ?? 0) >= 5 * userIds.length) {
+    console.error("error_event_alert_rate_limited", { school_id: school });
+    return;
+  }
+  const notifications = userIds.map((userId) => ({
+    school_id: school,
+    user_id: userId,
+    target_role: "super_admin",
+    title,
+    body: message,
+    type: "system_alert",
+    entity_type: "error_event",
+    entity_id: errorId,
+  }));
+  const { error: notificationError } = await svc.from("notification_logs")
+    .insert(notifications);
+  if (notificationError) throw notificationError;
+
+  const { data: events, error: eventError } = await svc.from(
+    "notification_events",
+  ).insert(userIds.map((userId) => ({
+    school_id: school,
+    user_id: userId,
+    event_type: "system_alert",
+    event_data: {
+      title,
+      message,
+      reference_type: "error_event",
+      reference_id: errorId,
+      route: "/system-monitor-screen",
+    },
+  }))).select("id");
+  if (eventError) throw eventError;
+  const eventIds = (events ?? []).map((row) => text(row.id)).filter(Boolean);
+  if (eventIds.length > 0) triggerPushProcessing(eventIds);
 }
 
 type StorageObject = { bucket_id: string; name: string };
@@ -539,6 +602,32 @@ export async function handleMonitoring(
       p_fingerprint: fingerprint,
     });
     if (error) return fail(error.message);
+    const savedEvent = data as Record<string, unknown>;
+    const metadata = context.metadata && typeof context.metadata === "object"
+      ? context.metadata as Record<string, unknown>
+      : {};
+    const approvalAuditFailure = `${metadata.approval_audit_failure ?? ""}` ===
+      "true" || message.includes("approval_audit_write_failed");
+    const statusCode = integer(context.status_code) ?? 0;
+    const isNewServerFailure = approvalAuditFailure || severity === "fatal" ||
+      (severity === "error" && statusCode >= 500);
+    if (isNewServerFailure && integer(savedEvent.occurrence_count) === 1) {
+      try {
+        await alertSuperAdminsOfNewError(
+          svc,
+          school,
+          text(savedEvent.id),
+          approvalAuditFailure,
+        );
+      } catch (alertError) {
+        console.error("error_event_alert_failed", {
+          error_id: text(savedEvent.id),
+          message: alertError instanceof Error
+            ? alertError.message
+            : String(alertError),
+        });
+      }
+    }
     return ok(responseRow(data as Record<string, unknown>));
   }
 

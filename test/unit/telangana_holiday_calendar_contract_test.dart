@@ -45,7 +45,7 @@ void main() {
 
   test('the supplied PDF spelling and local seed order are preserved', () {
     const sources = [
-      'supabase/migrations/20260829144043_fix_telangana_holiday_calendar_academic_year_range.sql',
+      'supabase/migrations/20260830134507_fix_telangana_holiday_calendar_academic_year_range.sql',
       'supabase/seed.sql',
       'supabase/seed_local_security.sql',
     ];

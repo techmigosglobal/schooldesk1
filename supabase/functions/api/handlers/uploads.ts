@@ -755,6 +755,8 @@ async function ensureEventPostSchema() {
         `alter table public.event_posts
           add column if not exists approved_by uuid references public.users(id) on delete set null`,
         `alter table public.event_posts
+          add column if not exists reviewed_by uuid references public.users(id) on delete set null`,
+        `alter table public.event_posts
           add column if not exists approved_at timestamptz`,
         `update public.event_posts
           set destinations = case
@@ -2676,6 +2678,7 @@ export async function handleEvents(
       destinations,
       media_urls: approvedMedia,
       approved_by: user.id,
+      reviewed_by: user.id,
       approved_at: new Date().toISOString(),
       rejection_reason: null,
       updated_at: new Date().toISOString(),
@@ -2752,6 +2755,7 @@ export async function handleEvents(
     const { data, error } = await svc.from("event_posts").update({
       status: "rejected",
       media_urls: rejectedMedia,
+      reviewed_by: user.id,
       rejection_reason: textValue(body.reason, "Principal requested changes."),
       updated_at: new Date().toISOString(),
     }).eq("id", seg).eq("school_id", school)

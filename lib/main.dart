@@ -30,9 +30,17 @@ import 'package:schooldesk1/core/services/theme_provider.dart';
 import 'package:schooldesk1/core/widgets/animated_startup_splash.dart';
 import 'package:schooldesk1/core/widgets/custom_error_widget.dart';
 
+SemanticsHandle? _appSemanticsHandle;
+
+@visibleForTesting
+void disposeAppSemanticsHandleForTesting() {
+  _appSemanticsHandle?.dispose();
+  _appSemanticsHandle = null;
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SemanticsBinding.instance.ensureSemantics();
+  _appSemanticsHandle ??= SemanticsBinding.instance.ensureSemantics();
   GoogleFonts.config.allowRuntimeFetching = false;
 
   // ── Validate environment FIRST ───────────────────────────────────────────

@@ -5,53 +5,71 @@ import 'package:schooldesk1/main.dart' as app;
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
+import 'package:schooldesk1/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart';
+import 'package:schooldesk1/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart';
+import 'package:schooldesk1/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   final credentials = <_RoleCredentials>[
-    _RoleCredentials(
+    const _RoleCredentials(
       role: 'Principal',
-      username: const String.fromEnvironment('QA_PRINCIPAL_USERNAME'),
-      password: const String.fromEnvironment('QA_PRINCIPAL_PASSWORD'),
-      dashboardMarkers: const ['Oversight Overview', 'Pending Approvals'],
+      username: String.fromEnvironment('QA_PRINCIPAL_USERNAME'),
+      password: String.fromEnvironment('QA_PRINCIPAL_PASSWORD'),
+      dashboardType: PrincipalDashboardScreen,
     ),
-    _RoleCredentials(
+    const _RoleCredentials(
       role: 'Admin',
-      username: const String.fromEnvironment('QA_ADMIN_USERNAME'),
-      password: const String.fromEnvironment('QA_ADMIN_PASSWORD'),
-      dashboardMarkers: const ['Total Students', 'Total Staff'],
+      username: String.fromEnvironment('QA_ADMIN_USERNAME'),
+      password: String.fromEnvironment('QA_ADMIN_PASSWORD'),
+      // Legacy backend admins share Principal-level access in this app.
+      dashboardType: PrincipalDashboardScreen,
     ),
-    _RoleCredentials(
+    const _RoleCredentials(
+      role: 'Coordinator',
+      username: String.fromEnvironment('QA_COORDINATOR_USERNAME'),
+      password: String.fromEnvironment('QA_COORDINATOR_PASSWORD'),
+      dashboardType: PrincipalDashboardScreen,
+    ),
+    const _RoleCredentials(
       role: 'Teacher',
-      username: const String.fromEnvironment('QA_TEACHER_USERNAME'),
-      password: const String.fromEnvironment('QA_TEACHER_PASSWORD'),
-      dashboardMarkers: const ["Today's Overview", 'Class Students'],
+      username: String.fromEnvironment('QA_TEACHER_USERNAME'),
+      password: String.fromEnvironment('QA_TEACHER_PASSWORD'),
+      dashboardType: TeacherDashboardScreen,
     ),
-    _RoleCredentials(
+    const _RoleCredentials(
       role: 'Parent',
-      username: const String.fromEnvironment('QA_PARENT_USERNAME'),
-      password: const String.fromEnvironment('QA_PARENT_PASSWORD'),
-      dashboardMarkers: const ['Fee Dues', 'Notices'],
+      username: String.fromEnvironment('QA_PARENT_USERNAME'),
+      password: String.fromEnvironment('QA_PARENT_PASSWORD'),
+      dashboardType: ParentDashboardScreen,
     ),
   ];
 
   group('Local role login smoke', () {
     for (final role in credentials) {
       testWidgets('${role.role} logs in and reaches dashboard', (tester) async {
-        await _launchCleanApp(tester);
-        await _openSignInForm(tester);
+        try {
+          await _launchCleanApp(tester);
+          await _openSignInForm(tester);
 
-        final fields = find.byType(TextFormField);
-        expect(fields, findsNWidgets(2));
-        await tester.enterText(fields.at(0), role.username);
-        await tester.enterText(fields.at(1), role.password);
-        await tester.testTextInput.receiveAction(TextInputAction.done);
+          final fields = find.byType(TextFormField);
+          expect(fields, findsNWidgets(2));
+          await tester.enterText(fields.at(0), role.username);
+          await tester.enterText(fields.at(1), role.password);
+          await tester.testTextInput.receiveAction(TextInputAction.done);
 
-        await _pumpUntilAnyText(tester, role.dashboardMarkers);
+          await _pumpUntilRoleDashboard(tester, role);
 
-        expect(find.text('Dashboard unavailable'), findsNothing);
-        expect(find.text('Invalid username or password.'), findsNothing);
+          expect(find.text('Dashboard unavailable'), findsNothing);
+          expect(find.text('Invalid username or password.'), findsNothing);
+          expect(
+            BackendApiClient.instance.currentRoleName?.toLowerCase(),
+            role.role.toLowerCase(),
+          );
+        } finally {
+          app.disposeAppSemanticsHandleForTesting();
+        }
       }, skip: !role.isConfigured);
     }
   });
@@ -59,6 +77,7 @@ void main() {
 
 Future<void> _launchCleanApp(WidgetTester tester) async {
   final originalErrorWidgetBuilder = ErrorWidget.builder;
+  final originalFlutterErrorHandler = FlutterError.onError;
   await TokenStorageService.clear();
   BackendApiClient.instance.clearAuthToken();
   RoleAccessService.clear();
@@ -73,49 +92,72 @@ Future<void> _launchCleanApp(WidgetTester tester) async {
     }
   } finally {
     ErrorWidget.builder = originalErrorWidgetBuilder;
+    FlutterError.onError = originalFlutterErrorHandler;
   }
 }
 
 Future<void> _openSignInForm(WidgetTester tester) async {
-  if (find.text('Sign in').evaluate().isNotEmpty) return;
+  if (find.byType(TextFormField).evaluate().length == 2) return;
 
-  await _pumpUntilAnyText(tester, const ['Login', 'Secure Login']);
-  final loginButton = find.widgetWithText(FilledButton, 'Login');
-  final secureLoginButton = find.widgetWithText(FilledButton, 'Secure Login');
-  if (loginButton.evaluate().isNotEmpty) {
-    await tester.tap(loginButton.first);
+  final landingSignInButton = find.byKey(const Key('sign_in_button'));
+  if (landingSignInButton.evaluate().isNotEmpty) {
+    await tester.tap(landingSignInButton);
   } else {
-    await tester.tap(secureLoginButton.first);
+    await _pumpUntilAnyText(tester, const ['Login', 'Secure Login']);
+    final loginButton = find.widgetWithText(FilledButton, 'Login');
+    final secureLoginButton = find.widgetWithText(FilledButton, 'Secure Login');
+    if (loginButton.evaluate().isNotEmpty) {
+      await tester.tap(loginButton.first);
+    } else {
+      await tester.tap(secureLoginButton.first);
+    }
   }
 
-  await _pumpUntilAnyText(tester, const ['Sign in']);
+  for (var attempt = 0; attempt < 80; attempt++) {
+    await tester.pump(const Duration(milliseconds: 500));
+    if (find.byType(TextFormField).evaluate().length == 2) return;
+  }
+  fail(
+    'The sign-in form did not expose the expected username and password fields.',
+  );
+}
+
+Future<void> _pumpUntilRoleDashboard(
+  WidgetTester tester,
+  _RoleCredentials role,
+) async {
+  for (var attempt = 0; attempt < 80; attempt++) {
+    await tester.pump(const Duration(milliseconds: 500));
+    final api = BackendApiClient.instance;
+    final expectedRole = role.role.toLowerCase();
+    if (api.isAuthenticated &&
+        api.currentRoleName?.toLowerCase() == expectedRole &&
+        find.byType(role.dashboardType).evaluate().isNotEmpty) {
+      return;
+    }
+  }
+  fail('The ${role.role} session did not reach its dashboard widget.');
 }
 
 Future<void> _pumpUntilAnyText(WidgetTester tester, List<String> texts) async {
   for (var attempt = 0; attempt < 80; attempt++) {
     await tester.pump(const Duration(milliseconds: 500));
-    for (final text in texts) {
-      if (find.text(text).evaluate().isNotEmpty) {
-        return;
-      }
-    }
+    if (texts.any((text) => find.text(text).evaluate().isNotEmpty)) return;
   }
-  fail(
-    'None of the expected dashboard markers were found: ${texts.join(', ')}',
-  );
+  fail('None of the expected text was found: ${texts.join(', ')}');
 }
 
 class _RoleCredentials {
   final String role;
   final String username;
   final String password;
-  final List<String> dashboardMarkers;
+  final Type dashboardType;
 
   const _RoleCredentials({
     required this.role,
     required this.username,
     required this.password,
-    required this.dashboardMarkers,
+    required this.dashboardType,
   });
 
   bool get isConfigured => username.trim().isNotEmpty && password.isNotEmpty;

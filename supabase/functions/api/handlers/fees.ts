@@ -4290,6 +4290,7 @@ export async function handleFees(
           return fail("invalid concession status");
         }
         updates.status = status;
+        updates.reviewed_by = user.id;
         if (status === "approved") updates.approved_by = user.id;
       }
       if (Object.hasOwn(body, "amount") || Object.hasOwn(body, "percentage")) {
@@ -4596,9 +4597,18 @@ export async function handleFees(
   }
 
   if (path === "/fee-concessions" && method === "POST") {
+    const status = text(body.status, "approved").toLowerCase();
+    if (!["pending", "approved", "rejected"].includes(status)) {
+      return fail("invalid concession status");
+    }
     const { data, error } = await svc.from("fee_concessions").insert({
       ...body,
       school_id: school,
+      status,
+      ...(status === "approved" || status === "rejected"
+        ? { reviewed_by: user.id }
+        : {}),
+      ...(status === "approved" ? { approved_by: user.id } : {}),
     }).select().single();
     if (error) return fail(error.message);
     return ok(data);

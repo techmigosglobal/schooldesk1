@@ -13,6 +13,19 @@ class ApprovalFeedPage {
 }
 
 extension BackendApprovalRequestsApi on BackendApiClient {
+  Future<List<Map<String, dynamic>>> getApprovalAuditLog({
+    int pageSize = 10,
+  }) {
+    return getRawList(
+      '/audit-logs',
+      queryParameters: {
+        'module': 'approvals',
+        'user_id': 'current',
+        'page_size': pageSize,
+      },
+    );
+  }
+
   Future<ApprovalFeedPage> getApprovalFeed({
     String status = 'pending',
     String type = '',

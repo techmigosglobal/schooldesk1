@@ -214,7 +214,7 @@ void main() {
     expect(source, contains('if (existing) return ok(existing);'));
 
     final migration = File(
-      'supabase/migrations/20260830103000_require_canonical_fee_invoice_source.sql',
+      'supabase/migrations/20260830134516_require_canonical_fee_invoice_source.sql',
     ).readAsStringSync();
     expect(migration, contains('reject_structureless_fee_invoice'));
     expect(migration, contains('fee_invoices_require_canonical_source'));

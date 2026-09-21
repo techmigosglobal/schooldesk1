@@ -24,6 +24,8 @@ class ErrorReportingService {
   static const int _maxQueuedReports = 100;
   static const int _maxMessageChars = 2048;
   static const int _maxStackChars = 12288;
+  Timer? _retryTimer;
+  int _retryAttempt = 0;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -84,6 +86,11 @@ class ErrorReportingService {
     if (path.contains('/monitoring/error-events')) {
       return Future.value();
     }
+    final statusCode = error.response?.statusCode ?? 0;
+    final message = _messageForApiError(error);
+    final approvalAuditFailure = message.contains(
+      'approval_audit_write_failed',
+    );
     unawaited(
       _recordCrashlytics(
         error: error,
@@ -97,15 +104,20 @@ class ErrorReportingService {
     );
     return _submit({
       'source': 'api',
-      'severity': error.response?.statusCode == null ? 'warning' : 'error',
-      'message': _messageForApiError(error),
+      'severity': approvalAuditFailure
+          ? 'fatal'
+          : statusCode >= 500
+          ? 'error'
+          : 'warning',
+      'message': message,
       'error_type': error.type.name,
-      'status_code': error.response?.statusCode ?? 0,
+      'status_code': statusCode,
       'method': error.requestOptions.method,
       'path': path,
       'request_id': _responseHeader(error, 'x-request-id'),
       'metadata': {
         'response_error_id': _responseHeader(error, 'x-error-id'),
+        'approval_audit_failure': approvalAuditFailure,
         'query_keys': error.requestOptions.queryParameters.keys.toList(),
       },
     });
@@ -176,13 +188,32 @@ class ErrorReportingService {
             },
           };
           await BackendApiClient.instance.submitErrorEvent(enriched);
+          _retryAttempt = 0;
         } on Object catch (_) {
-          // Reporting must never break the user flow or recurse into itself.
+          _pendingReports.addFirst(payload);
+          _scheduleRetry();
+          break;
         }
       }
     } finally {
       _flushing = false;
     }
+  }
+
+  void _scheduleRetry() {
+    if (_retryTimer?.isActive ?? false) return;
+    final delay = switch (_retryAttempt) {
+      0 => const Duration(seconds: 2),
+      1 => const Duration(seconds: 4),
+      2 => const Duration(seconds: 8),
+      3 => const Duration(seconds: 16),
+      _ => const Duration(seconds: 30),
+    };
+    _retryAttempt++;
+    _retryTimer = Timer(delay, () {
+      _retryTimer = null;
+      unawaited(_flush());
+    });
   }
 
   String _messageForApiError(DioException error) {

@@ -360,17 +360,24 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: outlineColor),
           ),
-          child: Column(
-            children: children.asMap().entries.map((e) {
-              final isLast = e.key == children.length - 1;
-              return Column(
-                children: [
-                  e.value,
-                  if (!isLast)
-                    Divider(height: 1, indent: 56, color: outlineColor),
-                ],
-              );
-            }).toList(),
+          child: Material(
+            color: Colors.transparent,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              children: children.asMap().entries.map((e) {
+                final isLast = e.key == children.length - 1;
+                return Column(
+                  children: [
+                    e.value,
+                    if (!isLast)
+                      Divider(height: 1, indent: 56, color: outlineColor),
+                  ],
+                );
+              }).toList(),
+            ),
           ),
         ),
       ],

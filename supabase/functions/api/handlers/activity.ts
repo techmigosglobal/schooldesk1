@@ -260,7 +260,9 @@ export async function handleActivity(
   if (module) query = query.eq("module", module);
   if (eventType) query = query.eq("event_type", eventType);
   if (actorRole) query = query.eq("actor_role", actorRole);
-  if (actorId) query = query.eq("user_id", actorId);
+  if (actorId) {
+    query = query.eq("user_id", actorId === "current" ? user.id : actorId);
+  }
   if (activityRole(user) === "principal") {
     // A principal can audit activity in their branch, but super-admin work is
     // organization-level administration and is intentionally kept separate.

@@ -1,0 +1,6 @@
+# Include this from a Riverpod-specific package or workspace module when it
+# starts using Riverpod. The current SchoolDesk app uses package:provider.
+include: analysis_options.yaml
+
+plugins:
+  riverpod_lint: ^3.1.0

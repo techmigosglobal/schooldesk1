@@ -39,7 +39,7 @@ void main() {
     expect(routeBackfill, contains("route = '/approval-center-screen'"));
   });
 
-  test('approval center only loads supported canonical approval sources', () {
+  test('approval center hydrates requesters by ID and preserves API fields', () {
     final screen = File(
       'lib/features/people/presentation/screens/approval_center_screen/approval_center_screen.dart',
     ).readAsStringSync();
@@ -50,6 +50,17 @@ void main() {
     expect(screen, isNot(contains("path: '/class-approvals'")));
     expect(screen, isNot(contains("path: '/student-approvals'")));
     expect(screen, isNot(contains("path: '/timetable/approvals'")));
-    expect(approvalsHandler, contains('users!account_approvals_user_id_fkey'));
+    expect(
+      approvalsHandler,
+      contains('accountUsersById.get(text(row.user_id))'),
+    );
+    expect(approvalsHandler, contains('requesterName: text(userRow.name'));
+    expect(approvalsHandler, contains('requesterRole: text(userRow.role_name'));
+    expect(
+      approvalsHandler,
+      contains('user: usersById.get(text(row.user_id))'),
+    );
+    expect(approvalsHandler, contains('start_date, end_date, reason'));
+    expect(approvalsHandler, isNot(contains('from_date, to_date')));
   });
 }

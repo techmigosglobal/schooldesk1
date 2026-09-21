@@ -202,6 +202,9 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   int _totalApprovals = 0;
   int _serverPendingCount = 0;
   String? _error;
+  List<Map<String, dynamic>> _approvalAuditLogs = const [];
+  bool _approvalAuditLoading = true;
+  String? _approvalAuditError;
   final Set<String> _actionLoadingIds = {};
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
@@ -230,6 +233,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       vsync: this,
     );
     _loadData();
+    _loadApprovalAuditLogs();
     // Store the service reference synchronously so dispose() can always
     // call removeListener without a second async gap.
     NotificationService.getInstance().then((s) {
@@ -305,6 +309,34 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         _error = e.toString();
       });
     }
+  }
+
+  Future<void> _loadApprovalAuditLogs() async {
+    if (mounted) {
+      setState(() {
+        _approvalAuditLoading = true;
+        _approvalAuditError = null;
+      });
+    }
+    try {
+      final logs = await BackendApiClient.instance.getApprovalAuditLog();
+      if (!mounted) return;
+      setState(() {
+        _approvalAuditLogs = logs;
+        _approvalAuditLoading = false;
+        _approvalAuditError = null;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _approvalAuditLoading = false;
+        _approvalAuditError = error.toString();
+      });
+    }
+  }
+
+  Future<void> _reloadAfterDecision() async {
+    await Future.wait([_loadData(), _loadApprovalAuditLogs()]);
   }
 
   Future<void> _loadMore() async {
@@ -499,7 +531,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         }
       }
     }
-    await _loadData();
+    await _reloadAfterDecision();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -597,7 +629,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         }
       }
     }
-    await _loadData();
+    await _reloadAfterDecision();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -901,7 +933,12 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           ],
           if (tabIndex == 0) ...[
             const SizedBox(height: 16),
-            const ApprovalAuditLogWidget(),
+            ApprovalAuditLogWidget(
+              logs: _approvalAuditLogs,
+              isLoading: _approvalAuditLoading,
+              error: _approvalAuditError,
+              onRetry: _loadApprovalAuditLogs,
+            ),
           ],
           const SizedBox(height: 32),
         ],

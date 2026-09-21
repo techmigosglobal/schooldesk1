@@ -1,0 +1,8 @@
+# These packages are consumed by analyzer configuration rather than Dart imports.
+allow_pins: true
+ignore:
+  - riverpod_lint
+  - very_good_analysis
+exclude:
+  - "build/**"
+  - "third_party/**"
