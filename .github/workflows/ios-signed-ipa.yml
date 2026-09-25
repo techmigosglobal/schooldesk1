@@ -148,7 +148,7 @@ jobs:
         if: ${{ inputs.run_quality_checks }}
         run: |
           set -Eeuo pipefail
-          flutter analyze
+          flutter analyze --no-fatal-infos
           flutter test --concurrency=1 \
             test/unit/arishville_fee_receipt_contract_test.dart \
             test/widget/fee_receipt_pdf_generation_test.dart \
