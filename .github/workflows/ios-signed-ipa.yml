@@ -217,16 +217,28 @@ jobs:
             -exportOptionsPlist "$export_options" \
             -exportPath "$export_path"
 
-          ipa_file="$export_path/Runner.ipa"
-          [[ -s "$ipa_file" ]] || {
+          echo "Export directory contents:"
+          ls -la "$export_path"
+          found_ipa=$(find "$export_path" -maxdepth 1 -name "*.ipa" | head -n 1)
+          [[ -n "$found_ipa" && -s "$found_ipa" ]] || {
             echo "::error::Expected signed IPA was not produced."
             exit 1
           }
+          if [[ "$found_ipa" != "$export_path/Runner.ipa" ]]; then
+            mv "$found_ipa" "$export_path/Runner.ipa"
+          fi
+          ipa_file="$export_path/Runner.ipa"
+
           verify_dir="$RUNNER_TEMP/ipa-verify"
           mkdir -p "$verify_dir"
           unzip -q "$ipa_file" -d "$verify_dir"
-          codesign --verify --deep --strict --verbose=2 "$verify_dir/Payload/Runner.app"
-          security cms -D -i "$verify_dir/Payload/Runner.app/embedded.mobileprovision" > "$RUNNER_TEMP/embedded-profile.plist"
+          app_bundle=$(find "$verify_dir/Payload" -maxdepth 1 -name "*.app" | head -n 1)
+          [[ -n "$app_bundle" && -d "$app_bundle" ]] || {
+            echo "::error::No .app found in IPA Payload."
+            exit 1
+          }
+          codesign --verify --deep --strict --verbose=2 "$app_bundle"
+          security cms -D -i "$app_bundle/embedded.mobileprovision" > "$RUNNER_TEMP/embedded-profile.plist"
           /usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/embedded-profile.plist" >/dev/null
           /usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/embedded-profile.plist" >/dev/null
           shasum -a 256 "$ipa_file" > "$export_path/Runner.ipa.sha256"
