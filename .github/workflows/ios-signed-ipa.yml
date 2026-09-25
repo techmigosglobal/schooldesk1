@@ -200,13 +200,11 @@ jobs:
           </plist>
           EOF
 
-          cat >> ios/Flutter/Release.xcconfig <<EOF
-DEVELOPMENT_TEAM = ${IOS_TEAM_ID}
-PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID}
-CODE_SIGN_STYLE = Manual
-CODE_SIGN_IDENTITY = ${IOS_SIGNING_IDENTITY:-Apple Distribution}
-PROVISIONING_PROFILE_SPECIFIER = ${IOS_PROFILE_NAME}
-EOF
+          printf '\nDEVELOPMENT_TEAM = %s\nPRODUCT_BUNDLE_IDENTIFIER = %s\nCODE_SIGN_STYLE = Manual\nCODE_SIGN_IDENTITY = %s\nPROVISIONING_PROFILE_SPECIFIER = %s\n' \
+            "$IOS_TEAM_ID" \
+            "$IOS_BUNDLE_ID" \
+            "${IOS_SIGNING_IDENTITY:-Apple Distribution}" \
+            "$IOS_PROFILE_NAME" >> ios/Flutter/Release.xcconfig
 
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
