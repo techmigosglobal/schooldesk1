@@ -30,7 +30,7 @@
 Production commands are separate from `scripts/local_supabase.sh`. Confirm the explicit production ref before linking or running any hosted command:
 
 ```sh
-npx --yes --package=supabase@2.116.0 supabase link --project-ref ouvwogguttybmpgfgctc
+npx --yes --package=supabase@2.116.0 supabase link --project-ref qzdhymlabzqjeocetqqv
 npx --yes --package=supabase@2.116.0 supabase migration list --linked
 npx --yes --package=supabase@2.116.0 supabase db push --dry-run --linked
 ```

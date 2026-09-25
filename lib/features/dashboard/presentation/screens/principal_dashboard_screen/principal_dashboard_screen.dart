@@ -1162,6 +1162,7 @@ class _PrincipalHomeData {
     final hasTeachers = staffTotal > 0;
     final hasStudents = studentsTotal > 0;
     final hasFees = feeStructures.isNotEmpty;
+    final isCoordinator = RoleAccessService.currentRoleName == 'coordinator';
     final goLiveReady = [
       registered,
       profileReady,
@@ -1170,7 +1171,7 @@ class _PrincipalHomeData {
       hasSubjects,
       hasTeachers,
       hasStudents,
-      if (!_isCoordinator) hasFees,
+      if (!isCoordinator) hasFees,
     ].every((v) => v);
 
     final metrics = Map<String, dynamic>.from(
@@ -1245,7 +1246,7 @@ class _PrincipalHomeData {
           route: AppRoutes.studentOversight,
           isComplete: hasStudents,
         ),
-        if (!_isCoordinator)
+        if (!isCoordinator)
           _SetupStep(
             title: 'Fee Structure Setup',
             route: AppRoutes.feeMonitoring,
@@ -1812,6 +1813,7 @@ class _DashboardSearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isCoordinator = RoleAccessService.currentRoleName == 'coordinator';
     return Material(
       color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(12),
@@ -1845,7 +1847,7 @@ class _DashboardSearchBar extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  _isCoordinator
+                  isCoordinator
                       ? 'Search students and staff…'
                       : 'Search students, staff, fees…',
                   maxLines: 1,

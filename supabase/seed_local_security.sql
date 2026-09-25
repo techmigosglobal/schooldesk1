@@ -255,4 +255,20 @@ begin
   insert into public.parent_student_links (school_id, parent_user_id, student_id)
   values (v_school, v_parent_user, v_student)
   on conflict (parent_user_id, student_id) do nothing;
+
+  -- Baseline role rows so the super_admin access/permissions PUT round-trip
+  -- works on School B as well.  Synthetic only; never derived from hosted data.
+  insert into public.roles (id, school_id, role_name, description, is_system)
+  values
+    ('00000000-0000-4000-8000-000000000320', v_school, 'principal', 'School principal', true),
+    ('00000000-0000-4000-8000-000000000321', v_school, 'teacher', 'Class teacher', true),
+    ('00000000-0000-4000-8000-000000000322', v_school, 'parent', 'Parent / guardian', true)
+  on conflict (id) do update set role_name = excluded.role_name;
+
+  insert into public.permissions (school_id, role_id, module, action)
+  values
+    (v_school, '00000000-0000-4000-8000-000000000320', 'students', 'read'),
+    (v_school, '00000000-0000-4000-8000-000000000321', 'students', 'read'),
+    (v_school, '00000000-0000-4000-8000-000000000322', 'students', 'read')
+  on conflict do nothing;
 end $$;

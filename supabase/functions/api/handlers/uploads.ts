@@ -63,6 +63,7 @@ const feedRoles = new Set([
   "admin",
   "teacher",
   "parent",
+  "super_admin",
 ]);
 
 function canViewSchoolFeed(user: User): boolean {

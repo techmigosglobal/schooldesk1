@@ -95,14 +95,14 @@ Deno.test("legacy unscoped references infer private only for private keys", asyn
 Deno.test("legacy Supabase Storage references map to migrated R2 keys", () => {
   assertEquals(
     legacyR2Reference(
-      "https://ouvwogguttybmpgfgctc.supabase.co/storage/v1/object/public/" +
+      "https://qzdhymlabzqjeocetqqv.supabase.co/storage/v1/object/public/" +
         "school-assets/uploads/school/post/video.mp4",
     ),
     "r2://private/legacy/school-assets/uploads/school/post/video.mp4",
   );
   assertEquals(
     legacyR2Reference(
-      "https://ouvwogguttybmpgfgctc.supabase.co/storage/v1/object/public/" +
+      "https://qzdhymlabzqjeocetqqv.supabase.co/storage/v1/object/public/" +
         "school-public-media/gallery/photo.jpg",
     ),
     "r2://public/website/gallery/photo.jpg",

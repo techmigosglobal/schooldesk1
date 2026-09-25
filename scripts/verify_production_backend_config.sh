@@ -63,7 +63,7 @@ grep -Fq -- '--dart-define=ENABLE_LOGGING=false' codemagic.yaml || {
 # No hosted project identity is allowed to become a checked-in production
 # input. The real endpoint is supplied through CI secrets at build time.
 if rg -n --hidden --glob '!scripts/verify_production_backend_config.sh' \
-  'ouvwogguttybmpgfgctc|YOUR_SUPABASE_ANON_KEY' codemagic.yaml scripts; then
+  'ouvwogguttybmpgfgctc|qzdhymlabzqjeocetqqv|YOUR_SUPABASE_ANON_KEY' codemagic.yaml scripts; then
   echo "Found a hosted project identity or credential placeholder in CI scripts" >&2
   exit 1
 fi

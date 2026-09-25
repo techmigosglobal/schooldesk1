@@ -24,7 +24,7 @@ export async function handleAccess(req: Request, path: string, method: string, _
     if (roleError || !role) return fail(roleError?.message ?? "Role not found", 404);
     const normalized = permissions.map((entry: unknown) => {
       const value = entry as Record<string, unknown>;
-      return { role_id: roleId, module: `${value.module ?? ""}`.trim(), action: `${value.action ?? ""}`.trim() };
+      return { school_id: school, role_id: roleId, module: `${value.module ?? ""}`.trim(), action: `${value.action ?? ""}`.trim() };
     }).filter((entry) => entry.module && entry.action);
     const { error: deleteError } = await svc.from("permissions").delete().eq("role_id", roleId);
     if (deleteError) return fail(deleteError.message);

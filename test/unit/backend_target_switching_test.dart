@@ -29,15 +29,21 @@ void main() {
   test('asset origin strips Supabase Edge function suffix', () {
     expect(
       EnvConfig.apiOriginFromBaseUrl(
-        'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api',
+        'https://qzdhymlabzqjeocetqqv.supabase.co/functions/v1/api',
       ),
-      'https://ouvwogguttybmpgfgctc.supabase.co',
+      'https://qzdhymlabzqjeocetqqv.supabase.co',
     );
   });
 
   test('release builds default to the Supabase backend without build args', () {
     final source = File('lib/core/config/env_config.dart').readAsStringSync();
 
+    expect(
+      source,
+      isNot(
+        contains('https://qzdhymlabzqjeocetqqv.supabase.co/functions/v1/api'),
+      ),
+    );
     expect(
       source,
       isNot(

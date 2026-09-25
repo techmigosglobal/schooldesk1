@@ -57,11 +57,17 @@ env.*.json
 .env.supabase
 ios/Flutter/DartDefines.xcconfig
 
-# Android release signing secrets
+# Android & Apple release signing secrets
 android/key.properties
 android/*.jks
 android/app/*.jks
 *.keystore
+*.jks
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.certSigningRequest
 
 # Symbolication related
 app.*.symbols

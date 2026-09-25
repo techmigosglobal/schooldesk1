@@ -779,5 +779,43 @@ export async function handleLeave(
     return ok(data);
   }
 
+  const studentRecallMatch = path.match(
+    /^\/student-leave\/applications\/([^/]+)\/recall$/,
+  );
+  if (studentRecallMatch && method === "POST") {
+    if (role(user) !== "parent") {
+      return fail("only parents can recall student leave requests", 403);
+    }
+    const applicationId = studentRecallMatch[1];
+    const { data: existing, error: existingError } = await svc
+      .from("student_leave_applications")
+      .select("id, student_id, status")
+      .eq("id", applicationId)
+      .eq("school_id", school)
+      .maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (!existing) return fail("student leave application not found", 404);
+    if (!(await parentCanAccessStudent(svc, user, text(existing.student_id)))) {
+      return fail("student leave recall denied", 403);
+    }
+    const currentStatus = text(existing.status).toLowerCase();
+    if (!["pending", "submitted", "resubmitted"].includes(currentStatus)) {
+      return fail(
+        "only pending student leave requests can be recalled",
+        409,
+      );
+    }
+    const { data, error } = await svc.from("student_leave_applications")
+      .update({
+        status: "recalled",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", applicationId)
+      .eq("school_id", school)
+      .select().single();
+    if (error) return fail(error.message);
+    return ok(data);
+  }
+
   return fail("not found", 404);
 }

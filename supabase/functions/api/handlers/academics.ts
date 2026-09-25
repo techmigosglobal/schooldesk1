@@ -225,17 +225,19 @@ export async function handleAcademics(
   let teacherSubjectIds: string[] = [];
   if (!canManageAcademics(user)) {
     // Teachers may read only the canonical assignments resolved from staff,
-    // sections, and staff_subjects. Parents, kiosk, and generic staff do not
-    // receive school-wide academic metadata through this administrative API.
-    if (role !== "teacher") return fail("forbidden", 403);
-    try {
-      const scope = await resolveActiveTeacherScope(svc, sid, linkedStaffId(user));
-      teacherSectionIds = [...scope.sections.keys()];
-      teacherGradeIds = [...new Set([...scope.sections.values()].map((row) => row.gradeId).filter(Boolean))];
-      teacherYearIds = [...new Set([...scope.sections.values()].map((row) => row.academicYearId).filter(Boolean))];
-      teacherSubjectIds = [...new Set([...scope.sections.values()].flatMap((row) => [...row.subjectIds]))];
-    } catch (error) {
-      return fail(error instanceof Error ? error.message : "failed to resolve teacher scope");
+    // sections, and staff_subjects. Parents may read academic metadata for
+    // their school so the parent calendar can resolve current-year context.
+    if (role !== "teacher" && role !== "parent") return fail("forbidden", 403);
+    if (role === "teacher") {
+      try {
+        const scope = await resolveActiveTeacherScope(svc, sid, linkedStaffId(user));
+        teacherSectionIds = [...scope.sections.keys()];
+        teacherGradeIds = [...new Set([...scope.sections.values()].map((row) => row.gradeId).filter(Boolean))];
+        teacherYearIds = [...new Set([...scope.sections.values()].map((row) => row.academicYearId).filter(Boolean))];
+        teacherSubjectIds = [...new Set([...scope.sections.values()].flatMap((row) => [...row.subjectIds]))];
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to resolve teacher scope");
+      }
     }
   }
   const body = method !== "GET"

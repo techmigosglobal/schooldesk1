@@ -357,4 +357,21 @@ begin
   insert into public.messages (school_id, conversation_id, sender_id, body, read_by)
   values (v_school, v_conversation, v_teacher_user, 'Seed chat message', '[]'::jsonb)
   on conflict do nothing;
+
+  -- Baseline role rows for the super_admin access/permissions PUT round-trip.
+  -- Synthetic only; never derived from hosted data.
+  insert into public.roles (id, school_id, role_name, description, is_system)
+  values
+    ('00000000-0000-4000-8000-000000000120', v_school, 'principal', 'School principal', true),
+    ('00000000-0000-4000-8000-000000000121', v_school, 'teacher', 'Class teacher', true),
+    ('00000000-0000-4000-8000-000000000122', v_school, 'parent', 'Parent / guardian', true)
+  on conflict (id) do update set role_name = excluded.role_name;
+
+  insert into public.permissions (school_id, role_id, module, action)
+  values
+    (v_school, '00000000-0000-4000-8000-000000000120', 'students', 'read'),
+    (v_school, '00000000-0000-4000-8000-000000000120', 'staff', 'read'),
+    (v_school, '00000000-0000-4000-8000-000000000121', 'students', 'read'),
+    (v_school, '00000000-0000-4000-8000-000000000122', 'students', 'read')
+  on conflict do nothing;
 end $$;

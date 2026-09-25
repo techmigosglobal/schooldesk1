@@ -12,7 +12,9 @@ const bucket = "school-public-media";
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const schoolId = (user: User) => text(user.app_metadata?.school_id);
 const isLeader = (user: User) =>
-  ["principal", "coordinator"].includes(text(user.app_metadata?.role_name).toLowerCase());
+  ["principal", "coordinator", "super_admin"].includes(
+    text(user.app_metadata?.role_name).toLowerCase(),
+  );
 const programs = ["Daycare", "Playgroup", "Nursery", "PP1", "PP2"];
 
 function publicUrl(svc: SupabaseClient, path: string) {

@@ -17,6 +17,11 @@ on:
         required: true
         default: true
         type: boolean
+      publish_to_testflight:
+        description: Automatically upload signed IPA to TestFlight (App Store Connect)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -112,8 +117,15 @@ jobs:
           security unlock-keychain -p "$SCHOOLDESK_IOS_KEYCHAIN_PASSWORD" "$keychain_file"
           security import "$cert_file" -P "$SCHOOLDESK_IOS_DISTRIBUTION_CERT_PASSWORD" \
             -A -t cert -f pkcs12 -k "$keychain_file"
-          security list-keychains -d user -s "$keychain_file" "$HOME/Library/Keychains/login.keychain-db"
+
+          curl -s -f https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o "$RUNNER_TEMP/AppleWWDRCAG3.cer"
+          security import "$RUNNER_TEMP/AppleWWDRCAG3.cer" -k "$keychain_file" -A
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$SCHOOLDESK_IOS_KEYCHAIN_PASSWORD" "$keychain_file"
+          security list-keychains -d user -s "$keychain_file" "$HOME/Library/Keychains/login.keychain-db" /Library/Keychains/System.keychain
           security default-keychain -s "$keychain_file"
+
+          cert_identity=$(security find-identity -v -p codesigning "$keychain_file" | grep -o '"[^"]*"' | head -n 1 | tr -d '"')
 
           security cms -D -i "$profile_file" > "$profile_plist"
           profile_uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile_plist")
@@ -124,6 +136,7 @@ jobs:
           {
             printf 'IOS_KEYCHAIN_PATH=%s\n' "$keychain_file"
             printf 'IOS_PROFILE_NAME=%s\n' "$profile_name"
+            printf 'IOS_SIGNING_IDENTITY=%s\n' "${cert_identity:-Apple Distribution}"
             printf 'IOS_TEAM_ID=%s\n' "$SCHOOLDESK_IOS_TEAM_ID"
             printf 'IOS_BUNDLE_ID=%s\n' "$SCHOOLDESK_IOS_BUNDLE_ID"
           } >> "$GITHUB_ENV"
@@ -186,7 +199,7 @@ jobs:
             DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
             CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGN_IDENTITY="${IOS_SIGNING_IDENTITY:-Apple Distribution}" \
             PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
             archive
           xcodebuild -exportArchive \
@@ -218,6 +231,15 @@ jobs:
             ${{ runner.temp }}/ipa/Runner.ipa
             ${{ runner.temp }}/ipa/Runner.ipa.sha256
             ${{ runner.temp }}/Runner.xcarchive/dSYMs/
+
+      - name: Publish to TestFlight (App Store Connect)
+        if: ${{ inputs.publish_to_testflight }}
+        uses: apple-actions/upload-testflight-build@v5.4.0
+        with:
+          app-path: ${{ runner.temp }}/ipa/Runner.ipa
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
 
       - name: Remove Apple signing material
         if: always()

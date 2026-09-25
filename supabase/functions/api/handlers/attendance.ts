@@ -1445,8 +1445,13 @@ export async function handleAttendance(
     const year = url.searchParams.get("year");
     const month = url.searchParams.get("month");
     if (year && month) {
-      const from = `${year}-${month}-01`;
-      const to = `${year}-${month}-31`;
+      const yyyy = Number(year);
+      const mm = Number(month);
+      const from = `${yyyy}-${String(mm).padStart(2, "0")}-01`;
+      // Last day of month: day 0 of the next month equals the last day of the
+      // requested month, which keeps February (and 30-day months) valid.
+      const lastDay = new Date(yyyy, mm, 0).getDate();
+      const to = `${yyyy}-${String(mm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
       q = q.gte("session.date", from).lte("session.date", to);
     }
     const { data, error } = await q.order("created_at", { ascending: false });

@@ -1483,7 +1483,9 @@ export async function handleCommunications(
   if (path === "/chat/contacts" && method === "GET") {
     const roleParam = text(url.searchParams.get("role")).toLowerCase();
     const studentId = text(url.searchParams.get("student_id"));
-    if (roleParam !== role(user)) {
+    const isSuperAdmin = text(user.app_metadata?.role_name).toLowerCase() ===
+      "super_admin";
+    if (!isSuperAdmin && roleParam !== role(user)) {
       return fail("role does not match session", 403);
     }
     if (roleParam === "parent") {
@@ -1494,7 +1496,7 @@ export async function handleCommunications(
       return ok(contacts);
     } else if (
       ["principal", "coordinator"].includes(roleParam) &&
-      canManageSchoolContent(user) && roleParam === role(user)
+      (canManageSchoolContent(user) || isSuperAdmin)
     ) {
       const contacts = await principalChatContacts(svc, school);
       return ok(contacts);

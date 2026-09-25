@@ -40,7 +40,7 @@ async function withStorageEnv(callback: () => Promise<void>) {
 }
 
 const legacyUrl =
-  "https://ouvwogguttybmpgfgctc.supabase.co/storage/v1/object/public/" +
+  "https://qzdhymlabzqjeocetqqv.supabase.co/storage/v1/object/public/" +
   "school-assets/uploads/school/post/photo.jpg";
 
 Deno.test("legacy event media resolves from R2 before Supabase", async () => {
