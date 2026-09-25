@@ -123,8 +123,8 @@ jobs:
           security import "$cert_file" -P "$SCHOOLDESK_IOS_DISTRIBUTION_CERT_PASSWORD" \
             -A -t cert -f pkcs12 -k "$keychain_file"
 
-          curl -s -f https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o "$RUNNER_TEMP/AppleWWDRCAG3.cer"
-          security import "$RUNNER_TEMP/AppleWWDRCAG3.cer" -k "$keychain_file" -A
+          curl -s -f https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o "$RUNNER_TEMP/AppleWWDRCAG3.cer" || true
+          security import "$RUNNER_TEMP/AppleWWDRCAG3.cer" -k "$keychain_file" -A 2>/dev/null || true
 
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$SCHOOLDESK_IOS_KEYCHAIN_PASSWORD" "$keychain_file"
           security list-keychains -d user -s "$keychain_file" "$HOME/Library/Keychains/login.keychain-db" /Library/Keychains/System.keychain
