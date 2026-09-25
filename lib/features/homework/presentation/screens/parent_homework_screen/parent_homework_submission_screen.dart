@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
+import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_homework_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_homework_repository.dart';
 
 @immutable
 class ParentHomeworkSubmissionArgs {
@@ -41,15 +45,17 @@ class ParentHomeworkSubmissionScreen extends StatefulWidget {
 
 class _ParentHomeworkSubmissionScreenState
     extends State<ParentHomeworkSubmissionScreen> {
+  ParentHomeworkRepository get _repository =>
+      ApiParentHomeworkRepository.legacyDefault;
+
   final _formKey = GlobalKey<FormState>();
   final _answerController = TextEditingController();
   final List<String> _attachmentUrls = [];
   final List<String> _attachmentNames = [];
   bool _saving = false;
   bool _uploading = false;
-  bool _loading = false;
-  String? _error;
   late Map<String, dynamic> _homeworkDetails;
+  late RepositoryState<Map<String, dynamic>> _detailState;
 
   static const _accentColor = Color(0xFF1A6B4A);
 
@@ -89,6 +95,10 @@ class _ParentHomeworkSubmissionScreenState
   void initState() {
     super.initState();
     _homeworkDetails = Map<String, dynamic>.from(widget.args.homework);
+    _detailState = RepositoryState(
+      data: _homeworkDetails,
+      source: RepositorySource.cache,
+    );
 
     // Set initial text if details already has remarks
     final initialRemarks = _parentComment.isNotEmpty
@@ -109,9 +119,14 @@ class _ParentHomeworkSubmissionScreenState
 
   Future<void> _loadDetails() async {
     if (!mounted) return;
+    final previous = _detailState.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _detailState = RepositoryState.loading(
+        data: previous,
+        source: RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
       final studentId = widget.args.studentId.trim();
@@ -120,19 +135,21 @@ class _ParentHomeworkSubmissionScreenState
       }
 
       // 1. Fetch child's homework list
-      final childRows = await BackendApiClient.instance.getHomework(
-        studentId: studentId,
-      );
+      final childRowsResult = await _repository.loadHomework(studentId);
+      _throwIfFailed(childRowsResult, 'Unable to load homework');
+      final childRows = childRowsResult.dataOrNull!;
       final rawHw = childRows.firstWhere(
         (row) => _hwText(row['id'] ?? row['homework_id']) == _homeworkId,
         orElse: () => throw Exception('Dairy item not found'),
       );
 
       // 2. Fetch submission state
-      final response = await BackendApiClient.instance.getHomeworkSubmissions(
+      final responseResult = await _repository.loadSubmissions(
         _homeworkId,
         studentId: studentId,
       );
+      _throwIfFailed(responseResult, 'Unable to load submission');
+      final response = responseResult.dataOrNull!;
       final submissions = response['submissions'];
       Map<String, dynamic> sub = {};
       if (submissions is List && submissions.isNotEmpty) {
@@ -196,14 +213,26 @@ class _ParentHomeworkSubmissionScreenState
           }
         }
 
-        _loading = false;
+        _detailState = RepositoryState(
+          data: mappedHw,
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error =
+        final message =
             'Failed to load details: ${e.toString().replaceAll("Exception:", "").trim()}';
-        _loading = false;
+        _detailState = previous == null
+            ? RepositoryState.error(error: StateError(message))
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: StateError(message),
+                lastUpdated: _detailState.lastUpdated,
+              );
       });
     }
   }
@@ -229,219 +258,203 @@ class _ParentHomeworkSubmissionScreenState
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
+      body: SchoolDeskRepositoryStateView<Map<String, dynamic>>(
+        state: _detailState,
+        onRetry: _loadDetails,
+        loadingMessage: 'Loading homework details…',
+        emptyTitle: 'Homework unavailable',
+        emptyMessage: 'Homework details are not available for this request.',
+        data: (_) => ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (ready)
+              Form(
+                key: _formKey,
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.dmSans(fontSize: 14),
-                    ),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: _loadDetails,
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (ready)
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _homeworkContextCard(),
-                        const SizedBox(height: 14),
-                        if (_hasFeedback && _parentComment.isNotEmpty) ...[
-                          _parentCommentCard(),
-                          const SizedBox(height: 14),
-                        ],
-                        if (_hasFeedback) ...[
-                          _feedbackCard(),
-                          const SizedBox(height: 14),
-                        ],
-                        if (!_isApproved) ...[
-                          _sectionHeader(
-                            icon: Icons.edit_note_rounded,
-                            label: _needsRevision
-                                ? 'Resubmit Your Answer'
-                                : 'Your Answer',
+                    _homeworkContextCard(),
+                    const SizedBox(height: 14),
+                    if (_hasFeedback && _parentComment.isNotEmpty) ...[
+                      _parentCommentCard(),
+                      const SizedBox(height: 14),
+                    ],
+                    if (_hasFeedback) ...[
+                      _feedbackCard(),
+                      const SizedBox(height: 14),
+                    ],
+                    if (!_isApproved) ...[
+                      _sectionHeader(
+                        icon: Icons.edit_note_rounded,
+                        label: _needsRevision
+                            ? 'Resubmit Your Answer'
+                            : 'Your Answer',
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _answerController,
+                        enabled: !_saving,
+                        minLines: 5,
+                        maxLines: 8,
+                        style: GoogleFonts.dmSans(fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText:
+                              'Write your answer or completion note here...',
+                          hintStyle: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            color: context.appTheme.muted,
                           ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _answerController,
-                            enabled: !_saving,
-                            minLines: 5,
-                            maxLines: 8,
-                            style: GoogleFonts.dmSans(fontSize: 14),
-                            decoration: InputDecoration(
-                              hintText:
-                                  'Write your answer or completion note here...',
-                              hintStyle: GoogleFonts.dmSans(
-                                fontSize: 13,
-                                color: context.appTheme.muted,
-                              ),
-                              filled: true,
-                              fillColor: context.appTheme.surface,
-                              alignLabelWithHint: true,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide(
-                                  color: context.appTheme.outlineVariant,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide(
-                                  color: context.appTheme.outlineVariant,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(
-                                  color: _accentColor,
-                                  width: 1.5,
-                                ),
-                              ),
-                            ),
-                            validator: (value) {
-                              if ((value ?? '').trim().isEmpty &&
-                                  _attachmentUrls.isEmpty) {
-                                return 'Enter an answer or add an attachment.';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          _attachmentsBlock(),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _saving ? null : _submit,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _accentColor,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: _saving
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.upload_file_rounded,
-                                      size: 18,
-                                    ),
-                              label: Text(
-                                _saving
-                                    ? 'Submitting...'
-                                    : _needsRevision
-                                    ? 'Resubmit Dairy'
-                                    : 'Submit Dairy',
-                                style: GoogleFonts.dmSans(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                ),
-                              ),
+                          filled: true,
+                          fillColor: context.appTheme.surface,
+                          alignLabelWithHint: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(
+                              color: context.appTheme.outlineVariant,
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _saving
-                                  ? null
-                                  : () => Navigator.pop(context),
-                              icon: const Icon(
-                                Icons.arrow_back_rounded,
-                                size: 18,
-                              ),
-                              label: Text(
-                                'Back to Dairy',
-                                style: GoogleFonts.dmSans(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(
+                              color: context.appTheme.outlineVariant,
                             ),
                           ),
-                        ] else ...[
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: context.appTheme.successContainer,
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                              color: _accentColor,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if ((value ?? '').trim().isEmpty &&
+                              _attachmentUrls.isEmpty) {
+                            return 'Enter an answer or add an attachment.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _attachmentsBlock(),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _saving ? null : _submit,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _accentColor,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                            ),
+                            shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.check_circle_rounded,
+                          ),
+                          icon: _saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.upload_file_rounded,
+                                  size: 18,
+                                ),
+                          label: Text(
+                            _saving
+                                ? 'Submitting...'
+                                : _needsRevision
+                                ? 'Resubmit Dairy'
+                                : 'Submit Dairy',
+                            style: GoogleFonts.dmSans(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.pop(context),
+                          icon: const Icon(
+                            Icons.arrow_back_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            'Back to Dairy',
+                            style: GoogleFonts.dmSans(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: context.appTheme.successContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle_rounded,
+                              color: context.appTheme.success,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'This homework has been approved by your teacher.',
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
                                   color: context.appTheme.success,
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'This homework has been approved by your teacher.',
-                                    style: GoogleFonts.dmSans(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: context.appTheme.success,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(
-                                Icons.arrow_back_rounded,
-                                size: 18,
-                              ),
-                              label: Text(
-                                'Back to Dairy',
-                                style: GoogleFonts.dmSans(
-                                  fontWeight: FontWeight.w600,
-                                ),
                               ),
                             ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(
+                            Icons.arrow_back_rounded,
+                            size: 18,
                           ),
-                        ],
-                      ],
-                    ),
-                  )
-                else
-                  const SchoolDeskStatusPanel.empty(
-                    title: 'Dairy selection required',
-                    message:
-                        'Open this screen from a linked child dairy item before submitting.',
-                  ),
-                const SizedBox(height: 84),
-              ],
-            ),
+                          label: Text(
+                            'Back to Dairy',
+                            style: GoogleFonts.dmSans(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              )
+            else
+              const SchoolDeskStatusPanel.empty(
+                title: 'Dairy selection required',
+                message:
+                    'Open this screen from a linked child dairy item before submitting.',
+              ),
+            const SizedBox(height: 84),
+          ],
+        ),
+      ),
     );
   }
 
@@ -835,21 +848,20 @@ class _ParentHomeworkSubmissionScreenState
 
   Future<void> _pickAttachments() async {
     final result = await FilePicker.pickFiles(
-      allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: const ["pdf", "jpg", "jpeg", "png", "webp"],
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return;
+    if (result.isEmpty) return;
     setState(() => _uploading = true);
     try {
-      for (final file in result.files) {
+      for (final file in result) {
         final path = file.path ?? '';
+        final fileBytes = await file.readAsBytes();
         final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
         final optimized = ImageUploadOptimizer.isImage(file.name, mimeType)
-            ? (file.bytes != null
+            ? (fileBytes.isNotEmpty
                   ? ImageUploadOptimizer.fromBytes(
-                      file.bytes!,
+                      fileBytes,
                       filename: file.name,
                       mimeType: mimeType,
                       preset: ImageUploadPreset.content,
@@ -861,13 +873,15 @@ class _ParentHomeworkSubmissionScreenState
                       preset: ImageUploadPreset.content,
                     ))
             : null;
-        if (path.trim().isEmpty && file.bytes == null) continue;
-        final url = await BackendApiClient.instance.uploadFile(
+        if (path.trim().isEmpty && fileBytes.isEmpty) continue;
+        final uploadResult = await _repository.uploadFile(
           path,
           filename: optimized?.filename ?? file.name,
-          fileBytes: optimized?.bytes ?? file.bytes,
+          fileBytes: optimized?.bytes ?? fileBytes,
           mimeType: optimized?.mimeType ?? mimeType,
         );
+        _throwIfFailed(uploadResult, 'Unable to upload attachment');
+        final url = uploadResult.dataOrNull!;
         if (url.trim().isEmpty) continue;
         if (!mounted) return;
         setState(() {
@@ -893,13 +907,13 @@ class _ParentHomeworkSubmissionScreenState
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.submitHomework(
-        _homeworkId,
+      final result = await _repository.submitHomework(
+        homeworkId: _homeworkId,
         studentId: widget.args.studentId,
         answerText: _answerController.text.trim(),
-        attachmentUrl: "",
         attachmentUrls: _attachmentUrls,
       );
+      _throwIfFailed(result, 'Unable to submit homework');
       if (!mounted) return;
       Navigator.pop(
         context,
@@ -920,6 +934,12 @@ class _ParentHomeworkSubmissionScreenState
       );
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _throwIfFailed<T>(Result<T> result, String fallback) {
+    if (result.isFailure) {
+      throw StateError(result.failureOrNull?.message ?? fallback);
     }
   }
 }

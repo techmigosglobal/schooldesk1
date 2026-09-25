@@ -69,7 +69,7 @@ void main() {
         'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
       ),
       File(
-        'lib/features/shared/presentation/screens/school_gallery_screen.dart',
+        'lib/shared/screens/school_gallery_screen.dart',
       ),
     ];
 

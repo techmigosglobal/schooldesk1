@@ -113,6 +113,9 @@ android/.kotlin/
 /storage-migration.json
 /storage-migration.json.tmp
 
+# Local platform restore dumps; may contain auth and school data.
+/.local/platform-restore/
+
 # Developer convenience dumps — never commit these
 all_files.txt
 flutter_*.log

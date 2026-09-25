@@ -1,10 +1,12 @@
 /// Principal Fee Home — the unified hub replacing the former 5,800-line monolith.
 library;
 
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -12,50 +14,110 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_widgets.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/data/api_payment_config_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/payment_config_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+@immutable
+class _FeeHomeSnapshot {
+  const _FeeHomeSnapshot({
+    required this.feeStructures,
+    required this.invoices,
+    required this.paymentRequests,
+    required this.reminderDeliveries,
+    required this.daycarePlans,
+    required this.academicYears,
+    required this.grades,
+    required this.sections,
+    required this.paymentConfig,
+    required this.feeSummary,
+    required this.selectedAcademicYearId,
+  });
+
+  final List<Map<String, dynamic>> feeStructures;
+  final List<Map<String, dynamic>> invoices;
+  final List<Map<String, dynamic>> paymentRequests;
+  final List<Map<String, dynamic>> reminderDeliveries;
+  final List<Map<String, dynamic>> daycarePlans;
+  final List<AcademicYearModel> academicYears;
+  final List<GradeModel> grades;
+  final List<SectionModel> sections;
+  final Map<String, dynamic> paymentConfig;
+  final Map<String, dynamic> feeSummary;
+  final String selectedAcademicYearId;
+}
 
 class FeeHomeScreen extends StatefulWidget {
-  const FeeHomeScreen({super.key});
+  final AdminFeesRepository? repository;
+  final PaymentConfigRepository? paymentConfigRepository;
+
+  const FeeHomeScreen({
+    super.key,
+    this.repository,
+    this.paymentConfigRepository,
+  });
   @override
   State<FeeHomeScreen> createState() => _FeeHomeScreenState();
 }
 
 class _FeeHomeScreenState extends State<FeeHomeScreen> {
+  late final AdminFeesRepository _repository;
+  late final PaymentConfigRepository _paymentConfigRepository;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  bool _loading = true;
-  String? _error;
-  String _selectedAcademicYearId = '';
+  RepositoryState<_FeeHomeSnapshot> _state = const RepositoryState.loading();
 
-  List<Map<String, dynamic>> _feeStructures = const [];
-  List<Map<String, dynamic>> _invoices = const [];
-  List<Map<String, dynamic>> _paymentRequests = const [];
-  List<Map<String, dynamic>> _reminderDeliveries = const [];
-  List<Map<String, dynamic>> _daycarePlans = const [];
-  List<AcademicYearModel> _academicYears = const [];
-  List<GradeModel> _grades = const [];
-  List<SectionModel> _sections = const [];
-  Map<String, dynamic> _paymentConfig = const {};
-  Map<String, dynamic> _feeSummary = const {};
+  _FeeHomeSnapshot? get _snapshot => _state.data;
+  String get _selectedAcademicYearId => _snapshot?.selectedAcademicYearId ?? '';
+  List<Map<String, dynamic>> get _feeStructures =>
+      _snapshot?.feeStructures ?? const [];
+  List<Map<String, dynamic>> get _invoices => _snapshot?.invoices ?? const [];
+  List<Map<String, dynamic>> get _paymentRequests =>
+      _snapshot?.paymentRequests ?? const [];
+  List<Map<String, dynamic>> get _reminderDeliveries =>
+      _snapshot?.reminderDeliveries ?? const [];
+  List<Map<String, dynamic>> get _daycarePlans =>
+      _snapshot?.daycarePlans ?? const [];
+  List<AcademicYearModel> get _academicYears =>
+      _snapshot?.academicYears ?? const [];
+  List<GradeModel> get _grades => _snapshot?.grades ?? const [];
+  List<SectionModel> get _sections => _snapshot?.sections ?? const [];
+  Map<String, dynamic> get _paymentConfig =>
+      _snapshot?.paymentConfig ?? const {};
+  Map<String, dynamic> get _feeSummary => _snapshot?.feeSummary ?? const {};
 
   @override
   void initState() {
     super.initState();
+    _repository = widget.repository ?? ApiAdminFeesRepository.legacyDefault;
+    _paymentConfigRepository =
+        widget.paymentConfigRepository ??
+        ApiPaymentConfigRepository.legacyDefault;
     _loadData();
   }
 
   Future<void> _loadData() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getFeeStructures(),
-        api.getInvoicesPage(pageSize: 20),
-        api.getAcademicYears(),
-        api.getGrades(),
-        api.getSections(),
-        api.getFeeDashboardSummary(),
+        _repository.loadFeeStructures(),
+        _repository.loadInvoicesPage(pageSize: 20),
+        _repository.loadAcademicYears(),
+        _repository.loadGrades(),
+        _repository.loadSections(),
+        _repository.loadFeeDashboardSummary(),
       ]);
 
       final structures = (results[0] as List)
@@ -69,24 +131,24 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           .toList();
       List<Map<String, dynamic>> prList = const [];
       try {
-        prList = (await api.getParentPaymentRequestsPage(pageSize: 20)).data
-            .where((r) => _isPendingRequest(r))
-            .toList();
+        prList = (await _repository.loadParentPaymentRequestsPage(
+          pageSize: 20,
+        )).data.where((r) => _isPendingRequest(r)).toList();
       } on Object catch (_) {}
 
       Map<String, dynamic> paymentConfig = const {};
       try {
-        paymentConfig = await api.getPaymentConfig();
+        paymentConfig = await _paymentConfigRepository.loadConfig();
       } on Object catch (_) {}
 
       List<Map<String, dynamic>> reminderDeliveries = const [];
       try {
-        reminderDeliveries = await api.getRawList('/fees/reminders');
+        reminderDeliveries = await _repository.loadRawList('/fees/reminders');
       } on Object catch (_) {}
 
       List<Map<String, dynamic>> daycarePlans = const [];
       try {
-        daycarePlans = await api.getRawList(
+        daycarePlans = await _repository.loadRawList(
           '/fees/daycare-plans',
           queryParameters: const {'active': 'true'},
         );
@@ -100,24 +162,37 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                 (years.isEmpty ? '' : years.first.id));
 
       setState(() {
-        _feeStructures = structures;
-        _invoices = invoices;
-        _paymentRequests = prList;
-        _reminderDeliveries = reminderDeliveries;
-        _daycarePlans = daycarePlans;
-        _academicYears = years;
-        _grades = results[3] as List<GradeModel>;
-        _sections = results[4] as List<SectionModel>;
-        _paymentConfig = paymentConfig;
-        _feeSummary = results[5] as Map<String, dynamic>;
-        _selectedAcademicYearId = selectedYear;
-        _loading = false;
+        _state = RepositoryState(
+          data: _FeeHomeSnapshot(
+            feeStructures: structures,
+            invoices: invoices,
+            paymentRequests: prList,
+            reminderDeliveries: reminderDeliveries,
+            daycarePlans: daycarePlans,
+            academicYears: years,
+            grades: results[3] as List<GradeModel>,
+            sections: results[4] as List<SectionModel>,
+            paymentConfig: paymentConfig,
+            feeSummary: results[5] as Map<String, dynamic>,
+            selectedAcademicYearId: selectedYear,
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load fee data. $error';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -245,47 +320,61 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
       ),
       bottomNavigationBar: const PrincipalShellBottomBar(),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadData,
-          child: _loading
-              ? _buildSkeleton()
-              : (_error != null ? _buildError() : _buildContent()),
+        child: SchoolDeskRepositoryStateView<_FeeHomeSnapshot>(
+          state: _state,
+          onRetry: _loadData,
+          emptyTitle: 'No fee data',
+          emptyMessage: 'Finance records are not available for this scope.',
+          data: (_) => RefreshIndicator(
+            onRefresh: _loadData,
+            child: _buildContent(),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSkeleton() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        for (var i = 0; i < 6; i++)
-          Container(
-            height: 64,
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: context.appTheme.surfaceVariant.withOpacity(0.35),
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-      ],
+  void _setSelectedAcademicYear(String value) {
+    final snapshot = _snapshot;
+    if (snapshot == null) return;
+    setState(
+      () => _state = _state.copyWith(
+        data: _FeeHomeSnapshot(
+          feeStructures: snapshot.feeStructures,
+          invoices: snapshot.invoices,
+          paymentRequests: snapshot.paymentRequests,
+          reminderDeliveries: snapshot.reminderDeliveries,
+          daycarePlans: snapshot.daycarePlans,
+          academicYears: snapshot.academicYears,
+          grades: snapshot.grades,
+          sections: snapshot.sections,
+          paymentConfig: snapshot.paymentConfig,
+          feeSummary: snapshot.feeSummary,
+          selectedAcademicYearId: value,
+        ),
+      ),
     );
   }
 
-  Widget _buildError() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 120),
-      children: [
-        _header(),
-        const SizedBox(height: 80),
-        FeeEmptyState(
-          icon: Icons.cloud_off_rounded,
-          title: 'Fees unavailable',
-          message: _error!,
-          actionLabel: 'Retry',
-          onAction: _loadData,
+  void _setDaycarePlans(List<Map<String, dynamic>> plans) {
+    final snapshot = _snapshot;
+    if (snapshot == null) return;
+    setState(
+      () => _state = _state.copyWith(
+        data: _FeeHomeSnapshot(
+          feeStructures: snapshot.feeStructures,
+          invoices: snapshot.invoices,
+          paymentRequests: snapshot.paymentRequests,
+          reminderDeliveries: snapshot.reminderDeliveries,
+          daycarePlans: plans,
+          academicYears: snapshot.academicYears,
+          grades: snapshot.grades,
+          sections: snapshot.sections,
+          paymentConfig: snapshot.paymentConfig,
+          feeSummary: snapshot.feeSummary,
+          selectedAcademicYearId: snapshot.selectedAcademicYearId,
         ),
-      ],
+      ),
     );
   }
 
@@ -325,7 +414,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                     )
                     .toList(),
                 onChanged: (v) {
-                  if (v != null) setState(() => _selectedAcademicYearId = v);
+                  if (v != null) _setSelectedAcademicYear(v);
                 },
               ),
             ],
@@ -436,7 +525,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
               Expanded(
                 child: FilledButton.icon(
                   onPressed: () =>
-                      Navigator.pushNamed(context, AppRoutes.feeCollect),
+                      SchoolDeskNavigation.push(context, AppRoutes.feeCollect),
                   icon: const Icon(Icons.add_card_rounded),
                   label: const Text('Collect Payment'),
                   style: FilledButton.styleFrom(
@@ -490,7 +579,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                 color: const Color(0xFF7C3AED),
                 label: 'Parent payment proofs',
                 detail: '${_paymentRequests.length} awaiting review',
-                onTap: () => Navigator.pushNamed(
+                onTap: () => SchoolDeskNavigation.push(
                   context,
                   AppRoutes.principalPaymentRequests,
                 ),
@@ -501,8 +590,10 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                 color: const Color(0xFF2563EB),
                 label: 'Parent payment setup',
                 detail: _paymentConfig.isEmpty ? 'Action needed' : 'Ready',
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.feePaymentConfig),
+                onTap: () => SchoolDeskNavigation.push(
+                  context,
+                  AppRoutes.feePaymentConfig,
+                ),
               ),
               const Divider(height: 22),
               _attentionRow(
@@ -537,7 +628,8 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
                     fallback: 'Upload or replace payment QR',
                   ),
                 ),
-          onTap: () => Navigator.pushNamed(context, AppRoutes.feePaymentConfig),
+          onTap: () =>
+              SchoolDeskNavigation.push(context, AppRoutes.feePaymentConfig),
         ),
 
         // ── Pending requests badge ───────────────────────────
@@ -548,7 +640,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
             title: 'Parent Payment Requests',
             subtitle:
                 '${_paymentRequests.length} request(s) waiting for review',
-            onTap: () => Navigator.pushNamed(
+            onTap: () => SchoolDeskNavigation.push(
               context,
               AppRoutes.principalPaymentRequests,
             ),
@@ -585,14 +677,15 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           iconColor: const Color(0xFF2563EB),
           title: 'Fee Structures',
           subtitle: 'Create, edit, and manage fee structures',
-          onTap: () => Navigator.pushNamed(context, AppRoutes.feeStructures),
+          onTap: () =>
+              SchoolDeskNavigation.push(context, AppRoutes.feeStructures),
         ),
         FeeActionRow(
           icon: Icons.payments_outlined,
           iconColor: const Color(0xFF16A34A),
           title: 'Collect Fee',
           subtitle: 'Choose a class and student, then record a payment',
-          onTap: () => Navigator.pushNamed(context, AppRoutes.feeCollect),
+          onTap: () => SchoolDeskNavigation.push(context, AppRoutes.feeCollect),
         ),
         FeeActionRow(
           icon: Icons.schedule_rounded,
@@ -607,7 +700,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           title: 'Student Ledger & Dues',
           subtitle:
               '${_studentAccounts.where((a) => a.balance > 0).length} students with outstanding balance',
-          onTap: () => Navigator.pushNamed(context, AppRoutes.feeLedger),
+          onTap: () => SchoolDeskNavigation.push(context, AppRoutes.feeLedger),
         ),
 
         const SizedBox(height: 48),
@@ -1002,11 +1095,10 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
     messageController.dispose();
     if (approved != true || selected.isEmpty || !mounted) return;
     try {
-      final summary = await BackendApiClient.instance
-          .createRaw('/fees/reminders', {
-            'invoice_ids': selected.toList(),
-            if (customMessage.isNotEmpty) 'message': customMessage,
-          });
+      final summary = await _repository.createRaw('/fees/reminders', {
+        'invoice_ids': selected.toList(),
+        if (customMessage.isNotEmpty) 'message': customMessage,
+      });
       if (!mounted) return;
       final queued = numValue(summary['queued']).round();
       final skipped = numValue(summary['skipped_cooldown']).round();
@@ -1031,7 +1123,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
 
   Future<void> _showDaycarePlans() async {
     try {
-      final plans = await BackendApiClient.instance.getRawList(
+      final plans = await _repository.loadRawList(
         '/fees/daycare-plans',
         queryParameters: const {'active': 'true'},
       );
@@ -1096,9 +1188,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         ),
       );
       if (mounted) {
-        setState(() {
-          _daycarePlans = plans;
-        });
+        _setDaycarePlans(plans);
       }
     } on Object catch (error) {
       if (!mounted) return;
@@ -1110,7 +1200,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
 
   Future<void> _createDaycarePlan() async {
     try {
-      final students = await BackendApiClient.instance.getRawList(
+      final students = await _repository.loadRawList(
         '/fees/daycare-eligible-students',
       );
       if (!mounted) return;
@@ -1203,7 +1293,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           'Enter an hourly rate, monthly hours, and a due day from 1 to 28.',
         );
       }
-      await BackendApiClient.instance.createRaw('/fees/daycare-plans', {
+      await _repository.createRaw('/fees/daycare-plans', {
         'student_id': studentId,
         'academic_year_id': _selectedAcademicYearId,
         'hourly_rate': rate,
@@ -1326,7 +1416,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
       return;
     }
     try {
-      await BackendApiClient.instance.updateRaw('/fees/daycare-plans/$id', {
+      await _repository.updateRaw('/fees/daycare-plans/$id', {
         'hourly_rate': rate,
         'contracted_hours_per_month': hours,
         'due_day': dueDay,

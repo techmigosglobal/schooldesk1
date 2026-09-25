@@ -76,6 +76,9 @@ void main() {
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
     final api = readBackendApiSources();
+    final approvalRepository = File(
+      'lib/modules/people/data/repositories/api_approval_repository.dart',
+    ).readAsStringSync();
 
     expect(adminFees, contains('AppRoutes.principalPaymentRequests'));
     expect(routes, contains('principalPaymentRequests'));
@@ -85,16 +88,18 @@ void main() {
       guard,
       contains('AppRoutes.principalPaymentRequests: {\'principal\'}'),
     );
-    expect(requestsScreen, contains('getParentPaymentRequestsPage('));
+    expect(requestsScreen, contains('loadPaymentRequests('));
     expect(
       requestsScreen,
       contains('AppRoutes.principalPaymentRequestDecision'),
     );
     expect(
       requestsScreen,
-      contains('pushReplacementNamed(AppRoutes.feeMonitoring)'),
+      contains('SchoolDeskNavigation.go(context, AppRoutes.feeMonitoring)'),
     );
-    expect(decisionScreen, contains('decideParentPaymentRequest('));
+    expect(decisionScreen, contains('decidePayment('));
+    expect(approvalRepository, contains('getParentPaymentRequestsPage('));
+    expect(approvalRepository, contains('decideParentPaymentRequest('));
     expect(
       api,
       contains('Future<Map<String, dynamic>> decideParentPaymentRequest'),
@@ -159,6 +164,9 @@ void main() {
     final paymentForm = File(
       'lib/features/finance/presentation/screens/parent_hub/parent_payment_flow.dart',
     ).readAsStringSync();
+    final paymentRepository = File(
+      'lib/roles/parent/data/api_parent_fee_payment_repository.dart',
+    ).readAsStringSync();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
     final registry = File(
@@ -171,8 +179,10 @@ void main() {
     expect(parentFees, isNot(contains('_showPaymentDialog')));
     expect(parentFees, isNot(contains('showDialog(')));
     expect(paymentForm, contains('class ParentPaymentFlow'));
-    expect(paymentForm, contains('submitParentPaymentRequestProof'));
-    expect(paymentForm, contains('resubmitFeePaymentProof'));
+    expect(paymentForm, contains('submitPaymentProof'));
+    expect(paymentForm, contains('resubmitPaymentProof'));
+    expect(paymentRepository, contains('submitParentPaymentRequestProof'));
+    expect(paymentRepository, contains('resubmitFeePaymentProof'));
     expect(paymentForm, contains('Confirm'));
     expect(paymentForm, contains('Submit Verification Request'));
     // Pay Now label replaced with Submit Payment for Verification in current UX
@@ -266,7 +276,8 @@ void main() {
 
     expect(source, isNot(contains("String _selectedClass = 'Class 5A'")));
     expect(source, isNot(contains("'Class 10B'")));
-    expect(source, contains('BackendApiClient.instance.getSections()'));
+    expect(source, contains('_repository.loadSections()'));
+    expect(source, contains('_repository.loadSessions('));
     expect(source, contains("createReportExport("));
     expect(source, contains("'/attendance/reports/exports'"));
   });

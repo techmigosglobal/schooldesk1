@@ -14,7 +14,7 @@ void main() {
         'lib/core/network/api_modules/school_api.dart',
       ).readAsStringSync();
 
-      expect(screen, contains('getAcademicYearSummary'));
+      expect(screen, contains('_repository.loadAcademicYearSummary'));
       expect(screen, contains('active_student_count'));
       expect(screen, contains('fee_structure_names'));
       expect(

@@ -13,6 +13,8 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 ///
 /// Left (main): Current class hero card + timetable feed.
 /// Right (sidebar): Quick-action grid + today's action queue + notices.
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 class TeacherDashboardDesktopBody extends StatelessWidget {
   final String teacherName;
   final String assignedClass;
@@ -265,7 +267,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
                       label: 'My Login',
                       icon: Icons.qr_code_scanner_rounded,
                       filled: true,
-                      onTap: () => Navigator.pushNamed(
+                      onTap: () => SchoolDeskNavigation.push(
                         context,
                         AppRoutes.teacherMyAttendance,
                         arguments: {'auto_scan': true},
@@ -274,7 +276,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
                     _TeacherHeroAction(
                       label: 'Student Attendance',
                       icon: Icons.how_to_reg_rounded,
-                      onTap: () => Navigator.pushNamed(
+                      onTap: () => SchoolDeskNavigation.push(
                         context,
                         AppRoutes.teacherAttendance,
                       ),
@@ -282,7 +284,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
                     _TeacherHeroAction(
                       label: 'Timetable',
                       icon: Icons.calendar_month_rounded,
-                      onTap: () => Navigator.pushNamed(
+                      onTap: () => SchoolDeskNavigation.push(
                         context,
                         AppRoutes.teacherTimetable,
                       ),
@@ -335,7 +337,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
             icon: Icons.qr_code_scanner_rounded,
             color: teacherFlowAccent,
             onTap: () async {
-              await Navigator.pushNamed(
+              await SchoolDeskNavigation.push(
                 context,
                 AppRoutes.teacherMyAttendance,
                 arguments: {'auto_scan': true},
@@ -350,8 +352,10 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
               subtitle: 'Your weekly timetable is available in My Timetable.',
               icon: Icons.event_busy_rounded,
               color: Colors.orange,
-              onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.teacherTimetable),
+              onTap: () => SchoolDeskNavigation.push(
+                context,
+                AppRoutes.teacherTimetable,
+              ),
             )
           else
             ...timetable.map((row) {
@@ -370,7 +374,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
                 subtitle: 'Review class period and plan next steps.',
                 icon: Icons.auto_stories_rounded,
                 color: teacherFlowAccent,
-                onTap: () => Navigator.pushNamed(
+                onTap: () => SchoolDeskNavigation.push(
                   context,
                   AppRoutes.teacherLessonPlanner,
                 ),
@@ -398,7 +402,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
                 color: notice.isUrgent
                     ? const Color(0xFFEF4444)
                     : teacherFlowAccent,
-                onTap: () => Navigator.pushNamed(
+                onTap: () => SchoolDeskNavigation.push(
                   context,
                   AppRoutes.teacherCommunication,
                 ),
@@ -418,7 +422,8 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
       errorMessage: feedError,
       onRetry: onFeedRetry,
       actionLabel: 'Manage',
-      onAction: () => Navigator.pushNamed(context, AppRoutes.teacherEventPosts),
+      onAction: () =>
+          SchoolDeskNavigation.push(context, AppRoutes.teacherEventPosts),
     );
   }
 
@@ -486,7 +491,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
               subtitle: action.$2,
               icon: action.$3,
               color: action.$4,
-              onTap: () => Navigator.pushNamed(context, action.$5),
+              onTap: () => SchoolDeskNavigation.push(context, action.$5),
             ),
         ],
       ),
@@ -509,7 +514,7 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
             color: Colors.indigo,
             urgency: attendancePending > 0 ? 'Required' : 'Ready',
             onTap: () =>
-                Navigator.pushNamed(context, AppRoutes.teacherAttendance),
+                SchoolDeskNavigation.push(context, AppRoutes.teacherAttendance),
           ),
           const SizedBox(height: 8),
           _ActionQueueItem(
@@ -518,7 +523,8 @@ class TeacherDashboardDesktopBody extends StatelessWidget {
             icon: Icons.event_busy_rounded,
             color: Colors.purple,
             urgency: 'Admin',
-            onTap: () => Navigator.pushNamed(context, AppRoutes.teacherLeave),
+            onTap: () =>
+                SchoolDeskNavigation.push(context, AppRoutes.teacherLeave),
           ),
         ],
       ),

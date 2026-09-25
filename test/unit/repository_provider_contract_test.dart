@@ -12,14 +12,14 @@ void main() {
         .where((file) => file.path.endsWith('.dart'))
         .toList();
     final models = File(
-      'lib/features/shared/data/models/backend_models.dart',
+      'lib/core/network/models/backend_models.dart',
     ).readAsStringSync();
 
     expect(facadeSource.split('\n').length, lessThanOrEqualTo(280));
     expect(
       facadeSource,
       contains(
-        "export 'package:schooldesk1/features/shared/data/models/backend_models.dart';",
+        "export 'package:schooldesk1/core/network/models/backend_models.dart';",
       ),
     );
     expect(facadeSource, contains("part 'api_modules/auth_api.dart';"));
@@ -40,50 +40,67 @@ void main() {
     }
   });
 
-  test('shared repositories are API-backed adapters over BackendApiClient', () {
-    final repositoryDir = Directory('lib/features/shared/data/repositories');
-    final files = repositoryDir
-        .listSync()
-        .whereType<File>()
-        .map((file) => file.uri.pathSegments.last)
-        .toSet();
+  test(
+    'capability repositories are API-backed adapters over BackendApiClient',
+    () {
+      final repositoryDirs = [
+        'lib/modules/attendance/data/repositories',
+        'lib/modules/communication/data/repositories',
+        'lib/modules/finance/data/repositories',
+        'lib/modules/leave/data/repositories',
+        'lib/modules/people/data/repositories',
+      ].map(Directory.new);
+      final repositoryFiles = repositoryDirs.expand(
+        (directory) => directory.listSync().whereType<File>(),
+      );
+      final files = repositoryFiles
+          .map((file) => file.uri.pathSegments.last)
+          .toSet();
 
-    expect(
-      files,
-      containsAll({
-        'api_attendance_repository.dart',
-        'api_fee_repository.dart',
-        'api_leave_repository.dart',
-        'api_notice_repository.dart',
-        'api_student_repository.dart',
-        'api_teacher_repository.dart',
-      }),
-    );
+      final capabilityFiles = repositoryDirs
+          .expand((directory) => directory.listSync().whereType<File>())
+          .whereType<File>()
+          .toList();
 
-    for (final file in repositoryDir.listSync().whereType<File>()) {
-      final name = file.uri.pathSegments.last;
-      if (!name.startsWith('api_') || name == 'api_repository_utils.dart') {
-        continue;
+      expect(
+        files,
+        containsAll({
+          'api_attendance_repository.dart',
+          'api_fee_repository.dart',
+          'api_leave_repository.dart',
+          'api_notice_repository.dart',
+          'api_student_repository.dart',
+          'api_teacher_repository.dart',
+        }),
+      );
+
+      for (final file in capabilityFiles) {
+        final name = file.uri.pathSegments.last;
+        if (!name.startsWith('api_') || name == 'api_repository_utils.dart') {
+          continue;
+        }
+
+        final source = file.readAsStringSync();
+        expect(
+          source,
+          contains('implements '),
+          reason:
+              '$name must implement the existing domain repository contract.',
+        );
+        expect(
+          source,
+          contains('BackendApiClient'),
+          reason: '$name must reuse the stable backend API facade.',
+        );
+        expect(
+          source,
+          contains('guardApi('),
+          reason:
+              '$name must translate backend exceptions into Result failures.',
+        );
       }
-
-      final source = file.readAsStringSync();
-      expect(
-        source,
-        contains('implements '),
-        reason: '$name must implement the existing domain repository contract.',
-      );
-      expect(
-        source,
-        contains('BackendApiClient'),
-        reason: '$name must reuse the stable backend API facade.',
-      );
-      expect(
-        source,
-        contains('guardApi('),
-        reason: '$name must translate backend exceptions into Result failures.',
-      );
-    }
-  });
+    },
+  );
 
   test('ServiceLocator registers repositories and exposes AuthController', () {
     final source = File('lib/core/di/service_locator.dart').readAsStringSync();
@@ -100,10 +117,10 @@ void main() {
 
     expect(main, contains('await ServiceLocator.initialize();'));
     expect(main, contains('MultiProvider('));
-    expect(main, isNot(contains('ProviderScope(')));
+    expect(main, contains('ProviderScope('));
     expect(
-      File('lib/app/providers/schooldesk_providers.dart').existsSync(),
-      isFalse,
+      File('lib/app/providers/app_providers.dart').existsSync(),
+      isTrue,
     );
     expect(main, contains('const AppProviders(child: MyApp())'));
   });

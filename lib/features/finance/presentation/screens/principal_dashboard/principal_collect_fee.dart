@@ -5,9 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 // ── Payment Modes ────────────────────────────────────────────────────────────
 
@@ -81,13 +85,18 @@ _FeeTypeBadge _feeTypeBadge(Map<String, dynamic> inv) {
 // ── Screen ───────────────────────────────────────────────────────────────────
 
 class PrincipalCollectFee extends StatefulWidget {
-  const PrincipalCollectFee({super.key});
+  final AdminFeesRepository? repository;
+
+  const PrincipalCollectFee({super.key, this.repository});
 
   @override
   State<PrincipalCollectFee> createState() => _PrincipalCollectFeeState();
 }
 
 class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
+  AdminFeesRepository get _repository =>
+      widget.repository ?? ApiAdminFeesRepository.legacyDefault;
+
   // ── Controllers ──────────────────────────────────────────────────────────
   final _amountController = TextEditingController();
   final _transactionController = TextEditingController();
@@ -95,13 +104,12 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
   final _searchCtrl = TextEditingController();
 
   // ── State ────────────────────────────────────────────────────────────────
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _loadingMore = false;
   bool _hasMore = false;
   int _page = 1;
   int _totalInvoices = 0;
   bool _saving = false;
-  String? _error;
 
   // ── Selection (stepped flow) ─────────────────────────────────────────────
   String _selectedSectionLabel = '';
@@ -237,14 +245,22 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
   }
 
   Future<void> _loadData({bool resetPage = true}) async {
+    final previous = _state.data;
     setState(() {
-      _loading = resetPage;
+      _state = resetPage
+          ? RepositoryState.loading(
+              data: previous,
+              source: previous == null
+                  ? RepositorySource.empty
+                  : RepositorySource.cache,
+              isStale: previous != null,
+              isRefreshing: previous != null,
+            )
+          : _state;
       _loadingMore = !resetPage;
-      _error = null;
     });
     try {
-      final api = BackendApiClient.instance;
-      final response = await api.getInvoicesPage(
+      final response = await _repository.loadInvoicesPage(
         search: _query,
         outstanding: true,
         page: resetPage ? 1 : _page + 1,
@@ -255,20 +271,31 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
       final existingIds = _invoices.map((invoice) => invoice['id']).toSet();
       final additions = resetPage
           ? invoices
-          : invoices.where((invoice) => existingIds.add(invoice['id'])).toList();
+          : invoices
+                .where((invoice) => existingIds.add(invoice['id']))
+                .toList();
       setState(() {
         _invoices = resetPage ? invoices : [..._invoices, ...additions];
         _page = response.page;
         _totalInvoices = response.total;
         _hasMore = response.hasMore;
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
         _loadingMore = false;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+              );
         _loadingMore = false;
       });
     }
@@ -365,13 +392,11 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
             ),
           ],
         ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? _buildErrorState()
-            : _dueInvoices.isEmpty
-            ? _buildEmptyState()
-            : _buildBody(),
+        body: SchoolDeskRepositoryStateView<Object>(
+          state: _state,
+          onRetry: _loadData,
+          data: (_) => _dueInvoices.isEmpty ? _buildEmptyState() : _buildBody(),
+        ),
       ),
     );
   }
@@ -480,51 +505,6 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
   }
 
   // ── Error / Empty States ─────────────────────────────────────────────────
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.red,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Something went wrong',
-              style: GoogleFonts.ibmPlexSans(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '$_error',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.ibmPlexSans(
-                color: context.appTheme.muted,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A6B4A),
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildEmptyState() {
     return Center(
@@ -1878,7 +1858,7 @@ class _PrincipalCollectFeeState extends State<PrincipalCollectFee> {
 
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.recordPayment(
+      await _repository.recordPayment(
         PaymentRequest(
           invoiceId: inv['id'],
           amountPaid: amount,

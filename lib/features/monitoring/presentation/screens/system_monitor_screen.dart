@@ -3,25 +3,50 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/modules/monitoring/data/api_system_monitor_repository.dart';
+import 'package:schooldesk1/modules/monitoring/domain/system_monitor_repository.dart';
 
 class SystemMonitorScreen extends StatefulWidget {
-  const SystemMonitorScreen({super.key});
+  final String role;
+  final SystemMonitorRepository? repository;
+
+  const SystemMonitorScreen({
+    super.key,
+    this.role = 'principal',
+    this.repository,
+  });
 
   @override
   State<SystemMonitorScreen> createState() => _SystemMonitorScreenState();
 }
 
+@immutable
+class _SystemMonitorSnapshot {
+  const _SystemMonitorSnapshot({
+    required this.events,
+    required this.retention,
+  });
+
+  final List<Map<String, dynamic>> events;
+  final Map<String, dynamic> retention;
+}
+
 class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
-  final _api = BackendApiClient.instance;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   String _status = 'open';
-  bool _loading = true;
-  String? _error;
-  List<Map<String, dynamic>> _events = const [];
-  Map<String, dynamic> _retention = const {};
+  bool _busy = false;
+  RepositoryState<_SystemMonitorSnapshot> _state =
+      const RepositoryState.loading();
+
+  Map<String, dynamic> get _retention =>
+      _state.data?.retention ?? const <String, dynamic>{};
+
+  SystemMonitorRepository get _repository =>
+      widget.repository ?? ApiSystemMonitorRepository.legacyDefault;
 
   @override
   void initState() {
@@ -30,37 +55,59 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
   }
 
   Future<void> _load() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final isSuperAdmin =
-          _api.currentRoleName?.trim().toLowerCase() == 'super_admin';
+      final isSuperAdmin = widget.role.trim().toLowerCase() == 'super_admin';
       final results = await Future.wait([
-        _api.getErrorEvents(
+        _repository.loadErrorEvents(
           status: _status == 'all' ? null : _status,
           pageSize: 50,
         ),
-        if (isSuperAdmin) _api.getErrorRetentionMetrics(),
+        if (isSuperAdmin) _repository.loadRetentionMetrics(),
       ]);
       final response = results.first;
       final data = response['data'];
+      if (!mounted) return;
+      final events = data is List
+          ? data
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList()
+          : const <Map<String, dynamic>>[];
+      final retention = isSuperAdmin && results.length > 1
+          ? Map<String, dynamic>.from(results[1] as Map)
+          : const <String, dynamic>{};
       setState(() {
-        _events = data is List
-            ? data
-                  .whereType<Map>()
-                  .map((e) => Map<String, dynamic>.from(e))
-                  .toList()
-            : const [];
-        _retention = isSuperAdmin && results.length > 1
-            ? Map<String, dynamic>.from(results[1] as Map)
-            : const {};
+        _state = RepositoryState(
+          data: _SystemMonitorSnapshot(events: events, retention: retention),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (error) {
-      setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() {
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
+      });
     }
   }
 
@@ -114,7 +161,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
     );
     if (save != true) return;
     try {
-      await _api.updateErrorRetentionSettings(
+      await _repository.updateRetentionSettings(
         warningKeepDays: int.tryParse(warning.text) ?? 0,
         resolvedKeepDays: int.tryParse(resolved.text) ?? 0,
         resolvedFatalKeepDays: int.tryParse(fatal.text) ?? 0,
@@ -151,7 +198,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
   Future<void> _clearResolvedEvents() async {
     final before = DateTime.now().toUtc().subtract(const Duration(days: 30));
     try {
-      final preview = await _api.previewResolvedErrorCleanup(before: before);
+      final preview = await _repository.previewResolvedCleanup(before: before);
       if (!mounted) return;
       final count = preview['deleted_count'] ?? 0;
       final confirm = TextEditingController();
@@ -195,7 +242,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
         ),
       );
       if (proceed != true) return;
-      final result = await _api.clearResolvedErrorEvents(before: before);
+      final result = await _repository.clearResolvedCleanup(before: before);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -214,9 +261,9 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
   }
 
   Future<void> _backupDb() async {
-    setState(() => _loading = true);
+    setState(() => _busy = true);
     try {
-      final data = await _api.backupDatabase();
+      final data = await _repository.backupDatabase();
       final jsonStr = const JsonEncoder.withIndent('  ').convert(data);
       await Clipboard.setData(ClipboardData(text: jsonStr));
       if (!mounted) return;
@@ -271,7 +318,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -313,12 +360,12 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
 
     if (restoreConfirmed != true || controller.text.trim().isEmpty) return;
 
-    setState(() => _loading = true);
+    setState(() => _busy = true);
     try {
       final Map<String, dynamic> parsed = Map<String, dynamic>.from(
         jsonDecode(controller.text.trim()) as Map,
       );
-      await _api.restoreDatabase(parsed);
+      await _repository.restoreDatabase(parsed);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -337,7 +384,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -371,9 +418,9 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
 
     if (wipeConfirmed != true) return;
 
-    setState(() => _loading = true);
+    setState(() => _busy = true);
     try {
-      final result = await _api.wipeDatabase();
+      final result = await _repository.wipeDatabase();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -397,13 +444,13 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final role = _api.currentRoleName?.trim().toLowerCase() ?? '';
+    final role = widget.role.trim().toLowerCase();
     final isSuperAdmin = role == 'super_admin';
 
     return Scaffold(
@@ -434,105 +481,102 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildFilters(),
-            const SizedBox(height: 16),
-            if (isSuperAdmin) ...[
-              _buildRetentionCard(),
+      body: SchoolDeskRepositoryStateView<_SystemMonitorSnapshot>(
+        state: _state,
+        onRetry: _load,
+        emptyTitle: 'No monitor data',
+        emptyMessage: 'Monitoring data is not available for this scope.',
+        data: (snapshot) => RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildFilters(),
               const SizedBox(height: 16),
-              Card(
-                color: Colors.white,
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey.shade200),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.storage_rounded, color: Colors.blue),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Database Administration',
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Perform backups, restorations, or clear transaction/student records for this school.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.download_rounded),
-                            label: const Text('Backup DB'),
-                            onPressed: _loading ? null : _backupDb,
-                          ),
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.upload_rounded),
-                            label: const Text('Restore DB'),
-                            onPressed: _loading ? null : _restoreDb,
-                          ),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              foregroundColor: Theme.of(
-                                context,
-                              ).colorScheme.error,
+              if (isSuperAdmin) ...[
+                _buildRetentionCard(),
+                const SizedBox(height: 16),
+                Card(
+                  color: Colors.white,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.storage_rounded,
+                              color: Colors.blue,
                             ),
-                            icon: const Icon(Icons.delete_forever_rounded),
-                            label: const Text('Wipe School Data'),
-                            onPressed: _loading ? null : _wipeDb,
-                          ),
-                        ],
-                      ),
-                    ],
+                            const SizedBox(width: 8),
+                            Text(
+                              'Database Administration',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Perform backups, restorations, or clear transaction/student records for this school.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Colors.grey.shade600,
+                              ),
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.download_rounded),
+                              label: const Text('Backup DB'),
+                              onPressed: _busy ? null : _backupDb,
+                            ),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.upload_rounded),
+                              label: const Text('Restore DB'),
+                              onPressed: _busy ? null : _restoreDb,
+                            ),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                foregroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.error,
+                              ),
+                              icon: const Icon(Icons.delete_forever_rounded),
+                              label: const Text('Wipe School Data'),
+                              onPressed: _busy ? null : _wipeDb,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
+              if (snapshot.events.isEmpty)
+                const _MessagePanel(
+                  icon: Icons.check_circle_outline_rounded,
+                  title: 'No matching error events',
+                  message: 'New crashes and backend errors will appear here.',
+                )
+              else
+                for (final event in snapshot.events)
+                  _ErrorEventTile(
+                    event: event,
+                    onOpen: () => _showDetails(event),
+                  ),
             ],
-            if (_loading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: CircularProgressIndicator(),
-                ),
-              )
-            else if (_error != null)
-              _MessagePanel(
-                icon: Icons.error_outline_rounded,
-                title: 'Unable to load events',
-                message: _error!,
-              )
-            else if (_events.isEmpty)
-              const _MessagePanel(
-                icon: Icons.check_circle_outline_rounded,
-                title: 'No matching error events',
-                message: 'New crashes and backend errors will appear here.',
-              )
-            else
-              for (final event in _events)
-                _ErrorEventTile(
-                  event: event,
-                  onOpen: () => _showDetails(event),
-                ),
-          ],
+          ),
         ),
       ),
     );
@@ -587,12 +631,12 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
               runSpacing: 10,
               children: [
                 OutlinedButton.icon(
-                  onPressed: _loading ? null : _editRetention,
+                  onPressed: _busy ? null : _editRetention,
                   icon: const Icon(Icons.tune_rounded),
                   label: const Text('Configure limits'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: _loading || eligible == 0
+                  onPressed: _busy || eligible == 0
                       ? null
                       : _clearResolvedEvents,
                   icon: const Icon(Icons.cleaning_services_outlined),
@@ -634,8 +678,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
   }
 
   Future<void> _showDetails(Map<String, dynamic> event) async {
-    final isSuperAdmin =
-        _api.currentRoleName?.trim().toLowerCase() == 'super_admin';
+    final isSuperAdmin = widget.role.trim().toLowerCase() == 'super_admin';
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -690,7 +733,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
               icon: const Icon(Icons.task_alt_rounded),
               label: const Text('Resolve'),
               onPressed: () async {
-                await _api.resolveErrorEvent(
+                await _repository.resolveErrorEvent(
                   _text(
                     event['id'],
                     fallback: _text(event['error_id'], fallback: ''),
@@ -762,7 +805,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
     );
     if (confirmed != true) return;
     try {
-      await _api.deleteResolvedErrorEvent(id);
+      await _repository.deleteResolvedErrorEvent(id);
       if (!mounted) return;
       Navigator.pop(context);
       await _load();

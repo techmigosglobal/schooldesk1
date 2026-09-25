@@ -6644,6 +6644,10 @@ abstract class _$OfflineDatabase extends GeneratedDatabase {
   late final $LocalStudentsTable localStudents = $LocalStudentsTable(this);
   late final $LocalHomeworkDraftsTable localHomeworkDrafts =
       $LocalHomeworkDraftsTable(this);
+  late final Index syncOutboxAccountIdempotencyIdx = Index(
+    'sync_outbox_account_idempotency_idx',
+    'CREATE UNIQUE INDEX sync_outbox_account_idempotency_idx ON sync_outbox_entries (account_key, idempotency_key)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6658,6 +6662,7 @@ abstract class _$OfflineDatabase extends GeneratedDatabase {
     localAttendanceSessions,
     localStudents,
     localHomeworkDrafts,
+    syncOutboxAccountIdempotencyIdx,
   ];
 }
 
@@ -6923,7 +6928,16 @@ class $$CachedResponsesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$CachedResponsesTable, CachedResponse>(table),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $CachedResponsesTable,
+                    CachedResponse
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -7294,7 +7308,16 @@ class $$SyncOutboxEntriesTableTableManager
                 nextAttemptAt: nextAttemptAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SyncOutboxEntriesTable, SyncOutboxEntry>(table),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $SyncOutboxEntriesTable,
+                    SyncOutboxEntry
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -7504,7 +7527,16 @@ class $$SyncStatesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SyncStatesTable, SyncState>(table),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $SyncStatesTable,
+                    SyncState
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -7716,7 +7748,16 @@ class $$SyncReferencesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SyncReferencesTable, SyncReference>(table),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $SyncReferencesTable,
+                    SyncReference
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -8181,7 +8222,16 @@ class $$LocalFileUploadsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$LocalFileUploadsTable, LocalFileUpload>(table),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $LocalFileUploadsTable,
+                    LocalFileUpload
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -8659,7 +8709,19 @@ class $$LocalAttendanceRecordsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<
+                    $LocalAttendanceRecordsTable,
+                    LocalAttendanceRecord
+                  >(table),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $LocalAttendanceRecordsTable,
+                    LocalAttendanceRecord
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9084,7 +9146,19 @@ class $$LocalAttendanceSessionsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<
+                    $LocalAttendanceSessionsTable,
+                    LocalAttendanceSession
+                  >(table),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $LocalAttendanceSessionsTable,
+                    LocalAttendanceSession
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9435,7 +9509,16 @@ class $$LocalStudentsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$LocalStudentsTable, LocalStudent>(table),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $LocalStudentsTable,
+                    LocalStudent
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9866,7 +9949,18 @@ class $$LocalHomeworkDraftsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$LocalHomeworkDraftsTable, LocalHomeworkDraft>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $LocalHomeworkDraftsTable,
+                    LocalHomeworkDraft
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),

@@ -10,7 +10,7 @@ void main() {
       final landing = File(
         'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
       ).readAsStringSync();
-      final main = File('lib/main.dart').readAsStringSync();
+      final app = File('lib/app/app.dart').readAsStringSync();
       final pubspec = File('pubspec.yaml').readAsStringSync();
       final androidManifest = File(
         'android/app/src/main/AndroidManifest.xml',
@@ -50,11 +50,11 @@ void main() {
       expect(landing, contains('Learn Today, Lead Tomorrow'));
       expect(landing, isNot(contains('Powered by Arish Ville')));
       expect(
-        main.contains("title: 'Arish Ville Preschool'") ||
-            main.contains("title: AppConstants.schoolName"),
+        app.contains("title: 'Arish Ville Preschool'") ||
+            app.contains("title: AppConstants.schoolName"),
         isTrue,
         reason:
-            'main.dart should set app title to Arish Ville brand name or constant',
+            'The composition root should set app title to Arish Ville brand name or constant',
       );
       expect(
         Directory('web').existsSync(),

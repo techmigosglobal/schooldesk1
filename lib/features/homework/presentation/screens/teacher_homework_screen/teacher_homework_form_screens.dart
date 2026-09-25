@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
@@ -10,6 +9,11 @@ import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
+import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_homework_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_homework_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 @immutable
 class TeacherHomeworkFormArgs {
@@ -56,6 +60,9 @@ class TeacherHomeworkFormScreen extends StatefulWidget {
 }
 
 class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
+  TeacherHomeworkRepository get _repository =>
+      ApiTeacherHomeworkRepository.legacyDefault;
+
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -72,9 +79,10 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   List<Map<String, dynamic>> _assignedClasses = const [];
   List<Map<String, dynamic>> _students = const [];
   bool _loadingContext = true;
+  RepositoryState<Object> _contextState = const RepositoryState.loading();
   bool _uploadingAttachment = false;
   bool _saving = false;
-  String? _error;
+  String? _formError;
 
   bool get _missingRequiredContext =>
       _teacherStaffId.trim().isEmpty || _assignedClasses.isEmpty;
@@ -159,22 +167,22 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
         'png',
         'webp',
       ],
-      withData: true,
     );
-    final file = result?.files.single;
-    final path = file?.path ?? '';
-    if (file == null || (path.trim().isEmpty && file.bytes == null)) return;
+    final file = result.single;
+    final path = file.path ?? '';
+    final fileBytes = await file.readAsBytes();
+    if (path.trim().isEmpty && fileBytes.isEmpty) return;
 
     setState(() {
       _uploadingAttachment = true;
-      _error = null;
+      _formError = null;
     });
     try {
       final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
       final optimized = ImageUploadOptimizer.isImage(file.name, mimeType)
-          ? (file.bytes != null
+          ? (fileBytes.isNotEmpty
                 ? ImageUploadOptimizer.fromBytes(
-                    file.bytes!,
+                    fileBytes,
                     filename: file.name,
                     mimeType: mimeType,
                     preset: ImageUploadPreset.content,
@@ -186,12 +194,18 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                     preset: ImageUploadPreset.content,
                   ))
           : null;
-      final url = await BackendApiClient.instance.uploadFile(
+      final uploadResult = await _repository.uploadFile(
         path,
         filename: optimized?.filename ?? file.name,
-        fileBytes: optimized?.bytes ?? file.bytes,
+        fileBytes: optimized?.bytes ?? fileBytes,
         mimeType: optimized?.mimeType ?? mimeType,
       );
+      if (uploadResult.isFailure) {
+        throw StateError(
+          uploadResult.failureOrNull?.message ?? 'Unable to upload attachment',
+        );
+      }
+      final url = uploadResult.dataOrNull!;
       if (url.isEmpty) {
         throw Exception('Upload completed but no file URL was returned.');
       }
@@ -205,7 +219,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       if (!mounted) return;
       setState(() {
         _uploadingAttachment = false;
-        _error = error.toString().replaceFirst('Exception: ', '');
+        _formError = error.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -213,24 +227,23 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
     if (_selectedSubjects.isEmpty) {
-      setState(() => _error = 'Please select at least one subject.');
+      setState(() => _formError = 'Please select at least one subject.');
       return;
     }
     if (!_formKey.currentState!.validate()) return;
     if (_teacherStaffId.trim().isEmpty) {
-      setState(() => _error = 'Teacher staff profile is missing.');
+      setState(() => _formError = 'Teacher staff profile is missing.');
       return;
     }
     setState(() {
       _saving = true;
-      _error = null;
+      _formError = null;
     });
     try {
-      final saveAsDraft =
-          BackendApiClient.instance.offlineSync?.isOffline == true;
+      final saveAsDraft = _repository.isOffline;
       final homeworkId = _homeworkRecordId;
       if (homeworkId.isEmpty) {
-        await BackendApiClient.instance.createHomework(
+        final result = await _repository.createHomework(
           title: _titleController.text.trim(),
           subject: _selectedSubjects.join(', '),
           className: _selectedClassLabel,
@@ -242,9 +255,19 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           status: saveAsDraft ? 'draft' : 'pending',
           attachmentUrl: _attachmentUrl,
         );
-        await _writeDiaryEntry();
+        if (result.isFailure) {
+          throw StateError(
+            result.failureOrNull?.message ?? 'Unable to create Dairy',
+          );
+        }
+        final diaryResult = await _writeDiaryEntry();
+        if (diaryResult.isFailure) {
+          throw StateError(
+            diaryResult.failureOrNull?.message ?? 'Unable to write diary entry',
+          );
+        }
       } else {
-        await BackendApiClient.instance.updateHomework(
+        final result = await _repository.updateHomework(
           homeworkId,
           title: _titleController.text.trim(),
           subject: _selectedSubjects.join(', '),
@@ -257,6 +280,11 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           status: saveAsDraft ? 'draft' : 'pending',
           attachmentUrl: _attachmentUrl,
         );
+        if (result.isFailure) {
+          throw StateError(
+            result.failureOrNull?.message ?? 'Unable to update Dairy',
+          );
+        }
       }
       if (mounted) {
         Navigator.pop(
@@ -274,7 +302,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = error.toString();
+        _formError = error.toString();
       });
     }
   }
@@ -301,221 +329,229 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       title: widget.args.isEditing ? 'Edit Dairy' : 'Assign Dairy',
       subtitle: 'Minimal typing flow with class defaults',
       selectedIndex: TeacherNav.diary,
-      child: TeacherFlowScrollView(
-        children: [
-          TeacherCurrentClassCard(
-            greeting: 'Dairy details',
-            classLabel: _defaultClassName,
-            subject: _defaultSubject,
-            timeLabel: 'Parents and students are notified after save',
-          ),
-          const SizedBox(height: 18),
-          Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Title',
-                    prefixIcon: Icon(Icons.title_rounded),
-                  ),
-                  validator: (value) =>
-                      _required(value, 'Enter a dairy title.'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _sectionId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Class',
-                    prefixIcon: Icon(Icons.class_rounded),
-                  ),
-                  items: _classOptions
-                      .map(
-                        (row) => DropdownMenuItem(
-                          value: teacherFlowText(row['id']),
-                          child: Text(_classLabel(row)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (_saving || _classOptions.length <= 1)
-                      ? null
-                      : (value) => setState(() => _sectionId = value ?? ''),
-                  validator: (value) =>
-                      _required(value, 'Select a class section.'),
-                ),
-                const SizedBox(height: 12),
-                SubjectCardGrid(
-                  label: 'Subjects',
-                  subjects: _subjectOptions,
-                  selectedSubjects: _selectedSubjects,
-                  enabled: !_saving,
-                  onToggle: (subject) {
-                    setState(() {
-                      if (_selectedSubjects.contains(subject)) {
-                        _selectedSubjects.remove(subject);
-                      } else {
-                        _selectedSubjects.add(subject);
-                      }
-                    });
-                  },
-                ),
-                if (_selectedSubjects.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 6),
-                    child: Text(
-                      'Please select at least one subject',
-                      style: TextStyle(fontSize: 12, color: Colors.red),
+      child: SchoolDeskRepositoryStateView<Object>(
+        state: _contextState,
+        onRetry: _loadMissingContext,
+        data: (_) => TeacherFlowScrollView(
+          children: [
+            TeacherCurrentClassCard(
+              greeting: 'Dairy details',
+              classLabel: _defaultClassName,
+              subject: _defaultSubject,
+              timeLabel: 'Parents and students are notified after save',
+            ),
+            const SizedBox(height: 18),
+            Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  TextFormField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Title',
+                      prefixIcon: Icon(Icons.title_rounded),
                     ),
+                    validator: (value) =>
+                        _required(value, 'Enter a dairy title.'),
                   ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _homeworkType,
-                  decoration: const InputDecoration(
-                    labelText: 'Work type',
-                    prefixIcon: Icon(Icons.category_rounded),
-                  ),
-                  items:
-                      const [
-                            'Dairy',
-                            'Classwork',
-                            'Project',
-                            'Revision',
-                            'Bring Materials',
-                            'Exam Reminder',
-                          ]
-                          .map(
-                            (type) => DropdownMenuItem(
-                              value: type,
-                              child: Text(type),
-                            ),
-                          )
-                          .toList(),
-                  onChanged: _saving
-                      ? null
-                      : (value) =>
-                            setState(() => _homeworkType = value ?? 'Dairy'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _studentId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Student scope',
-                    prefixIcon: Icon(Icons.groups_rounded),
-                  ),
-                  items: [
-                    const DropdownMenuItem(
-                      value: '',
-                      child: Text('Full class'),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _sectionId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Class',
+                      prefixIcon: Icon(Icons.class_rounded),
                     ),
-                    ..._students.map(
-                      (student) => DropdownMenuItem(
-                        value: teacherFlowText(student['id']),
-                        child: Text(
-                          teacherFlowText(student['name'], fallback: 'Student'),
-                        ),
+                    items: _classOptions
+                        .map(
+                          (row) => DropdownMenuItem(
+                            value: teacherFlowText(row['id']),
+                            child: Text(_classLabel(row)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (_saving || _classOptions.length <= 1)
+                        ? null
+                        : (value) => setState(() => _sectionId = value ?? ''),
+                    validator: (value) =>
+                        _required(value, 'Select a class section.'),
+                  ),
+                  const SizedBox(height: 12),
+                  SubjectCardGrid(
+                    label: 'Subjects',
+                    subjects: _subjectOptions,
+                    selectedSubjects: _selectedSubjects,
+                    enabled: !_saving,
+                    onToggle: (subject) {
+                      setState(() {
+                        if (_selectedSubjects.contains(subject)) {
+                          _selectedSubjects.remove(subject);
+                        } else {
+                          _selectedSubjects.add(subject);
+                        }
+                      });
+                    },
+                  ),
+                  if (_selectedSubjects.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Please select at least one subject',
+                        style: TextStyle(fontSize: 12, color: Colors.red),
                       ),
                     ),
-                  ],
-                  onChanged: _saving
-                      ? null
-                      : (value) => setState(() => _studentId = value ?? ''),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _dueDateController,
-                  decoration: const InputDecoration(
-                    labelText: 'Due date',
-                    hintText: 'YYYY-MM-DD',
-                    prefixIcon: Icon(Icons.event_rounded),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _homeworkType,
+                    decoration: const InputDecoration(
+                      labelText: 'Work type',
+                      prefixIcon: Icon(Icons.category_rounded),
+                    ),
+                    items:
+                        const [
+                              'Dairy',
+                              'Classwork',
+                              'Project',
+                              'Revision',
+                              'Bring Materials',
+                              'Exam Reminder',
+                            ]
+                            .map(
+                              (type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: _saving
+                        ? null
+                        : (value) =>
+                              setState(() => _homeworkType = value ?? 'Dairy'),
                   ),
-                  validator: (value) => _required(value, 'Enter due date.'),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _descriptionController,
-                  minLines: 4,
-                  maxLines: 6,
-                  decoration: const InputDecoration(
-                    labelText: 'Instructions',
-                    alignLabelWithHint: true,
-                    prefixIcon: Icon(Icons.notes_rounded),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _studentId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Student scope',
+                      prefixIcon: Icon(Icons.groups_rounded),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: '',
+                        child: Text('Full class'),
+                      ),
+                      ..._students.map(
+                        (student) => DropdownMenuItem(
+                          value: teacherFlowText(student['id']),
+                          child: Text(
+                            teacherFlowText(
+                              student['name'],
+                              fallback: 'Student',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _studentId = value ?? ''),
                   ),
-                  validator: (value) => _required(value, 'Enter instructions.'),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: (_saving || _uploadingAttachment)
-                      ? null
-                      : _pickAttachment,
-                  icon: _uploadingAttachment
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.attach_file_rounded),
-                  label: Text(
-                    _attachmentUrl.isEmpty
-                        ? 'Pick attachment'
-                        : 'Attachment: ${_attachmentName.isEmpty ? 'Uploaded file' : _attachmentName}',
-                    overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _dueDateController,
+                    decoration: const InputDecoration(
+                      labelText: 'Due date',
+                      hintText: 'YYYY-MM-DD',
+                      prefixIcon: Icon(Icons.event_rounded),
+                    ),
+                    validator: (value) => _required(value, 'Enter due date.'),
                   ),
-                ),
-                if (_attachmentUrl.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Builder(
-                      builder: (context) {
-                        final rawItem = EventPostMediaItem.fromUrl(
-                          _attachmentUrl,
-                        );
-                        final item = _attachmentName.isNotEmpty
-                            ? EventPostMediaItem(
-                                url: rawItem.url,
-                                name: _attachmentName,
-                                kind: rawItem.kind,
-                              )
-                            : rawItem;
-                        return EventPostMediaPreview(
-                          item: item,
-                          height: 140,
-                          compact: true,
-                        );
-                      },
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _descriptionController,
+                    minLines: 4,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'Instructions',
+                      alignLabelWithHint: true,
+                      prefixIcon: Icon(Icons.notes_rounded),
+                    ),
+                    validator: (value) =>
+                        _required(value, 'Enter instructions.'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: (_saving || _uploadingAttachment)
+                        ? null
+                        : _pickAttachment,
+                    icon: _uploadingAttachment
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.attach_file_rounded),
+                    label: Text(
+                      _attachmentUrl.isEmpty
+                          ? 'Pick attachment'
+                          : 'Attachment: ${_attachmentName.isEmpty ? 'Uploaded file' : _attachmentName}',
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: TextStyle(color: context.appTheme.error),
+                  if (_attachmentUrl.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Builder(
+                        builder: (context) {
+                          final rawItem = EventPostMediaItem.fromUrl(
+                            _attachmentUrl,
+                          );
+                          final item = _attachmentName.isNotEmpty
+                              ? EventPostMediaItem(
+                                  url: rawItem.url,
+                                  name: _attachmentName,
+                                  kind: rawItem.kind,
+                                )
+                              : rawItem;
+                          return EventPostMediaPreview(
+                            item: item,
+                            height: 140,
+                            compact: true,
+                          );
+                        },
+                      ),
+                    ),
+                  if (_formError != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _formError!,
+                      style: TextStyle(color: context.appTheme.error),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: _saving ? null : _submit,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send_rounded),
+                    label: Text(
+                      _saving
+                          ? 'Saving...'
+                          : widget.args.isEditing
+                          ? 'Save Dairy'
+                          : 'Share Dairy',
+                    ),
                   ),
                 ],
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: _saving ? null : _submit,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send_rounded),
-                  label: Text(
-                    _saving
-                        ? 'Saving...'
-                        : widget.args.isEditing
-                        ? 'Save Dairy'
-                        : 'Share Dairy',
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -613,18 +649,23 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           }
         }
         _loadingContext = false;
+        _contextState = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loadingContext = false;
-        _error = error.toString();
+        _formError = error.toString();
+        _contextState = RepositoryState.error(error: error);
       });
     }
   }
 
-  Future<void> _writeDiaryEntry() async {
-    await BackendApiClient.instance.createRaw('/diary-entries', {
+  Future<Result<void>> _writeDiaryEntry() async {
+    return _repository.writeDiaryEntry({
       'section_id': _sectionId,
       'teacher_id': _teacherStaffId,
       'staff_id': _teacherStaffId,
@@ -657,8 +698,10 @@ class TeacherHomeworkSubmissionsScreen extends StatefulWidget {
 
 class _TeacherHomeworkSubmissionsScreenState
     extends State<TeacherHomeworkSubmissionsScreen> {
-  bool _loading = true;
-  String? _error;
+  TeacherHomeworkRepository get _repository =>
+      ApiTeacherHomeworkRepository.legacyDefault;
+  RepositoryState<List<Map<String, dynamic>>> _submissionState =
+      const RepositoryState.loading();
   List<Map<String, dynamic>> _submissions = const [];
 
   String get _homeworkId => teacherFlowText(
@@ -669,34 +712,58 @@ class _TeacherHomeworkSubmissionsScreenState
   void initState() {
     super.initState();
     if (_homeworkId.isEmpty) {
-      _loading = false;
-      _error = 'Please open this screen from the related Teacher module.';
+      _submissionState = const RepositoryState.error(
+        error: 'Please open this screen from the related Teacher module.',
+      );
     } else {
       _loadSubmissions();
     }
   }
 
   Future<void> _loadSubmissions() async {
+    final previous = _submissionState.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _submissionState = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final payload = await BackendApiClient.instance.getHomeworkSubmissions(
-        _homeworkId,
-      );
+      final result = await _repository.loadSubmissions(_homeworkId);
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to load submissions',
+        );
+      }
+      final payload = result.dataOrNull!;
       if (!mounted) return;
       setState(() {
         _submissions = teacherFlowList(
           payload['submissions'] ?? payload['data'],
         );
-        _loading = false;
+        _submissionState = RepositoryState(
+          data: _submissions,
+          source: RepositorySource.remote,
+          phase: _submissions.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = error.toString();
+        _submissionState = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
       });
     }
   }
@@ -718,12 +785,17 @@ class _TeacherHomeworkSubmissionsScreenState
       return;
     }
     try {
-      await BackendApiClient.instance.reviewHomeworkSubmission(
+      final result = await _repository.reviewSubmission(
         _homeworkId,
         submissionId,
         status: 'reviewed',
         remarks: comment,
       );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to review submission',
+        );
+      }
       await _loadSubmissions();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -768,27 +840,35 @@ class _TeacherHomeworkSubmissionsScreenState
       title: 'Submissions',
       subtitle: title,
       selectedIndex: TeacherNav.diary,
-      loading: _loading,
-      error: _error,
+      loading: _submissionState.isLoading && !_submissionState.hasData,
+      error: _submissionState.hasData
+          ? null
+          : _submissionState.error?.toString(),
       onRefresh: _loadSubmissions,
-      child: TeacherFlowScrollView(
-        children: [
-          TeacherCurrentClassCard(
-            greeting: 'Review queue',
-            classLabel: title,
-            subject: '${_submissions.length} submissions',
-            timeLabel: 'Add feedback before marking done',
-          ),
-          const SizedBox(height: 18),
-          if (_submissions.isEmpty)
-            const TeacherFlowCard(
-              icon: Icons.inbox_rounded,
-              title: 'No submissions yet',
-              subtitle: 'Student submissions will appear here.',
-            )
-          else
-            ..._submissions.map((submission) => _submissionCard(submission)),
-        ],
+      child: SchoolDeskRepositoryStateView<List<Map<String, dynamic>>>(
+        state: _submissionState,
+        onRetry: _loadSubmissions,
+        emptyTitle: 'No submissions yet',
+        emptyMessage: 'Student submissions will appear here.',
+        data: (_) => TeacherFlowScrollView(
+          children: [
+            TeacherCurrentClassCard(
+              greeting: 'Review queue',
+              classLabel: title,
+              subject: '${_submissions.length} submissions',
+              timeLabel: 'Add feedback before marking done',
+            ),
+            const SizedBox(height: 18),
+            if (_submissions.isEmpty)
+              const TeacherFlowCard(
+                icon: Icons.inbox_rounded,
+                title: 'No submissions yet',
+                subtitle: 'Student submissions will appear here.',
+              )
+            else
+              ..._submissions.map((submission) => _submissionCard(submission)),
+          ],
+        ),
       ),
     );
   }
@@ -931,7 +1011,7 @@ class _HomeworkFeedbackDialog extends StatefulWidget {
 
 class _HomeworkFeedbackDialogState extends State<_HomeworkFeedbackDialog> {
   late final TextEditingController _controller;
-  String? _error;
+  String? _feedbackError;
 
   @override
   void initState() {
@@ -980,7 +1060,7 @@ class _HomeworkFeedbackDialogState extends State<_HomeworkFeedbackDialog> {
                 decoration: InputDecoration(
                   hintText:
                       'Share clear feedback about the student submission.',
-                  errorText: _error,
+                  errorText: _feedbackError,
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -992,7 +1072,9 @@ class _HomeworkFeedbackDialogState extends State<_HomeworkFeedbackDialog> {
                   ),
                 ),
                 onChanged: (_) {
-                  if (_error != null) setState(() => _error = null);
+                  if (_feedbackError != null) {
+                    setState(() => _feedbackError = null);
+                  }
                 },
               ),
             ],
@@ -1008,7 +1090,7 @@ class _HomeworkFeedbackDialogState extends State<_HomeworkFeedbackDialog> {
           onPressed: () {
             final value = _controller.text.trim();
             if (value.isEmpty) {
-              setState(() => _error = 'Feedback is required.');
+              setState(() => _feedbackError = 'Feedback is required.');
               return;
             }
             Navigator.pop(context, value);

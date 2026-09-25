@@ -23,6 +23,11 @@ class CachedResponses extends Table {
 }
 
 /// Mutations that are safe to replay after a transport failure.
+@TableIndex(
+  name: 'sync_outbox_account_idempotency_idx',
+  columns: {#accountKey, #idempotencyKey},
+  unique: true,
+)
 class SyncOutboxEntries extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get accountKey => text()();
@@ -203,7 +208,7 @@ class OfflineDatabase extends _$OfflineDatabase {
       );
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -215,6 +220,13 @@ class OfflineDatabase extends _$OfflineDatabase {
         await m.createTable(localAttendanceSessions);
       }
       if (from < 4) await m.createTable(localHomeworkDrafts);
+      if (from < 5) {
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS '
+          'sync_outbox_account_idempotency_idx '
+          'ON sync_outbox_entries (account_key, idempotency_key)',
+        );
+      }
     },
   );
 
@@ -259,6 +271,34 @@ class OfflineDatabase extends _$OfflineDatabase {
     required Object? payload,
     required String idempotencyKey,
   }) {
+    return _enqueueMutation(
+      accountKey: accountKey,
+      operationType: operationType,
+      method: method,
+      path: path,
+      queryParameters: queryParameters,
+      payload: payload,
+      idempotencyKey: idempotencyKey,
+    );
+  }
+
+  Future<int> _enqueueMutation({
+    required String accountKey,
+    required String operationType,
+    required String method,
+    required String path,
+    required Map<String, dynamic> queryParameters,
+    required Object? payload,
+    required String idempotencyKey,
+  }) async {
+    final existing =
+        await (select(syncOutboxEntries)..where((row) {
+              return row.accountKey.equals(accountKey) &
+                  row.idempotencyKey.equals(idempotencyKey);
+            }))
+            .getSingleOrNull();
+    if (existing != null) return existing.id;
+
     return into(syncOutboxEntries).insert(
       SyncOutboxEntriesCompanion.insert(
         accountKey: accountKey,
@@ -315,6 +355,15 @@ class OfflineDatabase extends _$OfflineDatabase {
     await (update(syncOutboxEntries)..where((row) => row.id.equals(id))).write(
       SyncOutboxEntriesCompanion(
         status: const Value('failed'),
+        lastError: Value(error),
+      ),
+    );
+  }
+
+  Future<void> markMutationConflict(int id, String error) async {
+    await (update(syncOutboxEntries)..where((row) => row.id.equals(id))).write(
+      SyncOutboxEntriesCompanion(
+        status: const Value('conflict'),
         lastError: Value(error),
       ),
     );
@@ -445,7 +494,9 @@ class OfflineDatabase extends _$OfflineDatabase {
     final mutations =
         await (select(syncOutboxEntries)..where((row) {
               return row.accountKey.equals(accountKey) &
-                  (row.status.equals('pending') | row.status.equals('failed'));
+                  (row.status.equals('pending') |
+                      row.status.equals('failed') |
+                      row.status.equals('conflict'));
             }))
             .get();
     final uploads =

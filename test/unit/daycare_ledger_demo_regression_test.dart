@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/core/services/demo_fixture_store.dart';
 
 void main() {
   test('Day Care plans are child-only hourly monthly plans', () {
@@ -132,44 +131,5 @@ void main() {
     expect(teacher, isNot(contains("label: const Text('Complete')")));
     expect(teacher, contains("label: 'Current week'"));
     expect(principal, contains("label: Text('Current plans')"));
-  });
-
-  test('demo fixtures cover the calendar and local finance supplements', () {
-    final store = DemoFixtureStore.pristine();
-    for (final path in [
-      '/academic-years/year-1',
-      '/holidays',
-      '/fees/reminders',
-      '/fees/daycare-plans',
-      '/fees/daycare-eligible-students',
-      '/fees/payment-config',
-    ]) {
-      expect(
-        store.respond(path: path, method: 'GET', role: 'parent')['success'],
-        true,
-      );
-    }
-    expect(
-      store.respond(
-        path: '/fees/daycare-plans',
-        method: 'POST',
-        role: 'principal',
-        body: {
-          'student_id': 'student-daycare-1',
-          'hourly_rate': 70,
-          'contracted_hours_per_month': 60,
-          'due_day': 10,
-        },
-      )['success'],
-      true,
-    );
-    expect(
-      store.respond(
-        path: '/fees/daycare-plans',
-        method: 'GET',
-        role: 'principal',
-      )['data'],
-      isNotEmpty,
-    );
   });
 }

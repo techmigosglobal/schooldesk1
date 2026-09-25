@@ -2,10 +2,9 @@
 
 ## State management
 
-Provider is the single application state-management system. Theme, settings,
-and authentication are `ChangeNotifier`s provided from the application root.
-Riverpod was removed because its provider definitions were not consumed by any
-screen; retaining an unused second container made ownership unclear.
+ADR-0001 supersedes the earlier Provider-only decision. Riverpod 3 is the
+composition-root boundary for migrated modules; Provider remains temporarily
+under the compatibility shell until legacy screens have moved to Riverpod.
 
 ## Network API boundary
 
@@ -21,9 +20,9 @@ and the legacy Retrofit `SchoolDeskApi` Dio, so existing feature screens do
 not choose between local and remote data sources. Successful,
 authenticated GET responses are copied into the account/branch/role-scoped
 Drift database and are used as stale fallbacks when the Edge API cannot be
-reached. The legacy Hive cache is only a successful-response optimization;
-authenticated reads remain network-first and never let Hive hide the transport
-failure from Drift. `ApiAttendanceRepository` additionally maintains a typed local
+reached. Drift is the only durable cache; the discontinued generic Hive HTTP
+cache was removed. Authenticated reads remain network-first and never bypass
+the Drift fallback. `ApiAttendanceRepository` additionally maintains a typed local
 attendance table for the teacher workflow, while draft homework writes are
 kept in a typed local draft table and merged into the teacher's offline list.
 
@@ -83,12 +82,10 @@ authoritative.
 
 ## Navigation
 
-Named routes remain the production navigation contract. The route boundary now
-throws a diagnostic error when a route has neither a widget nor a builder,
-instead of silently rendering a blank screen. A `go_router` migration is a
-separate compatibility project: it must first replace the existing dynamic
-argument maps with typed route argument objects and include deep-link and
-role-guard regression tests.
+The new composition root provides role-aware `go_router` navigation and typed
+route argument objects. The existing named-route registry remains as a
+compatibility adapter while screens migrate; deep-link aliases and role-guard
+tests are retained during that window.
 
 ## Native build dependencies
 

@@ -3,26 +3,21 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ChangeNotifier, kIsWeb;
 import 'package:dio/dio.dart';
-import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
-import 'package:dio_cache_interceptor_hive_store/dio_cache_interceptor_hive_store.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
-import 'package:schooldesk1/features/shared/data/models/backend_models.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/core/network/generated/schooldesk_api_models.dart';
 import 'package:schooldesk1/core/network/schooldesk_api.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/utils/secure_media_cache.dart';
 import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
 
-export 'package:schooldesk1/features/shared/data/models/backend_models.dart';
+export 'package:schooldesk1/core/network/models/backend_models.dart';
 part 'api_modules/auth_api.dart';
 part 'api_modules/branches_api.dart';
 part 'api_modules/client_interceptors.dart';
@@ -48,12 +43,9 @@ part 'api_modules/monitoring_api.dart';
 part 'api_modules/notifications_api.dart';
 part 'api_modules/help_api.dart';
 part 'api_modules/issues_api.dart';
-part 'api_modules/demo_api.dart';
 part 'api_modules/request_coalescing.dart';
 
 typedef ApiErrorReporter = void Function(DioException error);
-const _forceRefreshCacheExtraKey = 'schooldesk_force_refresh_cache';
-
 Future<MultipartFile> _multipartUpload({
   String? filePath,
   Uint8List? fileBytes,
@@ -78,12 +70,13 @@ Future<MultipartFile> _multipartUpload({
   );
 }
 
-class BackendApiClient {
+/// Session-aware transport notifier used by the typed router and Riverpod
+/// composition root. Auth/role changes are navigation state changes, so the
+/// router must be refreshed without relying on a periodic polling cycle.
+class BackendApiClient extends ChangeNotifier {
   static BackendApiClient? _instance;
   static ApiErrorReporter? apiErrorReporter;
   late final Dio _dio;
-  CacheOptions? _cacheOptions;
-  bool _cacheInstalled = false;
   Completer<bool>? _refreshCompleter;
 
   BackendApiClient._() {
@@ -100,9 +93,7 @@ class BackendApiClient {
     );
 
     _dio.interceptors.addAll([
-      _DemoLocalApiInterceptor(),
       _AuthInterceptor(this),
-      _ReadCacheOptionsInterceptor(this),
       _WriteCacheInvalidationInterceptor(this),
       OfflineDioInterceptor(),
       _LoggingInterceptor(),
@@ -118,7 +109,6 @@ class BackendApiClient {
 
   static Future<void> initialize() async {
     final client = instance;
-    await client.installPersistentCache();
     final access = await TokenStorageService.getAccessToken();
     if (access != null && access.isNotEmpty) {
       client.setAuthToken(access);
@@ -140,10 +130,18 @@ class BackendApiClient {
   String? get currentRoleName => _currentRoleName;
   String? get currentUserId => _currentUserId;
   String? get activeBranchId => _activeBranchId;
-  void setAuthToken(String token) => _authToken = token;
+  void setAuthToken(String token) {
+    if (_authToken == token) return;
+    _authToken = token;
+    notifyListeners();
+  }
+
   void setCurrentRole(String? roleName) {
     final normalized = roleName?.trim();
-    _currentRoleName = normalized?.isEmpty == true ? null : normalized;
+    final nextRole = normalized?.isEmpty == true ? null : normalized;
+    if (_currentRoleName == nextRole) return;
+    _currentRoleName = nextRole;
+    notifyListeners();
   }
 
   void setCurrentUserId(String? userId) {
@@ -161,11 +159,13 @@ class BackendApiClient {
     if (previousScope != nextScope && previousScope != 'anonymous') {
       unawaited(SecureSelectiveMediaCache.clearAccount(previousScope));
     }
+    if (_currentUserId != null || nextUserId == null) notifyListeners();
   }
 
   Future<void> setActiveBranchId(String? schoolId) async {
     final previousScope = offlineAccountKey;
     final normalized = schoolId?.trim();
+    final previousBranchId = _activeBranchId;
     _activeBranchId = normalized?.isEmpty == true ? null : normalized;
     if (_activeBranchId == null) {
       _dio.options.headers.remove('x-schooldesk-branch-id');
@@ -182,9 +182,15 @@ class BackendApiClient {
     }
     await invalidateCachedReads();
     unawaited(offlineSync?.syncNow() ?? Future<void>.value());
+    if (previousBranchId != _activeBranchId) notifyListeners();
   }
 
   void clearAuthToken() {
+    final hadSession =
+        _authToken != null ||
+        _currentRoleName != null ||
+        _currentUserId != null ||
+        _activeBranchId != null;
     final previousScope = offlineAccountKey;
     _authToken = null;
     _currentRoleName = null;
@@ -198,46 +204,10 @@ class BackendApiClient {
     if (previousScope != 'anonymous') {
       unawaited(SecureSelectiveMediaCache.clearAccount(previousScope));
     }
-  }
-
-  void beginLocalDemoSession({
-    required String role,
-    required String userId,
-    required String schoolId,
-  }) {
-    _authToken = 'local-demo-session';
-    _currentRoleName = role.trim().toLowerCase();
-    _currentUserId = userId;
-    _activeBranchId = schoolId;
-    _dio.options.headers['x-schooldesk-branch-id'] = schoolId;
+    if (hadSession) notifyListeners();
   }
 
   bool get isAuthenticated => _authToken != null;
-
-  Future<void> installPersistentCache() async {
-    if (_cacheInstalled) return;
-    try {
-      final dir = await getApplicationSupportDirectory();
-      final store = HiveCacheStore(p.join(dir.path, 'schooldesk_http_cache'));
-      _cacheOptions = CacheOptions(
-        store: store,
-        keyBuilder: _authenticatedCacheKey,
-        policy: CachePolicy.request,
-        hitCacheOnErrorExcept: const [401, 403],
-        maxStale: const Duration(days: 7),
-        allowPostMethod: false,
-      );
-      _dio.interceptors.add(DioCacheInterceptor(options: _cacheOptions!));
-      _cacheInstalled = true;
-    } on Object catch (error) {
-      if (EnvConfig.enableLogging) {
-        developer.log(
-          '[API CACHE] Persistent cache disabled: $error',
-          name: 'BackendApiClient',
-        );
-      }
-    }
-  }
 
   Future<void> invalidateAcademicSetupCache() =>
       _invalidateReadMemoryAndDisk(const [r'/academic-years', r'/dashboard/']);
@@ -247,7 +217,6 @@ class BackendApiClient {
     _cachedCurrentSchool = null;
     _cachedDashboards.clear();
     _clearCoalescedGets();
-    await _cacheOptions?.store?.clean();
   }
 
   Future<void> _invalidateReadMemoryAndDisk(List<String> pathPatterns) async {
@@ -257,10 +226,8 @@ class BackendApiClient {
   }
 
   Future<void> _deleteCachedPaths(List<String> pathPatterns) async {
-    final store = _cacheOptions?.store;
-    if (store == null) return;
-    for (final pattern in pathPatterns) {
-      await store.deleteFromPath(RegExp(pattern));
-    }
+    // Drift is the only durable cache. Its scoped invalidation is handled by
+    // OfflineSyncEngine; this compatibility method remains until all legacy
+    // API modules call repository invalidation directly.
   }
 }

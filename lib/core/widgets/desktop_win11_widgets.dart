@@ -142,12 +142,17 @@ class _BreadcrumbTrail extends StatelessWidget {
               color: i == items.length - 1
                   ? theme.colorScheme.primary
                   : tokens.textMuted,
-              fontWeight:
-                  i == items.length - 1 ? FontWeight.w700 : FontWeight.w500,
+              fontWeight: i == items.length - 1
+                  ? FontWeight.w700
+                  : FontWeight.w500,
             ),
           ),
           if (i < items.length - 1)
-            Icon(Icons.chevron_right_rounded, size: 14, color: tokens.textMuted),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 14,
+              color: tokens.textMuted,
+            ),
         ],
       ],
     );
@@ -305,19 +310,32 @@ class _SearchInputState extends State<_SearchInput> {
         focusNode: widget.focusNode,
         onChanged: widget.onChanged,
         textInputAction: TextInputAction.search,
-        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+        style: theme.textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w500,
+        ),
         decoration: InputDecoration(
           hintText: widget.hint,
           hintStyle: theme.textTheme.bodyMedium?.copyWith(
             color: tokens.textMuted,
           ),
-          prefixIcon: Icon(Icons.search_rounded, size: 18, color: tokens.textMuted),
-          prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: 18,
+            color: tokens.textMuted,
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 40,
+            minHeight: 40,
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
           suffixIcon: hasText
               ? IconButton(
-                  icon: Icon(Icons.close_rounded, size: 16, color: tokens.textMuted),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 16,
+                    color: tokens.textMuted,
+                  ),
                   onPressed: () {
                     widget.controller.clear();
                     widget.onChanged?.call('');
@@ -371,7 +389,9 @@ class _DesktopFilterChipWidget extends StatelessWidget {
                 : tokens.panel,
             borderRadius: BorderRadius.circular(tokens.radius.pill),
             border: Border.all(
-              color: chip.selected ? primary.withAlpha(120) : tokens.panelBorder,
+              color: chip.selected
+                  ? primary.withAlpha(120)
+                  : tokens.panelBorder,
             ),
           ),
           child: Row(
@@ -437,7 +457,11 @@ class DesktopEmptyState extends StatelessWidget {
                 color: tokens.panelMuted,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(icon, size: 36, color: tokens.textMuted.withAlpha(150)),
+              child: Icon(
+                icon,
+                size: 36,
+                color: tokens.textMuted.withAlpha(150),
+              ),
             ),
             SizedBox(height: tokens.spacing.lg),
             Text(

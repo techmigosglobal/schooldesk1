@@ -2,18 +2,39 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/features/leave/presentation/screens/parent_leave_screen/parent_leave_request_form_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_leave_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_leave_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
+@immutable
+class _ParentLeaveSnapshot {
+  final List<Map<String, dynamic>> children;
+  final List<Map<String, dynamic>> requests;
+  final List<Map<String, dynamic>> leaveTypes;
+
+  const _ParentLeaveSnapshot({
+    required this.children,
+    required this.requests,
+    required this.leaveTypes,
+  });
+}
 
 class ParentLeaveScreen extends StatefulWidget {
-  const ParentLeaveScreen({super.key});
+  final ParentLeaveRepository? repository;
+
+  const ParentLeaveScreen({super.key, this.repository});
 
   @override
   State<ParentLeaveScreen> createState() => _ParentLeaveScreenState();
@@ -22,12 +43,13 @@ class ParentLeaveScreen extends StatefulWidget {
 class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
   int _selectedNavIndex = ParentNav.leave;
   int _activeChildIndex = 0;
-  bool _loading = true;
-  String? _error;
+  RepositoryState<_ParentLeaveSnapshot> _state =
+      const RepositoryState.loading();
 
-  final _api = BackendApiClient.instance;
-  List<Map<String, dynamic>> _children = [];
-  List<Map<String, dynamic>> _requests = [];
+  List<Map<String, dynamic>> get _children => _state.data?.children ?? const [];
+  List<Map<String, dynamic>> get _requests => _state.data?.requests ?? const [];
+  List<Map<String, dynamic>> get _leaveTypes =>
+      _state.data?.leaveTypes ?? const [];
 
   @override
   void initState() {
@@ -39,18 +61,32 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
     bool showSpinner = true,
     bool forceRefresh = false,
   }) async {
+    final previous = _state.data;
     if (showSpinner) {
       setState(() {
-        _loading = true;
-        _error = null;
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
       });
     }
     try {
-      final children = await _api.getMyStudents(
-        refreshNonce: forceRefresh
-            ? DateTime.now().millisecondsSinceEpoch
-            : null,
+      final repository =
+          widget.repository ?? ApiParentLeaveRepository.legacyDefault;
+      final childrenResult = await repository.getChildren(
+        forceRefresh: forceRefresh,
       );
+      if (childrenResult.isFailure) {
+        throw StateError(
+          childrenResult.failureOrNull?.message ??
+              'Unable to load linked students',
+        );
+      }
+      final children = childrenResult.dataOrNull!;
       final selectedIndex = await ParentChildSelectionService.indexFor(
         children,
         fallback: _activeChildIndex,
@@ -62,25 +98,57 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
           ? children[safeSelectedIndex]
           : null;
       final studentId = selectedChild?['id']?.toString() ?? '';
-      final requests = studentId.isEmpty
-          ? <Map<String, dynamic>>[]
-          : await _api.getStudentLeaveApplications(
+      final requestsResult = studentId.isEmpty
+          ? const Result.ok(<Map<String, dynamic>>[])
+          : await repository.getRequests(
               studentId: studentId,
               forceRefresh: forceRefresh,
             );
+      if (requestsResult.isFailure) {
+        throw StateError(
+          requestsResult.failureOrNull?.message ??
+              'Unable to load leave requests',
+        );
+      }
+      final leaveTypesResult = await repository.getLeaveTypes(
+        forceRefresh: forceRefresh,
+      );
+      if (leaveTypesResult.isFailure) {
+        throw StateError(
+          leaveTypesResult.failureOrNull?.message ??
+              'Unable to load school leave types',
+        );
+      }
       if (!mounted) return;
       setState(() {
-        _children = children;
-        _requests = requests;
+        final requests = requestsResult.dataOrNull!;
+        final leaveTypes = leaveTypesResult.dataOrNull!;
+        _state = RepositoryState(
+          data: _ParentLeaveSnapshot(
+            children: children,
+            requests: requests,
+            leaveTypes: leaveTypes,
+          ),
+          source: RepositorySource.remote,
+          phase: children.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         _activeChildIndex = safeSelectedIndex;
-        _loading = false;
-        _error = null;
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = error.toString();
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -91,14 +159,6 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       selectedIndex: _selectedNavIndex,
       onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
     );
-    if (_loading) {
-      return SchoolDeskModuleScaffold(
-        title: 'Leave Requests',
-        subtitle: 'Request student leave and monitor approval history',
-        drawer: drawer,
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
     return SchoolDeskModuleScaffold(
       title: 'Leave Requests',
       subtitle: 'Request student leave and monitor approval history',
@@ -108,46 +168,49 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
 
-      body: RefreshIndicator(
-        onRefresh: () => _loadData(showSpinner: false, forceRefresh: true),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (_error != null) ...[
-              _buildErrorState(),
+      body: SchoolDeskRepositoryStateView<_ParentLeaveSnapshot>(
+        state: _state,
+        onRetry: () => _loadData(forceRefresh: true),
+        emptyTitle: 'No linked students',
+        emptyMessage: 'No linked students found for this parent account.',
+        loadingMessage: 'Loading leave requests…',
+        data: (_) => RefreshIndicator(
+          onRefresh: () => _loadData(showSpinner: false, forceRefresh: true),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildChildSelector(),
               const SizedBox(height: 16),
-            ],
-            _buildChildSelector(),
-            const SizedBox(height: 16),
-            _buildLeaveTypeCards(),
-            const SizedBox(height: 16),
-            _buildNewRequestButton(),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Request History',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+              _buildLeaveTypeCards(),
+              const SizedBox(height: 16),
+              _buildNewRequestButton(),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Request History',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Refresh',
-                  onPressed: () =>
-                      _loadData(showSpinner: false, forceRefresh: true),
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (_visibleRequests.isEmpty)
-              _buildEmptyHistory()
-            else
-              ..._visibleRequests.map((request) => _requestCard(request)),
-          ],
+                  IconButton(
+                    tooltip: 'Refresh',
+                    onPressed: () =>
+                        _loadData(showSpinner: false, forceRefresh: true),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (_visibleRequests.isEmpty)
+                _buildEmptyHistory()
+              else
+                ..._visibleRequests.map((request) => _requestCard(request)),
+            ],
+          ),
         ),
       ),
     );
@@ -168,38 +231,6 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       return null;
     }
     return _children[_activeChildIndex];
-  }
-
-  Widget _buildErrorState() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.appTheme.errorContainer,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: context.appTheme.error.withValues(alpha: 0.18),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline_rounded, color: context.appTheme.error),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _error ?? 'Unable to load leave requests',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                color: context.appTheme.onSurface,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => _loadData(forceRefresh: true),
-            child: Text('Retry', style: GoogleFonts.dmSans(fontSize: 12)),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildChildSelector() {
@@ -240,32 +271,33 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
   }
 
   Widget _buildLeaveTypeCards() {
-    final types = [
-      {
-        'label': 'Sick Leave',
-        'icon': Icons.sick_rounded,
-        'gradient': [const Color(0xFFDC2626), const Color(0xFFF87171)],
-        'desc': 'Illness or medical reasons',
-      },
-      {
-        'label': 'Personal Leave',
-        'icon': Icons.person_rounded,
-        'gradient': [const Color(0xFF1D4ED8), const Color(0xFF60A5FA)],
-        'desc': 'Family events or personal work',
-      },
-      {
-        'label': 'Early Pickup',
-        'icon': Icons.directions_car_rounded,
-        'gradient': [const Color(0xFFD97706), const Color(0xFFFBBF24)],
-        'desc': 'Early dismissal request',
-      },
-      {
-        'label': 'Special Permission',
-        'icon': Icons.star_rounded,
-        'gradient': [const Color(0xFF7C3AED), const Color(0xFFA78BFA)],
-        'desc': 'Events or competitions',
-      },
+    final palette = <List<Color>>[
+      [const Color(0xFF0F766E), const Color(0xFF34D399)],
+      [const Color(0xFF1D4ED8), const Color(0xFF60A5FA)],
+      [const Color(0xFFD97706), const Color(0xFFFBBF24)],
+      [const Color(0xFF7C3AED), const Color(0xFFA78BFA)],
     ];
+    final types = _leaveTypes
+        .map(_leaveTypeLabel)
+        .where((label) => label.isNotEmpty)
+        .toList();
+    if (types.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: context.appTheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: context.appTheme.outlineVariant),
+        ),
+        child: Text(
+          'No school leave types are configured for parent requests.',
+          style: GoogleFonts.dmSans(
+            fontSize: 13,
+            color: context.appTheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -277,8 +309,8 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       ),
       itemCount: types.length,
       itemBuilder: (_, index) {
-        final type = types[index];
-        final gradient = type['gradient'] as List<Color>;
+        final label = types[index];
+        final gradient = palette[index % palette.length];
         return Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(14),
@@ -286,7 +318,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
             borderRadius: BorderRadius.circular(14),
             onTap: _children.isEmpty
                 ? null
-                : () => _openRequestForm(type: type['label'] as String),
+                : () => _openRequestForm(type: label),
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -313,8 +345,8 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
                       color: Colors.white.withAlpha(35),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(
-                      type['icon'] as IconData,
+                    child: const Icon(
+                      Icons.event_busy_rounded,
                       color: Colors.white,
                       size: 18,
                     ),
@@ -326,7 +358,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          type['label'] as String,
+                          label,
                           style: GoogleFonts.dmSans(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
@@ -334,7 +366,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
                           ),
                         ),
                         Text(
-                          type['desc'] as String,
+                          'School-configured leave type',
                           style: GoogleFonts.dmSans(
                             fontSize: 10,
                             color: Colors.white.withAlpha(210),
@@ -360,7 +392,9 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: _children.isEmpty ? null : () => _openRequestForm(),
+        onTap: _children.isEmpty || _leaveTypes.isEmpty
+            ? null
+            : () => _openRequestForm(),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 15),
@@ -372,9 +406,11 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-            color: _children.isEmpty ? context.appTheme.surfaceVariant : null,
+            color: _children.isEmpty || _leaveTypes.isEmpty
+                ? context.appTheme.surfaceVariant
+                : null,
             borderRadius: BorderRadius.circular(14),
-            boxShadow: _children.isEmpty
+            boxShadow: _children.isEmpty || _leaveTypes.isEmpty
                 ? null
                 : [
                     BoxShadow(
@@ -390,7 +426,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
               Icon(
                 Icons.add_circle_rounded,
                 size: 20,
-                color: _children.isEmpty
+                color: _children.isEmpty || _leaveTypes.isEmpty
                     ? context.appTheme.muted
                     : Colors.white,
               ),
@@ -400,7 +436,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
                 style: GoogleFonts.dmSans(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: _children.isEmpty
+                  color: _children.isEmpty || _leaveTypes.isEmpty
                       ? context.appTheme.muted
                       : Colors.white,
                 ),
@@ -643,12 +679,15 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
   Future<void> _openRequestForm({String? type}) async {
     final activeChild = _activeChild;
     if (activeChild == null) return;
-    final created = await Navigator.of(context).pushNamed(
+    final created = await SchoolDeskNavigation.push(
+      context,
       AppRoutes.parentLeaveRequestForm,
       arguments: ParentLeaveRequestFormArgs(
         children: _children,
         initialStudentId: activeChild['id']?.toString() ?? '',
         initialLeaveType: type,
+        repository: widget.repository,
+        leaveTypes: _leaveTypes,
       ),
     );
     if (created == true && mounted) {
@@ -665,6 +704,14 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
     final last = row['last_name']?.toString().trim() ?? '';
     final name = [first, last].where((part) => part.isNotEmpty).join(' ');
     return name.isEmpty ? 'Student' : name;
+  }
+
+  String _leaveTypeLabel(Map<String, dynamic> row) {
+    for (final key in const ['leave_name', 'name', 'leave_type', 'type']) {
+      final value = row[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    return '';
   }
 
   String _requestStudentName(Map<String, dynamic> request) {

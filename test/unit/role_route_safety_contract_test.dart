@@ -270,11 +270,7 @@ void main() {
         'superAdminAuditLogs',
         'superAdminSystemMonitor',
         'superAdminAccess',
-        'idCardGeneration',
         'principalSchoolProfile',
-        'principalUserManagement',
-        'staffManagement',
-        'studentOversight',
         'help',
         'superAdminDashboard',
         'notificationCenter',
@@ -317,6 +313,74 @@ void main() {
     }
   });
 
+  test('coordinator has a separate home and no finance navigation', () {
+    expect(
+      RouteAccessGuard.dashboardForRole('coordinator'),
+      AppRoutes.coordinatorDashboard,
+    );
+    expect(
+      RouteAccessGuard.redirectFor(
+        routeName: AppRoutes.coordinatorDashboard,
+        isAuthenticated: true,
+        currentRole: 'coordinator',
+      ),
+      isNull,
+    );
+    for (final route in [
+      AppRoutes.feeHome,
+      AppRoutes.feeStructures,
+      AppRoutes.feeCollect,
+      AppRoutes.feeLedger,
+      AppRoutes.principalPaymentRequests,
+      AppRoutes.principalFees,
+    ]) {
+      expect(
+        RouteAccessGuard.isRoleAllowedFor(
+          routeName: route,
+          role: 'coordinator',
+        ),
+        isFalse,
+        reason: '$route must remain online finance-only for Principal',
+      );
+    }
+  });
+
+  test('kiosk navigation is isolated to QR attendance', () {
+    expect(
+      RouteAccessGuard.dashboardForRole('kiosk'),
+      AppRoutes.kioskQrAttendance,
+    );
+    expect(
+      RouteAccessGuard.isRoleAllowedFor(
+        routeName: AppRoutes.kioskQrAttendance,
+        role: 'kiosk',
+      ),
+      isTrue,
+    );
+    for (final route in [
+      AppRoutes.principalDashboard,
+      AppRoutes.teacherDashboard,
+      AppRoutes.parentDashboard,
+      AppRoutes.feeHome,
+      AppRoutes.profileScreen,
+    ]) {
+      expect(
+        RouteAccessGuard.isRoleAllowedFor(routeName: route, role: 'kiosk'),
+        isFalse,
+        reason: '$route must not be exposed to kiosk sessions',
+      );
+      expect(
+        RouteAccessGuard.redirectFor(
+          routeName: route,
+          isAuthenticated: true,
+          currentRole: 'kiosk',
+        ),
+        AppRoutes.kioskQrAttendance,
+        reason: '$route must redirect kiosk sessions to QR attendance',
+      );
+    }
+  });
+
   test('role-select login revokes a session issued for a different role', () {
     final source = File(
       'lib/features/auth/presentation/controllers/auth_controller.dart',
@@ -329,7 +393,7 @@ void main() {
     expect(mismatchStart, greaterThanOrEqualTo(0));
     expect(mismatchEnd, greaterThan(mismatchStart));
     final mismatchBlock = source.substring(mismatchStart, mismatchEnd);
-    expect(mismatchBlock, contains('BackendApiClient.instance.logout()'));
+    expect(mismatchBlock, contains('await _repository.logout()'));
     expect(mismatchBlock, contains('RoleAccessService.clear()'));
   });
 }

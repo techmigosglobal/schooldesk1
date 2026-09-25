@@ -6,12 +6,13 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class SchoolDeskModuleScaffold extends StatefulWidget {
   static const String openNavigationAction = '__schooldesk_open_navigation__';
@@ -185,14 +186,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
                           children: [
                             _ModuleToolbar(
                               title: widget.title,
-                              subtitle: DemoLocalApiService.instance.isActive
-                                  ? [
-                                      'Offline Demo',
-                                      if (widget.subtitle?.trim().isNotEmpty ??
-                                          false)
-                                        widget.subtitle!.trim(),
-                                    ].join(' · ')
-                                  : widget.subtitle,
+                              subtitle: widget.subtitle,
                               showMenu: showCompactMenuButton,
                               onMenuPressed: () =>
                                   _scaffoldKey.currentState?.openDrawer(),
@@ -305,10 +299,14 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
     final args = arguments ?? _argumentsFor(target, role);
 
     if (target == RouteAccessGuard.dashboardForRole(role)) {
-      navigator.pushNamedAndRemoveUntil(target, (existing) => false);
+      SchoolDeskNavigation.goFromNavigator(
+        navigator,
+        target,
+        legacyPredicate: (existing) => false,
+      );
       return;
     }
-    navigator.pushNamed(target, arguments: args);
+    SchoolDeskNavigation.pushFromNavigator(navigator, target, arguments: args);
   }
 
   Object? _argumentsFor(String route, String role) {
@@ -327,9 +325,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
         RouteAccessGuard.dashboardForRole(_role) ??
         AppRoutes.landingPage;
     if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(fallback, (existing) => false);
+    SchoolDeskNavigation.go(context, fallback);
   }
 }
 

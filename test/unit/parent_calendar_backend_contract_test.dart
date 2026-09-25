@@ -2,26 +2,27 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'backend_api_sources.dart';
-
 void main() {
   test('parent calendar renders backend events and holidays only', () {
     final source = File(
       'lib/features/calendar/presentation/screens/parent_calendar_screen/parent_calendar_screen.dart',
     ).readAsStringSync();
-    final api = readBackendApiSources();
+    final repository = File(
+      'lib/roles/parent/data/api_parent_calendar_repository.dart',
+    ).readAsStringSync();
 
-    expect(source, contains('BackendApiClient.instance'));
-    expect(source, contains('api.getEvents()'));
+    expect(source, contains('_repository.loadEvents'));
+    expect(source, isNot(contains('BackendApiClient.instance')));
     expect(
       source,
       isNot(contains("api.getRawList('/parent-teacher-meetings')")),
     );
     expect(source, isNot(contains('api.getExams()')));
     expect(source, isNot(contains("Tab(text: 'Exams')")));
-    expect(source, contains("api.getRawMap('/academic-years/"));
+    expect(source, contains('_repository.loadAcademicYear'));
     expect(source, contains('SchoolDeskStatusPanel.empty'));
-    expect(api, contains('Future<Map<String, dynamic>> getRawMap'));
+    expect(repository, contains('getAcademicYears'));
+    expect(repository, contains('getEvents'));
     expect(source, isNot(contains('Republic Day Celebration')));
     expect(source, isNot(contains('Mahashivratri')));
     expect(source, isNot(contains('Annual Exam Begins')));

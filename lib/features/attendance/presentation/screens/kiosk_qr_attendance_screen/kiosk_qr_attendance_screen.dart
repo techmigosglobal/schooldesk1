@@ -1,31 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/app/providers/app_providers.dart';
+import 'package:schooldesk1/core/auth/role_context.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/widgets/staff_qr_attendance_panel.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 
-class KioskQrAttendanceScreen extends StatefulWidget {
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
+class KioskQrAttendanceScreen extends ConsumerStatefulWidget {
   const KioskQrAttendanceScreen({super.key});
 
   @override
-  State<KioskQrAttendanceScreen> createState() =>
+  ConsumerState<KioskQrAttendanceScreen> createState() =>
       _KioskQrAttendanceScreenState();
 }
 
-class _KioskQrAttendanceScreenState extends State<KioskQrAttendanceScreen> {
+class _KioskQrAttendanceScreenState
+    extends ConsumerState<KioskQrAttendanceScreen> {
+  final RepositoryState<Object> _state = const RepositoryState<Object>(
+    data: Object(),
+    source: RepositorySource.remote,
+  );
   @override
   void initState() {
     super.initState();
     // Defensive guard: only kiosk role should be on this screen.
-    final role =
-        BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
+    final role = ref.read(roleContextProvider)?.role.wireName ?? '';
     if (role != 'kiosk') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           final target = RouteAccessGuard.dashboardForRole(role) ?? '/';
-          Navigator.of(context).pushReplacementNamed(target);
+          SchoolDeskNavigation.go(context, target);
         }
       });
     }
@@ -34,8 +44,7 @@ class _KioskQrAttendanceScreenState extends State<KioskQrAttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.of(context).size.width >= 900;
-    final role =
-        BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
+    final role = ref.watch(roleContextProvider)?.role.wireName ?? '';
     // Show a loading placeholder while redirecting non-kiosk users.
     if (role != 'kiosk') {
       return const Scaffold(
@@ -61,33 +70,38 @@ class _KioskQrAttendanceScreenState extends State<KioskQrAttendanceScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(wide ? 32 : 16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 980),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Live staff check-in and check-out QR',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: context.appTheme.onSurface,
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: () => setState(() {}),
+        data: (_) => SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(wide ? 32 : 16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 980),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Live staff check-in and check-out QR',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: context.appTheme.onSurface,
+                          ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Keep this screen open on the attendance display device. Teachers use the same QR for check-in and, after 12:00 p.m. India time, check-out.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: context.appTheme.onSurfaceVariant,
-                      height: 1.45,
+                    const SizedBox(height: 8),
+                    Text(
+                      'Keep this screen open on the attendance display device. Teachers use the same QR for check-in and, after 12:00 p.m. India time, check-out.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.appTheme.onSurfaceVariant,
+                        height: 1.45,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  StaffQrAttendancePanel(compact: !wide),
-                ],
+                    const SizedBox(height: 20),
+                    StaffQrAttendancePanel(compact: !wide),
+                  ],
+                ),
               ),
             ),
           ),

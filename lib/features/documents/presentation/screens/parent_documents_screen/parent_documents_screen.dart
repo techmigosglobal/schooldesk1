@@ -7,8 +7,8 @@ import 'package:printing/printing.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/services/pdf_service.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
@@ -16,17 +16,36 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_documents_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_documents_repository.dart';
+
+final class _ParentDocumentsSnapshot {
+  const _ParentDocumentsSnapshot({
+    required this.children,
+    required this.documentsByStudent,
+  });
+
+  final List<Map<String, dynamic>> children;
+  final Map<String, List<Map<String, dynamic>>> documentsByStudent;
+}
 
 class ParentDocumentsScreen extends StatefulWidget {
-  const ParentDocumentsScreen({super.key});
+  final ParentDocumentsRepository? repository;
+
+  const ParentDocumentsScreen({super.key, this.repository});
 
   @override
   State<ParentDocumentsScreen> createState() => _ParentDocumentsScreenState();
 }
 
 class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
+  ParentDocumentsRepository get _repository =>
+      widget.repository ?? ApiParentDocumentsRepository.legacyDefault;
+
   int _selectedNavIndex = ParentNav.documents;
   int _activeChildIndex = 0;
   bool _generatingPdf = false;
@@ -34,8 +53,8 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
 
   List<Map<String, dynamic>> _children = [];
   final Map<String, List<Map<String, dynamic>>> _docsByStudent = {};
-  bool _loading = true;
-  String? _error;
+  RepositoryState<_ParentDocumentsSnapshot> _repositoryState =
+      const RepositoryState.loading();
   Map<String, dynamic> _school = const {};
   String _parentName = '';
   NotificationService? _notificationService;
@@ -93,27 +112,37 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
   }
 
   Future<void> _loadData() async {
+    final previous = _repositoryState;
+    setState(() {
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
+    });
     try {
-      final api = BackendApiClient.instance;
-      final children = await api.getMyStudents(
+      final childrenResult = await _repository.loadChildren(
         refreshNonce: DateTime.now().millisecondsSinceEpoch,
       );
+      _throwIfFailed(childrenResult, 'Unable to load linked students');
+      final children = childrenResult.dataOrNull!;
       Map<String, dynamic> school = const {};
       String parentName = '';
-      try {
-        school = await api.getCurrentSchool();
-      } on Object catch (_) {}
-      try {
-        parentName = (await api.getProfile()).name.trim();
-      } on Object catch (_) {}
+      final schoolResult = await _repository.loadSchool();
+      if (schoolResult.isSuccess) school = schoolResult.dataOrNull!;
+      final profileResult = await _repository.loadProfile();
+      if (profileResult.isSuccess) {
+        parentName = profileResult.dataOrNull!.name.trim();
+      }
       final docs = <String, List<Map<String, dynamic>>>{};
       for (final child in children) {
         final studentId = (child['id'] ?? '').toString();
         if (studentId.isEmpty) continue;
-        final rows = await BackendApiClient.instance.getRawList(
-          '/student-documents',
-          queryParameters: {'student_id': studentId},
-        );
+        final rowsResult = await _repository.loadStudentDocuments(studentId);
+        if (rowsResult.isFailure) continue;
+        final rows = rowsResult.dataOrNull!;
         docs[studentId] = rows
             .map(
               (row) => {
@@ -174,13 +203,30 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
         _docsByStudent
           ..clear()
           ..addAll(docs);
-        _loading = false;
+        _repositoryState = RepositoryState(
+          data: _ParentDocumentsSnapshot(
+            children: List.unmodifiable(children),
+            documentsByStudent: Map.unmodifiable(docs),
+          ),
+          source: RepositorySource.remote,
+          phase: children.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
-        _loading = false;
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: e);
       });
     }
   }
@@ -330,7 +376,8 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
     );
     if (confirm != true) return;
     try {
-      await BackendApiClient.instance.deleteRaw('/student-documents/$docId');
+      final result = await _repository.deleteStudentDocument(docId);
+      _throwIfFailed(result, 'Unable to delete document');
       _loadData();
     } on Object catch (e) {
       if (mounted) {
@@ -400,9 +447,9 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
                           type: FileType.custom,
                           allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
                         );
-                        if (result != null && result.files.isNotEmpty) {
+                        if (result.isNotEmpty) {
                           setDialogState(() {
-                            selectedFile = result.files.first;
+                            selectedFile = result.first;
                           });
                         }
                       },
@@ -424,24 +471,24 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
                         uploading = true;
                       });
                       try {
-                        final fileUrl = await BackendApiClient.instance
-                            .uploadFile(
-                              selectedFile!.path!,
-                              filename: selectedFile!.name,
-                              folder: 'student-documents',
-                              entityType: 'student_document',
-                              entityId: studentId,
-                              private: true,
-                            );
-                        await BackendApiClient.instance
-                            .createRaw('/student-documents', {
-                              'student_id': studentId,
-                              'doc_type': docType,
-                              'title': titleCtrl.text.trim().isEmpty
+                        final uploadResult = await _repository.uploadDocument(
+                          selectedFile!.path!,
+                          filename: selectedFile!.name,
+                        );
+                        _throwIfFailed(
+                          uploadResult,
+                          'Unable to upload document',
+                        );
+                        final createResult = await _repository
+                            .createStudentDocument(
+                              type: docType,
+                              title: titleCtrl.text.trim().isEmpty
                                   ? docType
                                   : titleCtrl.text.trim(),
-                              'file_url': fileUrl,
-                            });
+                              fileUrl: uploadResult.dataOrNull!,
+                              studentId: studentId,
+                            );
+                        _throwIfFailed(createResult, 'Unable to save document');
                         Navigator.pop(context);
                         _loadData();
                       } on Object catch (e) {
@@ -466,6 +513,12 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
     );
   }
 
+  void _throwIfFailed<T>(Result<T> result, String fallback) {
+    if (result.isFailure) {
+      throw StateError(result.failureOrNull?.message ?? fallback);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
@@ -487,26 +540,25 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
             onPressed: () => _uploadStudentDocDialog(_activeStudentId!),
           ),
       ],
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? _buildStateMessage('Unable to load documents', _error!)
-          : _children.isEmpty
-          ? _buildStateMessage(
-              'No linked students',
-              'Ask the school admin to link students to this parent account.',
-            )
-          : Column(
-              children: [
-                _buildChildSelector(),
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _loadData,
-                    child: _buildDocumentsTab(),
-                  ),
-                ),
-              ],
+      body: SchoolDeskRepositoryStateView<_ParentDocumentsSnapshot>(
+        state: _repositoryState,
+        onRetry: _loadData,
+        emptyTitle: 'No linked students',
+        emptyMessage:
+            'Ask the school admin to link students to this parent account.',
+        errorTitle: 'Unable to load documents',
+        data: (_) => Column(
+          children: [
+            _buildChildSelector(),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadData,
+                child: _buildDocumentsTab(),
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/modules/people/data/api_user_access_repository.dart';
+import 'package:schooldesk1/modules/people/domain/user_access_repository.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
@@ -36,10 +39,16 @@ class AccountChildAssignmentScreen extends StatefulWidget {
 
 class _AccountChildAssignmentScreenState
     extends State<AccountChildAssignmentScreen> {
+  UserAccessRepository get _repository => ApiUserAccessRepository.legacyDefault;
+
   final _formKey = GlobalKey<FormState>();
   final _admissionController = TextEditingController();
   bool _saving = false;
   String? _feedback;
+  final RepositoryState<Object> _state = const RepositoryState<Object>(
+    data: Object(),
+    source: RepositorySource.remote,
+  );
 
   @override
   void dispose() {
@@ -82,82 +91,86 @@ class _AccountChildAssignmentScreenState
           onPressed: _saving ? null : _assignChildren,
         ),
       ],
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildParentSummary(),
-                  const SizedBox(height: 16),
-                  if (_feedback != null) ...[
-                    _buildFeedback(_feedback!),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: () => setState(() {}),
+        data: (_) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildParentSummary(),
                     const SizedBox(height: 16),
-                  ],
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: context.appTheme.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: context.appTheme.outlineVariant,
-                      ),
-                    ),
-                    child: TextFormField(
-                      controller: _admissionController,
-                      minLines: 5,
-                      maxLines: 8,
-                      textInputAction: TextInputAction.newline,
-                      decoration: const InputDecoration(
-                        labelText: 'Admission numbers *',
-                        hintText: 'ADM001, ADM002\nADM003',
-                        alignLabelWithHint: true,
-                        prefixIcon: Icon(Icons.badge_outlined),
-                      ),
-                      validator: (value) {
-                        if (_parseAdmissions().isEmpty) {
-                          return 'Enter at least one admission number';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _saving
-                              ? null
-                              : () => Navigator.pop(context),
-                          icon: const Icon(Icons.arrow_back_rounded),
-                          label: const Text('Back'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: FilledButton.icon(
-                          onPressed: _saving ? null : _assignChildren,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.link_rounded),
-                          label: const Text('Assign Children'),
-                        ),
-                      ),
+                    if (_feedback != null) ...[
+                      _buildFeedback(_feedback!),
+                      const SizedBox(height: 16),
                     ],
-                  ),
-                ],
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: context.appTheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: context.appTheme.outlineVariant,
+                        ),
+                      ),
+                      child: TextFormField(
+                        controller: _admissionController,
+                        minLines: 5,
+                        maxLines: 8,
+                        textInputAction: TextInputAction.newline,
+                        decoration: const InputDecoration(
+                          labelText: 'Admission numbers *',
+                          hintText: 'ADM001, ADM002\nADM003',
+                          alignLabelWithHint: true,
+                          prefixIcon: Icon(Icons.badge_outlined),
+                        ),
+                        validator: (value) {
+                          if (_parseAdmissions().isEmpty) {
+                            return 'Enter at least one admission number';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _saving
+                                ? null
+                                : () => Navigator.pop(context),
+                            icon: const Icon(Icons.arrow_back_rounded),
+                            label: const Text('Back'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: FilledButton.icon(
+                            onPressed: _saving ? null : _assignChildren,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.link_rounded),
+                            label: const Text('Assign Children'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -255,7 +268,7 @@ class _AccountChildAssignmentScreenState
       _feedback = null;
     });
     try {
-      await BackendApiClient.instance.assignParentStudents(
+      await _repository.assignParentStudents(
         parentUserId: widget.args.parentUserId,
         admissionNumbers: _parseAdmissions(),
       );

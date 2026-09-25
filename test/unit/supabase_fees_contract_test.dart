@@ -298,14 +298,14 @@ void main() {
     },
   );
 
-  test('parent fee history datasource uses Supabase fee payment routes', () {
+  test('parent fee history uses the scoped parent fee repository', () {
     final source = File(
-      'lib/features/finance/data/datasources/parent_fees_remote_datasource.dart',
+      'lib/roles/parent/data/api_parent_fee_payment_repository.dart',
     ).readAsStringSync();
 
-    expect(source, contains("'/fees/payments'"));
-    expect(source, contains('getMyStudents()'));
-    expect(source, contains("queryParameters: {'student_id': studentId}"));
+    expect(source, contains('getParentStudentFees'));
+    expect(source, contains('getMyStudents'));
+    expect(source, contains('getParentPaymentRequests'));
     expect(source, isNot(contains('/parents/fees/payments')));
     expect(source, isNot(contains('/parents/fees/receipts')));
   });
@@ -530,17 +530,10 @@ void main() {
   );
 
   test('parent payment history keeps receipt and invoice context', () {
-    final datasource = File(
-      'lib/features/finance/data/datasources/parent_fees_remote_datasource.dart',
-    ).readAsStringSync();
     final hub = File(
       'lib/features/finance/presentation/screens/parent_hub/parent_fee_hub.dart',
     ).readAsStringSync();
 
-    expect(datasource, contains("'receipt_id'"));
-    expect(datasource, contains("'receipt_no'"));
-    expect(datasource, contains("'invoice_number'"));
-    expect(datasource, contains("'fee_type'"));
     expect(hub, contains("invoice['invoice_number']"));
     expect(hub, contains("payment['receipt_number']"));
     expect(hub, contains("payment['amount_paid']"));
@@ -601,8 +594,14 @@ void main() {
 
       expect(source, contains('fee_dashboard_summary'));
       expect(source, contains('summary.collected'));
-      expect(source, isNot(contains('from("fee_invoices").select("paid_amount"')));
-      expect(source, isNot(contains('from("fee_invoices").select("balance, status"')));
+      expect(
+        source,
+        isNot(contains('from("fee_invoices").select("paid_amount"')),
+      );
+      expect(
+        source,
+        isNot(contains('from("fee_invoices").select("balance, status"')),
+      );
     },
   );
 

@@ -121,8 +121,7 @@ class OfflineDioInterceptor extends Interceptor {
   }
 
   bool _isIdempotentUpload(RequestOptions request) {
-    return request.method.toUpperCase() == 'POST' &&
-        request.data is FormData;
+    return request.method.toUpperCase() == 'POST' && request.data is FormData;
   }
 }
 
@@ -467,7 +466,17 @@ class OfflineSyncEngine extends ChangeNotifier {
         await database.deleteMutation(mutation.id);
       } on DioException catch (error) {
         if (_isPermanentFailure(error)) {
-          await database.markMutationFailed(mutation.id, _errorMessage(error));
+          if (error.response?.statusCode == 409) {
+            await database.markMutationConflict(
+              mutation.id,
+              _errorMessage(error),
+            );
+          } else {
+            await database.markMutationFailed(
+              mutation.id,
+              _errorMessage(error),
+            );
+          }
           _lastError = _errorMessage(error);
         } else {
           await _deferMutation(mutation.id, mutation.retryCount, error);

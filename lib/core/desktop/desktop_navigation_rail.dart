@@ -7,6 +7,8 @@ import 'desktop_hover_effects.dart';
 import 'desktop_responsive_breakpoints.dart';
 
 /// Persistent sidebar navigation for desktop — replaces drawer overlay.
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 class DesktopNavigationRail extends StatefulWidget {
   final SchoolDeskRole role;
   final String portalLabel;
@@ -342,14 +344,19 @@ class _DesktopRailItem extends StatelessWidget {
     }
     final navigator = Navigator.of(context);
     if (item.resetStack) {
-      navigator.pushNamedAndRemoveUntil(
+      SchoolDeskNavigation.goFromNavigator(
+        navigator,
         route,
-        (existing) => false,
+        legacyPredicate: (existing) => false,
         arguments: item.arguments,
       );
       return;
     }
-    navigator.pushNamed(route, arguments: item.arguments);
+    SchoolDeskNavigation.pushFromNavigator(
+      navigator,
+      route,
+      arguments: item.arguments,
+    );
   }
 }
 
@@ -410,14 +417,19 @@ class _DesktopRailFooter extends StatelessWidget {
     }
     final navigator = Navigator.of(context);
     if (action.resetStack) {
-      navigator.pushNamedAndRemoveUntil(
+      SchoolDeskNavigation.goFromNavigator(
+        navigator,
         route,
-        (existing) => false,
+        legacyPredicate: (existing) => false,
         arguments: action.arguments,
       );
       return;
     }
-    navigator.pushNamed(route, arguments: action.arguments);
+    SchoolDeskNavigation.pushFromNavigator(
+      navigator,
+      route,
+      arguments: action.arguments,
+    );
   }
 }
 

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/features/shared/domain/entities/fee_record.dart';
+import 'package:schooldesk1/modules/finance/domain/entities/fee_record.dart';
 
 void main() {
   group('FeeRecord Entity', () {

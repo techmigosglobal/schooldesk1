@@ -1,16 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
+import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:go_router/go_router.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/routes/feature_manifest_registry.dart';
+import 'package:schooldesk1/core/widgets/erp_components.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class SchoolDeskRouteFrame extends StatefulWidget {
   final SchoolDeskScreenMetadata metadata;
@@ -32,6 +40,7 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
   bool get _isPortalHomeRoute {
     switch (widget.metadata.route) {
       case '/principal-dashboard-screen':
+      case '/coordinator-dashboard-screen':
       case '/super-admin-dashboard-screen':
       case '/teacher-dashboard-screen':
       case '/parent-dashboard-screen':
@@ -45,7 +54,8 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
   bool get _canExitOnBack {
     if (widget.metadata.isPublic) return true;
     if (_isPortalHomeRoute) return false;
-    return Navigator.of(context).canPop();
+    return Navigator.of(context).canPop() ||
+        (GoRouter.maybeOf(context)?.canPop() ?? false);
   }
 
   void _handleBackWithoutPop() {
@@ -77,13 +87,41 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
   void _returnToPortalHome() {
     final target = _homeRouteForCurrentContext();
     if (target == null || target == widget.metadata.route) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(target, (route) => false);
+
+    final router = GoRouter.maybeOf(context);
+    if (router != null) {
+      if (router.canPop()) {
+        router.pop();
+      } else {
+        router.go(target);
+      }
+      return;
+    }
+
+    SchoolDeskNavigation.goFromNavigator(
+      Navigator.of(context),
+      target,
+      legacyPredicate: (route) => false,
+    );
   }
 
   String? _homeRouteForCurrentContext() {
+    // A role may open leadership-owned screens whose metadata belongs to a
+    // different portal. The active session role must win over the screen's
+    // owning portal when choosing the back destination.
+    final activeRole = BackendApiClient.instance.currentRoleName
+        ?.trim()
+        .toLowerCase();
+    final roleHome = RouteAccessGuard.dashboardForRole(activeRole);
+    if (roleHome != null) {
+      return roleHome;
+    }
+
     switch (widget.metadata.portal) {
       case 'principal':
         return '/principal-dashboard-screen';
+      case 'coordinator':
+        return '/coordinator-dashboard-screen';
       case 'super_admin':
         return '/super-admin-dashboard-screen';
       case 'teacher':
@@ -104,6 +142,8 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
       case 'principal':
       case 'admin':
         return '/principal-dashboard-screen';
+      case 'coordinator':
+        return '/coordinator-dashboard-screen';
       case 'super_admin':
         return '/super-admin-dashboard-screen';
       case 'teacher':
@@ -265,6 +305,15 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
 
   @override
   Widget build(BuildContext context) {
+    final sync = BackendApiClient.instance.offlineSync;
+    if (sync == null) return _buildFrame(context, isOffline: false);
+    return AnimatedBuilder(
+      animation: sync,
+      builder: (context, _) => _buildFrame(context, isOffline: sync.isOffline),
+    );
+  }
+
+  Widget _buildFrame(BuildContext context, {required bool isOffline}) {
     final tokens = Theme.of(context).schoolDesk;
 
     Widget content = widget.child;
@@ -351,6 +400,22 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
           sidebar,
           const VerticalDivider(width: 1, thickness: 1),
           Expanded(child: widget.child),
+        ],
+      );
+    }
+
+    final manifest = FeatureManifestRegistry.manifestForRoute(
+      widget.metadata.route,
+    );
+    if (isOffline && manifest.onlineOnlyMutation) {
+      final sync = BackendApiClient.instance.offlineSync;
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SchoolDeskOnlineRequiredBanner(
+            onRetry: sync == null ? null : () => unawaited(sync.syncNow()),
+          ),
+          Expanded(child: content),
         ],
       );
     }

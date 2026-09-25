@@ -17,8 +17,7 @@ extension BackendLeaveApi on BackendApiClient {
     )).data;
   }
 
-  Future<PaginatedList<Map<String, dynamic>>>
-  getStudentLeaveApplicationsPage({
+  Future<PaginatedList<Map<String, dynamic>>> getStudentLeaveApplicationsPage({
     String? studentId,
     String? status,
     bool forceRefresh = false,

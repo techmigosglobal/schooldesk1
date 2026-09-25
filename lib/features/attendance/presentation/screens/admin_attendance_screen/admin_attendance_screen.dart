@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -8,10 +9,28 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_attendance_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_attendance_repository.dart';
+
+@immutable
+class _AdminAttendanceSnapshot {
+  final List<String> classes;
+  final List<Map<String, dynamic>> records;
+  final List<Map<String, dynamic>> exceptions;
+
+  const _AdminAttendanceSnapshot({
+    required this.classes,
+    required this.records,
+    required this.exceptions,
+  });
+}
 
 class AdminAttendanceScreen extends StatefulWidget {
-  const AdminAttendanceScreen({super.key});
+  final PrincipalAttendanceRepository? repository;
+
+  const AdminAttendanceScreen({super.key, this.repository});
 
   @override
   State<AdminAttendanceScreen> createState() => _AdminAttendanceScreenState();
@@ -19,15 +38,20 @@ class AdminAttendanceScreen extends StatefulWidget {
 
 class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
     with SingleTickerProviderStateMixin {
+  PrincipalAttendanceRepository get _repository =>
+      widget.repository ?? ApiPrincipalAttendanceRepository.legacyDefault;
+
   late TabController _tabController;
   String _selectedClass = '';
-  List<String> _classes = [];
   final Map<String, String> _sectionIdsByClass = {};
+  RepositoryState<_AdminAttendanceSnapshot> _state =
+      const RepositoryState.loading();
 
-  List<Map<String, dynamic>> _attendanceRecords = [];
-  List<Map<String, dynamic>> _exceptions = [];
-  bool _loading = true;
-  String? _error;
+  List<String> get _classes => _state.data?.classes ?? const [];
+  List<Map<String, dynamic>> get _attendanceRecords =>
+      _state.data?.records ?? const [];
+  List<Map<String, dynamic>> get _exceptions =>
+      _state.data?.exceptions ?? const [];
   RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
@@ -45,16 +69,24 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
   }
 
   Future<void> _loadData() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final results = await Future.wait([
-        BackendApiClient.instance.getAttendanceSessions(),
-        BackendApiClient.instance.getSections(),
+      final results = await Future.wait<Object>([
+        _repository.loadSessions(pageSize: 100),
+        _repository.loadSections(),
       ]);
-      final sessions = results[0] as List<AttendanceSessionModel>;
+      final sessions =
+          (results[0] as PaginatedList<AttendanceSessionModel>).data;
       final sections = results[1] as List<SectionModel>;
       final classLabels = _classLabels(sections);
       final sectionLabels = {
@@ -62,11 +94,10 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
       };
       if (!mounted) return;
       setState(() {
-        _classes = classLabels;
-        if (_classes.isNotEmpty && !_classes.contains(_selectedClass)) {
-          _selectedClass = _classes.first;
+        if (classLabels.isNotEmpty && !classLabels.contains(_selectedClass)) {
+          _selectedClass = classLabels.first;
         }
-        _attendanceRecords = sessions.map((s) {
+        final records = sessions.map((s) {
           final absent = (s.totalStudents - s.presentCount).clamp(0, 1 << 20);
           return {
             'name': sectionLabels[s.sectionId] ?? s.sectionId,
@@ -83,7 +114,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
             'issue': s.totalStudents > 0 && absent > 0,
           };
         }).toList();
-        _exceptions = _attendanceRecords
+        final exceptions = records
             .where((row) => row['issue'] == true)
             .map(
               (row) => {
@@ -97,13 +128,28 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
               },
             )
             .toList();
-        _loading = false;
+        _state = RepositoryState(
+          data: _AdminAttendanceSnapshot(
+            classes: classLabels,
+            records: records,
+            exceptions: exceptions,
+          ),
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load attendance live feed from backend. $e';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -169,7 +215,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
           onPressed: _loadData,
         ),
         FilledButton.icon(
-          onPressed: _loading || _error != null
+          onPressed: _state.isLoading || _state.isError
               ? null
               : () => _exportAttendanceReport('Daily Attendance', 'csv'),
           icon: const Icon(Icons.download_rounded, size: 18),
@@ -185,30 +231,21 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
           Tab(text: 'Reports'),
         ],
       ),
-      body: _loading
-          ? const Padding(
-              padding: EdgeInsets.all(24),
-              child: SchoolDeskStatusPanel.loading(
-                message: 'Loading attendance live feed',
-              ),
-            )
-          : _error != null
-          ? Padding(
-              padding: const EdgeInsets.all(24),
-              child: SchoolDeskStatusPanel.error(
-                title: 'Attendance unavailable',
-                message: _error!,
-                onAction: _loadData,
-              ),
-            )
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildTodayView(),
-                _buildExceptions(),
-                _buildReports(),
-              ],
-            ),
+      body: SchoolDeskRepositoryStateView<_AdminAttendanceSnapshot>(
+        state: _state,
+        onRetry: _loadData,
+        loadingMessage: 'Loading attendance live feed',
+        emptyTitle: 'No attendance sessions',
+        emptyMessage: 'Attendance sessions will appear here when recorded.',
+        data: (_) => TabBarView(
+          controller: _tabController,
+          children: [
+            _buildTodayView(),
+            _buildExceptions(),
+            _buildReports(),
+          ],
+        ),
+      ),
     );
   }
 
@@ -574,8 +611,8 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
 
   Future<void> _exportAttendanceReport(String report, String format) async {
     try {
-      final export = await BackendApiClient.instance.createReportExport(
-        '/attendance/reports/exports',
+      final export = await _repository.createReportExport(
+        path: '/attendance/reports/exports',
         reportTitle: report,
         format: format,
         scope: 'admin',

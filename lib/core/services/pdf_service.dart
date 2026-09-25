@@ -986,7 +986,7 @@ class PdfService {
     required String className,
     required String month,
     required List<Map<String, dynamic>> students,
-    String schoolName = 'Public School',
+    String schoolName = '',
   }) async {
     final pdf = await _createDocument();
 
@@ -1044,7 +1044,7 @@ class PdfService {
     required double totalBilled,
     required double totalCollected,
     required List<Map<String, dynamic>> staffRows,
-    String schoolName = 'Public School',
+    String schoolName = '',
   }) async {
     final pdf = await _createDocument();
     final pending = totalBilled - totalCollected;
@@ -1332,9 +1332,9 @@ class PdfService {
     required String contactNo,
     required String bloodGroup,
     required String academicYear,
-    String schoolName = 'Public School',
-    String schoolAddress = '123 Education Lane, Knowledge City',
-    String schoolContact = '+91 98765 43210',
+    String schoolName = '',
+    String schoolAddress = '',
+    String schoolContact = '',
   }) async {
     final pdf = await _createDocument();
 

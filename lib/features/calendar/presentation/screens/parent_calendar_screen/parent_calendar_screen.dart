@@ -2,16 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:table_calendar/table_calendar.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_calendar_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_calendar_repository.dart';
+
+@immutable
+class _ParentCalendarSnapshot {
+  final List<Map<String, dynamic>> events;
+  final List<Map<String, dynamic>> holidays;
+
+  const _ParentCalendarSnapshot({required this.events, required this.holidays});
+}
 
 class ParentCalendarScreen extends StatefulWidget {
-  const ParentCalendarScreen({super.key});
+  const ParentCalendarScreen({super.key, this.repository});
+
+  final ParentCalendarRepository? repository;
 
   @override
   State<ParentCalendarScreen> createState() => _ParentCalendarScreenState();
@@ -19,12 +32,14 @@ class ParentCalendarScreen extends StatefulWidget {
 
 class _ParentCalendarScreenState extends State<ParentCalendarScreen>
     with SingleTickerProviderStateMixin {
+  late final ParentCalendarRepository _repository =
+      widget.repository ?? ApiParentCalendarRepository.legacyDefault;
   int _selectedNavIndex = ParentNav.calendar;
   late TabController _tabController;
-  bool _loading = true;
-  String? _error;
-  List<Map<String, dynamic>> _events = [];
-  List<Map<String, dynamic>> _holidays = [];
+  RepositoryState<_ParentCalendarSnapshot> _state =
+      const RepositoryState.loading();
+  List<Map<String, dynamic>> get _events => _state.data?.events ?? const [];
+  List<Map<String, dynamic>> get _holidays => _state.data?.holidays ?? const [];
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
 
@@ -36,26 +51,32 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
   }
 
   Future<void> _loadCalendar({bool showSpinner = true}) async {
+    final previous = _state.data;
     if (showSpinner) {
       setState(() {
-        _loading = true;
-        _error = null;
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
       });
     }
     try {
-      final api = BackendApiClient.instance;
-      final academicYears = await api.getAcademicYears();
-      final events = await api.getEvents();
+      final academicYears = await _repository.loadAcademicYears();
+      final eventRows = await _repository.loadEvents();
       final holidayRows = <Map<String, dynamic>>[];
       for (final year
           in academicYears.where((year) => year.isCurrent).take(1)) {
-        final detail = await api.getRawMap('/academic-years/${year.id}');
+        final detail = await _repository.loadAcademicYear(year.id);
         holidayRows.addAll(_asListMap(detail['holidays']));
       }
       if (!mounted) return;
       setState(() {
-        _events = [
-          ...events
+        final events = [
+          ...eventRows
               .where(
                 (event) =>
                     event['is_holiday'] != true &&
@@ -63,22 +84,30 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
               )
               .map(_eventCalendarRow),
         ]..sort(_sortByDate);
-        _holidays = [
-          ...events
+        final holidays = [
+          ...eventRows
               .where((event) => event['is_holiday'] == true)
               .map(_holidayFromEvent),
           ...holidayRows.map(_holidayCalendarRow),
         ]..sort(_sortByDate);
-        _loading = false;
-        _error = null;
+        _state = RepositoryState(
+          data: _ParentCalendarSnapshot(events: events, holidays: holidays),
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = error.toString();
-        _events = [];
-        _holidays = [];
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -105,7 +134,9 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       actions: [
         IconButton(
           tooltip: 'Refresh calendar',
-          onPressed: _loading ? null : () => _loadCalendar(showSpinner: false),
+          onPressed: _state.isLoading || _state.isRefreshing
+              ? null
+              : () => _loadCalendar(showSpinner: false),
           icon: const Icon(Icons.refresh_rounded),
         ),
       ],
@@ -116,12 +147,17 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
           Tab(text: 'Holidays'),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
-              children: [_buildEventsTab(), _buildHolidaysTab()],
-            ),
+      body: SchoolDeskRepositoryStateView<_ParentCalendarSnapshot>(
+        state: _state,
+        onRetry: _loadCalendar,
+        emptyTitle: 'No calendar data',
+        emptyMessage: 'Published school events and holidays will appear here.',
+        loadingMessage: 'Loading calendar…',
+        data: (_) => TabBarView(
+          controller: _tabController,
+          children: [_buildEventsTab(), _buildHolidaysTab()],
+        ),
+      ),
     );
   }
 
@@ -242,10 +278,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (_error != null) ...[
-            _buildErrorState(),
-            const SizedBox(height: 16),
-          ],
           if (rows.isEmpty)
             SchoolDeskStatusPanel.empty(
               title: emptyTitle,
@@ -253,33 +285,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
             )
           else
             ...rows.map(itemBuilder),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.appTheme.errorContainer,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.appTheme.error.withAlpha(40)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline_rounded, color: context.appTheme.error),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _error ?? 'Unable to load calendar',
-              style: GoogleFonts.dmSans(fontSize: 12),
-            ),
-          ),
-          TextButton(
-            onPressed: _loadCalendar,
-            child: Text('Retry', style: GoogleFonts.dmSans(fontSize: 12)),
-          ),
         ],
       ),
     );

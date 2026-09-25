@@ -11,8 +11,8 @@ void main() {
       'lib/features/finance/presentation/screens/parent_hub/parent_payment_history_v2.dart',
     ).readAsStringSync();
 
-    expect(hub, contains('getParentStudentFees('));
-    expect(history, contains('getParentStudentFees(studentId)'));
+    expect(hub, contains('_repository.loadStudentFees('));
+    expect(history, contains('_repository.loadStudentFees(studentId)'));
     expect(hub, isNot(contains('getInvoices(')));
     expect(history, isNot(contains('getInvoices(')));
   });

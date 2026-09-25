@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
-import 'package:schooldesk1/features/shared/data/models/backend_models.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

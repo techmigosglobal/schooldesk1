@@ -2,18 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
-import 'package:schooldesk1/core/services/backend_data_service.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_analytics_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_analytics_repository.dart';
 
 class PrincipalAnalyticsScreen extends StatefulWidget {
-  const PrincipalAnalyticsScreen({super.key});
+  const PrincipalAnalyticsScreen({this.repository, super.key});
+
+  final PrincipalAnalyticsRepository? repository;
 
   @override
   State<PrincipalAnalyticsScreen> createState() =>
       _PrincipalAnalyticsScreenState();
+}
+
+class _PrincipalAnalyticsSnapshot {
+  const _PrincipalAnalyticsSnapshot({
+    required this.invoices,
+    required this.alerts,
+    required this.staff,
+  });
+
+  final List<Map<String, dynamic>> invoices;
+  final List<Map<String, dynamic>> alerts;
+  final List<Map<String, dynamic>> staff;
 }
 
 class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
@@ -21,13 +38,17 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
   late TabController _tabController;
   String _attendancePeriod = 'This Week';
 
+  RepositoryState<_PrincipalAnalyticsSnapshot> _state =
+      const RepositoryState.loading();
+
   double _totalBilled = 0;
   double _totalCollected = 0;
-  bool _isLoading = true;
-  String? _loadError;
   List<Map<String, dynamic>> _feeInvoices = [];
   List<Map<String, dynamic>> _runtimeAlerts = [];
   List<Map<String, dynamic>> _staffRows = [];
+
+  PrincipalAnalyticsRepository get _repository =>
+      widget.repository ?? ApiPrincipalAnalyticsRepository.legacyDefault;
 
   @override
   void initState() {
@@ -37,9 +58,41 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
   }
 
   Future<void> _loadData() async {
+    final previous = _state;
+    if (mounted) {
+      setState(() {
+        _state = RepositoryState<_PrincipalAnalyticsSnapshot>.loading(
+          data: previous.data,
+          source: previous.hasData
+              ? RepositorySource.cache
+              : RepositorySource.empty,
+          isStale: previous.hasData,
+          isRefreshing: previous.hasData,
+          lastUpdated: previous.lastUpdated,
+        );
+      });
+    }
     try {
-      final storage = await BackendDataService.getInstance();
-      final invoices = await storage.getList(BackendDataService.kStudentFees);
+      final result = await _repository.load(forceRefresh: true);
+      if (result.isFailure) {
+        if (!mounted) return;
+        setState(() {
+          _state = previous.hasData
+              ? RepositoryState<_PrincipalAnalyticsSnapshot>(
+                  data: previous.data,
+                  source: RepositorySource.cache,
+                  isStale: true,
+                  error: result.failureOrNull,
+                  lastUpdated: previous.lastUpdated,
+                )
+              : RepositoryState<_PrincipalAnalyticsSnapshot>.error(
+                  error: result.failureOrNull!,
+                );
+        });
+        return;
+      }
+      final snapshot = result.dataOrNull!;
+      final invoices = snapshot.invoices;
 
       double billed = 0;
       double collected = 0;
@@ -47,12 +100,8 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
         billed += _invoiceTotal(inv);
         collected += _numValue(inv['paid_amount']);
       }
-      final notifications = await storage.getList(
-        BackendDataService.kRuntimeNotifications,
-      );
-      final staffRows = await storage.getList(
-        BackendDataService.kAdminTeachers,
-      );
+      final notifications = snapshot.alerts;
+      final staffRows = snapshot.staff;
 
       if (mounted) {
         setState(() {
@@ -61,15 +110,29 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
           _feeInvoices = invoices;
           _runtimeAlerts = notifications;
           _staffRows = staffRows;
-          _loadError = null;
-          _isLoading = false;
+          _state = RepositoryState<_PrincipalAnalyticsSnapshot>(
+            data: _PrincipalAnalyticsSnapshot(
+              invoices: invoices,
+              alerts: notifications,
+              staff: staffRows,
+            ),
+            source: RepositorySource.remote,
+            lastUpdated: DateTime.now().toUtc(),
+          );
         });
       }
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _loadError = '$e';
-        _isLoading = false;
+        _state = previous.hasData
+            ? RepositoryState<_PrincipalAnalyticsSnapshot>(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState<_PrincipalAnalyticsSnapshot>.error(error: e);
       });
     }
   }
@@ -104,9 +167,14 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
           Tab(text: 'Alerts'),
         ],
       ),
-      body: MediaQuery.of(context).size.width >= 840
-          ? _buildTabletLayout()
-          : _buildPhoneLayout(),
+      body: SchoolDeskRepositoryStateView<_PrincipalAnalyticsSnapshot>(
+        state: _state,
+        onRetry: _loadData,
+        errorTitle: 'Unable to load analytics',
+        data: (_) => MediaQuery.of(context).size.width >= 840
+            ? _buildTabletLayout()
+            : _buildPhoneLayout(),
+      ),
     );
   }
 
@@ -479,13 +547,6 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
   // ─── FEE COLLECTION TAB ───────────────────────────────────────────────────
 
   Widget _buildFeeTab() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_loadError != null) {
-      return Center(child: Text('Unable to load fee analytics: $_loadError'));
-    }
-
     final double pending = _totalBilled - _totalCollected;
     final double collectionRate = _totalBilled > 0
         ? (_totalCollected / _totalBilled) * 100

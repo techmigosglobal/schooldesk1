@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/chat_message_merge.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -13,13 +12,19 @@ import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide UserResponse;
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
+import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_communication_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_communication_repository.dart';
 
 class ParentTeacherChatScreen extends StatefulWidget {
-  const ParentTeacherChatScreen({super.key});
+  final ParentCommunicationRepository? repository;
+
+  const ParentTeacherChatScreen({super.key, this.repository});
 
   @override
   State<ParentTeacherChatScreen> createState() =>
@@ -27,6 +32,9 @@ class ParentTeacherChatScreen extends StatefulWidget {
 }
 
 class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
+  ParentCommunicationRepository get _repository =>
+      widget.repository ?? ApiParentCommunicationRepository.legacyDefault;
+
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -34,9 +42,8 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   String _realtimeConversationId = '';
   int _realtimeRequest = 0;
 
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _sending = false;
-  String? _error;
   String _parentUserId = '';
   String _selectedStudentId = '';
   _TeacherThread? _selectedThread;
@@ -64,7 +71,6 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   // ── Realtime ──────────────────────────────────────────────────────────────
 
   Future<void> _subscribeRealtime({String conversationId = ''}) async {
-    if (DemoLocalApiService.instance.isActive) return;
     if (_realtimeConversationId == conversationId && _realtimeChannel != null) {
       await ChatRealtimeService.instance.refreshAuth();
       return;
@@ -100,22 +106,25 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
 
   Future<void> _load({bool background = false}) async {
     if (!background) {
+      final previous = _state.data;
       setState(() {
-        _loading = true;
-        _error = null;
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
       });
     }
     try {
-      final api = BackendApiClient.instance;
-      final initial = await Future.wait<Object>([
-        api.getProfile(),
-        api.getMyStudents(),
-      ]);
-      final profile = initial[0] as UserResponse;
-      final children = (initial[1] as List)
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList();
+      final profileResult = await _repository.loadProfile();
+      final childrenResult = await _repository.loadChildren();
+      _throwIfFailed(profileResult, 'Unable to load profile');
+      _throwIfFailed(childrenResult, 'Unable to load linked students');
+      final profile = profileResult.dataOrNull!;
+      final children = childrenResult.dataOrNull!;
       final savedChildIndex = await ParentChildSelectionService.indexFor(
         children,
         fallback: 0,
@@ -127,18 +136,22 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
           : children.isEmpty
           ? ''
           : _text(children[savedChildIndex]['id']);
-      final chatData = await Future.wait<Object>([
-        api.getUnifiedChatConversations(studentId: selectedStudent),
-        api.getUnifiedChatContacts(role: 'parent', studentId: selectedStudent),
-      ]);
-      final allConversations = chatData[0] as List<Map<String, dynamic>>;
+      final conversationsResult = await _repository.loadConversations(
+        studentId: selectedStudent,
+      );
+      final contactsResult = await _repository.loadContacts(
+        studentId: selectedStudent,
+      );
+      _throwIfFailed(conversationsResult, 'Unable to load conversations');
+      _throwIfFailed(contactsResult, 'Unable to load contacts');
+      final allConversations = conversationsResult.dataOrNull!;
       final conversations = allConversations
           .where((row) => _text(row['type']) == 'parent_teacher')
           .toList();
       final principalConversations = allConversations
           .where((row) => _text(row['type']) == 'principal_parent')
           .toList();
-      final contacts = chatData[1] as List<Map<String, dynamic>>;
+      final contacts = contactsResult.dataOrNull!;
       final teacherRows = contacts
           .where((c) => _text(c['role']) == 'teacher')
           .map((c) {
@@ -175,11 +188,13 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       List<Map<String, dynamic>> messages;
       DateTime? cursor;
       if (selected?.conversationId.isNotEmpty == true) {
+        final messagesResult = await _repository.loadMessages(
+          conversationId: selected!.conversationId,
+        );
+        _throwIfFailed(messagesResult, 'Unable to load messages');
         messages = mergeChatMessagesByIdentity(
           const [],
-          await api.getUnifiedChatMessages(
-            conversationId: selected!.conversationId,
-          ),
+          messagesResult.dataOrNull!,
         );
         cursor = messages.isNotEmpty
             ? _date(messages.last['sent_at'] ?? messages.last['created_at'])
@@ -199,18 +214,20 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         _messages = messages;
         _pendingMessages.clear();
         _messagesCursor = cursor;
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
       _scrollToBottom();
       unawaited(_subscribeRealtime(conversationId: newConversationId));
       if (newConversationId.isNotEmpty) {
-        unawaited(api.markUnifiedChatConversationRead(newConversationId));
+        unawaited(_markConversationRead(newConversationId));
       }
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        if (!background) _error = error.toString();
+        if (!background) _state = RepositoryState.error(error: error);
       });
     }
   }
@@ -222,21 +239,29 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       return;
     }
     try {
-      final api = BackendApiClient.instance;
       final convId = thread.conversationId;
       final selectedStudent = _selectedStudentId;
-      final chatData = await Future.wait<Object>([
-        api.getUnifiedChatConversations(studentId: selectedStudent),
-        api.getUnifiedChatContacts(role: 'parent', studentId: selectedStudent),
-      ]);
-      final allConversations = chatData[0] as List<Map<String, dynamic>>;
+      final conversationsResult = await _repository.loadConversations(
+        studentId: selectedStudent,
+      );
+      final contactsResult = await _repository.loadContacts(
+        studentId: selectedStudent,
+      );
+      final messagesResult = await _repository.loadMessages(
+        conversationId: convId,
+        sentAfter: _messagesCursor,
+      );
+      _throwIfFailed(conversationsResult, 'Unable to refresh conversations');
+      _throwIfFailed(contactsResult, 'Unable to refresh contacts');
+      _throwIfFailed(messagesResult, 'Unable to refresh messages');
+      final allConversations = conversationsResult.dataOrNull!;
       final conversations = allConversations
           .where((row) => _text(row['type']) == 'parent_teacher')
           .toList();
       final principalConversations = allConversations
           .where((row) => _text(row['type']) == 'principal_parent')
           .toList();
-      final contacts = chatData[1] as List<Map<String, dynamic>>;
+      final contacts = contactsResult.dataOrNull!;
       final teacherRows = contacts
           .where((c) => _text(c['role']) == 'teacher')
           .map((c) {
@@ -269,10 +294,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         principalConversations: principalConversations,
         principalContacts: principalContacts,
       );
-      final newMessages = await api.getUnifiedChatMessages(
-        conversationId: convId,
-        sentAfter: _messagesCursor,
-      );
+      final newMessages = messagesResult.dataOrNull!;
       if (!mounted) return;
       setState(() {
         _threads = threads;
@@ -296,7 +318,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       });
       if (newMessages.isNotEmpty) {
         _scrollToBottom();
-        unawaited(api.markUnifiedChatConversationRead(convId));
+        unawaited(_markConversationRead(convId));
       }
     } on Object catch (_) {
       // Silent — next Realtime event retries.
@@ -445,21 +467,23 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
     try {
       var conversationId = thread.conversationId;
       if (conversationId.isEmpty) {
-        final created = await BackendApiClient.instance
-            .createUnifiedChatConversation(
-              type: thread.conversationType,
-              teacherId: thread.teacherId,
-              parentId: _parentUserId,
-              studentId: thread.studentId,
-              leaderId: thread.leaderId,
-              title: thread.teacherName,
-            );
-        conversationId = _text(created['id']);
+        final createdResult = await _repository.createConversation(
+          type: thread.conversationType,
+          teacherId: thread.teacherId,
+          parentId: _parentUserId,
+          studentId: thread.studentId,
+          leaderId: thread.leaderId,
+          title: thread.teacherName,
+        );
+        _throwIfFailed(createdResult, 'Unable to create conversation');
+        conversationId = _text(createdResult.dataOrNull!['id']);
       }
-      final sent = await BackendApiClient.instance.sendUnifiedChatMessage(
+      final sentResult = await _repository.sendMessage(
         conversationId: conversationId,
         body: body,
       );
+      _throwIfFailed(sentResult, 'Unable to send message');
+      final sent = sentResult.dataOrNull!;
       if (sent['queued'] == true) {
         if (mounted) {
           setState(() {
@@ -486,6 +510,16 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
     }
   }
 
+  Future<void> _markConversationRead(String conversationId) async {
+    await _repository.markConversationRead(conversationId);
+  }
+
+  void _throwIfFailed<T>(Result<T> result, String fallback) {
+    if (result.isFailure) {
+      throw StateError(result.failureOrNull?.message ?? fallback);
+    }
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -507,52 +541,36 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   }
 
   Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _load,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Retry'),
-              ),
-            ],
+    return SchoolDeskRepositoryStateView<Object>(
+      state: _state,
+      onRetry: _load,
+      data: (_) => Column(
+        children: [
+          _childSelector(),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 760;
+                final list = _conversationList();
+                final chat = _chatPane(canSend: true, showBackButton: !wide);
+                if (wide) {
+                  return Row(
+                    children: [
+                      SizedBox(width: 330, child: list),
+                      VerticalDivider(
+                        width: 1,
+                        color: context.appTheme.outlineVariant,
+                      ),
+                      Expanded(child: chat),
+                    ],
+                  );
+                }
+                return _selectedThread == null ? list : chat;
+              },
+            ),
           ),
-        ),
-      );
-    }
-    return Column(
-      children: [
-        _childSelector(),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 760;
-              final list = _conversationList();
-              final chat = _chatPane(canSend: true, showBackButton: !wide);
-              if (wide) {
-                return Row(
-                  children: [
-                    SizedBox(width: 330, child: list),
-                    VerticalDivider(
-                      width: 1,
-                      color: context.appTheme.outlineVariant,
-                    ),
-                    Expanded(child: chat),
-                  ],
-                );
-              }
-              return _selectedThread == null ? list : chat;
-            },
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

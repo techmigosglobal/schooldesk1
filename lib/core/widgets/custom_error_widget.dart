@@ -4,6 +4,8 @@ import 'package:schooldesk1/core/app_export.dart';
 
 // custom_error_widget.dart
 
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 class CustomErrorWidget extends StatelessWidget {
   final FlutterErrorDetails? errorDetails;
   final String? errorMessage;
@@ -51,7 +53,7 @@ class CustomErrorWidget extends StatelessWidget {
                     if (canBeBack) {
                       Navigator.of(context).pop();
                     } else {
-                      Navigator.pushNamed(context, AppRoutes.initial);
+                      SchoolDeskNavigation.push(context, AppRoutes.initial);
                     }
                   },
                   icon: const Icon(

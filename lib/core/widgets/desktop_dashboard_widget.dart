@@ -31,7 +31,8 @@ class DesktopDashboardWidget extends StatelessWidget {
         final isDesktop = DesktopBreakpoints.isDesktopWidth(width);
         final tokens = Theme.of(context).schoolDesk;
         final effectivePadding =
-            padding ?? EdgeInsets.all(isDesktop ? tokens.spacing.lg : tokens.spacing.md);
+            padding ??
+            EdgeInsets.all(isDesktop ? tokens.spacing.lg : tokens.spacing.md);
         final maxContentWidth = DesktopBreakpoints.contentMaxWidth(width);
 
         final content = Column(
@@ -50,7 +51,8 @@ class DesktopDashboardWidget extends StatelessWidget {
               ),
               SizedBox(height: tokens.spacing.lg),
             ],
-            if (isDesktop && (primaryContent != null || secondaryContent != null))
+            if (isDesktop &&
+                (primaryContent != null || secondaryContent != null))
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

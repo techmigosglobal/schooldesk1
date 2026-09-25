@@ -8,7 +8,7 @@ void main() {
       'lib/features/dashboard/presentation/screens/admin_dashboard_screen/admin_dashboard_screen.dart',
     );
 
-    expect(dashboard, contains('getApprovalRequests()'));
+    expect(dashboard, contains('approvalRepository'));
     expect(dashboard, contains('Pending submissions'));
     expect(dashboard, contains('Changes requested'));
     expect(dashboard, contains('Recently approved/rejected'));

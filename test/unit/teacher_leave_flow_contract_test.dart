@@ -140,7 +140,7 @@ void main() {
 
     setUpAll(() {
       modelSource = File(
-        'lib/features/shared/data/models/backend_models.dart',
+        'lib/core/network/models/backend_models.dart',
       ).readAsStringSync();
     });
 
@@ -237,7 +237,7 @@ void main() {
 
     setUpAll(() {
       entitySource = File(
-        'lib/features/shared/domain/entities/leave_request.dart',
+        'lib/modules/leave/domain/entities/leave_request.dart',
       ).readAsStringSync();
     });
 

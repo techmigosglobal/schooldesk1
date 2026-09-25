@@ -39,4 +39,16 @@ const localRoleCredentials = <LocalTestCredentials>[
     password: String.fromEnvironment('QA_PARENT_PASSWORD'),
     dashboardMarkers: ['Fee Dues', 'Notices'],
   ),
+  LocalTestCredentials(
+    role: 'Kiosk',
+    username: String.fromEnvironment('QA_KIOSK_USERNAME'),
+    password: String.fromEnvironment('QA_KIOSK_PASSWORD'),
+    dashboardMarkers: ['QR', 'attendance'],
+  ),
+  LocalTestCredentials(
+    role: 'Super Admin',
+    username: String.fromEnvironment('QA_SUPER_ADMIN_USERNAME'),
+    password: String.fromEnvironment('QA_SUPER_ADMIN_PASSWORD'),
+    dashboardMarkers: ['System', 'Schools'],
+  ),
 ];

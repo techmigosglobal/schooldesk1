@@ -1,12 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/paging/paged_list_controller.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/modules/people/data/api_admission_inquiry_repository.dart';
+import 'package:schooldesk1/modules/people/domain/admission_inquiry_repository.dart';
 
 class AdmissionInquiriesScreen extends StatefulWidget {
-  const AdmissionInquiriesScreen({super.key});
+  const AdmissionInquiriesScreen({super.key, this.repository});
+
+  final AdmissionInquiryRepository? repository;
 
   @override
   State<AdmissionInquiriesScreen> createState() =>
@@ -18,16 +23,23 @@ class _AdmissionInquiriesScreenState extends State<AdmissionInquiriesScreen> {
   final _searchController = TextEditingController();
   Timer? _searchDebounce;
 
+  AdmissionInquiryRepository get _repository =>
+      widget.repository ?? ApiAdmissionInquiryRepository.legacyDefault;
+
+  final RepositoryState<Object> _state = const RepositoryState<Object>(
+    data: Object(),
+    source: RepositorySource.remote,
+  );
+
   @override
   void initState() {
     super.initState();
     _paging = PagedListController<Map<String, dynamic>>(
-      loadPage: ({required page, required pageSize}) =>
-          BackendApiClient.instance.getAdmissionInquiriesPage(
-            search: _searchController.text,
-            page: page,
-            pageSize: pageSize,
-          ),
+      loadPage: ({required page, required pageSize}) => _repository.loadPage(
+        search: _searchController.text,
+        page: page,
+        pageSize: pageSize,
+      ),
       itemKey: (row) => '${row['id'] ?? ''}',
     );
     _paging.load();
@@ -58,98 +70,102 @@ class _AdmissionInquiriesScreenState extends State<AdmissionInquiriesScreen> {
           onPressed: _paging.refresh,
         ),
       ],
-      body: AnimatedBuilder(
-        animation: _paging,
-        builder: (context, _) {
-          final rows = _paging.items;
-          final hasError = _paging.error != null;
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search_rounded),
-                    hintText: 'Search parent, child, phone, or email',
-                  ),
-                ),
-              ),
-              if (_paging.isStale)
-                MaterialBanner(
-                  content: const Text(
-                    'Showing cached inquiries. Retry to refresh.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: _paging.refresh,
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              if (hasError && rows.isEmpty)
-                Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Admission inquiries are unavailable.'),
-                        const SizedBox(height: 8),
-                        FilledButton(
-                          onPressed: _paging.refresh,
-                          child: const Text('Retry'),
-                        ),
-                      ],
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _paging.refresh,
+        data: (_) => AnimatedBuilder(
+          animation: _paging,
+          builder: (context, _) {
+            final rows = _paging.items;
+            final hasError = _paging.error != null;
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search_rounded),
+                      hintText: 'Search parent, child, phone, or email',
                     ),
                   ),
-                )
-              else if (_paging.status == PagedListStatus.loading &&
-                  rows.isEmpty)
-                const Expanded(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (rows.isEmpty)
-                const Expanded(
-                  child: Center(child: Text('No admission inquiries yet.')),
-                )
-              else
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: rows.length + (_paging.hasMore ? 1 : 0),
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, index) {
-                      if (index == rows.length) {
-                        return OutlinedButton(
-                          onPressed: _paging.isBusy ? null : _paging.loadMore,
-                          child: Text(
-                            _paging.isBusy ? 'Loading…' : 'Load more',
+                ),
+                if (_paging.isStale)
+                  MaterialBanner(
+                    content: const Text(
+                      'Showing cached inquiries. Retry to refresh.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: _paging.refresh,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                if (hasError && rows.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Admission inquiries are unavailable.'),
+                          const SizedBox(height: 8),
+                          FilledButton(
+                            onPressed: _paging.refresh,
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (_paging.status == PagedListStatus.loading &&
+                    rows.isEmpty)
+                  const Expanded(
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (rows.isEmpty)
+                  const Expanded(
+                    child: Center(child: Text('No admission inquiries yet.')),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: rows.length + (_paging.hasMore ? 1 : 0),
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, index) {
+                        if (index == rows.length) {
+                          return OutlinedButton(
+                            onPressed: _paging.isBusy ? null : _paging.loadMore,
+                            child: Text(
+                              _paging.isBusy ? 'Loading…' : 'Load more',
+                            ),
+                          );
+                        }
+                        final row = rows[index];
+                        return Card(
+                          child: ListTile(
+                            leading: const CircleAvatar(
+                              child: Icon(Icons.markunread_outlined),
+                            ),
+                            title: Text(
+                              '${row['parent_name'] ?? ''} · ${row['program'] ?? ''}',
+                            ),
+                            subtitle: Text(
+                              '${row['child_name'] ?? 'Child not named'} · ${row['child_age'] ?? ''}\n${row['phone'] ?? ''} · ${row['email'] ?? ''}',
+                            ),
+                            isThreeLine: true,
+                            onTap: () => _showDetail(context, row),
                           ),
                         );
-                      }
-                      final row = rows[index];
-                      return Card(
-                        child: ListTile(
-                          leading: const CircleAvatar(
-                            child: Icon(Icons.markunread_outlined),
-                          ),
-                          title: Text(
-                            '${row['parent_name'] ?? ''} · ${row['program'] ?? ''}',
-                          ),
-                          subtitle: Text(
-                            '${row['child_name'] ?? 'Child not named'} · ${row['child_age'] ?? ''}\n${row['phone'] ?? ''} · ${row['email'] ?? ''}',
-                          ),
-                          isThreeLine: true,
-                          onTap: () => _showDetail(context, row),
-                        ),
-                      );
-                    },
+                      },
+                    ),
                   ),
-                ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }

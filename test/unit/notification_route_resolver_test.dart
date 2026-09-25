@@ -204,5 +204,19 @@ void main() {
       expect(lessonPlan.route, AppRoutes.teacherLessonPlanner);
       expect(leave.route, AppRoutes.teacherLeave);
     });
+
+    test('fallback destinations remain safe for platform-only roles', () {
+      final superAdminApproval = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'approval'},
+        currentRole: 'super_admin',
+      );
+      final kioskAnnouncement = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'announcement'},
+        currentRole: 'kiosk',
+      );
+
+      expect(superAdminApproval.route, AppRoutes.notificationCenter);
+      expect(kioskAnnouncement.route, AppRoutes.kioskQrAttendance);
+    });
   });
 }

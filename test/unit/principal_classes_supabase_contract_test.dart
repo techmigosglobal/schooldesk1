@@ -7,14 +7,26 @@ void main() {
     final screen = File(
       'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
     ).readAsStringSync();
+    final repository = File(
+      'lib/roles/principal/data/api_principal_classes_repository.dart',
+    ).readAsStringSync();
     final index = File('supabase/functions/api/index.ts').readAsStringSync();
 
-    expect(screen, contains('getPrincipalClassesOverview(forceRefresh: true)'));
-    expect(screen, contains('getAcademicYears(forceRefresh: true)'));
-    expect(screen, contains("api.getStaff(page: 1, pageSize: 100"));
-    expect(screen, contains("api.getRawList('/subjects'"));
-    expect(screen, contains("api.getRawList(\n          '/grade-subjects'"));
-    expect(screen, contains("api.getRawList(\n          '/staff-subjects'"));
+    expect(screen, contains('_repository.loadOverview(forceRefresh: true)'));
+    expect(
+      screen,
+      contains('_repository.loadAcademicYears(forceRefresh: true)'),
+    );
+    expect(screen, contains('_repository.loadStaff(page: 1, pageSize: 100'));
+    expect(screen, contains('_repository.loadSubjects()'));
+    expect(screen, contains('_repository.loadGradeSubjects()'));
+    expect(screen, contains('_repository.loadStaffSubjects()'));
+    expect(repository, contains('_api.getPrincipalClassesOverview('));
+    expect(repository, contains('_api.getAcademicYears('));
+    expect(repository, contains('_api.getStaff('));
+    expect(repository, contains("_api.getRawList('/subjects'"));
+    expect(repository, contains("_api.getRawList(\n    '/grade-subjects'"));
+    expect(repository, contains("_api.getRawList(\n    '/staff-subjects'"));
     expect(index, contains('path.startsWith("/staff-subjects")'));
   });
 
@@ -74,7 +86,7 @@ void main() {
       'lib/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart',
     ).readAsStringSync();
     final sectionModel = File(
-      'lib/features/shared/data/models/backend_models.dart',
+      'lib/core/network/models/backend_models.dart',
     ).readAsStringSync();
 
     expect(
@@ -265,7 +277,7 @@ void main() {
     );
 
     for (final subjectFlow in [addSelectSubject, createSubject]) {
-      expect(subjectFlow, contains('savePrincipalSubjectMapping('));
+      expect(subjectFlow, contains('saveSubjectMapping('));
       expect(subjectFlow, contains('periodsPerWeek: 0'));
       expect(subjectFlow, isNot(contains('teacherId:')));
       expect(subjectFlow, isNot(contains('assignmentId:')));
@@ -292,7 +304,7 @@ void main() {
       academics.indexOf('if (path.startsWith("/rooms"))'),
     );
 
-    expect(subjectSetup, contains("'section_id': _sectionId"));
+    expect(subjectSetup, contains('sectionId: _sectionId'));
     expect(subjectSetup, contains('_isClassGradeSubject(row)'));
     expect(
       subjectSetup,

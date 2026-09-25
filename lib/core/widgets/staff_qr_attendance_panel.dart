@@ -3,25 +3,30 @@ import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/app/providers/app_providers.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/utils/result.dart';
 
-class StaffQrAttendancePanel extends StatefulWidget {
+class StaffQrAttendancePanel extends ConsumerStatefulWidget {
   final bool compact;
 
   const StaffQrAttendancePanel({super.key, this.compact = false});
 
   @override
-  State<StaffQrAttendancePanel> createState() => _StaffQrAttendancePanelState();
+  ConsumerState<StaffQrAttendancePanel> createState() =>
+      _StaffQrAttendancePanelState();
 }
 
-class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
+class _StaffQrAttendancePanelState
+    extends ConsumerState<StaffQrAttendancePanel> {
   static const int _qrRefreshSeconds = 7;
   static const Duration _qrRefreshInterval = Duration(
     seconds: _qrRefreshSeconds,
@@ -66,8 +71,10 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
       _error = null;
     });
     try {
-      final api = BackendApiClient.instance;
-      final token = await api.getStaffQrToken(nonce: _qrRefreshNonce());
+      final repository = ref.read(kioskAttendanceRepositoryProvider);
+      final token = _unwrap(
+        await repository.getToken(nonce: _qrRefreshNonce()),
+      );
       if (!mounted) return;
       setState(() {
         _token = token;
@@ -94,7 +101,11 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
 
   Future<void> _loadRecentScans() async {
     try {
-      final rows = await BackendApiClient.instance.getStaffAttendanceForDate();
+      final rows = _unwrap(
+        await ref
+            .read(kioskAttendanceRepositoryProvider)
+            .getRecentScans(date: _todayDateText()),
+      );
       if (!mounted) return;
       setState(() => _recent = rows);
     } on Object catch (error) {
@@ -112,7 +123,11 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   Future<void> _pollRecentScans() async {
     if (_refreshing || _loading) return;
     try {
-      final rows = await BackendApiClient.instance.getStaffAttendanceForDate();
+      final rows = _unwrap(
+        await ref
+            .read(kioskAttendanceRepositoryProvider)
+            .getRecentScans(date: _todayDateText()),
+      );
       if (!mounted) return;
       setState(() => _recent = rows);
     } on Object catch (error) {
@@ -144,8 +159,10 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
     setState(() => _exportingLog = true);
     final date = _todayDateText();
     try {
-      final bytes = await BackendApiClient.instance.exportStaffQrLogsCsv(
-        date: date,
+      final bytes = _unwrap(
+        await ref
+            .read(kioskAttendanceRepositoryProvider)
+            .exportLogs(date: date),
       );
       final fileName = 'staff_qr_logs_$date.csv';
       await const ShareExportService().shareBytes(
@@ -183,6 +200,13 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
     final month = now.month.toString().padLeft(2, '0');
     final day = now.day.toString().padLeft(2, '0');
     return '${now.year}-$month-$day';
+  }
+
+  T _unwrap<T>(Result<T> result) {
+    return result.when(
+      success: (data) => data,
+      failure: (failure) => throw StateError(failure.message),
+    );
   }
 
   void _startLiveTicker() {
@@ -241,9 +265,11 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
                     recent: _recent.take(5).toList(),
                   );
                   if (!wide) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [qr, const SizedBox(height: 16), status],
+                    return SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [qr, const SizedBox(height: 16), status],
+                      ),
                     );
                   }
                   return Row(
@@ -405,6 +431,23 @@ class _QrBlock extends StatelessWidget {
             color: theme.colorScheme.error,
             icon: Icons.error_outline_rounded,
             text: 'QR unavailable',
+          ),
+          const SizedBox(height: 8),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              'Online connection required for live QR tokens and scan logs.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: refreshing ? null : onRefresh,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Retry connection'),
           ),
         ],
       ],

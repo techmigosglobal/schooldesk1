@@ -10,14 +10,21 @@ import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_fee_payment_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_fee_payment_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class ParentFeeHub extends StatefulWidget {
-  const ParentFeeHub({super.key});
+  final ParentFeePaymentRepository? repository;
+
+  const ParentFeeHub({super.key, this.repository});
 
   @override
   State<ParentFeeHub> createState() => _ParentFeeHubState();
@@ -25,6 +32,9 @@ class ParentFeeHub extends StatefulWidget {
 
 class _ParentFeeHubState extends State<ParentFeeHub>
     with WidgetsBindingObserver {
+  ParentFeePaymentRepository get _repository =>
+      widget.repository ?? ApiParentFeePaymentRepository.legacyDefault;
+
   static const Duration _autoRefreshInterval = Duration(seconds: 120);
   DateTime? _lastRefreshAt;
   static const _refreshDebounce = Duration(seconds: 10);
@@ -39,8 +49,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   List<Map<String, dynamic>> _childrenData = [];
   List<Map<String, dynamic>> _feeStructure = [];
   List<Map<String, dynamic>> _paymentHistory = [];
-  bool _loading = true;
-  String? _error;
+  RepositoryState<Object> _state = const RepositoryState.loading();
 
   double get _pendingAmount => _feeStructure.fold(
     0.0,
@@ -135,17 +144,24 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       if (elapsed < _refreshDebounce) return;
     }
     _lastRefreshAt = DateTime.now();
+    final previous = _state.data;
     if (showSpinner) {
       setState(() {
-        _loading = true;
-        _error = null;
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
       });
     }
     try {
       final refreshNonce = forceRefresh
           ? DateTime.now().millisecondsSinceEpoch
           : null;
-      final children = await BackendApiClient.instance.getMyStudents(
+      final children = await _repository.loadChildren(
         refreshNonce: refreshNonce,
       );
       final selectedIndex = await ParentChildSelectionService.indexFor(
@@ -162,7 +178,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
 
         final feeRows = studentId.isEmpty
             ? <Map<String, dynamic>>[]
-            : await BackendApiClient.instance.getParentStudentFees(
+            : await _repository.loadStudentFees(
                 studentId,
                 refreshNonce: refreshNonce,
               );
@@ -172,7 +188,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         final invoices = feeRows;
         final paymentRequests = studentId.isEmpty
             ? <Map<String, dynamic>>[]
-            : await BackendApiClient.instance.getParentPaymentRequests(
+            : await _repository.loadPaymentRequests(
                 studentId: studentId,
               );
 
@@ -314,13 +330,22 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         _childrenData = children;
         _feeStructure = feeList;
         _paymentHistory = historyList;
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+              );
       });
     }
   }
@@ -332,7 +357,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       onDestinationSelected: (_) {},
     );
 
-    if (_loading) {
+    if (_state.isLoading && !_state.hasData) {
       return SchoolDeskModuleScaffold(
         title: 'My Fees',
         subtitle: 'Fee overview, balances, and payment history',
@@ -341,7 +366,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       );
     }
 
-    if (_error != null || _childrenData.isEmpty) {
+    if (_state.isError || _childrenData.isEmpty) {
       return SchoolDeskModuleScaffold(
         title: 'My Fees',
         subtitle: 'Fee overview, balances, and payment history',
@@ -353,15 +378,15 @@ class _ParentFeeHubState extends State<ParentFeeHub>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  _error == null
+                  _state.error == null
                       ? 'No linked students. Ask the school admin to link students to this parent account.'
-                      : 'Unable to load fee data: $_error',
+                      : 'Unable to load fee data: ${_state.error}',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.ibmPlexSans(
                     color: context.appTheme.onSurface,
                   ),
                 ),
-                if (_error != null) ...[
+                if (_state.error != null) ...[
                   const SizedBox(height: 12),
                   ElevatedButton(
                     onPressed: () => _loadData(forceRefresh: true),
@@ -385,66 +410,70 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF4FBF8), Color(0xFFF7F8FF)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: () => _loadData(forceRefresh: true),
+        data: (_) => DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFF4FBF8), Color(0xFFF7F8FF)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
           ),
-        ),
-        child: RefreshIndicator(
-          onRefresh: () => _loadData(forceRefresh: true, showSpinner: false),
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 48),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildChildSelector(),
-                const SizedBox(height: 12),
-                _buildHeroBalanceCard(),
-                if (clarification != null) ...[
+          child: RefreshIndicator(
+            onRefresh: () => _loadData(forceRefresh: true, showSpinner: false),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 48),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildChildSelector(),
                   const SizedBox(height: 12),
-                  _buildActionBanner(clarification),
-                ],
-                const SizedBox(height: 16),
-                _buildFeeSectionHeader(),
-                const SizedBox(height: 8),
-                if (_feeStructure.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: context.appTheme.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: context.appTheme.outlineVariant,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.receipt_long_rounded,
-                          color: context.appTheme.muted,
-                          size: 24,
+                  _buildHeroBalanceCard(),
+                  if (clarification != null) ...[
+                    const SizedBox(height: 12),
+                    _buildActionBanner(clarification),
+                  ],
+                  const SizedBox(height: 16),
+                  _buildFeeSectionHeader(),
+                  const SizedBox(height: 8),
+                  if (_feeStructure.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: context.appTheme.surface,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: context.appTheme.outlineVariant,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'No fee invoices published yet.',
-                            style: GoogleFonts.ibmPlexSans(
-                              fontSize: 14,
-                              color: context.appTheme.muted,
-                              fontWeight: FontWeight.w600,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.receipt_long_rounded,
+                            color: context.appTheme.muted,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'No fee invoices published yet.',
+                              style: GoogleFonts.ibmPlexSans(
+                                fontSize: 14,
+                                color: context.appTheme.muted,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  ..._feeStructure.map((fee) => _buildFeeItemCard(fee)),
-              ],
+                        ],
+                      ),
+                    )
+                  else
+                    ..._feeStructure.map((fee) => _buildFeeItemCard(fee)),
+                ],
+              ),
             ),
           ),
         ),
@@ -456,11 +485,15 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     return ParentChildSelector(
       children: _childrenData,
       selectedIndex: _activeChildIndex,
-      isLoading: _loading,
+      isLoading: _state.isLoading,
       onSelected: (index) {
         setState(() {
           _activeChildIndex = index;
-          _loading = true;
+          _state = RepositoryState.loading(
+            data: _state.data,
+            source: _state.source,
+            isRefreshing: true,
+          );
         });
         ParentChildSelectionService.saveIndex(_childrenData, index);
         _loadData();
@@ -636,7 +669,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         ),
         TextButton.icon(
           onPressed: () =>
-              Navigator.pushNamed(context, '/parent/payment-history'),
+              SchoolDeskNavigation.push(context, '/parent/payment-history'),
           icon: const Icon(Icons.history_rounded, size: 16),
           label: const Text('History'),
           style: TextButton.styleFrom(
@@ -989,7 +1022,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         _text(statementGrade['grade_name']),
         _text(statementSection['section_name']),
       ].where((part) => part.isNotEmpty).join(' - ');
-      final school = await BackendApiClient.instance.getCurrentSchool();
+      final school = await _repository.loadCurrentSchool();
       final total = _feeStructure.fold<double>(
         0,
         (sum, fee) => sum + ((fee['totalAmount'] as num?)?.toDouble() ?? 0),
@@ -1059,7 +1092,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     final student = _childrenData.isEmpty
         ? null
         : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       '/parent/payment-flow',
       arguments: ParentPaymentSelectionArgs(fees: [fee], student: student),
@@ -1086,7 +1119,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     final student = _childrenData.isEmpty
         ? null
         : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       '/parent/payment-flow',
       arguments: ParentPaymentSelectionArgs(
@@ -1122,7 +1155,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       return;
     }
 
-    await Navigator.pushNamed(
+    await SchoolDeskNavigation.push(
       context,
       AppRoutes.parentReceipt,
       arguments: ParentPaymentSelectionArgs(

@@ -21,6 +21,11 @@ class RoleAccessService {
 
   static bool get isInitialized => _initialized;
 
+  /// Current session role for presentation guards. Backend session remains
+  /// authoritative; screens must not infer role from local demo state.
+  static String get currentRoleName =>
+      BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
+
   static Future<void> initialize() {
     if (_signedOut) return Future<void>.value();
     final now = DateTime.now();

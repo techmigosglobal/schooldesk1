@@ -100,12 +100,13 @@ void main() {
       final source = File(
         'lib/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart',
       ).readAsStringSync();
+      final repository = File(
+        'lib/roles/parent/data/api_parent_health_repository.dart',
+      ).readAsStringSync();
 
-      expect(source, contains('dio.get('));
-      expect(source, contains('dio.post('));
-      expect(source, contains('dio.patch('));
-      expect(source, contains('dio.delete('));
-      expect(source, contains("'/health-reminders'"));
+      expect(source, contains('_repository.loadReminders'));
+      expect(repository, contains("'/health-reminders'"));
+      expect(repository, contains("'/health-reminders/\$reminderId'"));
       expect(source, contains("'reminder_date'"));
       expect(source, contains('Reminder Date'));
       expect(source, contains('Reminder History'));

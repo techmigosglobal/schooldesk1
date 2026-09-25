@@ -251,6 +251,46 @@ void main() {
     expect(find.text('Server error'), findsOneWidget);
   });
 
+  testWidgets('SchoolDeskStatusPanel exposes a non-color stale state', (
+    tester,
+  ) async {
+    var refreshed = false;
+
+    await tester.pumpWidget(
+      wrap(
+        SchoolDeskStatusPanel.stale(
+          message: 'The latest attendance is not available yet.',
+          onAction: () => refreshed = true,
+        ),
+      ),
+    );
+
+    expect(find.text('Showing saved information'), findsOneWidget);
+    expect(
+      find.text('The latest attendance is not available yet.'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.history_toggle_off_rounded), findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
+
+    await tester.tap(find.text('Refresh'));
+    expect(refreshed, isTrue);
+  });
+
+  testWidgets('online-required banner is accessible and retryable', (
+    tester,
+  ) async {
+    var retried = false;
+    await tester.pumpWidget(
+      wrap(SchoolDeskOnlineRequiredBanner(onRetry: () => retried = true)),
+    );
+
+    expect(find.textContaining('Connect to the internet'), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
+    await tester.tap(find.text('Retry'));
+    expect(retried, isTrue);
+  });
+
   testWidgets('SchoolDeskBreadcrumbs renders route hierarchy compactly', (
     tester,
   ) async {

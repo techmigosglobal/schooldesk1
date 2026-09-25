@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/features/shared/data/models/backend_models.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 
 void main() {
   test('profile model accepts nullable role profile fields for every role', () {

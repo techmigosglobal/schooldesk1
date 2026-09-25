@@ -8,6 +8,8 @@ import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 @immutable
 class SchoolDeskNavigationSection {
   final String label;
@@ -560,13 +562,18 @@ class _NavigationItemTile extends StatelessWidget {
     if (currentRoute == item.route) return;
 
     if (item.resetStack) {
-      navigator.pushNamedAndRemoveUntil(
+      SchoolDeskNavigation.goFromNavigator(
+        navigator,
         item.route!,
-        (route) => false,
+        legacyPredicate: (route) => false,
         arguments: item.arguments,
       );
     } else {
-      navigator.pushNamed(item.route!, arguments: item.arguments);
+      SchoolDeskNavigation.pushFromNavigator(
+        navigator,
+        item.route!,
+        arguments: item.arguments,
+      );
     }
   }
 }
@@ -677,13 +684,18 @@ class _FooterActionTile extends StatelessWidget {
       navigator.pop();
     }
     if (action.resetStack) {
-      navigator.pushNamedAndRemoveUntil(
+      SchoolDeskNavigation.goFromNavigator(
+        navigator,
         action.route!,
-        (route) => false,
+        legacyPredicate: (route) => false,
         arguments: action.arguments,
       );
     } else {
-      navigator.pushNamed(action.route!, arguments: action.arguments);
+      SchoolDeskNavigation.pushFromNavigator(
+        navigator,
+        action.route!,
+        arguments: action.arguments,
+      );
     }
   }
 }

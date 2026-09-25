@@ -1,23 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_leave_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_leave_repository.dart';
 
 class ParentLeaveRequestFormArgs {
   final List<Map<String, dynamic>> children;
   final String initialStudentId;
   final String? initialLeaveType;
+  final List<Map<String, dynamic>> leaveTypes;
+  final ParentLeaveRepository? repository;
 
   const ParentLeaveRequestFormArgs({
     required this.children,
     required this.initialStudentId,
+    this.leaveTypes = const [],
     this.initialLeaveType,
+    this.repository,
   });
 }
 
@@ -40,10 +47,14 @@ class _ParentLeaveRequestFormScreenState
   String _selectedStudentId = '';
   String _selectedLeaveType = '';
   List<String> _leaveTypes = [];
-  bool _loadingLeaveTypes = true;
+  RepositoryState<List<String>> _leaveTypeState =
+      const RepositoryState.loading();
+  RepositoryState<Object> _submitState = const RepositoryState.empty();
+
+  bool get _loadingLeaveTypes => _leaveTypeState.isLoading;
+  bool get _submitting => _submitState.isRefreshing;
   String? _leaveTypeNotice;
   bool _halfDay = false;
-  bool _submitting = false;
   int _selectedNavIndex = ParentNav.leave;
 
   @override
@@ -55,6 +66,13 @@ class _ParentLeaveRequestFormScreenState
     _selectedStudentId = widget.args.initialStudentId;
     if (_selectedStudentId.isEmpty && widget.args.children.isNotEmpty) {
       _selectedStudentId = widget.args.children.first['id']?.toString() ?? '';
+    }
+    if (widget.args.leaveTypes.isNotEmpty) {
+      _leaveTypes = widget.args.leaveTypes
+          .map(_leaveTypeLabel)
+          .where((label) => label.isNotEmpty)
+          .toSet()
+          .toList();
     }
     _loadLeaveTypes();
   }
@@ -81,100 +99,110 @@ class _ParentLeaveRequestFormScreenState
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildStudentDropdown(),
-            const SizedBox(height: 14),
-            _buildLeaveTypeDropdown(),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _dateField(
-                    controller: _fromDateController,
-                    label: 'From date',
+      body: SchoolDeskRepositoryStateView<List<String>>(
+        state: _leaveTypeState,
+        onRetry: _loadLeaveTypes,
+        errorTitle: 'Unable to load leave types',
+        emptyTitle: 'No leave types configured',
+        emptyMessage:
+            _leaveTypeNotice ??
+            'The school has not configured leave types for parent requests.',
+        data: (_) => Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildStudentDropdown(),
+              const SizedBox(height: 14),
+              _buildLeaveTypeDropdown(),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _dateField(
+                      controller: _fromDateController,
+                      label: 'From date',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _dateField(
+                      controller: _toDateController,
+                      label: 'To date',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                value: _halfDay,
+                onChanged: _submitting
+                    ? null
+                    : (value) => setState(() {
+                        _halfDay = value;
+                        if (value) {
+                          _toDateController.text = _fromDateController.text;
+                        }
+                      }),
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Half-day leave',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _dateField(
-                    controller: _toDateController,
-                    label: 'To date',
-                  ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _reasonController,
+                enabled: !_submitting,
+                minLines: 4,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  hintText: 'Write the reason for this leave request',
+                  alignLabelWithHint: true,
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              value: _halfDay,
-              onChanged: _submitting
-                  ? null
-                  : (value) => setState(() {
-                      _halfDay = value;
-                      if (value) {
-                        _toDateController.text = _fromDateController.text;
-                      }
-                    }),
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                'Half-day leave',
-                style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                validator: (value) {
+                  if ((value ?? '').trim().length < 5) {
+                    return 'Enter a clear reason';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed:
+                    _submitting ||
+                        _loadingLeaveTypes ||
+                        _leaveTypes.isEmpty ||
+                        widget.args.children.isEmpty
+                    ? null
+                    : _submit,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: Text(
+                  _submitting ? 'Submitting...' : 'Submit Request',
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _reasonController,
-              enabled: !_submitting,
-              minLines: 4,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                labelText: 'Reason',
-                hintText: 'Write the reason for this leave request',
-                alignLabelWithHint: true,
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _submitting ? null : () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: Text(
+                  'Back to Leave Requests',
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                ),
               ),
-              validator: (value) {
-                if ((value ?? '').trim().length < 5) {
-                  return 'Enter a clear reason';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed:
-                  _submitting ||
-                      _loadingLeaveTypes ||
-                      widget.args.children.isEmpty
-                  ? null
-                  : _submit,
-              icon: _submitting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send_rounded, size: 18),
-              label: Text(
-                _submitting ? 'Submitting...' : 'Submit Request',
-                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
-              ),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _submitting ? null : () => Navigator.pop(context),
-              icon: const Icon(Icons.arrow_back_rounded, size: 18),
-              label: Text(
-                'Back to Leave Requests',
-                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -227,9 +255,16 @@ class _ParentLeaveRequestFormScreenState
         ),
       );
     }
-    final leaveTypes = _leaveTypes.isEmpty
-        ? _defaultParentLeaveTypes()
-        : _leaveTypes;
+    final leaveTypes = _leaveTypes;
+    if (leaveTypes.isEmpty) {
+      return Text(
+        _leaveTypeNotice ?? 'No school leave types are configured.',
+        style: GoogleFonts.dmSans(
+          fontSize: 13,
+          color: context.appTheme.onSurfaceVariant,
+        ),
+      );
+    }
     final selectedValue = leaveTypes.contains(_selectedLeaveType)
         ? _selectedLeaveType
         : leaveTypes.first;
@@ -321,9 +356,11 @@ class _ParentLeaveRequestFormScreenState
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    final selectedLeaveType = _selectedLeaveType.trim().isEmpty
-        ? _defaultParentLeaveTypes().first
-        : _selectedLeaveType.trim();
+    final selectedLeaveType = _selectedLeaveType.trim();
+    if (selectedLeaveType.isEmpty) {
+      _showError('No school leave type is available. Connect and retry.');
+      return;
+    }
     final fromDate = _fromDateController.text.trim();
     final toDate = _toDateController.text.trim();
     final from = DateTime.tryParse(fromDate);
@@ -336,16 +373,30 @@ class _ParentLeaveRequestFormScreenState
       _showError('Half-day leave must use the same from and to date.');
       return;
     }
-    setState(() => _submitting = true);
-    try {
-      await BackendApiClient.instance.submitStudentLeaveApplication(
-        studentId: _selectedStudentId,
-        leaveType: selectedLeaveType,
-        fromDate: fromDate,
-        toDate: toDate,
-        halfDay: _halfDay,
-        reason: _reasonController.text.trim(),
+    setState(() {
+      _submitState = const RepositoryState<Object>.loading(
+        data: Object(),
+        source: RepositorySource.localMutation,
+        isRefreshing: true,
       );
+    });
+    try {
+      final result =
+          await (widget.args.repository ??
+                  ApiParentLeaveRepository.legacyDefault)
+              .submitRequest(
+                studentId: _selectedStudentId,
+                leaveType: selectedLeaveType,
+                fromDate: fromDate,
+                toDate: toDate,
+                halfDay: _halfDay,
+                reason: _reasonController.text.trim(),
+              );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to submit leave request',
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -356,7 +407,9 @@ class _ParentLeaveRequestFormScreenState
       Navigator.pop(context, true);
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _submitting = false);
+      setState(() {
+        _submitState = RepositoryState<Object>.error(error: error);
+      });
       _showError(error.toString());
     }
   }
@@ -372,8 +425,36 @@ class _ParentLeaveRequestFormScreenState
   }
 
   Future<void> _loadLeaveTypes() async {
+    if (widget.args.leaveTypes.isNotEmpty) {
+      final incomingType = widget.args.initialLeaveType?.trim();
+      if (mounted) {
+        setState(() {
+          _selectedLeaveType =
+              incomingType != null && _leaveTypes.contains(incomingType)
+              ? incomingType
+              : _leaveTypes.first;
+          _leaveTypeState = RepositoryState<List<String>>(
+            data: _leaveTypes,
+            source: RepositorySource.remote,
+            phase: _leaveTypes.isEmpty
+                ? RepositoryPhase.empty
+                : RepositoryPhase.ready,
+          );
+        });
+      }
+      return;
+    }
     try {
-      final rows = await BackendApiClient.instance.getLeaveTypes();
+      final result =
+          await (widget.args.repository ??
+                  ApiParentLeaveRepository.legacyDefault)
+              .getLeaveTypes();
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to load school leave types',
+        );
+      }
+      final rows = result.dataOrNull!;
       final configuredLabels = rows
           .map(_leaveTypeLabel)
           .where((label) {
@@ -381,42 +462,37 @@ class _ParentLeaveRequestFormScreenState
           })
           .toSet()
           .toList();
-      final labels = configuredLabels.isEmpty
-          ? _defaultParentLeaveTypes()
-          : configuredLabels;
       final incomingType = widget.args.initialLeaveType?.trim();
       if (!mounted) return;
       setState(() {
-        _leaveTypes = labels;
+        _leaveTypes = configuredLabels;
         _selectedLeaveType =
-            incomingType != null && labels.contains(incomingType)
+            incomingType != null && configuredLabels.contains(incomingType)
             ? incomingType
-            : labels.first;
-        _loadingLeaveTypes = false;
+            : configuredLabels.firstOrNull ?? '';
+        _leaveTypeState = RepositoryState<List<String>>(
+          data: configuredLabels,
+          source: RepositorySource.remote,
+          phase: configuredLabels.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+        );
         _leaveTypeNotice = configuredLabels.isEmpty
-            ? 'Using default parent leave categories because school leave types are not configured yet.'
+            ? 'No school leave types are configured for parent requests.'
             : null;
       });
     } on Object {
       if (!mounted) return;
       setState(() {
-        final labels = _defaultParentLeaveTypes();
-        _leaveTypes = labels;
-        _selectedLeaveType = labels.first;
-        _loadingLeaveTypes = false;
+        _leaveTypes = const [];
+        _selectedLeaveType = '';
+        _leaveTypeState = const RepositoryState<List<String>>.error(
+          error: 'Unable to load school leave types. Connect and retry.',
+        );
         _leaveTypeNotice =
-            'Unable to load configured leave types. Using default parent leave categories.';
+            'Unable to load school leave types. Connect and retry.';
       });
     }
-  }
-
-  List<String> _defaultParentLeaveTypes() {
-    return const [
-      'Sick Leave',
-      'Personal Leave',
-      'Early Pickup',
-      'Special Permission',
-    ];
   }
 
   String _leaveTypeLabel(Map<String, dynamic> row) {

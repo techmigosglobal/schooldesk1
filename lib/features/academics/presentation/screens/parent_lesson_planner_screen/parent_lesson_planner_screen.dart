@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
-import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_lesson_planner_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_lesson_planner_repository.dart';
 
 class ParentLessonPlannerScreen extends StatefulWidget {
-  const ParentLessonPlannerScreen({super.key});
+  const ParentLessonPlannerScreen({super.key, this.repository});
+
+  final ParentLessonPlannerRepository? repository;
 
   @override
   State<ParentLessonPlannerScreen> createState() =>
@@ -15,8 +19,10 @@ class ParentLessonPlannerScreen extends StatefulWidget {
 }
 
 class _ParentLessonPlannerScreenState extends State<ParentLessonPlannerScreen> {
-  bool _loading = true;
-  String? _error;
+  late final ParentLessonPlannerRepository _repository =
+      widget.repository ?? ApiParentLessonPlannerRepository.legacyDefault;
+  RepositoryState<List<dynamic>> _repositoryState =
+      const RepositoryState.loading();
   List<dynamic> _planners = [];
 
   @override
@@ -26,23 +32,42 @@ class _ParentLessonPlannerScreenState extends State<ParentLessonPlannerScreen> {
   }
 
   Future<void> _load() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
-      final planners = await BackendApiClient.instance
-          .getParentLessonPlanners();
+      final planners = await _repository.loadLessonPlanners();
       if (!mounted) return;
       setState(() {
         _planners = planners;
-        _loading = false;
+        _repositoryState = RepositoryState(
+          data: List<dynamic>.unmodifiable(planners),
+          source: RepositorySource.remote,
+          phase: planners.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
-    } on Object {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = 'Unable to load lesson planners.';
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
       });
     }
   }
@@ -59,30 +84,23 @@ class _ParentLessonPlannerScreenState extends State<ParentLessonPlannerScreen> {
           onPressed: _load,
         ),
       ],
-      body: _loading
-          ? const SchoolDeskStatusPanel.loading(
-              message: 'Loading lesson planners',
-            )
-          : _error != null
-          ? SchoolDeskStatusPanel.error(
-              title: 'Unavailable',
-              message: _error!,
-              onAction: _load,
-            )
-          : _planners.isEmpty
-          ? const SchoolDeskStatusPanel.empty(
-              title: 'No lesson planners yet',
-              message:
-                  'Your child\'s teacher has not uploaded any lesson plans yet.',
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _planners.length,
-              itemBuilder: (context, index) {
-                final p = _planners[index];
-                return _PlannerCard(planner: p);
-              },
-            ),
+      body: SchoolDeskRepositoryStateView<List<dynamic>>(
+        state: _repositoryState,
+        onRetry: _load,
+        emptyTitle: 'No lesson planners yet',
+        emptyMessage:
+            'Your child\'s teacher has not uploaded any lesson plans yet.',
+        errorTitle: 'Lesson planners unavailable',
+        loadingMessage: 'Loading lesson planners',
+        data: (_) => ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: _planners.length,
+          itemBuilder: (context, index) {
+            final p = _planners[index];
+            return _PlannerCard(planner: p);
+          },
+        ),
+      ),
     );
   }
 }

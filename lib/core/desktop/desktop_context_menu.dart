@@ -97,10 +97,10 @@ class DesktopContextMenuItem {
   }) : isDivider = false;
 
   const DesktopContextMenuItem.divider()
-      : label = '',
-        icon = null,
-        shortcut = null,
-        onTap = null,
-        enabled = false,
-        isDivider = true;
+    : label = '',
+      icon = null,
+      shortcut = null,
+      onTap = null,
+      enabled = false,
+      isDivider = true;
 }

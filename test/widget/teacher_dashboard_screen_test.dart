@@ -26,7 +26,7 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Arish Ville Preschool'), findsOneWidget);
+    expect(find.text('School'), findsOneWidget);
     expect(find.byType(SchoolDeskIllustratedActionTile), findsWidgets);
   });
 

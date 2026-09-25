@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -13,11 +13,32 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/people/presentation/screens/admin_user_access_screen/account_access_form_screen.dart';
 import 'package:schooldesk1/features/people/presentation/screens/admin_user_access_screen/account_child_assignment_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/modules/people/data/api_user_access_repository.dart';
+import 'package:schooldesk1/modules/people/domain/user_access_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+@immutable
+class _UserAccessSnapshot {
+  const _UserAccessSnapshot({
+    required this.users,
+    required this.activities,
+  });
+
+  final List<Map<String, dynamic>> users;
+  final List<Map<String, dynamic>> activities;
+}
 
 class AdminUserAccessScreen extends StatefulWidget {
   final String ownerRole;
+  final UserAccessRepository? repository;
 
-  const AdminUserAccessScreen({super.key, this.ownerRole = 'admin'});
+  const AdminUserAccessScreen({
+    super.key,
+    this.ownerRole = 'admin',
+    this.repository,
+  });
 
   @override
   State<AdminUserAccessScreen> createState() => _AdminUserAccessScreenState();
@@ -25,15 +46,16 @@ class AdminUserAccessScreen extends StatefulWidget {
 
 class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     with SingleTickerProviderStateMixin {
+  UserAccessRepository get _repository =>
+      widget.repository ?? ApiUserAccessRepository.legacyDefault;
+
   late TabController _tabController;
   String _filterRole = 'All';
   String _statusFilter = 'Active';
   String _searchQuery = '';
-  bool _loading = false;
   bool _loadingMore = false;
   bool _hasMore = false;
-  bool _staleData = false;
-  String? _error;
+  RepositoryState<_UserAccessSnapshot> _state = const RepositoryState.loading();
   int _currentPage = 0;
   int _loadGeneration = 0;
   Timer? _searchDebounce;
@@ -101,22 +123,29 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
 
   Future<void> _loadUsers({bool resetPage = true}) async {
     final generation = ++_loadGeneration;
+    final previous = _state.data;
     final requestedPage = resetPage ? 1 : _currentPage + 1;
     if (mounted) {
       setState(() {
-        _loading = resetPage && _users.isEmpty;
+        if (resetPage) {
+          _state = RepositoryState.loading(
+            data: previous,
+            source: previous == null
+                ? RepositorySource.empty
+                : RepositorySource.cache,
+            isStale: previous != null,
+            isRefreshing: previous != null,
+          );
+        }
         _loadingMore = !resetPage;
-        _error = null;
-        if (resetPage) _staleData = false;
       });
     }
     try {
-      final api = BackendApiClient.instance;
       final roleFilter = _filterRole == 'All' ? null : _filterRole;
       final statusFilter = _statusFilter == 'All'
           ? null
           : _statusFilter.toLowerCase();
-      final res = await api.getUsers(
+      final res = await _repository.loadUsers(
         role: roleFilter,
         status: statusFilter,
         search: _searchQuery,
@@ -156,13 +185,10 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           .where((u) => _manageableRoles.contains(u['role']))
           .toList();
       final activityRows = resetPage
-          ? await api.getRawList(
-              '/audit-logs',
-              queryParameters: const {'page': 1, 'page_size': 20},
-            )
+          ? await _repository.loadActivities()
           : const <Map<String, dynamic>>[];
       final permissionPayload = resetPage && _isSuperAdminOwner
-          ? await api.getAccessPermissions()
+          ? await _repository.loadPermissions()
           : <String, dynamic>{};
       final activities = activityRows.take(20).map((a) {
         final createdAt = DateTime.tryParse('${a['created_at'] ?? ''}');
@@ -197,9 +223,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
         }
         _currentPage = res.page;
         _hasMore = res.hasMore && res.data.isNotEmpty;
-        _loading = false;
         _loadingMore = false;
-        _staleData = false;
         if (resetPage && _isSuperAdminOwner) {
           final roles = permissionPayload['roles'] as List? ?? const [];
           final permissions =
@@ -221,14 +245,29 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                 .toList();
           }
         }
+        _state = RepositoryState(
+          data: _UserAccessSnapshot(
+            users: List.unmodifiable(_users),
+            activities: List.unmodifiable(_activities),
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _error = e.toString();
-        _loading = false;
         _loadingMore = false;
-        _staleData = _users.isNotEmpty;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -297,7 +336,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
             tooltip: 'Open Staff',
             icon: const Icon(Icons.people_alt_outlined),
             onPressed: () =>
-                Navigator.pushNamed(context, AppRoutes.staffManagement),
+                SchoolDeskNavigation.push(context, AppRoutes.staffManagement),
           )
         else
           IconButton(
@@ -314,52 +353,24 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           Tab(text: 'Activity'),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [_buildUsers(), _buildPermissions(), _buildActivity()],
+      body: SchoolDeskRepositoryStateView<_UserAccessSnapshot>(
+        state: _state,
+        onRetry: _loadUsers,
+        emptyTitle: 'No user accounts',
+        emptyMessage: 'No accounts are available for this school scope.',
+        data: (_) => TabBarView(
+          controller: _tabController,
+          children: [_buildUsers(), _buildPermissions(), _buildActivity()],
+        ),
       ),
     );
   }
 
   Widget _buildUsers() {
-    if (_loading && _users.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null && _users.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Failed to load users',
-                style: GoogleFonts.dmSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.dmSans(
-                  fontSize: 11,
-                  color: context.appTheme.muted,
-                ),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(onPressed: _loadUsers, child: const Text('Retry')),
-            ],
-          ),
-        ),
-      );
-    }
     return Column(
       children: [
         if (_isPrincipalOwner) _buildPrincipalAccessNotice(),
         _buildUserFilters(),
-        if (_staleData) _buildStaleUserBanner(),
         Expanded(
           child: _filtered.isEmpty
               ? _buildEmptyUsers()
@@ -424,39 +435,6 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       child: TextButton(
         onPressed: _loadingMore ? null : () => _loadUsers(resetPage: false),
         child: Text(_loadingMore ? 'Loading...' : 'Load more users'),
-      ),
-    );
-  }
-
-  Widget _buildStaleUserBanner() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.cloud_off_rounded,
-            size: 17,
-            color: Colors.orange.shade900,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Showing cached accounts. ${_error ?? 'Refresh failed.'}',
-              style: GoogleFonts.dmSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.orange.shade900,
-              ),
-            ),
-          ),
-          TextButton(onPressed: _loadUsers, child: const Text('Retry')),
-        ],
       ),
     );
   }
@@ -1032,9 +1010,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     );
     if (confirmed != true || !mounted) return;
     try {
-      final result = await BackendApiClient.instance.resetUserCredentials(
-        user['id'].toString(),
-      );
+      final result = await _repository.resetCredentials(user['id'].toString());
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -1067,7 +1043,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     final route = existing == null
         ? AppRoutes.principalAccountCreate
         : AppRoutes.principalAccountEdit;
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       route,
       arguments: AccountAccessFormArgs(
@@ -1091,7 +1067,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   }
 
   Future<void> _openChildAssignment(Map<String, dynamic> u) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.principalParentChildAssignment,
       arguments: AccountChildAssignmentArgs(
@@ -1114,7 +1090,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
 
   Future<void> _setUserActive(Map<String, dynamic> u, bool active) async {
     try {
-      await BackendApiClient.instance.updateUser(
+      await _repository.updateUser(
         u['id'].toString(),
         isActive: active,
       );
@@ -1170,14 +1146,14 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     try {
       final staffId = '${u['staffId'] ?? ''}';
       if (isInactive) {
-        await BackendApiClient.instance.deleteUser(
+        await _repository.deleteUser(
           u['id'].toString(),
           permanent: true,
         );
       } else if ((u['linkedType'] ?? '') == 'staff' && staffId.isNotEmpty) {
-        await BackendApiClient.instance.deleteStaff(staffId);
+        await _repository.deleteLinkedStaff(staffId);
       } else {
-        await BackendApiClient.instance.deleteUser(u['id'].toString());
+        await _repository.deleteUser(u['id'].toString());
       }
       await _loadUsers();
       if (!mounted) return;

@@ -5,18 +5,25 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/widgets/branch_switcher.dart';
 import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
-import 'package:schooldesk1/core/services/token_storage_service.dart';
+import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
+import 'package:schooldesk1/roles/super_admin/data/api_super_admin_dashboard_repository.dart';
+import 'package:schooldesk1/roles/super_admin/domain/super_admin_dashboard_repository.dart';
+import 'package:schooldesk1/roles/super_admin/domain/super_admin_dashboard_snapshot.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
-  const SuperAdminDashboardScreen({super.key});
+  const SuperAdminDashboardScreen({super.key, this.dashboardRepository});
+
+  final SuperAdminDashboardRepository? dashboardRepository;
 
   @override
   State<SuperAdminDashboardScreen> createState() =>
@@ -24,8 +31,8 @@ class SuperAdminDashboardScreen extends StatefulWidget {
 }
 
 class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
-  final _api = BackendApiClient.instance;
-  bool _loading = false;
+  RepositoryState<SuperAdminDashboardSnapshot> _repositoryState =
+      const RepositoryState<SuperAdminDashboardSnapshot>.loading();
   String _adminName = 'Super Admin';
   String _schoolName = 'School System';
   String _systemStatus = 'Online';
@@ -63,24 +70,44 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   }
 
   Future<void> _loadData() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
+      _repositoryState = RepositoryState<SuperAdminDashboardSnapshot>.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
-      // Use the dedicated super_admin dashboard endpoint.
-      final results = await Future.wait([
-        _api.getProfile(),
-        _api.getCurrentSchool(),
-        _api.getDashboard('super_admin', forceRefresh: true),
-        _api.getBranchOverview(),
-      ]);
-
-      final profile = results[0] as UserResponse;
-      final school = results[1] as Map<String, dynamic>;
-      final dashboard = results[2] as Map<String, dynamic>;
+      final result =
+          await (widget.dashboardRepository ??
+                  ApiSuperAdminDashboardRepository.legacyDefault)
+              .load();
+      if (result.isFailure) {
+        final state = RepositoryState.fromResult<SuperAdminDashboardSnapshot>(
+          result,
+          previous: previous.hasData ? previous : null,
+        );
+        if (!mounted) return;
+        setState(() {
+          _repositoryState = state;
+        });
+        return;
+      }
+      final snapshot = result.dataOrNull!;
+      final profile = snapshot.profile;
+      final school = snapshot.school;
+      final dashboard = snapshot.dashboard;
       final sysMetrics = dashboard['system_metrics'] as Map? ?? {};
 
       setState(() {
+        _repositoryState =
+            RepositoryState.fromResult<SuperAdminDashboardSnapshot>(
+              result,
+              previous: previous.hasData ? previous : null,
+            );
         _adminName = profile.name.trim().isEmpty
             ? 'Super Admin'
             : profile.name.trim();
@@ -90,12 +117,17 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         _totalStaff = sysMetrics['total_staff'] as int? ?? 0;
         _totalClasses = sysMetrics['total_classes'] as int? ?? 0;
         _systemStatus = 'Healthy';
-        _branchOverview = results[3] as List<Map<String, dynamic>>;
-        _loading = false;
+        _branchOverview = snapshot.branchOverview;
       });
     } on Object catch (_) {
       setState(() {
-        _loading = false;
+        _repositoryState = RepositoryState<SuperAdminDashboardSnapshot>.error(
+          error: 'Unable to load super admin dashboard.',
+          data: previous.data,
+          source: previous.source,
+          isStale: previous.hasData,
+          lastUpdated: previous.lastUpdated,
+        );
       });
     }
   }
@@ -108,7 +140,16 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       ),
     );
     try {
-      final data = await _api.backupDatabase();
+      final result =
+          await (widget.dashboardRepository ??
+                  ApiSuperAdminDashboardRepository.legacyDefault)
+              .backupDatabase();
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Backup request failed',
+        );
+      }
+      final data = result.dataOrNull!;
       final jsonStr = const JsonEncoder.withIndent('  ').convert(data);
       await Clipboard.setData(ClipboardData(text: jsonStr));
       if (!mounted) return;
@@ -133,114 +174,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     }
   }
 
-  Future<void> _manageDemo() async {
-    try {
-      var account = await _api.getDemoAccount();
-      if (account == null) {
-        final schoolId = await TokenStorageService.getSchoolId();
-        if (schoolId == null || schoolId.isEmpty) {
-          throw StateError(
-            'Select a school before creating the synthetic demo account.',
-          );
-        }
-        account = await _api.createDemoAccount(demoSchoolId: schoolId);
-        if (!mounted) return;
-        await _showDemoCredential(account, created: true);
-        return;
-      }
-      if (!mounted) return;
-      final currentAccount = account;
-      final action = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Shared mobile demo'),
-          content: Text(
-            'Username: ${currentAccount['username']}\nStatus: ${currentAccount['is_enabled'] == true ? 'Enabled' : 'Disabled'}\nPasswords rotate every 72 hours and may be revealed once after rotation.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'reveal'),
-              child: const Text('Reveal once'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(
-                context,
-                currentAccount['is_enabled'] == true ? 'disable' : 'enable',
-              ),
-              child: Text(
-                currentAccount['is_enabled'] == true
-                    ? 'Disable demo'
-                    : 'Enable demo',
-              ),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, 'reset'),
-              child: const Text('Reset now'),
-            ),
-          ],
-        ),
-      );
-      if (action == null) return;
-      if (action == 'enable' || action == 'disable') {
-        await _api.setDemoAccountEnabled(
-          currentAccount['id'].toString(),
-          action == 'enable',
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Demo access ${action == 'enable' ? 'enabled' : 'disabled'}.',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-        return;
-      }
-      final secret = action == 'reset'
-          ? await _api.resetDemoAccount(currentAccount['id'].toString())
-          : await _api.revealDemoAccount(currentAccount['id'].toString());
-      if (mounted) {
-        await _showDemoCredential(secret);
-      }
-    } on Object catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Demo administration failed: $error'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _showDemoCredential(
-    Map<String, dynamic> value, {
-    bool created = false,
-  }) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(
-        created ? 'Demo account created' : 'One-time demo credential',
-      ),
-      content: SelectableText(
-        'Username: ${value['username']}\nPassword: ${value['temporary_password']}\n\nShare this only with approved demo users. This password will not be shown again.',
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('I have shared it securely'),
-        ),
-      ],
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -264,7 +197,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 460),
-                child: _loading
+                child: _repositoryState.isLoading && !_repositoryState.hasData
                     ? const SchoolDeskPageSkeleton(cardCount: 4)
                     : RefreshIndicator(
                         onRefresh: _loadData,
@@ -276,6 +209,19 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                               children: [
                                 _buildHeader(context),
                                 const SizedBox(height: 12),
+                                if (_repositoryState.isOffline)
+                                  SchoolDeskStatusPanel.stale(
+                                    message:
+                                        'Showing saved system data while backend is unavailable.',
+                                    onAction: _loadData,
+                                  ),
+                                if (_repositoryState.isError &&
+                                    !_repositoryState.hasData)
+                                  SchoolDeskStatusPanel.error(
+                                    title: 'Dashboard unavailable',
+                                    message: '${_repositoryState.error}',
+                                    onAction: _loadData,
+                                  ),
                                 BranchSwitcher(
                                   canCreate: true,
                                   onChanged: _loadData,
@@ -325,16 +271,9 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     accent: const Color(0xFF10B981),
                                     cardColor: const Color(0xFFECFDF5),
                                   ),
-                                  _ModuleCard(
-                                    label: 'Mobile Demo',
-                                    onTap: _manageDemo,
-                                    icon: Icons.play_circle_outline_rounded,
-                                    accent: const Color(0xFFC88700),
-                                    cardColor: const Color(0xFFFFF7E5),
-                                  ),
                                 ]),
                                 const SizedBox(height: 22),
-                                _buildSectionTitle('School Oversight'),
+                                _buildSectionTitle('Tenant Controls'),
                                 const SizedBox(height: 12),
                                 _buildGrid([
                                   const _ModuleCard(
@@ -351,20 +290,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     accent: Color(0xFFF4C430),
                                     cardColor: Color(0xFFFEF3C7),
                                   ),
-                                  const _ModuleCard(
-                                    label: 'Staff oversight',
-                                    route: AppRoutes.staffManagement,
-                                    icon: Icons.people_rounded,
-                                    accent: Color(0xFF2563EB),
-                                    cardColor: Color(0xFFEAF4FF),
-                                  ),
-                                  const _ModuleCard(
-                                    label: 'Students list',
-                                    route: AppRoutes.studentOversight,
-                                    icon: Icons.school_rounded,
-                                    accent: Color(0xFF54A9E8),
-                                    cardColor: Color(0xFFEEF7FF),
-                                  ),
                                 ]),
                                 const SizedBox(height: 22),
                                 _buildSectionTitle('Quick Actions'),
@@ -375,13 +300,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     route: AppRoutes.help,
                                     icon: Icons.help_outline_rounded,
                                     accent: Color(0xFF0E5EA8),
-                                    cardColor: Color(0xFFEEF7FF),
-                                  ),
-                                  const _ModuleCard(
-                                    label: 'ID Cards',
-                                    route: AppRoutes.idCardGeneration,
-                                    icon: Icons.badge_rounded,
-                                    accent: Color(0xFF54A9E8),
                                     cardColor: Color(0xFFEEF7FF),
                                   ),
                                 ]),
@@ -491,14 +409,15 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   Icons.help_outline_rounded,
                   color: Colors.white,
                 ),
-                onPressed: () => Navigator.pushNamed(context, AppRoutes.help),
+                onPressed: () =>
+                    SchoolDeskNavigation.push(context, AppRoutes.help),
               ),
               IconButton(
                 icon: const Icon(
                   Icons.notifications_none_rounded,
                   color: Colors.white,
                 ),
-                onPressed: () => Navigator.pushNamed(
+                onPressed: () => SchoolDeskNavigation.push(
                   context,
                   AppRoutes.notificationCenter,
                   arguments: 'super_admin',
@@ -734,7 +653,7 @@ class _ModuleCard extends StatelessWidget {
             onTap ??
             () {
               if (route != null) {
-                Navigator.pushNamed(context, route!);
+                SchoolDeskNavigation.push(context, route!);
               }
             },
         child: Padding(

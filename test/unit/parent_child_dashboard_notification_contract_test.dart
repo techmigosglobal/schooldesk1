@@ -7,11 +7,15 @@ void main() {
     final screen = File(
       'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
     ).readAsStringSync();
+    final repository = File(
+      'lib/roles/parent/data/api_parent_dashboard_repository.dart',
+    ).readAsStringSync();
     final handler = File(
       'supabase/functions/api/handlers/dashboard.ts',
     ).readAsStringSync();
 
-    expect(screen, contains("api.getDashboard('parent'"));
+    expect(repository, contains("_api.getDashboard("));
+    expect(screen, contains('ParentDashboardRepository'));
     expect(screen, isNot(contains('api.getMyStudents(')));
     expect(screen, isNot(contains('api.getCurrentSchool(')));
     expect(screen, contains("_metricNumber(child['unread_messages'])"));
@@ -77,7 +81,7 @@ void main() {
     expect(chat, contains('ParentChildSelectionService.indexFor'));
     expect(
       chat,
-      contains('api.getUnifiedChatConversations(studentId: selectedStudent)'),
+      contains('_repository.loadConversations('),
     );
     expect(chat, isNot(contains("type: 'parent_teacher'")));
     expect(chat, isNot(contains("type: 'principal_parent'")));
@@ -88,7 +92,7 @@ void main() {
       'lib/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart',
     ).readAsStringSync();
 
-    expect(chat, contains('api.getUnifiedChatConversations(monitor: true)'));
+    expect(chat, contains('_repository.loadConversations(monitor: true)'));
     expect(chat, isNot(contains("type: 'parent_teacher'")));
     expect(chat, isNot(contains("type: 'principal_teacher'")));
     expect(chat, isNot(contains("type: 'principal_parent'")));

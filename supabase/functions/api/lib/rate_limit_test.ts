@@ -69,7 +69,7 @@ Deno.test("login policy calls the atomic RPC and surfaces retry metadata", async
 
 Deno.test("rate-limit migration keeps storage private and RPC service-only", async () => {
   const migration = await Deno.readTextFile(
-    new URL("supabase/migrations/20260828183352_database_rate_limits.sql", root),
+    new URL("supabase/migrations/20260830134225_database_rate_limits.sql", root),
   );
 
   assertMatch(

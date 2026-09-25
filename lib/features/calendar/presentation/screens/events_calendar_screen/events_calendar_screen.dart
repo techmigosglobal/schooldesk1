@@ -3,16 +3,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
-
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/modules/calendar/data/api_calendar_repository.dart';
+import 'package:schooldesk1/modules/calendar/domain/calendar_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 enum _EventFilter {
   month,
@@ -32,10 +34,12 @@ enum SchoolCalendarPortal { principal, teacher, parent }
 
 class EventsCalendarScreen extends StatefulWidget {
   final SchoolCalendarPortal portal;
+  final CalendarRepository? repository;
 
   const EventsCalendarScreen({
     super.key,
     this.portal = SchoolCalendarPortal.principal,
+    this.repository,
   });
 
   @override
@@ -43,10 +47,11 @@ class EventsCalendarScreen extends StatefulWidget {
 }
 
 class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
+  late final CalendarRepository _repository =
+      widget.repository ?? ApiCalendarRepository.legacyDefault;
   List<_PrincipalEvent> _events = [];
   List<AcademicYearModel> _academicYears = [];
-  bool _loading = true;
-  String? _error;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   String _query = '';
   String _selectedAcademicYearId = '';
   int _selectedMonth = DateTime.now().month;
@@ -68,22 +73,28 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   Future<void> _loadData() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
-      final years = await api.getAcademicYears();
+      final years = await _repository.loadAcademicYears();
       final selectedYearId = _selectedAcademicYearId.isNotEmpty
           ? _selectedAcademicYearId
           : _currentAcademicYearId(years);
       final results = await Future.wait<List<Map<String, dynamic>>>([
-        api.getEvents(
+        _repository.loadEvents(
           academicYearId: selectedYearId.isEmpty ? null : selectedYearId,
         ),
-        api
-            .getHolidays(
+        _repository
+            .loadHolidays(
               academicYearId: selectedYearId.isEmpty ? null : selectedYearId,
             )
             .catchError((_) => <Map<String, dynamic>>[]),
@@ -92,7 +103,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       final holidayRows = results[1];
       Map<String, dynamic> preferences = const {};
       try {
-        preferences = await api.getCalendarPreferences();
+        preferences = await _repository.loadPreferences();
       } on Object catch (_) {
         // Calendar preferences are optional. A temporary preference failure
         // must not hide the actual event and holiday data.
@@ -148,13 +159,22 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         _selectedDate = effectiveSelectedDate;
         _focusedDay = effectiveSelectedDate;
         _selectedWeekStart = _startOfWeek(effectiveSelectedDate);
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = error.toString();
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
       });
     }
   }
@@ -218,9 +238,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   bool get _canManageEvents {
     if (widget.portal != SchoolCalendarPortal.principal) return false;
-    final role = BackendApiClient.instance.currentRoleName
-        ?.trim()
-        .toLowerCase();
+    final role = _repository.currentRoleName?.trim().toLowerCase();
     return role == null ||
         role.isEmpty ||
         role == 'principal' ||
@@ -228,8 +246,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   bool get _isPrincipal {
-    return BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
-        'principal';
+    return _repository.currentRoleName?.trim().toLowerCase() == 'principal';
   }
 
   AcademicYearModel? get _selectedAcademicYear {
@@ -476,6 +493,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           selectedAcademicYearId: _selectedAcademicYearId,
           initialMonth: _selectedMonth,
           initialDate: initialDate,
+          repository: _repository,
         ),
       ),
     );
@@ -516,6 +534,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           selectedAcademicYearId: _selectedAcademicYearId,
           canManage: _canManageEvents && event.isEventRecord,
           onAction: (action) => _handleEventAction(action, event),
+          repository: _repository,
         ),
       ),
     );
@@ -534,6 +553,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               : event.academicYearId,
           initialMonth: event.start.month,
           event: event,
+          repository: _repository,
         ),
       ),
     );
@@ -634,7 +654,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     controller.dispose();
     if (confirmed != true || !mounted) return;
     try {
-      final result = await BackendApiClient.instance.resetSchoolCalendar();
+      final result = await _repository.resetCalendar();
       await _loadData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -662,7 +682,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     final confirmed = await _confirmDelete(event);
     if (!confirmed) return false;
     try {
-      await BackendApiClient.instance.deleteRaw('/events/${event.id}');
+      await _repository.deleteEvent(event.id);
       if (!mounted) return true;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -687,7 +707,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   Future<bool> _setEventStatus(_PrincipalEvent event, String status) async {
     if (event.id.isEmpty) return false;
     try {
-      await BackendApiClient.instance.updateRaw('/events/${event.id}', {
+      await _repository.updateEvent(event.id, {
         'status': status,
       });
       if (!mounted) return true;
@@ -752,7 +772,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           ? [
               IconButton(
                 tooltip: 'Reset school calendar',
-                onPressed: _loading ? null : _confirmCalendarReset,
+                onPressed: _state.isLoading ? null : _confirmCalendarReset,
                 icon: const Icon(Icons.restart_alt_rounded),
               ),
             ]
@@ -772,52 +792,30 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                     label: const Text('Create event'),
                   )
           : null,
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(child: _buildCalendarSummary()),
-            SliverToBoxAdapter(child: _buildFilters()),
-            if (_loading)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      EmptyStateWidget(
-                        icon: Icons.cloud_off_rounded,
-                        title: 'Unable to load calendar',
-                        description: _error!,
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: _loadData,
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('Retry'),
-                      ),
-                    ],
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadData,
+        data: (_) => RefreshIndicator(
+          onRefresh: _loadData,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(child: _buildCalendarSummary()),
+              SliverToBoxAdapter(child: _buildFilters()),
+              ...[
+                if (_displayMode == _EventsDisplayMode.agenda)
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, compact ? 136 : 88),
+                    sliver: SliverToBoxAdapter(child: _buildAgendaView()),
+                  )
+                else
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, compact ? 136 : 88),
+                    sliver: SliverToBoxAdapter(child: _buildCalendarView()),
                   ),
-                ),
-              )
-            else ...[
-              if (_displayMode == _EventsDisplayMode.agenda)
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 8, 16, compact ? 136 : 88),
-                  sliver: SliverToBoxAdapter(child: _buildAgendaView()),
-                )
-              else
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 8, 16, compact ? 136 : 88),
-                  sliver: SliverToBoxAdapter(child: _buildCalendarView()),
-                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -1739,6 +1737,7 @@ class _EventDetailPage extends StatelessWidget {
   final String selectedAcademicYearId;
   final bool canManage;
   final Future<bool> Function(String action) onAction;
+  final CalendarRepository repository;
 
   const _EventDetailPage({
     required this.event,
@@ -1746,6 +1745,7 @@ class _EventDetailPage extends StatelessWidget {
     required this.selectedAcademicYearId,
     required this.canManage,
     required this.onAction,
+    required this.repository,
   });
 
   @override
@@ -1783,6 +1783,7 @@ class _EventDetailPage extends StatelessWidget {
                     : event.academicYearId,
                 initialMonth: event.start.month,
                 event: event,
+                repository: repository,
               ),
             ),
           );
@@ -1860,6 +1861,7 @@ class _EventFormPage extends StatefulWidget {
   final int initialMonth;
   final DateTime? initialDate;
   final _PrincipalEvent? event;
+  final CalendarRepository repository;
 
   const _EventFormPage({
     required this.academicYears,
@@ -1867,6 +1869,7 @@ class _EventFormPage extends StatefulWidget {
     required this.initialMonth,
     this.initialDate,
     this.event,
+    required this.repository,
   });
 
   @override
@@ -1888,7 +1891,7 @@ class _EventFormPageState extends State<_EventFormPage> {
   late DateTime _endDate;
   TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 10, minute: 0);
-  String? _error;
+  String? _formError;
 
   static const _types = [
     'event',
@@ -1956,27 +1959,29 @@ class _EventFormPageState extends State<_EventFormPage> {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
     if (_academicYearId.isEmpty) {
-      setState(() => _error = 'Create an academic year before adding events.');
+      setState(
+        () => _formError = 'Create an academic year before adding events.',
+      );
       return;
     }
     if (_endDate.isBefore(_startDate)) {
-      setState(() => _error = 'End date cannot be before start date.');
+      setState(() => _formError = 'End date cannot be before start date.');
       return;
     }
     final startDateTime = _combinedDateTime(_startDate, _effectiveStartTime);
     final endDateTime = _combinedDateTime(_endDate, _effectiveEndTime);
     if (!endDateTime.isAfter(startDateTime)) {
-      setState(() => _error = 'End time must be after start time.');
+      setState(() => _formError = 'End time must be after start time.');
       return;
     }
     final yearError = _academicYearRangeError();
     if (yearError != null) {
-      setState(() => _error = yearError);
+      setState(() => _formError = yearError);
       return;
     }
     setState(() {
       _saving = true;
-      _error = null;
+      _formError = null;
     });
     try {
       final payload = {
@@ -1998,9 +2003,9 @@ class _EventFormPageState extends State<_EventFormPage> {
       };
       final eventId = widget.event?.id ?? '';
       if (eventId.isEmpty) {
-        await BackendApiClient.instance.createEventPayload(payload);
+        await widget.repository.createEvent(payload);
       } else {
-        await BackendApiClient.instance.updateRaw('/events/$eventId', payload);
+        await widget.repository.updateEvent(eventId, payload);
       }
       if (mounted) {
         Navigator.pop(
@@ -2015,7 +2020,7 @@ class _EventFormPageState extends State<_EventFormPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Event save failed: $error';
+        _formError = 'Event save failed: $error';
       });
     }
   }
@@ -2261,10 +2266,10 @@ class _EventFormPageState extends State<_EventFormPage> {
                 prefixIcon: Icon(Icons.notes_rounded),
               ),
             ),
-            if (_error != null) ...[
+            if (_formError != null) ...[
               const SizedBox(height: 14),
               Text(
-                _error!,
+                _formError!,
                 style: GoogleFonts.dmSans(
                   color: context.appTheme.error,
                   fontWeight: FontWeight.w700,

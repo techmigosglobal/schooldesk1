@@ -2,11 +2,29 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/modules/communication/domain/entities/notice.dart';
+import 'package:schooldesk1/modules/communication/data/repositories/api_notice_repository.dart';
+import 'package:schooldesk1/modules/communication/domain/repositories/notice_repository.dart';
+import 'package:schooldesk1/modules/people/data/api_staff_directory_repository.dart';
+import 'package:schooldesk1/modules/people/data/api_student_directory_repository.dart';
+import 'package:schooldesk1/modules/people/domain/staff_directory_repository.dart';
+import 'package:schooldesk1/modules/people/domain/student_directory_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class GlobalSearchScreen extends StatefulWidget {
-  const GlobalSearchScreen({super.key});
+  final StudentDirectoryRepository? studentRepository;
+  final StaffDirectoryRepository? staffRepository;
+  final NoticeRepository? noticeRepository;
+
+  const GlobalSearchScreen({
+    super.key,
+    this.studentRepository,
+    this.staffRepository,
+    this.noticeRepository,
+  });
 
   @override
   State<GlobalSearchScreen> createState() => _GlobalSearchScreenState();
@@ -16,7 +34,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _searchCtrl = TextEditingController();
   late TabController _tabController;
-  bool _loading = false;
+  RepositoryState<Object> _state = const RepositoryState(
+    data: Object(),
+    source: RepositorySource.localMutation,
+  );
 
   List<_SearchResult> _studentResults = [];
   List<_SearchResult> _staffResults = [];
@@ -26,6 +47,15 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
   Timer? _searchDebounce;
   int _searchGeneration = 0;
 
+  StudentDirectoryRepository get _studentRepository =>
+      widget.studentRepository ?? ApiStudentDirectoryRepository.legacyDefault;
+
+  StaffDirectoryRepository get _staffRepository =>
+      widget.staffRepository ?? ApiStaffDirectoryRepository.legacyDefault;
+
+  NoticeRepository get _noticeRepository =>
+      widget.noticeRepository ?? ApiNoticeRepository.legacyDefault;
+
   @override
   void initState() {
     super.initState();
@@ -34,9 +64,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
   }
 
   Future<void> _initData() async {
-    final api = BackendApiClient.instance;
-    final notices = await _try(() => api.getAnnouncements());
-    _allNotices = (notices ?? [])
+    final result = await _try(() => _noticeRepository.getNotices());
+    final notices = result?.dataOrNull ?? const <Notice>[];
+    _allNotices = notices
         .map(
           (notice) => {
             'id': notice.id,
@@ -84,14 +114,25 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
     }
 
     setState(() {
-      _loading = true;
+      _state = RepositoryState.loading(
+        data: _state.data,
+        source: _state.source,
+        isRefreshing: true,
+      );
     });
     final generation = ++_searchGeneration;
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait([
-        api.getStudents(search: query.trim(), page: 1, pageSize: 20),
-        api.getStaff(search: query.trim(), page: 1, pageSize: 20),
+        _studentRepository.loadStudents(
+          search: query.trim(),
+          page: 1,
+          pageSize: 20,
+        ),
+        _staffRepository.loadStaff(
+          search: query.trim(),
+          page: 1,
+          pageSize: 20,
+        ),
       ]);
       if (!mounted || generation != _searchGeneration) return;
       final students = results[0] as PaginatedList<StudentModel>;
@@ -159,12 +200,15 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
               ),
             )
             .toList();
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (_) {
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
-        _loading = false;
+        _state = RepositoryState.error(error: 'Search failed. Please retry.');
         _studentResults = [];
         _staffResults = [];
         _noticeResults = [];
@@ -251,42 +295,46 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
           ],
         ),
       ),
-      body: _searchCtrl.text.isEmpty
-          ? _buildEmptyState(onSurfaceColor, mutedColor, outlineColor)
-          : _loading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildAllResults(
-                  surfaceColor,
-                  onSurfaceColor,
-                  mutedColor,
-                  outlineColor,
-                ),
-                _buildResultList(
-                  _studentResults,
-                  surfaceColor,
-                  onSurfaceColor,
-                  mutedColor,
-                  outlineColor,
-                ),
-                _buildResultList(
-                  _staffResults,
-                  surfaceColor,
-                  onSurfaceColor,
-                  mutedColor,
-                  outlineColor,
-                ),
-                _buildResultList(
-                  _noticeResults,
-                  surfaceColor,
-                  onSurfaceColor,
-                  mutedColor,
-                  outlineColor,
-                ),
-              ],
-            ),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: () => _searchServer(_searchCtrl.text),
+        data: (_) => _searchCtrl.text.isEmpty
+            ? _buildEmptyState(onSurfaceColor, mutedColor, outlineColor)
+            : _state.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildAllResults(
+                    surfaceColor,
+                    onSurfaceColor,
+                    mutedColor,
+                    outlineColor,
+                  ),
+                  _buildResultList(
+                    _studentResults,
+                    surfaceColor,
+                    onSurfaceColor,
+                    mutedColor,
+                    outlineColor,
+                  ),
+                  _buildResultList(
+                    _staffResults,
+                    surfaceColor,
+                    onSurfaceColor,
+                    mutedColor,
+                    outlineColor,
+                  ),
+                  _buildResultList(
+                    _noticeResults,
+                    surfaceColor,
+                    onSurfaceColor,
+                    mutedColor,
+                    outlineColor,
+                  ),
+                ],
+              ),
+      ),
     );
   }
 

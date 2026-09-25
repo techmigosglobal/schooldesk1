@@ -5,29 +5,24 @@ import 'package:flutter/semantics.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:schooldesk1/core/app_export.dart';
+import 'package:schooldesk1/app/app.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
-import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/desktop/desktop_window_manager.dart';
-import 'package:schooldesk1/core/desktop/desktop_layout_wrapper.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/di/service_locator.dart';
 import 'package:schooldesk1/firebase_runtime_options.dart';
-import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
-import 'package:schooldesk1/core/offline/offline_status_banner.dart';
 import 'package:schooldesk1/core/offline/offline_background_sync.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/error_reporting_service.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
-import 'package:schooldesk1/core/services/demo_sandbox_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/theme_provider.dart';
-import 'package:schooldesk1/core/widgets/animated_startup_splash.dart';
 import 'package:schooldesk1/core/widgets/custom_error_widget.dart';
 
 SemanticsHandle? _appSemanticsHandle;
@@ -87,7 +82,6 @@ void main() async {
   );
 
   await BackendApiClient.initialize();
-  await _restoreLocalDemoSessionIfNeeded();
   if (EnvConfig.enableLogging) {
     developer.log(
       '[API CONFIG] Backend attached: ${BackendApiClient.instance.baseUrl}',
@@ -119,50 +113,19 @@ void main() async {
   ErrorWidget.builder = buildSchoolDeskErrorWidget;
 
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
-        ChangeNotifierProvider<AppSettingsProvider>.value(
-          value: appSettingsProvider,
-        ),
-      ],
-      child: const AppProviders(child: MyApp()),
+    ProviderScope(
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
+          ChangeNotifierProvider<AppSettingsProvider>.value(
+            value: appSettingsProvider,
+          ),
+        ],
+        child: const AppProviders(child: MyApp()),
+      ),
     ),
   );
   _deferStartupServices();
-}
-
-/// Restores only a verified fictional demo snapshot. This has no production
-/// token, no stored demo password, and routes subsequent operational calls to
-/// the on-device façade rather than the backend.
-Future<void> _restoreLocalDemoSessionIfNeeded() async {
-  final sandbox = DemoSandboxService.instance;
-  if (!await sandbox.isActive()) return;
-
-  final stored = await sandbox.snapshot();
-  if (stored == null) {
-    await sandbox.end();
-    return;
-  }
-
-  final selectedRole = (await sandbox.selectedRole())?.trim().toLowerCase();
-  const selectableRoles = {'principal', 'teacher', 'parent'};
-  if (selectedRole == null || !selectableRoles.contains(selectedRole)) {
-    DemoLocalApiService.instance.awaitRoleSelection();
-    return;
-  }
-
-  final nestedSnapshot = stored['snapshot'];
-  final snapshot = nestedSnapshot is Map
-      ? Map<String, dynamic>.from(nestedSnapshot)
-      : stored;
-  DemoLocalApiService.instance.start(role: selectedRole, snapshot: snapshot);
-  BackendApiClient.instance.beginLocalDemoSession(
-    role: selectedRole,
-    userId: DemoLocalApiService.localUserId,
-    schoolId: DemoLocalApiService.localSchoolId,
-  );
-  RoleAccessService.resetSignOutGuard();
 }
 
 /// The application-wide error boundary is deliberately a pure builder so every
@@ -211,15 +174,10 @@ Future<void> _withRetry(
 
 Future<void> _initializeDeferredStartupServices() async {
   // Session restore and role init are retried with backoff (network-dependent).
-  // A demo deliberately has no live session to restore. In particular, do not
-  // let a stale production token replace its local role after startup.
-  if (!DemoLocalApiService.instance.isActive &&
-      !DemoLocalApiService.instance.isAwaitingRoleSelection) {
-    await _withRetry(
-      BackendApiClient.instance.restoreStoredSession,
-      name: 'restoreStoredSession',
-    );
-  }
+  await _withRetry(
+    BackendApiClient.instance.restoreStoredSession,
+    name: 'restoreStoredSession',
+  );
   await _withRetry(
     RoleAccessService.initialize,
     name: 'RoleAccessService.initialize',
@@ -303,72 +261,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final appSettingsProvider = context.watch<AppSettingsProvider>();
-    return Sizer(
-      builder: (context, orientation, screenType) {
-        return MaterialApp(
-          title: AppConstants.schoolName,
-          navigatorKey: PushNotificationService.navigatorKey,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: themeProvider.themeMode,
-          builder: (context, child) {
-            final mediaQuery = MediaQuery.of(context);
-            final effectiveTextScale = mediaQuery.textScaler.scale(
-              appSettingsProvider.appTextScaleFactor,
-            );
-            return MediaQuery(
-              data: mediaQuery.copyWith(
-                textScaler: TextScaler.linear(effectiveTextScale).clamp(
-                  maxScaleFactor: SchoolDeskResponsive.maxSupportedTextScale,
-                ),
-              ),
-              child: DesktopLayoutWrapper(
-                child: OfflineStatusBanner(
-                  child: AnimatedStartupSplash(child: child!),
-                ),
-              ),
-            );
-          },
-          debugShowCheckedModeBanner: false,
-          initialRoute: DemoLocalApiService.instance.isAwaitingRoleSelection
-              ? AppRoutes.demoRoleSelector
-              : RouteAccessGuard.initialRouteFor(
-                  isAuthenticated: BackendApiClient.instance.isAuthenticated,
-                  currentRole: BackendApiClient.instance.currentRoleName,
-                ),
-          onGenerateRoute: (settings) {
-            final routeName = settings.name;
-            final builder = AppRoutes.routes[routeName];
-
-            if (builder == null) return null;
-
-            final redirectRoute = RouteAccessGuard.redirectFor(
-              routeName: routeName,
-              isAuthenticated: BackendApiClient.instance.isAuthenticated,
-              currentRole: BackendApiClient.instance.currentRoleName,
-            );
-            if (redirectRoute != null) {
-              return MaterialPageRoute(
-                settings: RouteSettings(name: redirectRoute),
-                builder: (context) => AppRoutes.buildRoutePage(
-                  context,
-                  routeName: redirectRoute,
-                  routeBuilder: AppRoutes.routes[redirectRoute]!,
-                ),
-              );
-            }
-
-            return MaterialPageRoute(
-              settings: settings,
-              builder: (context) => AppRoutes.buildRoutePage(
-                context,
-                routeName: routeName!,
-                routeBuilder: builder,
-              ),
-            );
-          },
-        );
-      },
+    return SchoolDeskApp(
+      themeMode: themeProvider.themeMode,
+      textScaleFactor: appSettingsProvider.appTextScaleFactor,
     );
   }
 }

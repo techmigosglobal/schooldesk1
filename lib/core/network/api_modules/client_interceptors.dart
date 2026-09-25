@@ -30,30 +30,12 @@ extension BackendAuthenticatedCache on BackendApiClient {
       _activeBranchId ?? 'no-branch',
       _currentRoleName ?? 'no-role',
     ].join('|');
-    final scopedUri = normalizedUri.replace(
-      fragment: 'schooldesk-cache-scope=${Uri.encodeComponent(scope)}',
-    );
-    return CacheOptions.defaultCacheKeyBuilder(
-      RequestOptions(path: scopedUri.toString()),
-    );
+    return '${normalizedUri.toString()}#schooldesk-cache-scope='
+        '${Uri.encodeComponent(scope)}';
   }
 
   String cacheKeyForRequest(RequestOptions request) =>
       _authenticatedCacheKey(request);
-}
-
-// ─── Auth Interceptor ─────────────────────────────────────────────────────────
-
-class _DemoLocalApiInterceptor extends Interceptor {
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    final demo = DemoLocalApiService.instance;
-    if (!demo.isActive || options.path.startsWith('/demo/')) {
-      handler.next(options);
-      return;
-    }
-    handler.resolve(demo.responseFor(options));
-  }
 }
 
 class _AuthInterceptor extends Interceptor {
@@ -85,85 +67,6 @@ class _AuthInterceptor extends Interceptor {
     return apiOrigin == null ||
         uri.host.toLowerCase() != apiOrigin.host.toLowerCase() ||
         uri.port != apiOrigin.port;
-  }
-}
-
-// ─── Read Cache Interceptor ───────────────────────────────────────────────────
-
-class _ReadCacheOptionsInterceptor extends Interceptor {
-  final BackendApiClient _client;
-
-  _ReadCacheOptionsInterceptor(this._client);
-
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    final cacheOptions = _client._cacheOptions;
-    if (cacheOptions == null ||
-        !_client.isAuthenticated ||
-        (_client.currentUserId?.trim().isEmpty ?? true) ||
-        options.method.toUpperCase() != 'GET' ||
-        !_isCacheablePath(options.path)) {
-      handler.next(options);
-      return;
-    }
-
-    options.extra.addAll(
-      cacheOptions
-          .copyWith(
-            maxStale: Nullable(_ttlForPath(options.path)),
-            policy: _policyForRequest(options),
-            // Drift owns offline fallback. Do not let the legacy Hive cache
-            // resolve transport errors before OfflineDioInterceptor can read
-            // the account/branch/role-scoped SQLite snapshot.
-            hitCacheOnErrorExcept: const Nullable<List<int>>(null),
-          )
-          .toExtra(),
-    );
-    handler.next(options);
-  }
-
-  bool _isCacheablePath(String path) {
-    final clean = path.toLowerCase();
-    // Keep authentication, mutation-like GETs, and short-lived operational
-    // endpoints out of the offline snapshot. Other authenticated GETs are
-    // read models and should remain available when the device temporarily
-    // loses connectivity; a narrow allow-list made whole feature areas blank
-    // even though their data had already been loaded once.
-    if ((clean.contains('/auth/') && !clean.contains('/auth/profile')) ||
-        clean.contains('/uploads') ||
-        // Payment-request responses may contain expiring proof URLs. Historical
-        // /fees/payments reads are safe to cache for parent history/receipts.
-        clean.contains('/payment-requests') ||
-        clean.contains('/attendance/staff/qr-token')) {
-      return false;
-    }
-    return !clean.contains('/health');
-  }
-
-  Duration _ttlForPath(String path) {
-    final clean = path.toLowerCase();
-    if (clean.contains('/academic-years') ||
-        clean.contains('/grades') ||
-        clean.contains('/sections') ||
-        clean.contains('/subjects')) {
-      return const Duration(days: 30);
-    }
-    if (clean.contains('/dashboard/')) return const Duration(days: 1);
-    if (clean.contains('/leave/') || clean.contains('/student-leave/')) {
-      return const Duration(hours: 6);
-    }
-    if (clean.contains('/attendance/')) return const Duration(hours: 6);
-    if (clean.contains('/fees/')) return const Duration(hours: 12);
-    return const Duration(days: 7);
-  }
-
-  CachePolicy _policyForRequest(RequestOptions options) {
-    final isExplicitRefresh =
-        options.extra[_forceRefreshCacheExtraKey] == true ||
-        options.queryParameters.containsKey('refresh_nonce');
-    return isExplicitRefresh
-        ? CachePolicy.refreshForceCache
-        : CachePolicy.refresh;
   }
 }
 

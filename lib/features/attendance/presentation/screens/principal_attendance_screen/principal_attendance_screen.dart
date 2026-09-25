@@ -7,16 +7,52 @@ import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/constants/app_constants.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_attendance_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_attendance_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 enum _AttendanceView { staff, students, classes, monitor, reports }
 
+final class _PrincipalAttendanceSnapshot {
+  const _PrincipalAttendanceSnapshot({
+    required this.staffAttendance,
+    required this.monthlyStaffAttendance,
+    required this.staff,
+    required this.staffDailySummary,
+    required this.sections,
+    required this.sessions,
+    required this.monthlySessions,
+  });
+
+  final List<StaffAttendanceModel> staffAttendance;
+  final List<StaffAttendanceModel> monthlyStaffAttendance;
+  final List<StaffModel> staff;
+  final Map<String, dynamic> staffDailySummary;
+  final List<SectionModel> sections;
+  final List<AttendanceSessionModel> sessions;
+  final List<AttendanceSessionModel> monthlySessions;
+
+  bool get isEmpty =>
+      staffAttendance.isEmpty &&
+      monthlyStaffAttendance.isEmpty &&
+      staff.isEmpty &&
+      sections.isEmpty &&
+      sessions.isEmpty &&
+      monthlySessions.isEmpty;
+}
+
 class PrincipalAttendanceScreen extends StatefulWidget {
-  const PrincipalAttendanceScreen({super.key});
+  final PrincipalAttendanceRepository? repository;
+
+  const PrincipalAttendanceScreen({super.key, this.repository});
 
   @override
   State<PrincipalAttendanceScreen> createState() =>
@@ -24,10 +60,13 @@ class PrincipalAttendanceScreen extends StatefulWidget {
 }
 
 class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
-  bool _loading = true;
+  PrincipalAttendanceRepository get _repository =>
+      widget.repository ?? ApiPrincipalAttendanceRepository.legacyDefault;
+
+  RepositoryState<_PrincipalAttendanceSnapshot> _repositoryState =
+      const RepositoryState.loading();
   bool _detailLoading = false;
   bool _exporting = false;
-  String? _error;
   String _search = '';
   _AttendanceView _view = _AttendanceView.staff;
   String _selectedSectionId = '';
@@ -79,7 +118,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     setState(() => _loadingMoreSessions = true);
     try {
       final nextPage = monthly ? _monthlySessionsPage + 1 : _sessionsPage + 1;
-      final page = await BackendApiClient.instance.getAttendanceSessionsPage(
+      final page = await _repository.loadSessions(
         startDate: monthly ? _monthStartText : null,
         endDate: monthly ? _monthEndText : null,
         date: monthly ? null : _selectedDateText,
@@ -106,8 +145,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       if (!mounted) return;
       setState(() {
         _loadingMoreSessions = false;
-        _error = 'Unable to load more attendance sessions. $error';
       });
+      _showSnack('Unable to load more attendance sessions. $error');
     }
   }
 
@@ -130,10 +169,10 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     if (!_isViewingToday) return;
     try {
       final results = await Future.wait<Object>([
-        BackendApiClient.instance.getStaffAttendanceForDate(
+        _repository.loadStaffAttendance(
           date: _selectedDateText,
         ),
-        BackendApiClient.instance.getStaffDailyAttendanceSummary(
+        _repository.loadStaffDailySummary(
           date: _selectedDateText,
         ),
       ]);
@@ -148,26 +187,31 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   Future<void> _load() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getStaffAttendanceForDate(date: _selectedDateText),
-        api.getStaffAttendanceForDate(
+        _repository.loadStaffAttendance(date: _selectedDateText),
+        _repository.loadStaffAttendance(
           startDate: _monthStartText,
           endDate: _monthEndText,
         ),
-        api.getStaff(page: 1, pageSize: 100, status: 'active'),
-        api.getSections(),
-        api.getAttendanceSessionsPage(date: _selectedDateText),
-        api.getAttendanceSessionsPage(
+        _repository.loadStaff(page: 1, pageSize: 100, status: 'active'),
+        _repository.loadSections(),
+        _repository.loadSessions(date: _selectedDateText),
+        _repository.loadSessions(
           startDate: _monthStartText,
           endDate: _monthEndText,
         ),
-        api.getStaffDailyAttendanceSummary(date: _selectedDateText),
+        _repository.loadStaffDailySummary(date: _selectedDateText),
       ]);
       final sections = results[3] as List<SectionModel>;
       if (!mounted) return;
@@ -190,7 +234,23 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                 sections.any((section) => section.id == _selectedSectionId)
             ? _selectedSectionId
             : (sections.isEmpty ? '' : sections.first.id);
-        _loading = false;
+        final snapshot = _PrincipalAttendanceSnapshot(
+          staffAttendance: _staffAttendance,
+          monthlyStaffAttendance: _monthlyStaffAttendance,
+          staff: _staff,
+          staffDailySummary: _staffDailySummary,
+          sections: _sections,
+          sessions: _sessions,
+          monthlySessions: _monthlySessions,
+        );
+        _repositoryState = RepositoryState(
+          data: snapshot,
+          source: RepositorySource.remote,
+          phase: snapshot.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
       if (_selectedSectionId.isNotEmpty) {
         await _loadSectionStudents(_selectedSectionId);
@@ -198,8 +258,16 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load attendance dashboard. $error';
-        _loading = false;
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                phase: RepositoryPhase.ready,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
       });
     }
   }
@@ -220,7 +288,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     }
     setState(() => _detailLoading = true);
     try {
-      final response = await BackendApiClient.instance.getStudents(
+      final response = await _repository.loadStudents(
         sectionId: sectionId,
         page: 1,
         pageSize: 100,
@@ -254,12 +322,11 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       _detailLoading = true;
     });
     try {
-      final records = await BackendApiClient.instance
-          .getStudentAttendanceRecords(
-            studentId,
-            month: _selectedDate.month,
-            year: _selectedDate.year,
-          );
+      final records = await _repository.loadStudentAttendanceRecords(
+        studentId,
+        month: _selectedDate.month,
+        year: _selectedDate.year,
+      );
       if (!mounted) return;
       setState(() {
         _recordsByStudent[studentId] = records;
@@ -285,12 +352,11 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     final results = await Future.wait(
       missing.map((student) async {
         try {
-          final records = await BackendApiClient.instance
-              .getStudentAttendanceRecords(
-                student.id,
-                month: _selectedDate.month,
-                year: _selectedDate.year,
-              );
+          final records = await _repository.loadStudentAttendanceRecords(
+            student.id,
+            month: _selectedDate.month,
+            year: _selectedDate.year,
+          );
           return _StudentRecordLoad.success(student.id, records);
         } on Object catch (error) {
           return _StudentRecordLoad.failure(student.id, error);
@@ -321,18 +387,21 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       child: Scaffold(
         backgroundColor: context.appTheme.background,
         body: SafeArea(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-              ? _errorView()
-              : Column(
-                  children: [
-                    _topBar(),
-                    _modePicker(),
-                    _dateNavigator(),
-                    Expanded(child: _viewPage(_activePrincipalView())),
-                  ],
-                ),
+          child: SchoolDeskRepositoryStateView<_PrincipalAttendanceSnapshot>(
+            state: _repositoryState,
+            onRetry: _load,
+            emptyTitle: 'No attendance data yet',
+            emptyMessage: 'No attendance records exist for this school scope.',
+            errorTitle: 'Attendance data unavailable',
+            data: (_) => Column(
+              children: [
+                _topBar(),
+                _modePicker(),
+                _dateNavigator(),
+                Expanded(child: _viewPage(_activePrincipalView())),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -359,46 +428,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 88)),
         ],
       ),
-    );
-  }
-
-  Widget _errorView() {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(22),
-      children: [
-        _topBar(),
-        const SizedBox(height: 32),
-        _SoftCard(
-          child: Column(
-            children: [
-              const Icon(
-                Icons.cloud_off_rounded,
-                color: Color(0xFFEF4444),
-                size: 36,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Attendance data unavailable',
-                style: _UiText.title,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                style: _UiText.caption,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _load,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -440,7 +469,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   void _openClassHubSetup() {
-    Navigator.of(context).pushNamed(
+    SchoolDeskNavigation.push(
+      context,
       AppRoutes.principalClasses,
       arguments: {
         'source': 'principal_attendance',
@@ -1300,7 +1330,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     );
     if (reason == null || reason.trim().isEmpty) return;
     try {
-      await BackendApiClient.instance.reopenAttendanceSession(
+      await _repository.reopenSession(
         session.id,
         reason: reason.trim(),
       );
@@ -1351,8 +1381,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     final normalizedFormat = format == 'zip' ? 'pdf' : format.toLowerCase();
     try {
       final rows = _studentReportRows();
-      final export = await BackendApiClient.instance.createReportExport(
-        '/attendance/reports/exports',
+      final export = await _repository.createReportExport(
+        path: '/attendance/reports/exports',
         reportTitle: title,
         format: normalizedFormat == 'csv' ? 'csv' : 'pdf',
         reportType: 'attendance',

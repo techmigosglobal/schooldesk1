@@ -1,16 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_timetable_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_timetable_repository.dart';
+
+final class _ParentTimetableSnapshot {
+  const _ParentTimetableSnapshot({
+    required this.childRows,
+    required this.slots,
+  });
+
+  final List<Map<String, dynamic>> childRows;
+  final List<dynamic> slots;
+}
 
 class ParentTimetableScreen extends StatefulWidget {
-  const ParentTimetableScreen({super.key});
+  final ParentTimetableRepository? repository;
+
+  const ParentTimetableScreen({super.key, this.repository});
 
   @override
   State<ParentTimetableScreen> createState() => _ParentTimetableScreenState();
@@ -25,7 +40,8 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
   List<String> _childIds = [];
   List<Map<String, dynamic>> _childRows = [];
   List<dynamic> _allSlots = [];
-  bool _loading = true;
+  RepositoryState<_ParentTimetableSnapshot> _repositoryState =
+      const RepositoryState.loading();
   int _selectedDay = 1; // 1 = Monday, 2 = Tuesday, ..., 7 = Sunday.
 
   // Monotonically increasing token. Each _loadChildTimetable call captures the
@@ -57,9 +73,24 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
+    final previous = _repositoryState;
+    setState(() {
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
+    });
     try {
-      final childrenResponse = await BackendApiClient.instance.getMyStudents();
+      final childrenResult = await _repository.loadChildren();
+      final childrenResponse = childrenResult.dataOrNull;
+      if (childrenResponse == null) {
+        throw StateError(
+          childrenResult.failureOrNull?.message ?? 'Unable to load children',
+        );
+      }
       final childLabels = childrenResponse.map((c) {
         final first = (c['first_name'] ?? '').toString();
         final last = (c['last_name'] ?? '').toString();
@@ -87,14 +118,44 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
             .map((child) => Map<String, dynamic>.from(child))
             .toList();
         _activeChildIndex = selectedIndex;
+        _repositoryState = RepositoryState.loading(
+          data: _ParentTimetableSnapshot(
+            childRows: List.unmodifiable(_childRows),
+            slots: List.unmodifiable(_allSlots),
+          ),
+          source: RepositorySource.remote,
+          isRefreshing: _childIds.isNotEmpty,
+          lastUpdated: previous.lastUpdated,
+        );
       });
       if (_children.isNotEmpty && _childIds.isNotEmpty) {
         await _loadChildTimetable(selectedIndex);
       } else {
-        setState(() => _loading = false);
+        setState(() {
+          _repositoryState = RepositoryState(
+            data: _ParentTimetableSnapshot(
+              childRows: List.unmodifiable(_childRows),
+              slots: const [],
+            ),
+            source: RepositorySource.remote,
+            lastUpdated: DateTime.now().toUtc(),
+          );
+        });
       }
     } on Object catch (e) {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _repositoryState = previous.hasData
+              ? RepositoryState(
+                  data: previous.data,
+                  source: RepositorySource.cache,
+                  isStale: true,
+                  error: e,
+                  lastUpdated: previous.lastUpdated,
+                )
+              : RepositoryState.error(error: e);
+        });
+      }
       _showErrorSnackBar('Failed to load child list: $e');
     }
   }
@@ -105,7 +166,16 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
     // before this await resolves, _loadToken will have been incremented and
     // the stale result is silently discarded.
     final token = ++_loadToken;
-    setState(() => _loading = true);
+    final previous = _repositoryState;
+    setState(() {
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
+    });
     try {
       final child = _childRows[childIndex];
       final sectionId = _stringValue(
@@ -113,20 +183,43 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
       );
       final response = sectionId.isEmpty
           ? <Map<String, dynamic>>[]
-          : await BackendApiClient.instance.getTimetableSlots(
+          : (await _repository.loadSlots(
               sectionId: sectionId,
+            )).when(
+              success: (slots) => slots,
+              failure: (failure) => throw StateError(failure.message),
             );
       if (!mounted || token != _loadToken) return; // stale load — discard
       setState(() {
         _allSlots = response;
-        _loading = false;
+        _repositoryState = RepositoryState(
+          data: _ParentTimetableSnapshot(
+            childRows: List.unmodifiable(_childRows),
+            slots: List.unmodifiable(response),
+          ),
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (!mounted || token != _loadToken) return;
-      setState(() => _loading = false);
+      setState(() {
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: e);
+      });
       _showErrorSnackBar('Failed to load child timetable: $e');
     }
   }
+
+  ParentTimetableRepository get _repository =>
+      widget.repository ?? ApiParentTimetableRepository.legacyDefault;
 
   void _showErrorSnackBar(String message) {
     if (mounted) {
@@ -201,25 +294,30 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
           tooltip: 'Refresh schedule',
         ),
       ],
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildChildSelector(),
-                  const SizedBox(height: 16),
-                  _buildDaySelector(),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: _daySlots.isEmpty
-                        ? _buildEmptyState()
-                        : _buildPeriodsList(),
-                  ),
-                ],
+      body: SchoolDeskRepositoryStateView<_ParentTimetableSnapshot>(
+        state: _repositoryState,
+        onRetry: _loadData,
+        emptyTitle: 'No timetable data',
+        emptyMessage: 'No timetable is available for this child scope.',
+        errorTitle: 'Timetable unavailable',
+        data: (_) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildChildSelector(),
+              const SizedBox(height: 16),
+              _buildDaySelector(),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _daySlots.isEmpty
+                    ? _buildEmptyState()
+                    : _buildPeriodsList(),
               ),
-            ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

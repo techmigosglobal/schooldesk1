@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -14,16 +12,25 @@ import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highl
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/teacher_dashboard_desktop_shell.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_preview.dart';
-import 'package:schooldesk1/features/shared/data/models/school_feed_models.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_dashboard_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_dashboard_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_dashboard_snapshot.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final bool loadData;
   final List<Map<String, dynamic>> initialTimetable;
+  final TeacherDashboardRepository? dashboardRepository;
 
   const TeacherDashboardScreen({
     super.key,
     this.loadData = true,
     this.initialTimetable = const [],
+    this.dashboardRepository,
   });
 
   @override
@@ -31,9 +38,7 @@ class TeacherDashboardScreen extends StatefulWidget {
 }
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
-  bool _loading = false;
   late bool _roleScopeLoaded;
-  String? _error;
   String _teacherName = 'Teacher';
   String _assignedClass = 'Not assigned';
   String _assignedSubject = 'General';
@@ -46,6 +51,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   List<Map<String, dynamic>> _eventPosts = const [];
   String? _feedError;
   bool _feedStale = false;
+  RepositoryState<TeacherDashboardSnapshot> _repositoryState =
+      const RepositoryState<TeacherDashboardSnapshot>.loading();
   RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
@@ -57,6 +64,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         .toList();
     if (widget.loadData) {
       _loadDashboardData();
+    } else {
+      _repositoryState = const RepositoryState<TeacherDashboardSnapshot>(
+        data: TeacherDashboardSnapshot(
+          announcements: [],
+          myAttendance: null,
+          feed: null,
+        ),
+        source: RepositorySource.remote,
+      );
     }
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'teacher-dashboard',
@@ -74,21 +90,41 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Future<void> _loadDashboardData({bool forceRefresh = false}) async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState<TeacherDashboardSnapshot>.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
       await RoleAccessService.initialize();
-      final api = BackendApiClient.instance;
-      final results = await Future.wait([
-        api.getAnnouncements(forceRefresh: forceRefresh),
-        _loadMyAttendanceSafely(api),
-        _loadUnreadNotificationsCount(),
-        _loadFeedPage(api),
-      ]);
+      final snapshotResult =
+          await (widget.dashboardRepository ??
+                  ApiTeacherDashboardRepository.legacyDefault)
+              .load(forceRefresh: forceRefresh);
+      if (snapshotResult.isFailure) {
+        final state = RepositoryState.fromResult<TeacherDashboardSnapshot>(
+          snapshotResult,
+          previous: previous.hasData ? previous : null,
+        );
+        if (!mounted) return;
+        setState(() {
+          _repositoryState = state;
+        });
+        return;
+      }
+      final snapshot = snapshotResult.dataOrNull!;
+      final unreadNotifications = await _loadUnreadNotificationsCount();
       if (!mounted) return;
       setState(() {
+        _repositoryState = RepositoryState.fromResult<TeacherDashboardSnapshot>(
+          snapshotResult,
+          previous: previous.hasData ? previous : null,
+        );
         _roleScopeLoaded = true;
         _teacherName = RoleAccessService.teacherName;
         _assignedClass = RoleAccessService.teacherClassName;
@@ -100,49 +136,29 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               (row) => teacherFlowText(row['done']).toLowerCase() != 'true',
             )
             .length;
-        _myAttendance = results[1] as StaffAttendanceModel?;
-        _announcements = (results[0] as List)
-            .whereType<AnnouncementModel>()
-            .toList();
-        final feedResult = results[3] as SchoolFeedLoadResult;
-        if (feedResult.page != null) {
-          _eventPosts = feedResult.page!.data
+        _myAttendance = snapshot.myAttendance;
+        _announcements = snapshot.announcements;
+        if (snapshot.feed != null) {
+          _eventPosts = snapshot.feed!.data
               .map((row) => Map<String, dynamic>.from(row))
               .toList();
         }
-        _feedError = feedResult.error?.toString();
-        _feedStale = feedResult.isStale;
-        _unreadNotifications = results[2] as int? ?? 0;
-        _loading = false;
+        _feedError = snapshot.feedError?.toString();
+        _feedStale = snapshot.feedIsStale;
+        _unreadNotifications = unreadNotifications;
       });
     } on Object catch (_) {
       if (!mounted) return;
       setState(() {
+        _repositoryState = RepositoryState<TeacherDashboardSnapshot>.error(
+          error: 'Unable to load teacher dashboard from backend.',
+          data: previous.data,
+          source: previous.source,
+          isStale: previous.hasData,
+          lastUpdated: previous.lastUpdated,
+        );
         _roleScopeLoaded = true;
-        _loading = false;
-        _error = DemoLocalApiService.instance.isActive
-            ? 'Unable to load offline demo data.'
-            : 'Unable to load teacher dashboard from backend.';
       });
-    }
-  }
-
-  Future<SchoolFeedLoadResult> _loadFeedPage(BackendApiClient api) async {
-    try {
-      final page = await api.getTeacherSchoolFeedPage(page: 1, pageSize: 20);
-      return SchoolFeedLoadResult(page: page);
-    } on Object catch (error) {
-      return SchoolFeedLoadResult(error: error);
-    }
-  }
-
-  Future<StaffAttendanceModel?> _loadMyAttendanceSafely(
-    BackendApiClient api,
-  ) async {
-    try {
-      return await api.getMyStaffAttendanceToday();
-    } on Object catch (_) {
-      return null;
     }
   }
 
@@ -156,7 +172,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Future<void> _openMyAttendance() async {
-    await Navigator.pushNamed(
+    await SchoolDeskNavigation.push(
       context,
       AppRoutes.teacherMyAttendance,
       arguments: {'auto_scan': true},
@@ -171,16 +187,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final shortName = _teacherName.split(' ').take(2).join(' ');
 
     return TeacherFlowScaffold(
-      title: 'Arish Ville Preschool',
-      subtitle: DemoLocalApiService.instance.isActive
-          ? 'Offline Demo · $shortName · classroom flow'
-          : '$shortName · classroom flow',
+      title: _repositoryState.data?.schoolName ?? 'School',
+      subtitle: '$shortName · classroom flow',
       selectedIndex: TeacherNav.dashboard,
       actions: [
         IconButton(
           tooltip: 'How to use the application',
           icon: const Icon(Icons.help_outline_rounded),
-          onPressed: () => Navigator.pushNamed(context, AppRoutes.help),
+          onPressed: () => SchoolDeskNavigation.push(context, AppRoutes.help),
         ),
         Stack(
           clipBehavior: Clip.none,
@@ -188,7 +202,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             IconButton(
               tooltip: 'Notifications',
               icon: const Icon(Icons.notifications_none_rounded),
-              onPressed: () => Navigator.pushNamed(
+              onPressed: () => SchoolDeskNavigation.push(
                 context,
                 AppRoutes.notificationCenter,
                 arguments: 'teacher',
@@ -223,136 +237,149 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ],
         ),
       ],
-      loading: _loading,
-      error: _error,
+      loading: _repositoryState.isLoading && !_repositoryState.hasData,
+      error: _repositoryState.hasData
+          ? null
+          : _repositoryState.error?.toString(),
       onRefresh: () => _loadDashboardData(forceRefresh: true),
-      child: isDesktop
-          ? TeacherDashboardDesktopBody(
-              teacherName: _teacherName,
-              assignedClass: _assignedClass,
-              assignedSubject: _assignedSubject,
-              timetable: _timetable,
-              announcements: _announcements,
-              eventPosts: _eventPosts,
-              attendancePending: _attendancePending,
-              roleScopeLoaded: _roleScopeLoaded,
-              hasStaffLink: RoleAccessService.hasTeacherStaffLink,
-              hasAssignedClasses: RoleAccessService.hasAssignedClasses,
-              myAttendance: _myAttendance,
-              feedError: _feedError,
-              feedStale: _feedStale,
-              onFeedRetry: () => _loadDashboardData(forceRefresh: true),
-              onRefresh: () => _loadDashboardData(forceRefresh: true),
-            )
-          : TeacherFlowScrollView(
-              children: [
-                if (_roleScopeLoaded && !RoleAccessService.hasTeacherStaffLink)
-                  const TeacherFlowCard(
-                    icon: Icons.badge_outlined,
-                    title:
-                        'Your teacher account is not linked to a staff profile.',
-                    subtitle: 'Please contact Admin/Principal.',
-                  )
-                else if (_roleScopeLoaded &&
-                    !RoleAccessService.hasAssignedClasses)
-                  const TeacherFlowCard(
-                    icon: Icons.class_outlined,
-                    title: 'No classes assigned yet.',
-                    subtitle:
-                        'Your classes, timetable, and attendance workflow will appear after assignment.',
-                  )
-                else
-                  TeacherCurrentClassCard(
-                    greeting: 'Hello, $shortName',
-                    classLabel: _currentClassTitle,
-                    subject: _currentSubject,
-                    timeLabel: _currentTimeLabel,
-                    avatar: RoleAccessService.teacherAvatarUrl,
-                    actions: [
-                      TeacherFlowAction(
-                        label: 'My Login',
-                        icon: Icons.qr_code_scanner_rounded,
-                        filled: true,
-                        onTap: _openMyAttendance,
-                      ),
-                    ],
-                  ),
-                if (_timetable.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    '$_currentSubject - $_currentClassTitle',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: teacherFlowInk,
+      child: SchoolDeskRepositoryStateView<TeacherDashboardSnapshot>(
+        state: _repositoryState,
+        onRetry: () => _loadDashboardData(forceRefresh: true),
+        emptyTitle: 'No dashboard data',
+        emptyMessage: 'Teacher dashboard data is not available offline.',
+        data: (_) => isDesktop
+            ? TeacherDashboardDesktopBody(
+                teacherName: _teacherName,
+                assignedClass: _assignedClass,
+                assignedSubject: _assignedSubject,
+                timetable: _timetable,
+                announcements: _announcements,
+                eventPosts: _eventPosts,
+                attendancePending: _attendancePending,
+                roleScopeLoaded: _roleScopeLoaded,
+                hasStaffLink: RoleAccessService.hasTeacherStaffLink,
+                hasAssignedClasses: RoleAccessService.hasAssignedClasses,
+                myAttendance: _myAttendance,
+                feedError: _feedError,
+                feedStale: _feedStale,
+                onFeedRetry: () => _loadDashboardData(forceRefresh: true),
+                onRefresh: () => _loadDashboardData(forceRefresh: true),
+              )
+            : TeacherFlowScrollView(
+                children: [
+                  if (_roleScopeLoaded &&
+                      !RoleAccessService.hasTeacherStaffLink)
+                    const TeacherFlowCard(
+                      icon: Icons.badge_outlined,
+                      title:
+                          'Your teacher account is not linked to a staff profile.',
+                      subtitle: 'Please contact Admin/Principal.',
+                    )
+                  else if (_roleScopeLoaded &&
+                      !RoleAccessService.hasAssignedClasses)
+                    const TeacherFlowCard(
+                      icon: Icons.class_outlined,
+                      title: 'No classes assigned yet.',
+                      subtitle:
+                          'Your classes, timetable, and attendance workflow will appear after assignment.',
+                    )
+                  else
+                    TeacherCurrentClassCard(
+                      greeting: 'Hello, $shortName',
+                      classLabel: _currentClassTitle,
+                      subject: _currentSubject,
+                      timeLabel: _currentTimeLabel,
+                      avatar: RoleAccessService.teacherAvatarUrl,
+                      actions: [
+                        TeacherFlowAction(
+                          label: 'My Login',
+                          icon: Icons.qr_code_scanner_rounded,
+                          filled: true,
+                          onTap: _openMyAttendance,
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                const TodaysHighlightsCard(role: 'teacher'),
-                const SizedBox(height: 18),
-                const TeacherFlowSectionHeader(title: 'Quick Actions'),
-                const SizedBox(height: 10),
-                _TeacherQuickActionGrid(),
-                const SizedBox(height: 18),
-                TeacherFlowSectionHeader(
-                  title: 'Today Action Queue',
-                  actionLabel: 'Refresh',
-                  onAction: () => _loadDashboardData(forceRefresh: true),
-                ),
-                const SizedBox(height: 10),
-                ..._teacherActionQueue(context),
-                const SizedBox(height: 18),
-                TeacherFlowSectionHeader(
-                  title: 'Today Feed',
-                  actionLabel: 'Classes',
-                  onAction: () =>
-                      Navigator.pushNamed(context, AppRoutes.teacherClasses),
-                ),
-                const SizedBox(height: 10),
-                ..._todayFeed(context),
-                const SizedBox(height: 18),
-                SchoolFeedPreview(
-                  posts: _eventPosts,
-                  accentColor: teacherFlowAccent,
-                  showParentVisibility: true,
-                  audienceLabel: 'Staff & school updates',
-                  isStale: _feedStale,
-                  errorMessage: _feedError,
-                  onRetry: () => _loadDashboardData(forceRefresh: true),
-                  actionLabel: 'Manage',
-                  onAction: () =>
-                      Navigator.pushNamed(context, AppRoutes.teacherEventPosts),
-                ),
-                if (_announcements.isNotEmpty) ...[
+                  if (_timetable.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      '$_currentSubject - $_currentClassTitle',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: teacherFlowInk,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  const TodaysHighlightsCard(role: 'teacher'),
+                  const SizedBox(height: 18),
+                  const TeacherFlowSectionHeader(title: 'Quick Actions'),
+                  const SizedBox(height: 10),
+                  _TeacherQuickActionGrid(),
                   const SizedBox(height: 18),
                   TeacherFlowSectionHeader(
-                    title: 'School Notices',
-                    actionLabel: 'Open',
-                    onAction: () => Navigator.pushNamed(
+                    title: 'Today Action Queue',
+                    actionLabel: 'Refresh',
+                    onAction: () => _loadDashboardData(forceRefresh: true),
+                  ),
+                  const SizedBox(height: 10),
+                  ..._teacherActionQueue(context),
+                  const SizedBox(height: 18),
+                  TeacherFlowSectionHeader(
+                    title: 'Today Feed',
+                    actionLabel: 'Classes',
+                    onAction: () => SchoolDeskNavigation.push(
                       context,
-                      AppRoutes.teacherCommunication,
+                      AppRoutes.teacherClasses,
                     ),
                   ),
                   const SizedBox(height: 10),
-                  ..._announcements
-                      .take(3)
-                      .map(
-                        (notice) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: TeacherFlowCard(
-                            icon: Icons.campaign_rounded,
-                            title: notice.title,
-                            subtitle: notice.content,
-                            status: notice.isUrgent ? 'Urgent' : 'Notice',
-                            statusColor: notice.isUrgent
-                                ? context.appTheme.error
-                                : teacherFlowAccent,
+                  ..._todayFeed(context),
+                  const SizedBox(height: 18),
+                  SchoolFeedPreview(
+                    posts: _eventPosts,
+                    accentColor: teacherFlowAccent,
+                    showParentVisibility: true,
+                    audienceLabel: 'Staff & school updates',
+                    isStale: _feedStale,
+                    errorMessage: _feedError,
+                    onRetry: () => _loadDashboardData(forceRefresh: true),
+                    actionLabel: 'Manage',
+                    onAction: () => SchoolDeskNavigation.push(
+                      context,
+                      AppRoutes.teacherEventPosts,
+                    ),
+                  ),
+                  if (_announcements.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    TeacherFlowSectionHeader(
+                      title: 'School Notices',
+                      actionLabel: 'Open',
+                      onAction: () => SchoolDeskNavigation.push(
+                        context,
+                        AppRoutes.teacherCommunication,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ..._announcements
+                        .take(3)
+                        .map(
+                          (notice) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: TeacherFlowCard(
+                              icon: Icons.campaign_rounded,
+                              title: notice.title,
+                              subtitle: notice.content,
+                              status: notice.isUrgent ? 'Urgent' : 'Notice',
+                              statusColor: notice.isUrgent
+                                  ? context.appTheme.error
+                                  : teacherFlowAccent,
+                            ),
                           ),
                         ),
-                      ),
+                  ],
                 ],
-              ],
-            ),
+              ),
+      ),
     );
   }
 
@@ -416,7 +443,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 : 'Your backend timetable is empty for today.',
             icon: Icons.event_busy_rounded,
             color: Colors.orange,
-            onTap: () => Navigator.pushNamed(
+            onTap: () => SchoolDeskNavigation.push(
               context,
               hasWeeklyTimetable
                   ? AppRoutes.teacherTimetable
@@ -458,8 +485,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               title: '$subject - $classLabel',
               subtitle: 'Review the class period and plan next steps.',
               icon: Icons.auto_stories_rounded,
-              onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.teacherLessonPlanner),
+              onTap: () => SchoolDeskNavigation.push(
+                context,
+                AppRoutes.teacherLessonPlanner,
+              ),
             ),
           ),
         );
@@ -511,7 +540,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         subtitle: subtitle,
         icon: icon,
         color: color,
-        onTap: () => Navigator.pushNamed(context, route),
+        onTap: () => SchoolDeskNavigation.push(context, route),
       ),
     );
   }
@@ -579,7 +608,7 @@ class _TeacherQuickActionGrid extends StatelessWidget {
             subtitle: action.subtitle,
             illustrationAsset: action.illustrationAsset,
             color: teacherFlowAccent,
-            onTap: () => Navigator.pushNamed(context, action.route),
+            onTap: () => SchoolDeskNavigation.push(context, action.route),
           ),
       ],
     );

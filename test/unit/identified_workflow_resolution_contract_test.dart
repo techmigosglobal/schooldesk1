@@ -75,8 +75,8 @@ void main() {
       expect(receipt, contains("receipt['payment_method']"));
       expect(receipt, contains("pr['payment_method']"));
       expect(principalCard, contains("r['payment_method']"));
-      expect(receipt, contains('api.getCurrentSchool()'));
-      expect(receipt, contains('api.getProfile()'));
+      expect(receipt, contains('_repository.loadCurrentSchool()'));
+      expect(receipt, contains('_repository.loadProfile()'));
       expect(documents, contains('schoolName:'));
       expect(documents, contains('parentName: _parentName'));
       expect(documents, contains('rollNo: rollNo'));
@@ -142,13 +142,20 @@ void main() {
       'lib/features/documents/presentation/screens/'
       'admin_documents_screen/admin_documents_screen.dart',
     );
+    final adminDocumentsRepository = source(
+      'lib/modules/documents/data/api_admin_documents_repository.dart',
+    );
     final issues = source('supabase/functions/api/handlers/issues.ts');
     final issueScreen = source(
       'lib/features/communication/presentation/screens/issue_screen.dart',
     );
     final routes = source('lib/routes/app_routes.dart');
 
-    expect(adminDocuments, contains("createRaw('/student-documents'"));
+    expect(adminDocuments, contains('createStudentDocument'));
+    expect(
+      adminDocumentsRepository,
+      contains("createRaw('/student-documents'"),
+    );
     expect(uploads, contains('notifyStudentDocumentParents'));
     expect(uploads, contains('teacherAssignedSectionIds'));
     expect(uploads, contains('fee receipts cannot be deleted by parents'));

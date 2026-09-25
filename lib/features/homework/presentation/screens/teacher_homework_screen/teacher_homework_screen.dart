@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -12,9 +11,17 @@ import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 import 'package:schooldesk1/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_form_screens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_homework_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_homework_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class TeacherHomeworkScreen extends StatefulWidget {
-  const TeacherHomeworkScreen({super.key});
+  final TeacherHomeworkRepository? repository;
+
+  const TeacherHomeworkScreen({super.key, this.repository});
 
   @override
   State<TeacherHomeworkScreen> createState() => _TeacherHomeworkScreenState();
@@ -22,10 +29,12 @@ class TeacherHomeworkScreen extends StatefulWidget {
 
 class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
     with SingleTickerProviderStateMixin {
+  TeacherHomeworkRepository get _repository =>
+      widget.repository ?? ApiTeacherHomeworkRepository.legacyDefault;
+
   late final TabController _tabController;
 
-  bool _loading = true;
-  String? _error;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   List<Map<String, dynamic>> _homework = const [];
   Map<String, int> _submissionCounts = const {};
   bool _skippedToday = false;
@@ -46,9 +55,16 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
   }
 
   Future<void> _loadHomework({bool forceRefresh = false}) async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
       await RoleAccessService.initialize();
@@ -60,15 +76,24 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
               )
             : RoleAccessService.teacherClassId;
       }
-      final rows = await BackendApiClient.instance.getHomework();
+      final homeworkResult = await _repository.loadHomework(
+        sectionId: _selectedSectionId,
+      );
+      if (homeworkResult.isFailure) {
+        throw StateError(
+          homeworkResult.failureOrNull?.message ?? 'Unable to load Dairy',
+        );
+      }
+      final rows = homeworkResult.dataOrNull!;
       final reminder = await _loadReminderStatus();
       final counts = <String, int>{};
       for (final row in rows.take(12)) {
         final id = _homeworkId(row);
         if (id.isEmpty) continue;
         try {
-          final submissions = await BackendApiClient.instance
-              .getHomeworkSubmissions(id);
+          final submissionsResult = await _repository.loadSubmissions(id);
+          if (submissionsResult.isFailure) continue;
+          final submissions = submissionsResult.dataOrNull!;
           counts[id] = teacherFlowList(
             submissions['submissions'] ?? submissions['data'],
           ).length;
@@ -89,22 +114,32 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
               : 'pending',
         ).toLowerCase();
         _skippedToday = _reminderStatus == 'skipped';
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = error.toString();
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
       });
     }
   }
 
   Future<Map<String, dynamic>> _loadReminderStatus() async {
     try {
-      return await BackendApiClient.instance.getTodayHomeworkReminderStatus(
+      final result = await _repository.loadReminderStatus(
         sectionId: _selectedSectionId,
       );
+      return result.dataOrNull ?? const {};
     } on Object catch (_) {
       return const {};
     }
@@ -112,11 +147,16 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
 
   Future<void> _skipToday() async {
     try {
-      final reminder = await BackendApiClient.instance
-          .skipTodayHomeworkReminder(
-            sectionId: _selectedSectionId,
-            reason: 'Teacher skipped homework assignment for today',
-          );
+      final result = await _repository.skipReminder(
+        sectionId: _selectedSectionId,
+        reason: 'Teacher skipped homework assignment for today',
+      );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to skip Dairy reminder',
+        );
+      }
+      final reminder = result.dataOrNull!;
       if (!mounted) return;
       setState(() {
         _reminderStatus = teacherFlowText(
@@ -137,7 +177,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
   }
 
   Future<void> _openSubmissions(Map<String, dynamic> homework) async {
-    await Navigator.pushNamed(
+    await SchoolDeskNavigation.push(
       context,
       AppRoutes.teacherHomeworkSubmissions,
       arguments: TeacherHomeworkSubmissionsArgs(homework: homework),
@@ -174,7 +214,12 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
       if (id.isEmpty) {
         throw Exception('Dairy record is missing its server id.');
       }
-      await BackendApiClient.instance.deleteHomework(id);
+      final result = await _repository.deleteHomework(id);
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to delete Dairy',
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Dairy deleted successfully')),
@@ -194,96 +239,101 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
       title: 'Dairy / Assignments',
       subtitle: 'Assignments, dairy sharing, and submission review',
       selectedIndex: TeacherNav.diary,
-      loading: _loading,
-      error: _error,
+      loading: _state.isLoading && !_state.hasData,
+      error: _state.hasData ? null : _state.error?.toString(),
       onRefresh: _loadHomework,
-      child: Column(
-        children: [
-          // ── Tab Bar ──────────────────────────────────────────────
-          Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              labelColor: teacherFlowAccent,
-              unselectedLabelColor: teacherFlowMuted,
-              indicatorColor: teacherFlowAccent,
-              indicatorWeight: 3,
-              labelStyle: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-              unselectedLabelStyle: const TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-              ),
-              tabs: [
-                const Tab(
-                  icon: Icon(Icons.add_task_rounded, size: 20),
-                  text: 'Assign Dairy',
+      child: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadHomework,
+        data: (_) => Column(
+          children: [
+            // ── Tab Bar ──────────────────────────────────────────────
+            Container(
+              color: Colors.white,
+              child: TabBar(
+                controller: _tabController,
+                labelColor: teacherFlowAccent,
+                unselectedLabelColor: teacherFlowMuted,
+                indicatorColor: teacherFlowAccent,
+                indicatorWeight: 3,
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
                 ),
-                Tab(
-                  icon: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const Icon(Icons.rate_review_rounded, size: 20),
-                      if (_totalSubmissions > 0)
-                        Positioned(
-                          top: -4,
-                          right: -6,
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: const BoxDecoration(
-                              color: Colors.orange,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Text(
-                              '$_totalSubmissions',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
+                unselectedLabelStyle: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+                tabs: [
+                  const Tab(
+                    icon: Icon(Icons.add_task_rounded, size: 20),
+                    text: 'Assign Dairy',
+                  ),
+                  Tab(
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const Icon(Icons.rate_review_rounded, size: 20),
+                        if (_totalSubmissions > 0)
+                          Positioned(
+                            top: -4,
+                            right: -6,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: Colors.orange,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '$_totalSubmissions',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
+                    text: 'Review',
                   ),
-                  text: 'Review',
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          // ── Tab Views ────────────────────────────────────────────
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _AssignHomeworkTab(
-                  homework: _homework,
-                  submissionCounts: _submissionCounts,
-                  skippedToday: _skippedToday,
-                  isHomeworkAssignedToday: _isHomeworkSubmittedToday(),
-                  dailyLockedByOther: _isHomeworkClaimedByOther(),
-                  onSkipToday: _skipToday,
-                  onSectionChanged: (sectionId) {
-                    setState(() => _selectedSectionId = sectionId);
-                  },
-                  onDelete: _deleteHomework,
-                  isDueSoon: _isDueSoon,
-                  homeworkId: _homeworkId,
-                  onHomeworkCreated: () => _loadHomework(forceRefresh: true),
-                ),
-                _ReviewTab(
-                  homework: _homework,
-                  submissionCounts: _submissionCounts,
-                  onOpenSubmissions: _openSubmissions,
-                  isDueSoon: _isDueSoon,
-                  homeworkId: _homeworkId,
-                ),
-              ],
+            // ── Tab Views ────────────────────────────────────────────
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _AssignHomeworkTab(
+                    homework: _homework,
+                    submissionCounts: _submissionCounts,
+                    skippedToday: _skippedToday,
+                    isHomeworkAssignedToday: _isHomeworkSubmittedToday(),
+                    dailyLockedByOther: _isHomeworkClaimedByOther(),
+                    onSkipToday: _skipToday,
+                    onSectionChanged: (sectionId) {
+                      setState(() => _selectedSectionId = sectionId);
+                    },
+                    onDelete: _deleteHomework,
+                    isDueSoon: _isDueSoon,
+                    homeworkId: _homeworkId,
+                    repository: _repository,
+                    onHomeworkCreated: () => _loadHomework(forceRefresh: true),
+                  ),
+                  _ReviewTab(
+                    homework: _homework,
+                    submissionCounts: _submissionCounts,
+                    onOpenSubmissions: _openSubmissions,
+                    isDueSoon: _isDueSoon,
+                    homeworkId: _homeworkId,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -366,6 +416,7 @@ class _AssignHomeworkTab extends StatefulWidget {
   final void Function(Map<String, dynamic>) onDelete;
   final bool Function(Map<String, dynamic>) isDueSoon;
   final String Function(Map<String, dynamic>) homeworkId;
+  final TeacherHomeworkRepository repository;
   final VoidCallback onHomeworkCreated;
 
   const _AssignHomeworkTab({
@@ -379,6 +430,7 @@ class _AssignHomeworkTab extends StatefulWidget {
     required this.onDelete,
     required this.isDueSoon,
     required this.homeworkId,
+    required this.repository,
     required this.onHomeworkCreated,
   });
 
@@ -466,19 +518,18 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
-      allowMultiple: true,
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return;
+    if (result.isEmpty) return;
 
-    for (final file in result.files) {
+    for (final file in result) {
       final path = file.path ?? '';
+      final fileBytes = await file.readAsBytes();
       final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
       final isImage = ImageUploadOptimizer.isImage(file.name, mimeType);
       final optimized = isImage
-          ? (file.bytes != null
+          ? (fileBytes.isNotEmpty
                 ? ImageUploadOptimizer.fromBytes(
-                    file.bytes!,
+                    fileBytes,
                     filename: file.name,
                     mimeType: mimeType,
                     preset: ImageUploadPreset.content,
@@ -490,11 +541,11 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                     preset: ImageUploadPreset.content,
                   ))
           : null;
-      if (path.trim().isEmpty && file.bytes == null) continue;
+      if (path.trim().isEmpty && fileBytes.isEmpty) continue;
       await _uploadFile(
         path,
         optimized?.filename ?? file.name,
-        fileBytes: optimized?.bytes ?? file.bytes,
+        fileBytes: optimized?.bytes ?? fileBytes,
         mimeType: optimized?.mimeType ?? mimeType,
       );
     }
@@ -511,12 +562,16 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
       _formError = null;
     });
     try {
-      final url = await BackendApiClient.instance.uploadFile(
+      final result = await widget.repository.uploadFile(
         path,
         filename: name,
         fileBytes: fileBytes,
         mimeType: mimeType,
       );
+      if (result.isFailure) {
+        throw StateError(result.failureOrNull?.message ?? 'Unable to upload');
+      }
+      final url = result.dataOrNull!;
       if (url.isEmpty) throw Exception('Upload completed but no URL returned.');
       if (!mounted) return;
       setState(() {
@@ -555,10 +610,9 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
           : RoleAccessService.teacherClassId;
       final className = _classLabelForSection(sectionId);
       final attachmentUrl = _attachments.map((a) => a.url).join(',');
-      final saveAsDraft =
-          BackendApiClient.instance.offlineSync?.isOffline == true;
+      final saveAsDraft = widget.repository.isOffline;
 
-      await BackendApiClient.instance.createHomework(
+      final result = await widget.repository.createHomework(
         title: _titleController.text.trim(),
         subject: _selectedSubjects.join(', '),
         className: className,
@@ -570,6 +624,11 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
         status: saveAsDraft ? 'draft' : 'pending',
         attachmentUrl: attachmentUrl,
       );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to save Dairy',
+        );
+      }
       if (!mounted) return;
       // Reset form
       _titleController.clear();

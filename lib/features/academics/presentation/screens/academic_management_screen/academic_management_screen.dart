@@ -2,11 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/academic_management_screen/academic_management_form_screens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_academic_year_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_academic_year_repository.dart';
+import 'package:schooldesk1/modules/academics/data/api_academic_management_repository.dart';
+import 'package:schooldesk1/modules/academics/domain/academic_management_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 const _academicBg = Color(0xFFF3F8FF);
 const _academicInk = Color(0xFF08142F);
@@ -42,8 +48,15 @@ EdgeInsets _academicListPadding(BuildContext context) {
 
 class AcademicManagementScreen extends StatefulWidget {
   final String ownerRole;
+  final PrincipalAcademicYearRepository? academicYearRepository;
+  final AcademicManagementRepository? repository;
 
-  const AcademicManagementScreen({super.key, this.ownerRole = 'principal'});
+  const AcademicManagementScreen({
+    super.key,
+    this.ownerRole = 'principal',
+    this.academicYearRepository,
+    this.repository,
+  });
 
   @override
   State<AcademicManagementScreen> createState() =>
@@ -57,8 +70,9 @@ class _AcademicManagementScreenState extends State<AcademicManagementScreen>
   ];
 
   late TabController _tabController;
-  BackendDataService? _storage;
-  bool _loading = true;
+  late final AcademicManagementRepository _repository =
+      widget.repository ?? ApiAcademicManagementRepository.legacyDefault;
+  RepositoryState<Object> _state = const RepositoryState.loading();
 
   List<Map<String, dynamic>> _academicYears = [];
   List<Map<String, dynamic>> _subjects = [];
@@ -117,33 +131,60 @@ class _AcademicManagementScreenState extends State<AcademicManagementScreen>
   }
 
   Future<void> _loadData() async {
-    _storage = await BackendDataService.getInstance();
-    await _storage!.ensureAcademicManagementLoaded();
-    final academicYears = await _storage!.getList(
-      BackendDataService.kAcademicYears,
-    );
-    final subjects = await _storage!.getList(
-      BackendDataService.kAcademicSubjects,
-    );
-    final classes = await _storage!.getList(
-      BackendDataService.kAcademicClasses,
-    );
-    final curriculum = await _storage!.getList(
-      BackendDataService.kAcademicCurriculum,
-    );
-    final staff = await _storage!.getList(BackendDataService.kAdminTeachers);
-    setState(() {
-      _academicYears = academicYears;
-      _subjects = subjects;
-      _classes = classes;
-      _curriculum = curriculum;
-      _staff = staff;
-      _loading = false;
-    });
+    final previous = _state.data;
+    if (mounted) {
+      setState(() {
+        _state = RepositoryState<Object>.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
+      });
+    }
+    try {
+      final result = await _repository.load();
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Academic load failed',
+        );
+      }
+      final snapshot = result.dataOrNull!;
+      final academicYears = snapshot.academicYears;
+      final subjects = snapshot.subjects;
+      final classes = snapshot.classes;
+      final curriculum = snapshot.curriculum;
+      final staff = snapshot.staff;
+      if (!mounted) return;
+      setState(() {
+        _academicYears = academicYears;
+        _subjects = subjects;
+        _classes = classes;
+        _curriculum = curriculum;
+        _staff = staff;
+        _state = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _state = previous == null
+            ? RepositoryState<Object>.error(error: error)
+            : RepositoryState<Object>(
+                data: Object(),
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
+      });
+    }
   }
 
   Future<void> _refresh() async {
-    setState(() => _loading = true);
     await _loadData();
   }
 
@@ -166,12 +207,12 @@ class _AcademicManagementScreenState extends State<AcademicManagementScreen>
                       _AcademicHeader(
                         unreadNotifications: _unreadNotifications,
                         onMenu: _showAcademicMenu,
-                        onNotifications: () => Navigator.pushNamed(
+                        onNotifications: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.notificationCenter,
                           arguments: _role,
                         ),
-                        onProfile: () => Navigator.pushNamed(
+                        onProfile: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.profileScreen,
                           arguments: _role,
@@ -195,49 +236,53 @@ class _AcademicManagementScreenState extends State<AcademicManagementScreen>
   }
 
   Widget _buildContent() {
-    return _loading
-        ? Center(
-            child: CircularProgressIndicator(color: context.appTheme.primary),
-          )
-        : TabBarView(
-            controller: _tabController,
-            children: [
-              _AcademicYearsTab(
-                years: _academicYears,
-                classes: _classes,
-                subjects: _subjects,
-                storage: _storage!,
-                onRefresh: _refresh,
-                isAdminOwner: _isAdminOwner,
-                ownerRole: widget.ownerRole,
-              ),
-              _SubjectsTab(
-                subjects: _subjects,
-                storage: _storage!,
-                onRefresh: _refresh,
-                isAdminOwner: _isAdminOwner,
-                ownerRole: widget.ownerRole,
-              ),
-              _ClassesTab(
-                classes: _classes,
-                staff: _staff,
-                storage: _storage!,
-                onRefresh: _refresh,
-                isAdminOwner: _isAdminOwner,
-                ownerRole: widget.ownerRole,
-              ),
-              _CurriculumTab(
-                curriculum: _curriculum,
-                academicYears: _academicYears,
-                classes: _classes,
-                subjects: _subjects,
-                storage: _storage!,
-                onRefresh: _refresh,
-                isAdminOwner: _isAdminOwner,
-                ownerRole: widget.ownerRole,
-              ),
-            ],
-          );
+    return SchoolDeskRepositoryStateView<Object>(
+      state: _state,
+      onRetry: _refresh,
+      errorTitle: 'Unable to load academic management',
+      data: (_) => TabBarView(
+        controller: _tabController,
+        children: [
+          _AcademicYearsTab(
+            years: _academicYears,
+            classes: _classes,
+            subjects: _subjects,
+            storage: _repository,
+            academicYearRepository:
+                widget.academicYearRepository ??
+                ApiPrincipalAcademicYearRepository.legacyDefault,
+            onRefresh: _refresh,
+            isAdminOwner: _isAdminOwner,
+            ownerRole: widget.ownerRole,
+          ),
+          _SubjectsTab(
+            subjects: _subjects,
+            storage: _repository,
+            onRefresh: _refresh,
+            isAdminOwner: _isAdminOwner,
+            ownerRole: widget.ownerRole,
+          ),
+          _ClassesTab(
+            classes: _classes,
+            staff: _staff,
+            storage: _repository,
+            onRefresh: _refresh,
+            isAdminOwner: _isAdminOwner,
+            ownerRole: widget.ownerRole,
+          ),
+          _CurriculumTab(
+            curriculum: _curriculum,
+            academicYears: _academicYears,
+            classes: _classes,
+            subjects: _subjects,
+            storage: _repository,
+            onRefresh: _refresh,
+            isAdminOwner: _isAdminOwner,
+            ownerRole: widget.ownerRole,
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showAcademicMenu() async {
@@ -561,16 +606,16 @@ class _AcademicBottomBar extends StatelessWidget {
                 label: 'Home',
                 icon: Icons.home_rounded,
                 selected: true,
-                onTap: () => Navigator.pushNamedAndRemoveUntil(
-                  context,
+                onTap: () => SchoolDeskNavigation.goFromNavigator(
+                  Navigator.of(context),
                   homeRoute,
-                  (_) => false,
+                  legacyPredicate: (_) => false,
                 ),
               ),
               _AcademicBottomNavItem(
                 label: 'Search',
                 icon: Icons.search_rounded,
-                onTap: () => Navigator.pushNamed(
+                onTap: () => SchoolDeskNavigation.push(
                   context,
                   AppRoutes.globalSearch,
                   arguments: role,
@@ -579,7 +624,7 @@ class _AcademicBottomBar extends StatelessWidget {
               _AcademicBottomNavItem(
                 label: 'Alerts',
                 icon: Icons.notifications_none_rounded,
-                onTap: () => Navigator.pushNamed(
+                onTap: () => SchoolDeskNavigation.push(
                   context,
                   AppRoutes.notificationCenter,
                   arguments: role,
@@ -588,7 +633,7 @@ class _AcademicBottomBar extends StatelessWidget {
               _AcademicBottomNavItem(
                 label: 'Profile',
                 icon: Icons.person_outline_rounded,
-                onTap: () => Navigator.pushNamed(
+                onTap: () => SchoolDeskNavigation.push(
                   context,
                   AppRoutes.profileScreen,
                   arguments: role,
@@ -746,7 +791,8 @@ class _AcademicYearsTab extends StatelessWidget {
   final List<Map<String, dynamic>> years;
   final List<Map<String, dynamic>> classes;
   final List<Map<String, dynamic>> subjects;
-  final BackendDataService storage;
+  final AcademicManagementRepository storage;
+  final PrincipalAcademicYearRepository academicYearRepository;
   final VoidCallback onRefresh;
   final bool isAdminOwner;
   final String ownerRole;
@@ -756,6 +802,7 @@ class _AcademicYearsTab extends StatelessWidget {
     required this.classes,
     required this.subjects,
     required this.storage,
+    required this.academicYearRepository,
     required this.onRefresh,
     required this.isAdminOwner,
     required this.ownerRole,
@@ -845,7 +892,7 @@ class _AcademicYearsTab extends StatelessWidget {
     Map<String, dynamic> year,
   ) async {
     try {
-      await BackendApiClient.instance.updateAcademicYear(
+      await academicYearRepository.updateAcademicYear(
         '${year['id'] ?? ''}',
         yearLabel: _yearLabel(year),
         startDate: _yearStartDate(year),
@@ -886,7 +933,7 @@ class _AcademicYearsTab extends StatelessWidget {
     BuildContext context, {
     Map<String, dynamic>? year,
   }) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.academicYearForm,
       arguments: AcademicYearFormArgs(ownerRole: ownerRole, year: year),
@@ -1301,7 +1348,7 @@ class _BookBlock extends StatelessWidget {
 
 class _SubjectsTab extends StatefulWidget {
   final List<Map<String, dynamic>> subjects;
-  final BackendDataService storage;
+  final AcademicManagementRepository storage;
   final VoidCallback onRefresh;
   final bool isAdminOwner;
   final String ownerRole;
@@ -1476,7 +1523,7 @@ class _SubjectsTabState extends State<_SubjectsTab> {
     BuildContext context, {
     Map<String, dynamic>? subject,
   }) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.academicSubjectForm,
       arguments: AcademicSubjectFormArgs(
@@ -1495,7 +1542,7 @@ class _SubjectsTabState extends State<_SubjectsTab> {
 class _ClassesTab extends StatelessWidget {
   final List<Map<String, dynamic>> classes;
   final List<Map<String, dynamic>> staff;
-  final BackendDataService storage;
+  final AcademicManagementRepository storage;
   final VoidCallback onRefresh;
   final bool isAdminOwner;
   final String ownerRole;
@@ -1574,7 +1621,7 @@ class _ClassesTab extends StatelessWidget {
     BuildContext context, {
     Map<String, dynamic>? classData,
   }) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.academicClassForm,
       arguments: AcademicClassFormArgs(
@@ -1616,7 +1663,7 @@ class _CurriculumTab extends StatefulWidget {
   final List<Map<String, dynamic>> academicYears;
   final List<Map<String, dynamic>> classes;
   final List<Map<String, dynamic>> subjects;
-  final BackendDataService storage;
+  final AcademicManagementRepository storage;
   final VoidCallback onRefresh;
   final bool isAdminOwner;
   final String ownerRole;
@@ -1777,7 +1824,7 @@ class _CurriculumTabState extends State<_CurriculumTab> {
     BuildContext context, {
     Map<String, dynamic>? item,
   }) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.academicCurriculumForm,
       arguments: AcademicCurriculumFormArgs(
@@ -2584,7 +2631,7 @@ class _AcademicClassCard extends StatelessWidget {
                         icon: Icons.menu_book_outlined,
                         label: 'Subjects',
                         color: _academicBlue,
-                        onTap: () => Navigator.pushNamed(
+                        onTap: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.principalSubjects,
                           arguments: args,
@@ -2597,7 +2644,7 @@ class _AcademicClassCard extends StatelessWidget {
                         icon: Icons.check_circle_outline_rounded,
                         label: 'Attendance',
                         color: _academicGreen,
-                        onTap: () => Navigator.pushNamed(
+                        onTap: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.principalAttendance,
                           arguments: args,

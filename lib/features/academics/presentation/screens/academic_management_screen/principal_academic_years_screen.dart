@@ -5,14 +5,20 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/academic_management_screen/academic_management_form_screens.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_academic_year_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_academic_year_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 const _ayBlue = Color(0xFF105DDF);
 const _ayInk = Color(0xFF08142F);
@@ -28,7 +34,9 @@ class AcademicYearRouteArgs {
 }
 
 class PrincipalAcademicYearsScreen extends StatefulWidget {
-  const PrincipalAcademicYearsScreen({super.key});
+  final PrincipalAcademicYearRepository? repository;
+
+  const PrincipalAcademicYearsScreen({super.key, this.repository});
 
   @override
   State<PrincipalAcademicYearsScreen> createState() =>
@@ -37,7 +45,9 @@ class PrincipalAcademicYearsScreen extends StatefulWidget {
 
 class _PrincipalAcademicYearsScreenState
     extends State<PrincipalAcademicYearsScreen> {
-  bool _loading = true;
+  late final PrincipalAcademicYearRepository _repository;
+  RepositoryState<List<Map<String, dynamic>>> _state =
+      const RepositoryState.loading();
   String _query = '';
   String _status = 'all';
   List<Map<String, dynamic>> _years = const [];
@@ -45,27 +55,52 @@ class _PrincipalAcademicYearsScreenState
   @override
   void initState() {
     super.initState();
+    _repository =
+        widget.repository ?? ApiPrincipalAcademicYearRepository.legacyDefault;
     _load();
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    final previous = _state.data;
+    setState(() {
+      _state = RepositoryState<List<Map<String, dynamic>>>.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
+    });
     try {
-      final rows = await BackendApiClient.instance.getAcademicYears();
+      final rows = await _repository.loadAcademicYears();
       if (!mounted) return;
+      final mapped = rows.map<Map<String, dynamic>>(_yearMap).toList()
+        ..sort(
+          (a, b) => (_dateValue(a['start_date']) ?? DateTime(1900)).compareTo(
+            _dateValue(b['start_date']) ?? DateTime(1900),
+          ),
+        );
       setState(() {
-        _years = rows.map(_yearMap).toList()
-          ..sort(
-            (a, b) => (_dateValue(a['start_date']) ?? DateTime(1900)).compareTo(
-              _dateValue(b['start_date']) ?? DateTime(1900),
-            ),
-          );
-        _loading = false;
+        _years = mapped;
+        _state = RepositoryState<List<Map<String, dynamic>>>(
+          data: mapped,
+          source: RepositorySource.remote,
+          phase: mapped.isEmpty ? RepositoryPhase.empty : RepositoryPhase.ready,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _loading = false);
-      _snack(context, 'Unable to load academic years: $error', error: true);
+      setState(() {
+        _state = previous == null
+            ? RepositoryState<List<Map<String, dynamic>>>.error(error: error)
+            : RepositoryState<List<Map<String, dynamic>>>(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
+      });
     }
   }
 
@@ -91,58 +126,58 @@ class _PrincipalAcademicYearsScreenState
           icon: const Icon(Icons.add_rounded),
         ),
       ],
-      child: RefreshIndicator(
-        onRefresh: _load,
-        color: _ayBlue,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 88),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: _SearchBox(
-                    onChanged: (value) => setState(() => _query = value),
+      child: SchoolDeskRepositoryStateView<List<Map<String, dynamic>>>(
+        state: _state,
+        onRetry: _load,
+        errorTitle: 'Unable to load academic years',
+        data: (_) => RefreshIndicator(
+          onRefresh: _load,
+          color: _ayBlue,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 88),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _SearchBox(
+                      onChanged: (value) => setState(() => _query = value),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                _FilterButton(
-                  status: _status,
-                  onChanged: (value) => setState(() => _status = value),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.only(top: 80),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_filteredYears.isEmpty)
-              const _EmptyPanel(
-                icon: Icons.calendar_month_outlined,
-                title: 'No academic years found',
-                body: 'Create an academic year to begin yearly setup.',
-              )
-            else
-              for (final year in _filteredYears) ...[
-                _YearListCard(
-                  year: year,
-                  onView: () => _openDetail(year),
-                  onEdit: () => _openEdit(year),
-                  onActivate: () => _activate(year),
-                  onDelete: () => _deleteYear(year),
-                ),
-                const SizedBox(height: 12),
-              ],
-          ],
+                  const SizedBox(width: 12),
+                  _FilterButton(
+                    status: _status,
+                    onChanged: (value) => setState(() => _status = value),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              if (_filteredYears.isEmpty)
+                const _EmptyPanel(
+                  icon: Icons.calendar_month_outlined,
+                  title: 'No academic years found',
+                  body: 'Create an academic year to begin yearly setup.',
+                )
+              else
+                for (final year in _filteredYears) ...[
+                  _YearListCard(
+                    year: year,
+                    onView: () => _openDetail(year),
+                    onEdit: () => _openEdit(year),
+                    onActivate: () => _activate(year),
+                    onDelete: () => _deleteYear(year),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Future<void> _openCreate() async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.academicYearForm,
       arguments: const AcademicYearFormArgs(ownerRole: 'principal'),
@@ -154,7 +189,7 @@ class _PrincipalAcademicYearsScreenState
   }
 
   Future<void> _openEdit(Map<String, dynamic> year) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.academicYearForm,
       arguments: AcademicYearFormArgs(ownerRole: 'principal', year: year),
@@ -166,7 +201,7 @@ class _PrincipalAcademicYearsScreenState
   }
 
   void _openDetail(Map<String, dynamic> year) {
-    Navigator.pushNamed(
+    SchoolDeskNavigation.push(
       context,
       AppRoutes.academicYearDetail,
       arguments: AcademicYearRouteArgs(year: year),
@@ -175,7 +210,7 @@ class _PrincipalAcademicYearsScreenState
 
   Future<void> _activate(Map<String, dynamic> year) async {
     try {
-      await BackendApiClient.instance.updateAcademicYear(
+      await _repository.updateAcademicYear(
         '${year['id']}',
         yearLabel: _yearLabel(year),
         startDate: _isoDate(year['start_date']),
@@ -199,7 +234,7 @@ class _PrincipalAcademicYearsScreenState
     final finalConfirm = await _confirmAcademicYearFinalDelete(context, year);
     if (finalConfirm != true || !mounted) return;
     try {
-      await BackendApiClient.instance.deleteAcademicYear(
+      await _repository.deleteAcademicYear(
         '${year['id']}',
         cascadeConfirmed: true,
       );
@@ -217,8 +252,13 @@ class _PrincipalAcademicYearsScreenState
 
 class PrincipalAcademicYearDetailScreen extends StatefulWidget {
   final AcademicYearRouteArgs args;
+  final PrincipalAcademicYearRepository? repository;
 
-  const PrincipalAcademicYearDetailScreen({super.key, required this.args});
+  const PrincipalAcademicYearDetailScreen({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<PrincipalAcademicYearDetailScreen> createState() =>
@@ -227,37 +267,51 @@ class PrincipalAcademicYearDetailScreen extends StatefulWidget {
 
 class _PrincipalAcademicYearDetailScreenState
     extends State<PrincipalAcademicYearDetailScreen> {
-  bool _loading = true;
-  String? _error;
+  late final PrincipalAcademicYearRepository _repository;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   Map<String, dynamic> _summary = const {};
 
   @override
   void initState() {
     super.initState();
+    _repository =
+        widget.repository ?? ApiPrincipalAcademicYearRepository.legacyDefault;
     _loadSummary();
   }
 
   Future<void> _loadSummary() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState<Object>.loading(
+        data: previous,
+        source: previous == null ? RepositorySource.empty : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
       final id = '${widget.args.year['id'] ?? ''}'.trim();
       if (id.isEmpty) throw StateError('Academic year id is missing');
-      final summary = await BackendApiClient.instance.getAcademicYearSummary(
-        id,
-      );
+      final summary = await _repository.loadAcademicYearSummary(id);
       if (!mounted) return;
       setState(() {
         _summary = summary;
-        _loading = false;
+        _state = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = '$error';
+        _state = previous == null
+            ? RepositoryState<Object>.error(error: error)
+            : RepositoryState<Object>(
+                data: Object(),
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
       });
     }
   }
@@ -277,22 +331,22 @@ class _PrincipalAcademicYearDetailScreenState
               Expanded(child: Text('Year summary', style: _titleStyle(22))),
               IconButton(
                 tooltip: 'Refresh summary',
-                onPressed: _loading ? null : _loadSummary,
+                onPressed: _state.isLoading ? null : _loadSummary,
                 icon: const Icon(Icons.refresh_rounded),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          if (_loading)
+          if (_state.isLoading && !_state.hasData)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 70),
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (_error != null)
+          else if (_state.isError && !_state.hasData)
             _EmptyPanel(
               icon: Icons.cloud_off_rounded,
               title: 'Summary unavailable',
-              body: _error!,
+              body: '${_state.error}',
             )
           else
             _AcademicYearSummaryPanel(summary: _summary),
@@ -506,8 +560,13 @@ class _SummaryListCard extends StatelessWidget {
 
 class AcademicYearClasswiseExportScreen extends StatefulWidget {
   final AcademicYearRouteArgs args;
+  final PrincipalAcademicYearRepository? repository;
 
-  const AcademicYearClasswiseExportScreen({super.key, required this.args});
+  const AcademicYearClasswiseExportScreen({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<AcademicYearClasswiseExportScreen> createState() =>
@@ -516,11 +575,12 @@ class AcademicYearClasswiseExportScreen extends StatefulWidget {
 
 class _AcademicYearClasswiseExportScreenState
     extends State<AcademicYearClasswiseExportScreen> {
+  late final PrincipalAcademicYearRepository _repository;
   String _gradeId = 'all';
   String _sectionId = 'all';
   String _exportType = 'complete_classwise_data';
   static const String _format = 'pdf';
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _exporting = false;
   List<GradeModel> _grades = const [];
   List<SectionModel> _sections = const [];
@@ -529,28 +589,32 @@ class _AcademicYearClasswiseExportScreenState
   @override
   void initState() {
     super.initState();
+    _repository =
+        widget.repository ?? ApiPrincipalAcademicYearRepository.legacyDefault;
     _load();
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() => _state = const RepositoryState.loading());
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait([
-        api.getGrades(),
-        api.getSections(yearId: '${widget.args.year['id']}'),
-        api.getStudents(pageSize: 1),
+        _repository.loadGrades(),
+        _repository.loadSections(yearId: '${widget.args.year['id']}'),
+        _repository.loadStudents(pageSize: 1),
       ]);
       if (!mounted) return;
       setState(() {
         _grades = results[0] as List<GradeModel>;
         _sections = results[1] as List<SectionModel>;
         _studentCount = (results[2] as PaginatedList<StudentModel>).total;
-        _loading = false;
+        _state = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() => _state = RepositoryState<Object>.error(error: error));
       _snack(context, 'Unable to load export data: $error', error: true);
     }
   }
@@ -564,7 +628,7 @@ class _AcademicYearClasswiseExportScreenState
     final year = widget.args.year;
     return _AyPageShell(
       title: 'Classwise Export',
-      child: _loading
+      child: _state.isLoading && !_state.hasData
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.fromLTRB(18, 22, 18, 26),
@@ -709,7 +773,7 @@ class _AcademicYearClasswiseExportScreenState
   Future<void> _export() async {
     setState(() => _exporting = true);
     try {
-      final export = await BackendApiClient.instance.createReportExport(
+      final export = await _repository.queueReportExport(
         '/reports/exports',
         reportTitle: 'Classwise ${_labelize(_exportType)}',
         reportType: _exportType,
@@ -721,6 +785,7 @@ class _AcademicYearClasswiseExportScreenState
         await _downloadExportArtifact(
           context,
           export: export,
+          repository: _repository,
           format: _format,
           title: 'Classwise ${_labelize(_exportType)}',
         );
@@ -740,8 +805,13 @@ class _AcademicYearClasswiseExportScreenState
 
 class AcademicYearUsersExportScreen extends StatefulWidget {
   final AcademicYearRouteArgs args;
+  final PrincipalAcademicYearRepository? repository;
 
-  const AcademicYearUsersExportScreen({super.key, required this.args});
+  const AcademicYearUsersExportScreen({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<AcademicYearUsersExportScreen> createState() =>
@@ -750,6 +820,7 @@ class AcademicYearUsersExportScreen extends StatefulWidget {
 
 class _AcademicYearUsersExportScreenState
     extends State<AcademicYearUsersExportScreen> {
+  late final PrincipalAcademicYearRepository _repository;
   final Set<String> _roles = {'principal', 'teacher', 'parent'};
   String _status = 'all';
   static const String _format = 'pdf';
@@ -759,6 +830,8 @@ class _AcademicYearUsersExportScreenState
   @override
   void initState() {
     super.initState();
+    _repository =
+        widget.repository ?? ApiPrincipalAcademicYearRepository.legacyDefault;
     _loadCount();
   }
 
@@ -766,7 +839,7 @@ class _AcademicYearUsersExportScreenState
     try {
       var total = 0;
       for (final role in _roles) {
-        final result = await BackendApiClient.instance.getUsers(
+        final result = await _repository.loadUsers(
           role: role,
           status: _status == 'all' ? null : _status,
           pageSize: 1,
@@ -899,7 +972,7 @@ class _AcademicYearUsersExportScreenState
     }
     setState(() => _exporting = true);
     try {
-      final export = await BackendApiClient.instance.createReportExport(
+      final export = await _repository.queueReportExport(
         '/reports/exports',
         reportTitle: 'Users-wise Data Export',
         reportType: 'users_wise_export',
@@ -917,6 +990,7 @@ class _AcademicYearUsersExportScreenState
         await _downloadExportArtifact(
           context,
           export: export,
+          repository: _repository,
           format: _format,
           title: 'Users-wise Data Export',
         );
@@ -933,8 +1007,13 @@ class _AcademicYearUsersExportScreenState
 
 class AcademicYearFeesExportScreen extends StatefulWidget {
   final AcademicYearRouteArgs args;
+  final PrincipalAcademicYearRepository? repository;
 
-  const AcademicYearFeesExportScreen({super.key, required this.args});
+  const AcademicYearFeesExportScreen({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<AcademicYearFeesExportScreen> createState() =>
@@ -943,12 +1022,13 @@ class AcademicYearFeesExportScreen extends StatefulWidget {
 
 class _AcademicYearFeesExportScreenState
     extends State<AcademicYearFeesExportScreen> {
+  late final PrincipalAcademicYearRepository _repository;
   String _gradeId = 'all';
   String _sectionId = 'all';
   String _reportType = 'complete_fees_report';
   String _paymentStatus = 'all';
   static const String _format = 'pdf';
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _exporting = false;
   List<GradeModel> _grades = const [];
   List<SectionModel> _sections = const [];
@@ -958,19 +1038,20 @@ class _AcademicYearFeesExportScreenState
   @override
   void initState() {
     super.initState();
+    _repository =
+        widget.repository ?? ApiPrincipalAcademicYearRepository.legacyDefault;
     _load();
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() => _state = const RepositoryState.loading());
     try {
-      final api = BackendApiClient.instance;
       final yearId = '${widget.args.year['id']}';
       final results = await Future.wait([
-        api.getGrades(),
-        api.getSections(yearId: yearId),
-        api.getFeeStructures(academicYearId: yearId),
-        api.getInvoicesPage(academicYearId: yearId, pageSize: 1),
+        _repository.loadGrades(),
+        _repository.loadSections(yearId: yearId),
+        _repository.loadFeeStructures(academicYearId: yearId),
+        _repository.loadInvoicesPage(academicYearId: yearId, pageSize: 1),
       ]);
       if (!mounted) return;
       setState(() {
@@ -979,11 +1060,14 @@ class _AcademicYearFeesExportScreenState
         _structureCount = (results[2] as List<Map<String, dynamic>>).length;
         _invoiceCount =
             (results[3] as PaginatedList<Map<String, dynamic>>).total;
-        _loading = false;
+        _state = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() => _state = RepositoryState<Object>.error(error: error));
       _snack(context, 'Unable to load fees data: $error', error: true);
     }
   }
@@ -997,7 +1081,7 @@ class _AcademicYearFeesExportScreenState
     final year = widget.args.year;
     return _AyPageShell(
       title: 'Fees Export',
-      child: _loading
+      child: _state.isLoading && !_state.hasData
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.fromLTRB(18, 22, 18, 26),
@@ -1130,7 +1214,7 @@ class _AcademicYearFeesExportScreenState
   Future<void> _export() async {
     setState(() => _exporting = true);
     try {
-      final export = await BackendApiClient.instance.createReportExport(
+      final export = await _repository.queueReportExport(
         '/fees/reports/exports',
         reportTitle: _labelize(_reportType),
         reportType: _reportType,
@@ -1150,6 +1234,7 @@ class _AcademicYearFeesExportScreenState
         await _downloadExportArtifact(
           context,
           export: export,
+          repository: _repository,
           format: _format,
           title: _labelize(_reportType),
         );
@@ -2239,6 +2324,7 @@ class _FinalDeleteDialogState extends State<_FinalDeleteDialog> {
 Future<void> _downloadExportArtifact(
   BuildContext context, {
   required Map<String, dynamic> export,
+  required PrincipalAcademicYearRepository repository,
   required String format,
   required String title,
 }) async {
@@ -2247,9 +2333,7 @@ Future<void> _downloadExportArtifact(
     _snack(context, '$title export queued');
     return;
   }
-  final bytes = await BackendApiClient.instance.downloadReportExport(
-    downloadUrl,
-  );
+  final bytes = await repository.downloadReportExport(downloadUrl);
   if (bytes.isEmpty) {
     throw StateError('Export file was empty');
   }

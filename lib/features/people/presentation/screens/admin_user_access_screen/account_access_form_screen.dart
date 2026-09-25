@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/modules/people/data/api_staff_directory_repository.dart';
+import 'package:schooldesk1/modules/people/data/api_user_access_repository.dart';
+import 'package:schooldesk1/modules/people/domain/staff_directory_repository.dart';
+import 'package:schooldesk1/modules/people/domain/user_access_repository.dart';
 
 @immutable
 class AccountAccessFormArgs {
@@ -45,6 +50,11 @@ class AccountAccessFormScreen extends StatefulWidget {
 }
 
 class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
+  StaffDirectoryRepository get _staffRepository =>
+      ApiStaffDirectoryRepository.legacyDefault;
+  UserAccessRepository get _userRepository =>
+      ApiUserAccessRepository.legacyDefault;
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _usernameController;
@@ -57,6 +67,10 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
   bool _saving = false;
   bool _passwordVisible = false;
   String? _feedback;
+  final RepositoryState<Object> _state = const RepositoryState<Object>(
+    data: Object(),
+    source: RepositorySource.remote,
+  );
 
   bool get _isPrincipalOwner => widget.args.isPrincipalOwner;
   bool get _isSuperAdminOwner => widget.args.isSuperAdminOwner;
@@ -145,49 +159,53 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
           onPressed: _saving ? null : _save,
         ),
       ],
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 16),
-                  if (_feedback != null) ...[
-                    _buildFeedback(_feedback!),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: () => setState(() {}),
+        data: (_) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 920),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildHeader(),
                     const SizedBox(height: 16),
-                  ],
-                  _buildPanel(
-                    children: [
-                      _buildResponsivePair(
-                        first: _buildNameField(),
-                        second: _buildUsernameField(),
-                      ),
+                    if (_feedback != null) ...[
+                      _buildFeedback(_feedback!),
                       const SizedBox(height: 16),
-                      _buildResponsivePair(
-                        first: _buildEmailField(),
-                        second: _buildPhoneField(),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildResponsivePair(
-                        first: _buildRoleField(),
-                        second: _isStaffManagedRole(_role)
-                            ? _buildDesignationField()
-                            : _buildPasswordField(),
-                      ),
-                      if (_isStaffManagedRole(_role)) ...[
-                        const SizedBox(height: 16),
-                        _buildPasswordField(),
-                      ],
                     ],
-                  ),
-                  const SizedBox(height: 16),
-                  _buildActionBar(),
-                ],
+                    _buildPanel(
+                      children: [
+                        _buildResponsivePair(
+                          first: _buildNameField(),
+                          second: _buildUsernameField(),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildResponsivePair(
+                          first: _buildEmailField(),
+                          second: _buildPhoneField(),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildResponsivePair(
+                          first: _buildRoleField(),
+                          second: _isStaffManagedRole(_role)
+                              ? _buildDesignationField()
+                              : _buildPasswordField(),
+                        ),
+                        if (_isStaffManagedRole(_role)) ...[
+                          const SizedBox(height: 16),
+                          _buildPasswordField(),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildActionBar(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -506,7 +524,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
     final password = _passwordController.text;
     if (_isStaffManagedRole(_role)) {
       final name = _splitName(_nameController.text.trim());
-      await BackendApiClient.instance.createStaff(
+      await _staffRepository.createStaff(
         firstName: name.firstName,
         lastName: name.lastName,
         staffCode: username,
@@ -522,7 +540,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
       return;
     }
 
-    await BackendApiClient.instance.createUser(
+    await _userRepository.createUser(
       username: username,
       password: password,
       role: _role,
@@ -536,7 +554,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
   Future<void> _updateExistingAccount() async {
     final existing = widget.args.existing!;
     final password = _passwordController.text.trim();
-    await BackendApiClient.instance.updateUser(
+    await _userRepository.updateUser(
       existing['id'].toString(),
       username: _usernameController.text.trim(),
       password: password.isEmpty ? null : password,
@@ -549,7 +567,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
     final staffId = '${existing['staffId'] ?? existing['linkedId'] ?? ''}';
     if (_isStaffManagedRole(_role) && staffId.isNotEmpty) {
       final name = _splitName(_nameController.text.trim());
-      await BackendApiClient.instance.updateStaff(
+      await _staffRepository.updateStaff(
         staffId,
         firstName: name.firstName,
         lastName: name.lastName,

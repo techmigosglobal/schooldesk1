@@ -28,7 +28,7 @@ void main() {
       'lib/core/network/api_modules/events_api.dart',
     ).readAsStringSync();
     final gallery = File(
-      'lib/features/shared/presentation/screens/school_gallery_screen.dart',
+      'lib/shared/screens/school_gallery_screen.dart',
     ).readAsStringSync();
     final manager = File(
       'lib/features/communication/presentation/screens/principal_event_approval_screen.dart',
@@ -41,7 +41,7 @@ void main() {
     expect(gallery, contains('Manage posts'));
     expect(gallery, contains('Edit post'));
     expect(gallery, contains('Delete post'));
-    expect(manager, contains('getPrincipalEventPosts()'));
+    expect(manager, contains('_repository.loadPosts()'));
     expect(manager, contains('All school posts'));
     expect(manager, contains('Future<void> _deletePost'));
     expect(handler, contains('roleValue(user)'));

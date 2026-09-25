@@ -1,22 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/services/backend_data_service.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/modules/academics/data/api_academic_management_repository.dart';
+import 'package:schooldesk1/modules/academics/domain/academic_management_repository.dart';
 
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 /// Read-only Academic Info screen — shows Principal-published academic year,
 /// subjects, classes, and curriculum. Used by Teacher, Admin, and Parent modules.
+final class _AcademicInfoSnapshot {
+  const _AcademicInfoSnapshot({
+    required this.activeYear,
+    required this.subjects,
+    required this.classes,
+    required this.curriculum,
+  });
+
+  final Map<String, dynamic>? activeYear;
+  final List<Map<String, dynamic>> subjects;
+  final List<Map<String, dynamic>> classes;
+  final List<Map<String, dynamic>> curriculum;
+}
+
 class AcademicInfoScreen extends StatefulWidget {
   final String role; // 'teacher', 'admin', 'parent'
   final Widget drawer;
   final int drawerIndex;
+  final AcademicManagementRepository? repository;
 
   const AcademicInfoScreen({
     super.key,
     required this.role,
     required this.drawer,
     required this.drawerIndex,
+    this.repository,
   });
 
   @override
@@ -26,8 +45,10 @@ class AcademicInfoScreen extends StatefulWidget {
 class _AcademicInfoScreenState extends State<AcademicInfoScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  BackendDataService? _storage;
-  bool _loading = true;
+  late final AcademicManagementRepository _repository =
+      widget.repository ?? ApiAcademicManagementRepository.legacyDefault;
+  RepositoryState<_AcademicInfoSnapshot> _repositoryState =
+      const RepositoryState.loading();
 
   Map<String, dynamic>? _activeYear;
   List<Map<String, dynamic>> _subjects = [];
@@ -48,27 +69,64 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
   }
 
   Future<void> _loadData() async {
-    _storage = await BackendDataService.getInstance();
-    await _storage!.ensureAcademicManagementLoaded();
-    final activeYear = await _storage!.getMap(
-      BackendDataService.kActiveAcademicYear,
-    );
-    final subjects = await _storage!.getList(
-      BackendDataService.kAcademicSubjects,
-    );
-    final classes = await _storage!.getList(
-      BackendDataService.kAcademicClasses,
-    );
-    final curriculum = await _storage!.getList(
-      BackendDataService.kSharedCurriculum,
-    );
+    final previous = _repositoryState;
     setState(() {
-      _activeYear = activeYear;
-      _subjects = subjects;
-      _classes = classes;
-      _curriculum = curriculum;
-      _loading = false;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
+    try {
+      final result = await _repository.load();
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Academic load failed',
+        );
+      }
+      final snapshot = result.dataOrNull!;
+      final activeYear = snapshot.academicYears.isEmpty
+          ? null
+          : snapshot.academicYears.first;
+      final subjects = snapshot.subjects;
+      final classes = snapshot.classes;
+      final curriculum = snapshot.curriculum;
+      if (!mounted) return;
+      setState(() {
+        _activeYear = activeYear;
+        _subjects = subjects;
+        _classes = classes;
+        _curriculum = curriculum;
+        _repositoryState = RepositoryState(
+          data: _AcademicInfoSnapshot(
+            activeYear: activeYear,
+            subjects: List.unmodifiable(subjects),
+            classes: List.unmodifiable(classes),
+            curriculum: List.unmodifiable(curriculum),
+          ),
+          source: RepositorySource.remote,
+          phase: subjects.isEmpty && classes.isEmpty && curriculum.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
+      });
+    }
   }
 
   @override
@@ -112,7 +170,6 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
                 color: context.appTheme.primary,
               ),
               onPressed: () {
-                setState(() => _loading = true);
                 _loadData();
               },
             ),
@@ -138,25 +195,28 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
           ),
         ),
       ],
-      body: _loading
-          ? Center(
-              child: CircularProgressIndicator(color: context.appTheme.primary),
-            )
-          : Column(
-              children: [
-                if (_activeYear != null) _buildActiveYearBanner(),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildCurriculumTab(),
-                      _buildSubjectsTab(),
-                      _buildClassesTab(),
-                    ],
-                  ),
-                ),
-              ],
+      body: SchoolDeskRepositoryStateView<_AcademicInfoSnapshot>(
+        state: _repositoryState,
+        onRetry: _loadData,
+        emptyTitle: 'No academic information',
+        emptyMessage: 'No published academic data exists for this school.',
+        errorTitle: 'Academic information unavailable',
+        data: (_) => Column(
+          children: [
+            if (_activeYear != null) _buildActiveYearBanner(),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildCurriculumTab(),
+                  _buildSubjectsTab(),
+                  _buildClassesTab(),
+                ],
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 

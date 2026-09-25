@@ -12,10 +12,10 @@ void main() {
 
       expect(source, contains('_confirmAcademicYearDelete'));
       expect(source, contains('_confirmAcademicYearFinalDelete'));
-      expect(source, contains('deleteAcademicYear('));
+      expect(source, contains('_repository.deleteAcademicYear('));
       expect(source, contains('cascadeConfirmed: true'));
 
-      expect(source, contains('getAcademicYearSummary'));
+      expect(source, contains('_repository.loadAcademicYearSummary'));
       expect(source, contains('active_student_count'));
       expect(source, contains('fee_structure_names'));
       expect(source, isNot(contains('Export Data')));

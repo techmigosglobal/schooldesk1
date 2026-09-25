@@ -8,6 +8,7 @@ part of 'schooldesk_api_client.dart';
 // RetrofitGenerator
 // **************************************************************************
 
+// ignore_for_file: type=lint
 // ignore_for_file: unnecessary_brace_in_string_interps,no_leading_underscores_for_local_identifiers,unused_element,unnecessary_string_interpolations,unused_element_parameter,avoid_unused_constructor_parameters,unreachable_from_main,avoid_redundant_argument_values
 
 class _SchoolDeskApiClient implements SchoolDeskApiClient {
@@ -24,7 +25,8 @@ class _SchoolDeskApiClient implements SchoolDeskApiClient {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = request;
+    final _data = <String, dynamic>{};
+    _data.addAll(request.toJson());
     final _options = _setStreamType<ApiEnvelope>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
@@ -367,7 +369,8 @@ class _SchoolDeskApiClient implements SchoolDeskApiClient {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = payload;
+    final _data = <String, dynamic>{};
+    _data.addAll(payload.toJson());
     final _options = _setStreamType<ApiEnvelope>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
@@ -394,7 +397,8 @@ class _SchoolDeskApiClient implements SchoolDeskApiClient {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = payload;
+    final _data = <String, dynamic>{};
+    _data.addAll(payload.toJson());
     final _options = _setStreamType<ApiEnvelope>(
       Options(method: 'PUT', headers: _headers, extra: _extra)
           .compose(
@@ -767,7 +771,8 @@ class _SchoolDeskApiClient implements SchoolDeskApiClient {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = payload;
+    final _data = <String, dynamic>{};
+    _data.addAll(payload.toJson());
     final _options = _setStreamType<ApiEnvelope>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
@@ -794,7 +799,8 @@ class _SchoolDeskApiClient implements SchoolDeskApiClient {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = payload;
+    final _data = <String, dynamic>{};
+    _data.addAll(payload.toJson());
     final _options = _setStreamType<ApiEnvelope>(
       Options(method: 'PUT', headers: _headers, extra: _extra)
           .compose(
@@ -999,7 +1005,8 @@ class _SchoolDeskApiClient implements SchoolDeskApiClient {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = payload;
+    final _data = <String, dynamic>{};
+    _data.addAll(payload.toJson());
     final _options = _setStreamType<ApiEnvelope>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
@@ -1167,7 +1174,8 @@ class _SchoolDeskApiClient implements SchoolDeskApiClient {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = payload;
+    final _data = <String, dynamic>{};
+    _data.addAll(payload.toJson());
     final _options = _setStreamType<ApiEnvelope>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
@@ -1194,7 +1202,8 @@ class _SchoolDeskApiClient implements SchoolDeskApiClient {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = payload;
+    final _data = <String, dynamic>{};
+    _data.addAll(payload.toJson());
     final _options = _setStreamType<ApiEnvelope>(
       Options(method: 'PUT', headers: _headers, extra: _extra)
           .compose(
@@ -1542,7 +1551,8 @@ class _SchoolDeskApiClient implements SchoolDeskApiClient {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = payload;
+    final _data = <String, dynamic>{};
+    _data.addAll(payload.toJson());
     final _options = _setStreamType<ApiEnvelope>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(

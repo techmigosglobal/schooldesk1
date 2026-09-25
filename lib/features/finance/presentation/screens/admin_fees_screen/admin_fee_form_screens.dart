@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
 
 @immutable
 class AdminFeeStructureFormArgs {
@@ -119,8 +123,13 @@ class AdminPaymentRecordFormResult {
 
 class AdminFeeStructureFormScreen extends StatefulWidget {
   final AdminFeeStructureFormArgs args;
+  final AdminFeesRepository? repository;
 
-  const AdminFeeStructureFormScreen({super.key, required this.args});
+  const AdminFeeStructureFormScreen({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<AdminFeeStructureFormScreen> createState() =>
@@ -129,6 +138,7 @@ class AdminFeeStructureFormScreen extends StatefulWidget {
 
 class _AdminFeeStructureFormScreenState
     extends State<AdminFeeStructureFormScreen> {
+  late final AdminFeesRepository _repository;
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _amountController;
   late final TextEditingController _dueDayController;
@@ -149,6 +159,7 @@ class _AdminFeeStructureFormScreenState
   @override
   void initState() {
     super.initState();
+    _repository = widget.repository ?? ApiAdminFeesRepository.legacyDefault;
     final fee = widget.args.feeStructure ?? const <String, dynamic>{};
     _selectedYearId = _initialId(
       '${fee['academic_year_id'] ?? ''}',
@@ -264,37 +275,44 @@ class _AdminFeeStructureFormScreenState
         role: _dashboardRole(widget.args.ownerRole),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (!_hasReferenceData)
-              const SchoolDeskStatusPanel.empty(
-                title: 'Setup data missing',
-                message:
-                    'Academic years, classes, and fee categories are required before fee structure requests can be prepared.',
-              )
-            else ...[
-              _buildSummary(),
-              const SizedBox(height: 14),
-              _buildSelectors(),
-              const SizedBox(height: 14),
-              _buildAmountFields(),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_rounded, size: 18),
-                label: Text(_saving ? 'Saving...' : 'Save Structure'),
-              ),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        ),
+        onRetry: () {},
+        data: (_) => Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (!_hasReferenceData)
+                const SchoolDeskStatusPanel.empty(
+                  title: 'Setup data missing',
+                  message:
+                      'Academic years, classes, and fee categories are required before fee structure requests can be prepared.',
+                )
+              else ...[
+                _buildSummary(),
+                const SizedBox(height: 14),
+                _buildSelectors(),
+                const SizedBox(height: 14),
+                _buildAmountFields(),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: _saving ? null : _save,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_rounded, size: 18),
+                  label: Text(_saving ? 'Saving...' : 'Save Structure'),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -608,7 +626,7 @@ class _AdminFeeStructureFormScreenState
       final id = _feeStructureId;
       if (widget.args.isEditing) {
         if (id.isEmpty) throw Exception('Backend fee structure ID is missing');
-        await BackendApiClient.instance.updateFeeStructure(
+        await _repository.updateFeeStructure(
           id,
           academicYearId: _selectedYearId,
           gradeId: _selectedGradeId,
@@ -619,12 +637,12 @@ class _AdminFeeStructureFormScreenState
           dueDay: int.parse(_dueDayController.text),
           lateFinePerDay: double.tryParse(_lateFineController.text) ?? 0,
         );
-        await BackendApiClient.instance.applyFeeInvoiceSync(
+        await _repository.applyFeeInvoiceSync(
           id,
           includePartiallyPaid: true,
         );
       } else {
-        final created = await BackendApiClient.instance.createFeeStructure(
+        final created = await _repository.createFeeStructure(
           academicYearId: _selectedYearId,
           gradeId: _selectedGradeId,
           sectionId: _selectedSectionId,
@@ -637,7 +655,7 @@ class _AdminFeeStructureFormScreenState
         );
         final createdId = _textValue(created['id']);
         if (createdId.isNotEmpty) {
-          await BackendApiClient.instance.applyFeeInvoiceSync(
+          await _repository.applyFeeInvoiceSync(
             createdId,
             includePartiallyPaid: true,
           );
@@ -733,8 +751,13 @@ class _AdminFeeStructureFormScreenState
 
 class AdminInvoiceGenerationFormScreen extends StatefulWidget {
   final AdminInvoiceGenerationFormArgs args;
+  final AdminFeesRepository? repository;
 
-  const AdminInvoiceGenerationFormScreen({super.key, required this.args});
+  const AdminInvoiceGenerationFormScreen({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<AdminInvoiceGenerationFormScreen> createState() =>
@@ -743,6 +766,7 @@ class AdminInvoiceGenerationFormScreen extends StatefulWidget {
 
 class _AdminInvoiceGenerationFormScreenState
     extends State<AdminInvoiceGenerationFormScreen> {
+  late final AdminFeesRepository _repository;
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _labelController;
   late final TextEditingController _dueDateController;
@@ -812,6 +836,7 @@ class _AdminInvoiceGenerationFormScreenState
   @override
   void initState() {
     super.initState();
+    _repository = widget.repository ?? ApiAdminFeesRepository.legacyDefault;
     final seed = widget.args.seedStructure ?? const <String, dynamic>{};
     _scope = 'class';
     _selectedYearId = _initialId(
@@ -847,39 +872,46 @@ class _AdminInvoiceGenerationFormScreenState
         role: _dashboardRole(widget.args.ownerRole),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (!_hasReferenceData)
-              const SchoolDeskStatusPanel.empty(
-                title: 'Invoice setup data missing',
-                message:
-                    'Academic year, class, and student data must be loaded before invoice requests can be submitted.',
-              )
-            else ...[
-              _buildInvoiceScope(),
-              const SizedBox(height: 14),
-              _buildInvoiceFields(),
-              const SizedBox(height: 14),
-              _buildEstimate(),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _generating ? null : _generate,
-                icon: _generating
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.receipt_long_rounded, size: 18),
-                label: Text(
-                  _generating ? 'Generating...' : 'Generate Invoices',
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        ),
+        onRetry: () {},
+        data: (_) => Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (!_hasReferenceData)
+                const SchoolDeskStatusPanel.empty(
+                  title: 'Invoice setup data missing',
+                  message:
+                      'Academic year, class, and student data must be loaded before invoice requests can be submitted.',
+                )
+              else ...[
+                _buildInvoiceScope(),
+                const SizedBox(height: 14),
+                _buildInvoiceFields(),
+                const SizedBox(height: 14),
+                _buildEstimate(),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: _generating ? null : _generate,
+                  icon: _generating
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.receipt_long_rounded, size: 18),
+                  label: Text(
+                    _generating ? 'Generating...' : 'Generate Invoices',
+                  ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -1109,18 +1141,17 @@ class _AdminInvoiceGenerationFormScreenState
     }
     setState(() => _generating = true);
     try {
-      final result = await BackendApiClient.instance
-          .createRaw('/fees/invoices/generate', {
-            'academic_year_id': _selectedYearId,
-            'grade_id': _selectedGradeId,
-            if (_scope == 'section') 'section_id': _selectedSectionId,
-            if (_scope == 'student') 'student_id': _selectedStudentId,
-            'term_id': _selectedTermId,
-            'include_one_time': _includeOneTime,
-            'include_yearly': _includeYearly,
-            'invoice_label': _labelController.text.trim(),
-            'due_date': _dueDateController.text.trim(),
-          });
+      final result = await _repository.createRaw('/fees/invoices/generate', {
+        'academic_year_id': _selectedYearId,
+        'grade_id': _selectedGradeId,
+        if (_scope == 'section') 'section_id': _selectedSectionId,
+        if (_scope == 'student') 'student_id': _selectedStudentId,
+        'term_id': _selectedTermId,
+        'include_one_time': _includeOneTime,
+        'include_yearly': _includeYearly,
+        'invoice_label': _labelController.text.trim(),
+        'due_date': _dueDateController.text.trim(),
+      });
       if (!mounted) return;
       final createdCount = (result['created'] as num?)?.toInt() ?? 0;
       if (!mounted) return;
@@ -1176,7 +1207,7 @@ class _AdminInvoiceGenerationFormScreenState
       return;
     }
     try {
-      final terms = await BackendApiClient.instance.getTerms(yearId);
+      final terms = await _repository.loadTerms(yearId);
       if (!mounted) return;
       setState(() {
         _terms = terms;
@@ -1206,8 +1237,13 @@ class _AdminInvoiceGenerationFormScreenState
 
 class AdminPaymentRecordFormScreen extends StatefulWidget {
   final AdminPaymentRecordFormArgs args;
+  final AdminFeesRepository? repository;
 
-  const AdminPaymentRecordFormScreen({super.key, required this.args});
+  const AdminPaymentRecordFormScreen({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<AdminPaymentRecordFormScreen> createState() =>
@@ -1216,6 +1252,7 @@ class AdminPaymentRecordFormScreen extends StatefulWidget {
 
 class _AdminPaymentRecordFormScreenState
     extends State<AdminPaymentRecordFormScreen> {
+  late final AdminFeesRepository _repository;
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _amountController;
   late final TextEditingController _paymentDateController;
@@ -1243,6 +1280,7 @@ class _AdminPaymentRecordFormScreenState
   @override
   void initState() {
     super.initState();
+    _repository = widget.repository ?? ApiAdminFeesRepository.legacyDefault;
     final initialId = '${widget.args.initialInvoice?['id'] ?? ''}'.trim();
     _selectedInvoiceId = _initialId(
       initialId,
@@ -1274,37 +1312,44 @@ class _AdminPaymentRecordFormScreenState
         role: _dashboardRole(widget.args.ownerRole),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (_pendingDues.isEmpty)
-              const SchoolDeskStatusPanel.empty(
-                title: 'No outstanding invoices',
-                message:
-                    'Payment requests can be submitted after outstanding invoices are available.',
-              )
-            else ...[
-              _buildInvoiceSelector(),
-              const SizedBox(height: 14),
-              _buildPaymentFields(),
-              const SizedBox(height: 14),
-              _buildInvoiceSummary(),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _saving ? null : _record,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.payments_rounded, size: 18),
-                label: Text(_saving ? 'Saving...' : 'Record Payment'),
-              ),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        ),
+        onRetry: () {},
+        data: (_) => Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (_pendingDues.isEmpty)
+                const SchoolDeskStatusPanel.empty(
+                  title: 'No outstanding invoices',
+                  message:
+                      'Payment requests can be submitted after outstanding invoices are available.',
+                )
+              else ...[
+                _buildInvoiceSelector(),
+                const SizedBox(height: 14),
+                _buildPaymentFields(),
+                const SizedBox(height: 14),
+                _buildInvoiceSummary(),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: _saving ? null : _record,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.payments_rounded, size: 18),
+                  label: Text(_saving ? 'Saving...' : 'Record Payment'),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -1483,7 +1528,7 @@ class _AdminPaymentRecordFormScreenState
     final amount = double.parse(_amountController.text);
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.recordPayment(
+      await _repository.recordPayment(
         PaymentRequest(
           invoiceId: _selectedInvoiceId,
           amountPaid: amount,

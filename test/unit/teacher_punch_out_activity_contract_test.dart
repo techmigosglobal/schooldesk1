@@ -38,8 +38,11 @@ void main() {
     final source = File(
       'lib/features/attendance/presentation/screens/teacher_my_attendance_screen/teacher_my_attendance_screen.dart',
     ).readAsStringSync();
+    final repository = File(
+      'lib/roles/teacher/data/api_teacher_attendance_repository.dart',
+    ).readAsStringSync();
     expect(source, contains('Punch Out'));
-    expect(source, contains('punchOutMyStaffAttendance'));
+    expect(repository, contains('punchOutMyStaffAttendance'));
     expect(source, contains(r'Out ${_timeLabel(checkOut)}'));
   });
 

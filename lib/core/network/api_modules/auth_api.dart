@@ -255,7 +255,8 @@ extension BackendAuthApi on BackendApiClient {
           mimeType: mimeType,
           filePath: filePath,
           fileBytes: fileBytes,
-          idempotencyKey: e.requestOptions.headers['Idempotency-Key']?.toString(),
+          idempotencyKey: e.requestOptions.headers['Idempotency-Key']
+              ?.toString(),
         );
         if (queued != null) return queued.placeholder;
       }

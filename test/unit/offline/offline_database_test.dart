@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -58,6 +60,129 @@ void main() {
     expect(pending, hasLength(1));
     expect(pending.single.idempotencyKey, 'idem-1');
     expect(pending.single.operationType, 'attendance.submit');
+  });
+
+  test('idempotency key is durable and scoped per account', () async {
+    final first = await database.enqueueMutation(
+      accountKey: 'account-a|branch-a|teacher',
+      operationType: 'attendance.submit',
+      method: 'POST',
+      path: '/attendance',
+      queryParameters: const {},
+      payload: const {'local_id': 'attendance-1'},
+      idempotencyKey: 'same-key',
+    );
+    final duplicate = await database.enqueueMutation(
+      accountKey: 'account-a|branch-a|teacher',
+      operationType: 'attendance.submit',
+      method: 'POST',
+      path: '/attendance',
+      queryParameters: const {},
+      payload: const {'local_id': 'attendance-1'},
+      idempotencyKey: 'same-key',
+    );
+    final otherAccount = await database.enqueueMutation(
+      accountKey: 'account-b|branch-b|teacher',
+      operationType: 'attendance.submit',
+      method: 'POST',
+      path: '/attendance',
+      queryParameters: const {},
+      payload: const {'local_id': 'attendance-1'},
+      idempotencyKey: 'same-key',
+    );
+
+    expect(duplicate, first);
+    expect(otherAccount, isNot(first));
+    expect(
+      await database.pendingMutations('account-a|branch-a|teacher'),
+      hasLength(1),
+    );
+    expect(
+      await database.pendingMutations('account-b|branch-b|teacher'),
+      hasLength(1),
+    );
+  });
+
+  test(
+    'outbox preserves order, retry backoff, permanent failure, and conflict',
+    () async {
+      final first = await database.enqueueMutation(
+        accountKey: 'account-a|branch-a|teacher',
+        operationType: 'attendance.submit',
+        method: 'POST',
+        path: '/attendance',
+        queryParameters: const {},
+        payload: const {'local_id': 'first'},
+        idempotencyKey: 'first-key',
+      );
+      final second = await database.enqueueMutation(
+        accountKey: 'account-a|branch-a|teacher',
+        operationType: 'teacher-note.save',
+        method: 'POST',
+        path: '/diary-entries',
+        queryParameters: const {},
+        payload: const {'local_id': 'second'},
+        idempotencyKey: 'second-key',
+      );
+
+      var pending = await database.pendingMutations(
+        'account-a|branch-a|teacher',
+      );
+      expect(pending.map((entry) => entry.id), [first, second]);
+
+      await database.markMutationRetry(
+        first,
+        retryCount: 1,
+        error: 'temporary network failure',
+        nextAttemptAt: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+      );
+      pending = await database.pendingMutations('account-a|branch-a|teacher');
+      expect(pending.single.id, second);
+
+      await database.markMutationConflict(first, 'server version conflict');
+      final conflicted = await (database.select(
+        database.syncOutboxEntries,
+      )..where((row) => row.id.equals(first))).getSingle();
+      expect(conflicted.status, 'conflict');
+      expect(conflicted.lastError, 'server version conflict');
+      expect(await database.pendingWorkCount('account-a|branch-a|teacher'), 2);
+
+      await database.markMutationFailed(second, 'permanent validation failure');
+      expect(
+        await database.pendingWorkCount('account-a|branch-a|teacher'),
+        2,
+      );
+    },
+  );
+
+  test('outbox survives database restart', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'schooldesk-offline-restart-',
+    );
+    final file = File('${directory.path}/offline.sqlite');
+    try {
+      final firstDatabase = OfflineDatabase(NativeDatabase(file));
+      final id = await firstDatabase.enqueueMutation(
+        accountKey: 'account-a|branch-a|teacher',
+        operationType: 'homework.draft',
+        method: 'POST',
+        path: '/homework',
+        queryParameters: const {},
+        payload: const {'status': 'draft', 'local_id': 'draft-1'},
+        idempotencyKey: 'restart-key',
+      );
+      await firstDatabase.close();
+
+      final reopened = OfflineDatabase(NativeDatabase(file));
+      final pending = await reopened.pendingMutations(
+        'account-a|branch-a|teacher',
+      );
+      expect(pending.single.id, id);
+      expect(pending.single.idempotencyKey, 'restart-key');
+      await reopened.close();
+    } finally {
+      await directory.delete(recursive: true);
+    }
   });
 
   test('does not allow identical local ids to cross account scopes', () async {

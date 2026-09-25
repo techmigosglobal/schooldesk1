@@ -101,7 +101,7 @@ void main() {
       'supabase/migrations/0003_attendance_fees_leave_timetable.sql',
     ).readAsStringSync();
     final model = File(
-      'lib/features/shared/data/models/backend_models.dart',
+      'lib/core/network/models/backend_models.dart',
     ).readAsStringSync();
 
     expect(source, contains('/leave/balances'));
@@ -141,6 +141,12 @@ void main() {
     final leaveScreen = File(
       'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_screen.dart',
     ).readAsStringSync();
+    final parentAttendanceRepository = File(
+      'lib/roles/parent/data/api_parent_attendance_repository.dart',
+    ).readAsStringSync();
+    final leaveRepository = File(
+      'lib/roles/parent/data/api_parent_leave_repository.dart',
+    ).readAsStringSync();
 
     expect(
       attendanceScreen,
@@ -150,30 +156,22 @@ void main() {
       attendanceScreen,
       contains("request['to_date'] ?? request['end_date']"),
     );
-    expect(
-      attendanceScreen,
-      contains('Future<Map<String, dynamic>> _safeAttendanceSummary'),
-    );
-    expect(
-      attendanceScreen,
-      contains('Future<List<Map<String, dynamic>>> _safeAttendanceRecords'),
-    );
-    expect(
-      attendanceScreen,
-      contains('Future<List<Map<String, dynamic>>> _safeLeaveRequests'),
-    );
+    expect(parentAttendanceRepository, contains('getStudentAttendanceSummary'));
+    expect(parentAttendanceRepository, contains('getStudentAttendanceRecords'));
+    expect(parentAttendanceRepository, contains('getStudentLeaveApplications'));
     expect(
       leaveScreen,
       contains("request['from_date'] ?? request['start_date']"),
     );
     expect(leaveScreen, contains("request['to_date'] ?? request['end_date']"));
+    expect(leaveRepository, contains('getStudentLeaveApplications('));
   });
 
   test(
     'StaffAttendanceModel._parseDateTime handles PostgreSQL time-only strings',
     () {
       final source = File(
-        'lib/features/shared/data/models/backend_models.dart',
+        'lib/core/network/models/backend_models.dart',
       ).readAsStringSync();
 
       // Verify the parser exists in StaffAttendanceModel

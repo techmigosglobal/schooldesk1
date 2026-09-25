@@ -11,7 +11,7 @@ void main() {
       'supabase/functions/api/handlers/help.ts',
     ).readAsStringSync();
     final screen = File(
-      'lib/features/shared/presentation/screens/help_screen/help_screen.dart',
+      'lib/shared/screens/help_screen/help_screen.dart',
     ).readAsStringSync();
 
     for (final role in ['principal', 'coordinator', 'teacher', 'parent']) {
@@ -31,7 +31,7 @@ void main() {
       'supabase/functions/api/handlers/help.ts',
     ).readAsStringSync();
     final screen = File(
-      'lib/features/shared/presentation/screens/help_screen/help_screen.dart',
+      'lib/shared/screens/help_screen/help_screen.dart',
     ).readAsStringSync();
 
     expect(handler, contains('function workflowSteps'));

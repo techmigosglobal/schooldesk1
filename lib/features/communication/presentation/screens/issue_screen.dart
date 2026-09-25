@@ -1,12 +1,13 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/paging/paged_list_controller.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -14,12 +15,16 @@ import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/modules/communication/data/api_issue_repository.dart';
+import 'package:schooldesk1/modules/communication/domain/issue_repository.dart';
 
 enum IssueScreenRole { principal, teacher, parent, superAdmin }
 
 class IssueScreen extends StatefulWidget {
-  const IssueScreen({super.key, required this.role});
+  const IssueScreen({super.key, required this.role, this.repository});
   final IssueScreenRole role;
+  final IssueRepository? repository;
   @override
   State<IssueScreen> createState() => _IssueScreenState();
 }
@@ -30,9 +35,11 @@ class _IssueScreenState extends State<IssueScreen>
   late final PagedListController<Map<String, dynamic>> _paging;
   final _searchController = TextEditingController();
   Timer? _searchDebounce;
-  bool _loading = true;
-  String? _error;
+  RepositoryState<Object> _state = const RepositoryState.loading();
+  bool _mutationBusy = false;
   bool get _isSuperAdmin => widget.role == IssueScreenRole.superAdmin;
+  IssueRepository get _repository =>
+      widget.repository ?? ApiIssueRepository.legacyDefault;
 
   @override
   void initState() {
@@ -45,13 +52,12 @@ class _IssueScreenState extends State<IssueScreen>
         }
       });
     _paging = PagedListController<Map<String, dynamic>>(
-      loadPage: ({required page, required pageSize}) =>
-          BackendApiClient.instance.getIssuesPage(
-            status: _statusForCurrentTab,
-            search: _searchController.text,
-            page: page,
-            pageSize: pageSize,
-          ),
+      loadPage: ({required page, required pageSize}) => _repository.loadPage(
+        status: _statusForCurrentTab,
+        search: _searchController.text,
+        page: page,
+        pageSize: pageSize,
+      ),
       itemKey: (row) => '${row['id'] ?? ''}',
     );
     _load();
@@ -67,17 +73,35 @@ class _IssueScreenState extends State<IssueScreen>
   }
 
   Future<void> _load() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState<Object>.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     await _paging.refresh();
     if (!mounted) return;
     setState(() {
-      _loading = false;
-      _error = _paging.error == null
-          ? null
-          : 'Issues are unavailable. Please retry.';
+      _state = _paging.error == null
+          ? const RepositoryState<Object>(
+              data: Object(),
+              source: RepositorySource.remote,
+            )
+          : (previous == null
+                ? RepositoryState<Object>.error(
+                    error: 'Issues are unavailable. Please retry.',
+                  )
+                : RepositoryState<Object>(
+                    data: Object(),
+                    source: RepositorySource.cache,
+                    isStale: true,
+                    error: 'Issues are unavailable. Please retry.',
+                  ));
     });
   }
 
@@ -104,16 +128,19 @@ class _IssueScreenState extends State<IssueScreen>
       builder: (_) => const _RaiseIssueDialog(),
     );
     if (draft == null) return;
-    setState(() => _loading = true);
+    setState(() {
+      _mutationBusy = true;
+    });
     try {
       final files = <Map<String, dynamic>>[];
       for (final file in draft.files) {
+        final fileBytes = await file.readAsBytes();
         final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
         final isImage = ImageUploadOptimizer.isImage(file.name, mimeType);
         final optimized = isImage
-            ? (file.bytes != null
+            ? (fileBytes.isNotEmpty
                   ? ImageUploadOptimizer.fromBytes(
-                      file.bytes!,
+                      fileBytes,
                       filename: file.name,
                       mimeType: mimeType,
                       preset: ImageUploadPreset.content,
@@ -128,11 +155,11 @@ class _IssueScreenState extends State<IssueScreen>
         files.add({
           'name': optimized?.filename ?? file.name,
           'path': file.path,
-          'bytes': optimized?.bytes ?? file.bytes,
+          'bytes': optimized?.bytes ?? fileBytes,
           'mime_type': optimized?.mimeType ?? mimeType,
         });
       }
-      await BackendApiClient.instance.createIssueWithAttachments(
+      await _repository.createWithAttachments(
         draft.payload,
         files,
       );
@@ -147,12 +174,14 @@ class _IssueScreenState extends State<IssueScreen>
     } on Object {
       if (mounted) {
         setState(
-          () => _error =
-              'The issue or one of its attachments could not be submitted. Please retry.',
+          () => _state = _state.copyWith(
+            error:
+                'The issue or one of its attachments could not be submitted. Please retry.',
+          ),
         );
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _mutationBusy = false);
     }
   }
 
@@ -185,7 +214,7 @@ class _IssueScreenState extends State<IssueScreen>
       note = result;
     }
     try {
-      await BackendApiClient.instance.updateIssue(
+      await _repository.updateIssue(
         '${issue['id']}',
         status: status,
         resolutionNote: note,
@@ -205,7 +234,7 @@ class _IssueScreenState extends State<IssueScreen>
     Map attachment,
   ) async {
     try {
-      final url = await BackendApiClient.instance.issueAttachmentUrl(
+      final url = await _repository.loadAttachmentUrl(
         '${issue['id']}',
         '${attachment['id']}',
       );
@@ -267,7 +296,7 @@ class _IssueScreenState extends State<IssueScreen>
       floatingActionButton: _isSuperAdmin
           ? null
           : FloatingActionButton.extended(
-              onPressed: _raiseIssue,
+              onPressed: _mutationBusy ? null : _raiseIssue,
               icon: const Icon(Icons.add_rounded),
               label: const Text('Raise Issue'),
             ),
@@ -286,74 +315,72 @@ class _IssueScreenState extends State<IssueScreen>
         animation: _paging,
         builder: (context, _) {
           final issues = _paging.items;
-          final hasError = _error != null || _paging.error != null;
-          if (_loading && issues.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (hasError && issues.isEmpty) {
-            return Center(
-              child: FilledButton(onPressed: _load, child: const Text('Retry')),
-            );
-          }
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search_rounded),
-                    hintText: 'Search issues',
+          return SchoolDeskRepositoryStateView<Object>(
+            state: _state,
+            onRetry: _load,
+            errorTitle: 'Unable to load issues',
+            data: (_) => Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search_rounded),
+                      hintText: 'Search issues',
+                    ),
                   ),
                 ),
-              ),
-              if (_paging.isStale)
-                MaterialBanner(
-                  content: const Text(
-                    'Showing cached issues. Retry to refresh.',
+                if (_paging.isStale || _state.isOffline)
+                  MaterialBanner(
+                    content: const Text(
+                      'Showing cached issues. Retry to refresh.',
+                    ),
+                    actions: [
+                      TextButton(onPressed: _load, child: const Text('Retry')),
+                    ],
                   ),
-                  actions: [
-                    TextButton(onPressed: _load, child: const Text('Retry')),
-                  ],
-                ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _load,
-                  child: issues.isEmpty
-                      ? ListView(
-                          children: const [
-                            SizedBox(height: 180),
-                            Center(child: Text('No issues found.')),
-                          ],
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: issues.length + (_paging.hasMore ? 1 : 0),
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            if (index == issues.length) {
-                              return OutlinedButton(
-                                onPressed: _paging.isBusy
-                                    ? null
-                                    : _paging.loadMore,
-                                child: Text(
-                                  _paging.isBusy ? 'Loading…' : 'Load more',
-                                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: issues.isEmpty
+                        ? ListView(
+                            children: const [
+                              SizedBox(height: 180),
+                              Center(child: Text('No issues found.')),
+                            ],
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(16),
+                            itemCount:
+                                issues.length + (_paging.hasMore ? 1 : 0),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              if (index == issues.length) {
+                                return OutlinedButton(
+                                  onPressed: _paging.isBusy
+                                      ? null
+                                      : _paging.loadMore,
+                                  child: Text(
+                                    _paging.isBusy ? 'Loading…' : 'Load more',
+                                  ),
+                                );
+                              }
+                              return _IssueCard(
+                                issue: issues[index],
+                                superAdmin: _isSuperAdmin,
+                                repository: _repository,
+                                onUpdate: _update,
+                                onOpenAttachment: _openAttachment,
                               );
-                            }
-                            return _IssueCard(
-                              issue: issues[index],
-                              superAdmin: _isSuperAdmin,
-                              onUpdate: _update,
-                              onOpenAttachment: _openAttachment,
-                            );
-                          },
-                        ),
+                            },
+                          ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -365,11 +392,13 @@ class _IssueCard extends StatelessWidget {
   const _IssueCard({
     required this.issue,
     required this.superAdmin,
+    required this.repository,
     required this.onUpdate,
     required this.onOpenAttachment,
   });
   final Map<String, dynamic> issue;
   final bool superAdmin;
+  final IssueRepository repository;
   final Future<void> Function(Map<String, dynamic>, String) onUpdate;
   final Future<void> Function(Map<String, dynamic>, Map) onOpenAttachment;
   @override
@@ -459,6 +488,7 @@ class _IssueCard extends StatelessWidget {
                             (attachment) => _IssueAttachmentThumbnail(
                               issueId: '${issue['id']}',
                               attachment: attachment,
+                              repository: repository,
                               onOpen: () => onOpenAttachment(issue, attachment),
                             ),
                           )
@@ -511,7 +541,8 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
   String _category = 'technical';
   String _priority = 'medium';
   List<PlatformFile> _files = const [];
-  String? _error;
+  final Map<String, Uint8List> _fileBytesByName = {};
+  String? _attachmentError;
   @override
   void dispose() {
     _title.dispose();
@@ -521,18 +552,26 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
 
   Future<void> _pick() async {
     final result = await FilePicker.pickFiles(
-      allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx'],
-      withData: true,
     );
-    if (result == null) return;
+    final selectedBytes = <String, Uint8List>{};
+    for (final file in result) {
+      final bytes = await file.readAsBytes();
+      if (bytes.isNotEmpty) selectedBytes[file.name] = bytes;
+    }
 
     setState(() {
-      final combined = [..._files, ...result.files];
+      _fileBytesByName.addAll(selectedBytes);
+      final combined = [..._files, ...result];
       _files = combined.take(5).toList();
-      final bytes = _files.fold<int>(0, (sum, file) => sum + file.size);
-      _error = combined.length > 5 || bytes > 50 * 1024 * 1024
+      final bytes = _files.fold<int>(
+        0,
+        (sum, file) =>
+            sum +
+            (_fileBytesByName[file.name]?.length ?? file.lengthSync() ?? 0),
+      );
+      _attachmentError = combined.length > 5 || bytes > 50 * 1024 * 1024
           ? 'Choose up to five files totaling 50 MB.'
           : null;
     });
@@ -613,7 +652,7 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
                         ),
                         clipBehavior: Clip.antiAlias,
                         child:
-                            (file.bytes == null ||
+                            (_fileBytesByName[file.name] == null ||
                                 ![
                                   'jpg',
                                   'jpeg',
@@ -622,7 +661,10 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
                                   'gif',
                                 ].contains(file.extension?.toLowerCase()))
                             ? const Icon(Icons.insert_drive_file_outlined)
-                            : Image.memory(file.bytes!, fit: BoxFit.cover),
+                            : Image.memory(
+                                _fileBytesByName[file.name]!,
+                                fit: BoxFit.cover,
+                              ),
                       ),
                       Positioned(
                         top: -8,
@@ -634,9 +676,13 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
                             _files = List.of(_files)..removeAt(index);
                             final total = _files.fold<int>(
                               0,
-                              (sum, selected) => sum + selected.size,
+                              (sum, selected) =>
+                                  sum +
+                                  (_fileBytesByName[selected.name]?.length ??
+                                      selected.lengthSync() ??
+                                      0),
                             );
-                            _error = total > 50 * 1024 * 1024
+                            _attachmentError = total > 50 * 1024 * 1024
                                 ? 'Choose up to five files totaling 50 MB.'
                                 : null;
                           }),
@@ -653,9 +699,9 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
-            if (_error != null)
+            if (_attachmentError != null)
               Text(
-                _error!,
+                _attachmentError!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
           ],
@@ -668,7 +714,7 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
         child: const Text('Cancel'),
       ),
       FilledButton(
-        onPressed: _error != null
+        onPressed: _attachmentError != null
             ? null
             : () {
                 if (_form.currentState!.validate()) {
@@ -693,11 +739,13 @@ class _IssueAttachmentThumbnail extends StatelessWidget {
   const _IssueAttachmentThumbnail({
     required this.issueId,
     required this.attachment,
+    required this.repository,
     required this.onOpen,
   });
 
   final String issueId;
   final Map attachment;
+  final IssueRepository repository;
   final VoidCallback onOpen;
 
   @override
@@ -726,7 +774,7 @@ class _IssueAttachmentThumbnail extends StatelessWidget {
                 ),
                 child: image
                     ? FutureBuilder<String>(
-                        future: BackendApiClient.instance.issueAttachmentUrl(
+                        future: repository.loadAttachmentUrl(
                           issueId,
                           '${attachment['id']}',
                         ),

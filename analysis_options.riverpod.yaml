@@ -1,5 +1,6 @@
-# Include this from a Riverpod-specific package or workspace module when it
-# starts using Riverpod. The current SchoolDesk app uses package:provider.
+# Include this from Riverpod-owned modules as the migration proceeds. Legacy
+# Provider screens remain below the compatibility shell until their role module
+# has moved to the new composition root.
 include: analysis_options.yaml
 
 plugins:

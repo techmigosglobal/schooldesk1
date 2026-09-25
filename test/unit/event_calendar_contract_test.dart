@@ -11,7 +11,7 @@ void main() {
     expect(source, contains("'start_datetime':"));
     expect(source, contains("'end_datetime':"));
     expect(source, isNot(contains("createRaw('/events', payload)")));
-    expect(source, contains('BackendApiClient.instance.createEventPayload'));
+    expect(source, contains('widget.repository.createEvent'));
     expect(source, contains('event.overlapsDate(day)'));
     expect(
       source,
@@ -23,6 +23,10 @@ void main() {
     expect(source, contains('_buildFilters()'));
     expect(source, contains("label: Text('Agenda')"));
     expect(source, contains("message: 'Go to today'"));
+    final repository = File(
+      'lib/modules/calendar/data/api_calendar_repository.dart',
+    ).readAsStringSync();
+    expect(repository, contains('createEventPayload'));
   });
 
   test('event api creates events with the Go /events contract', () {

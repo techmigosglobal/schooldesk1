@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
+import 'package:schooldesk1/modules/people/data/repositories/api_approval_repository.dart';
+import 'package:schooldesk1/modules/people/domain/repositories/approval_repository.dart';
 
 class AdminPaymentRequestDecisionArgs {
   final Map<String, dynamic> request;
@@ -21,8 +24,13 @@ class AdminPaymentRequestDecisionArgs {
 
 class AdminPaymentRequestDecisionScreen extends StatefulWidget {
   final AdminPaymentRequestDecisionArgs args;
+  final ApprovalRepository? repository;
 
-  const AdminPaymentRequestDecisionScreen({super.key, required this.args});
+  const AdminPaymentRequestDecisionScreen({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<AdminPaymentRequestDecisionScreen> createState() =>
@@ -31,9 +39,14 @@ class AdminPaymentRequestDecisionScreen extends StatefulWidget {
 
 class _AdminPaymentRequestDecisionScreenState
     extends State<AdminPaymentRequestDecisionScreen> {
+  ApprovalRepository get _repository =>
+      widget.repository ?? ApiApprovalRepository.legacyDefault;
+
   final _remarksController = TextEditingController();
   String _decision = 'approved';
-  bool _submitting = false;
+  RepositoryState<Object> _submitState = const RepositoryState.empty();
+
+  bool get _submitting => _submitState.isRefreshing;
 
   @override
   void dispose() {
@@ -54,72 +67,81 @@ class _AdminPaymentRequestDecisionScreenState
         title: 'Payment Decision',
         actions: const [],
         maxWidth: 600,
-        child: Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: context.appTheme.outlineVariant),
+        child: SchoolDeskRepositoryStateView<Object>(
+          state: const RepositoryState<Object>(
+            data: Object(),
+            source: RepositorySource.remote,
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildDetails(request),
-                  const SizedBox(height: 16),
-                  _buildDecisionSelector(),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _remarksController,
-                    enabled: !_submitting,
-                    minLines: 3,
-                    maxLines: 5,
-                    decoration: InputDecoration(
-                      labelText: _decision == 'approved'
-                          ? 'Payment approval note'
-                          : _decision == 'clarification_required'
-                          ? 'Clarification note'
-                          : 'Rejection reason',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: FilledButton.icon(
-                      onPressed: _submitting ? null : _submit,
-                      icon: _submitting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Icon(
-                              _decision == 'approved'
-                                  ? Icons.check_circle_rounded
-                                  : _decision == 'clarification_required'
-                                  ? Icons.help_outline_rounded
-                                  : Icons.cancel_rounded,
-                              size: 18,
-                            ),
-                      label: Text(
-                        _submitting
-                            ? 'Submitting...'
-                            : _decision == 'approved'
-                            ? 'Approve Payment'
+          onRetry: () {},
+          data: (_) => Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: context.appTheme.outlineVariant),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildDetails(request),
+                    const SizedBox(height: 16),
+                    _buildDecisionSelector(),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _remarksController,
+                      enabled: !_submitting,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: InputDecoration(
+                        labelText: _decision == 'approved'
+                            ? 'Payment approval note'
                             : _decision == 'clarification_required'
-                            ? 'Request Clarification'
-                            : 'Reject Payment',
-                        style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                            ? 'Clarification note'
+                            : 'Rejection reason',
+                        alignLabelWithHint: true,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: FilledButton.icon(
+                        onPressed: _submitting ? null : _submit,
+                        icon: _submitting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Icon(
+                                _decision == 'approved'
+                                    ? Icons.check_circle_rounded
+                                    : _decision == 'clarification_required'
+                                    ? Icons.help_outline_rounded
+                                    : Icons.cancel_rounded,
+                                size: 18,
+                              ),
+                        label: Text(
+                          _submitting
+                              ? 'Submitting...'
+                              : _decision == 'approved'
+                              ? 'Approve Payment'
+                              : _decision == 'clarification_required'
+                              ? 'Request Clarification'
+                              : 'Reject Payment',
+                          style: GoogleFonts.dmSans(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -139,66 +161,73 @@ class _AdminPaymentRequestDecisionScreenState
         role: DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: Form(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildDetails(request),
-            const SizedBox(height: 16),
-            _buildDecisionSelector(),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _remarksController,
-              enabled: !_submitting,
-              minLines: 3,
-              maxLines: 5,
-              decoration: InputDecoration(
-                labelText: _decision == 'approved'
-                    ? 'Payment approval note'
-                    : _decision == 'clarification_required'
-                    ? 'Clarification note'
-                    : 'Rejection reason',
-                alignLabelWithHint: true,
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        ),
+        onRetry: () {},
+        data: (_) => Form(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildDetails(request),
+              const SizedBox(height: 16),
+              _buildDecisionSelector(),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _remarksController,
+                enabled: !_submitting,
+                minLines: 3,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  labelText: _decision == 'approved'
+                      ? 'Payment approval note'
+                      : _decision == 'clarification_required'
+                      ? 'Clarification note'
+                      : 'Rejection reason',
+                  alignLabelWithHint: true,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: _submitting ? null : _submit,
-              icon: _submitting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      _decision == 'approved'
-                          ? Icons.check_circle_rounded
-                          : _decision == 'clarification_required'
-                          ? Icons.help_outline_rounded
-                          : Icons.cancel_rounded,
-                      size: 18,
-                    ),
-              label: Text(
-                _submitting
-                    ? 'Submitting...'
-                    : _decision == 'approved'
-                    ? 'Approve Payment'
-                    : _decision == 'clarification_required'
-                    ? 'Request Clarification'
-                    : 'Reject Payment',
-                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _submitting ? null : _submit,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        _decision == 'approved'
+                            ? Icons.check_circle_rounded
+                            : _decision == 'clarification_required'
+                            ? Icons.help_outline_rounded
+                            : Icons.cancel_rounded,
+                        size: 18,
+                      ),
+                label: Text(
+                  _submitting
+                      ? 'Submitting...'
+                      : _decision == 'approved'
+                      ? 'Approve Payment'
+                      : _decision == 'clarification_required'
+                      ? 'Request Clarification'
+                      : 'Reject Payment',
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _submitting ? null : () => Navigator.pop(context),
-              icon: const Icon(Icons.arrow_back_rounded, size: 18),
-              label: Text(
-                'Back to Requests',
-                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _submitting ? null : () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: Text(
+                  'Back to Requests',
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -344,9 +373,15 @@ class _AdminPaymentRequestDecisionScreenState
       _showError('Enter a clarification note.');
       return;
     }
-    setState(() => _submitting = true);
+    setState(() {
+      _submitState = const RepositoryState<Object>.loading(
+        data: Object(),
+        source: RepositorySource.localMutation,
+        isRefreshing: true,
+      );
+    });
     try {
-      await BackendApiClient.instance.decideParentPaymentRequest(
+      await _repository.decidePayment(
         requestID,
         status: _decision,
         adminRemarks: remarks,
@@ -372,7 +407,13 @@ class _AdminPaymentRequestDecisionScreenState
       }
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _submitting = false);
+      setState(() {
+        _submitState = RepositoryState<Object>.error(
+          data: const Object(),
+          source: RepositorySource.localMutation,
+          error: error,
+        );
+      });
       _showError(error.toString());
     }
   }

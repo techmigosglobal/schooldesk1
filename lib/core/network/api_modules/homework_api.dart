@@ -354,16 +354,18 @@ extension BackendHomeworkApi on BackendApiClient {
     List<String> attachmentUrls = const [],
   }) async {
     try {
-      final response = await SchoolDeskApi.instance.client
-          .submitHomework(homeworkId, {
-            'student_id': studentId,
-            'answer_text': answerText,
-            'attachment_url': attachmentUrl,
-            'attachment_urls': attachmentUrls
-                .map((url) => url.trim())
-                .where((url) => url.isNotEmpty)
-                .toList(),
-          });
+      final response = await SchoolDeskApi.instance.client.submitHomework(
+        homeworkId,
+        {
+          'student_id': studentId,
+          'answer_text': answerText,
+          'attachment_url': attachmentUrl,
+          'attachment_urls': attachmentUrls
+              .map((url) => url.trim())
+              .where((url) => url.isNotEmpty)
+              .toList(),
+        },
+      );
       if (response.success == true) return _asMap(response.data);
       throw ServerException(
         message: response.error ?? 'Failed to submit homework',

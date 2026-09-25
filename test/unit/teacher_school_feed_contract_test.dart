@@ -7,11 +7,14 @@ void main() {
     final screen = File(
       'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
     ).readAsStringSync();
+    final repository = File(
+      'lib/roles/teacher/data/api_teacher_dashboard_repository.dart',
+    ).readAsStringSync();
     final desktop = File(
       'lib/features/dashboard/presentation/widgets/teacher_dashboard_desktop_shell.dart',
     ).readAsStringSync();
 
-    expect(screen, contains('api.getTeacherSchoolFeedPage'));
+    expect(repository, contains('_api.getTeacherSchoolFeedPage'));
     expect(screen, contains('List<Map<String, dynamic>> _eventPosts'));
     expect(screen, contains('showParentVisibility: true'));
     expect(screen, contains("audienceLabel: 'Staff & school updates'"));
@@ -49,12 +52,16 @@ void main() {
     final screen = File(
       'lib/features/communication/presentation/screens/event_post_screen.dart',
     ).readAsStringSync();
+    final repository = File(
+      'lib/modules/communication/data/api_event_post_repository.dart',
+    ).readAsStringSync();
     final handler = File(
       'supabase/functions/api/handlers/uploads.ts',
     ).readAsStringSync();
 
-    expect(screen, contains("private: true"));
-    expect(screen, contains("folder: 'event-posts'"));
+    expect(screen, contains('_repository.uploadMedia('));
+    expect(repository, contains("private: true"));
+    expect(repository, contains("folder: 'event-posts'"));
     expect(handler, contains('promoteEventPostMedia'));
     expect(handler, contains('copyR2File'));
     expect(handler, contains('R2 media promotion verification failed'));

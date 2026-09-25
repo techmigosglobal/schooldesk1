@@ -1,28 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_fee_payment_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_fee_payment_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
+@immutable
+class _ParentPaymentHistorySnapshot {
+  final List<Map<String, dynamic>> children;
+  final List<Map<String, dynamic>> payments;
+
+  const _ParentPaymentHistorySnapshot({
+    required this.children,
+    required this.payments,
+  });
+}
 
 class ParentPaymentHistoryV2 extends StatefulWidget {
-  const ParentPaymentHistoryV2({super.key});
+  final ParentFeePaymentRepository? repository;
+
+  const ParentPaymentHistoryV2({super.key, this.repository});
 
   @override
   State<ParentPaymentHistoryV2> createState() => _ParentPaymentHistoryV2State();
 }
 
 class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
-  bool _loading = true;
-  String? _error;
-  List<Map<String, dynamic>> _paymentHistory = [];
-  List<Map<String, dynamic>> _childrenData = [];
+  ParentFeePaymentRepository get _repository =>
+      widget.repository ?? ApiParentFeePaymentRepository.legacyDefault;
+
+  RepositoryState<_ParentPaymentHistorySnapshot> _state =
+      const RepositoryState.loading();
   int _activeChildIndex = 0;
+
+  List<Map<String, dynamic>> get _childrenData =>
+      _state.data?.children ?? const [];
+  List<Map<String, dynamic>> get _paymentHistory =>
+      _state.data?.payments ?? const [];
 
   @override
   void initState() {
@@ -31,18 +55,21 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
   }
 
   Future<void> _loadHistory() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final children = await BackendApiClient.instance.getMyStudents();
+      final children = await _repository.loadChildren();
       if (children.isEmpty) {
-        setState(() {
-          _childrenData = [];
-          _paymentHistory = [];
-          _loading = false;
-        });
+        setState(() => _state = const RepositoryState.empty());
         return;
       }
 
@@ -58,10 +85,10 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       // global invoice list is a principal-only finance endpoint.
       final invoices = studentId.isEmpty
           ? <Map<String, dynamic>>[]
-          : await BackendApiClient.instance.getParentStudentFees(studentId);
+          : await _repository.loadStudentFees(studentId);
       final paymentRequests = studentId.isEmpty
           ? <Map<String, dynamic>>[]
-          : await BackendApiClient.instance.getParentPaymentRequests(
+          : await _repository.loadPaymentRequests(
               studentId: studentId,
             );
 
@@ -201,14 +228,30 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       );
 
       setState(() {
-        _childrenData = children;
-        _paymentHistory = historyList;
-        _loading = false;
+        _state = RepositoryState(
+          data: _ParentPaymentHistorySnapshot(
+            children: children,
+            payments: historyList,
+          ),
+          source: RepositorySource.remote,
+          phase: historyList.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = e.toString();
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -226,26 +269,29 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? _buildError()
-          : RefreshIndicator(
-              onRefresh: _loadHistory,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (_childrenData.length > 1) ...[
-                    _buildChildSelector(),
-                    const SizedBox(height: 16),
-                  ],
-                  if (_paymentHistory.isEmpty)
-                    _buildEmptyState()
-                  else
-                    ..._paymentHistory.map((item) => _buildHistoryCard(item)),
-                ],
-              ),
-            ),
+      body: SchoolDeskRepositoryStateView<_ParentPaymentHistorySnapshot>(
+        state: _state,
+        onRetry: _loadHistory,
+        emptyTitle: 'No payment history',
+        emptyMessage: 'No completed payments are available for this child.',
+        loadingMessage: 'Loading payment history…',
+        data: (_) => RefreshIndicator(
+          onRefresh: _loadHistory,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (_childrenData.length > 1) ...[
+                _buildChildSelector(),
+                const SizedBox(height: 16),
+              ],
+              if (_paymentHistory.isEmpty)
+                _buildEmptyState()
+              else
+                ..._paymentHistory.map((item) => _buildHistoryCard(item)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -253,46 +299,12 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
     return ParentChildSelector(
       children: _childrenData,
       selectedIndex: _activeChildIndex,
-      isLoading: _loading,
+      isLoading: _state.isLoading || _state.isRefreshing,
       onSelected: (index) {
         setState(() => _activeChildIndex = index);
         ParentChildSelectionService.saveIndex(_childrenData, index);
         _loadHistory();
       },
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline_rounded,
-              color: context.appTheme.error,
-              size: 48,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Error Loading Payments',
-              style: GoogleFonts.ibmPlexSans(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error ?? 'An unexpected error occurred.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.ibmPlexSans(color: context.appTheme.muted),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(onPressed: _loadHistory, child: const Text('Retry')),
-          ],
-        ),
-      ),
     );
   }
 
@@ -424,7 +436,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
               if (hasLinkedReceipt)
                 OutlinedButton.icon(
                   onPressed: () {
-                    Navigator.pushNamed(
+                    SchoolDeskNavigation.push(
                       context,
                       '/parent/receipt',
                       arguments: ParentPaymentSelectionArgs(
@@ -493,7 +505,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
     final student = _childrenData.isEmpty
         ? null
         : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       '/parent/payment-flow',
       arguments: ParentPaymentSelectionArgs(

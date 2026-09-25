@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -15,9 +14,32 @@ import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_scr
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
+import 'package:schooldesk1/modules/people/data/repositories/api_approval_repository.dart';
+import 'package:schooldesk1/modules/people/domain/repositories/approval_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+@immutable
+class _PaymentRequestsSnapshot {
+  const _PaymentRequestsSnapshot({
+    required this.requests,
+    required this.page,
+    required this.total,
+    required this.hasMore,
+  });
+
+  final List<Map<String, dynamic>> requests;
+  final int page;
+  final int total;
+  final bool hasMore;
+}
 
 class AdminPaymentRequestsScreen extends StatefulWidget {
-  const AdminPaymentRequestsScreen({super.key});
+  const AdminPaymentRequestsScreen({super.key, this.repository});
+
+  final ApprovalRepository? repository;
 
   @override
   State<AdminPaymentRequestsScreen> createState() =>
@@ -26,14 +48,19 @@ class AdminPaymentRequestsScreen extends StatefulWidget {
 
 class _AdminPaymentRequestsScreenState
     extends State<AdminPaymentRequestsScreen> {
-  bool _loading = true;
+  ApprovalRepository get _repository =>
+      widget.repository ?? ApiApprovalRepository.legacyDefault;
+
   bool _loadingMore = false;
-  bool _hasMore = false;
-  int _page = 1;
-  int _totalRequests = 0;
-  String? _error;
+  RepositoryState<_PaymentRequestsSnapshot> _state =
+      const RepositoryState.loading();
   String _statusFilter = 'pending';
-  List<Map<String, dynamic>> _requests = [];
+
+  _PaymentRequestsSnapshot? get _snapshot => _state.data;
+  bool get _hasMore => _snapshot?.hasMore ?? false;
+  int get _page => _snapshot?.page ?? 1;
+  int get _totalRequests => _snapshot?.total ?? 0;
+  List<Map<String, dynamic>> get _requests => _snapshot?.requests ?? const [];
 
   @override
   void initState() {
@@ -45,22 +72,30 @@ class _AdminPaymentRequestsScreenState
     bool showSpinner = true,
     bool resetPage = true,
   }) async {
+    final previous = _state.data;
     if (showSpinner) {
       setState(() {
-        _loading = resetPage;
+        _state = resetPage
+            ? RepositoryState.loading(
+                data: previous,
+                source: previous == null
+                    ? RepositorySource.empty
+                    : RepositorySource.cache,
+                isStale: previous != null,
+                isRefreshing: previous != null,
+              )
+            : _state;
         _loadingMore = !resetPage;
-        _error = null;
       });
     } else if (!resetPage) {
       setState(() => _loadingMore = true);
     }
     try {
-      final response = await BackendApiClient.instance
-          .getParentPaymentRequestsPage(
-            status: _statusFilter == 'all' ? null : _statusFilter,
-            page: resetPage ? 1 : _page + 1,
-            pageSize: 20,
-          );
+      final response = await _repository.loadPaymentRequests(
+        status: _statusFilter == 'all' ? null : _statusFilter,
+        page: resetPage ? 1 : _page + 1,
+        pageSize: 20,
+      );
       final rows = response.data
           .where((row) => FeePaymentRequestStatus.isReviewRecord(row['status']))
           .toList();
@@ -69,21 +104,34 @@ class _AdminPaymentRequestsScreenState
       final additions = resetPage
           ? rows
           : rows.where((row) => existingIds.add(_text(row['id']))).toList();
+      final requests = resetPage ? rows : [..._requests, ...additions];
       setState(() {
-        _requests = resetPage ? rows : [..._requests, ...additions];
-        _page = response.page;
-        _totalRequests = response.total;
-        _hasMore = response.hasMore;
-        _loading = false;
+        _state = RepositoryState(
+          data: _PaymentRequestsSnapshot(
+            requests: requests,
+            page: response.page,
+            total: response.total,
+            hasMore: response.hasMore,
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         _loadingMore = false;
-        _error = null;
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
         _loadingMore = false;
-        _error = error.toString();
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -101,41 +149,36 @@ class _AdminPaymentRequestsScreenState
         actions: [
           IconButton(
             tooltip: 'Refresh payment requests',
-            onPressed: _loading
+            onPressed: _state.isLoading
                 ? null
                 : () => _loadRequests(showSpinner: false),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
         maxWidth: 800,
-        child: _loading
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(40),
-                  child: CircularProgressIndicator(),
-                ),
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_error != null) ...[
-                    _buildErrorState(),
-                    const SizedBox(height: 16),
-                  ],
-                  _buildSummary(),
-                  const SizedBox(height: 14),
-                  _buildStatusFilters(),
-                  const SizedBox(height: 14),
-                  if (_visibleRequests.isEmpty)
-                    const SchoolDeskStatusPanel.empty(
-                      title: 'No payment requests',
-                      message: 'Parent payment requests will appear here.',
-                    )
-                  else
-                    ..._visibleRequests.map(_requestCard),
-                  if (_hasMore) _buildLoadMoreButton(),
-                ],
-              ),
+        child: SchoolDeskRepositoryStateView<_PaymentRequestsSnapshot>(
+          state: _state,
+          onRetry: _loadRequests,
+          emptyTitle: 'No payment requests',
+          emptyMessage: 'Payment requests are not available for this scope.',
+          data: (_) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildSummary(),
+              const SizedBox(height: 14),
+              _buildStatusFilters(),
+              const SizedBox(height: 14),
+              if (_visibleRequests.isEmpty)
+                const SchoolDeskStatusPanel.empty(
+                  title: 'No payment requests',
+                  message: 'Parent payment requests will appear here.',
+                )
+              else
+                ..._visibleRequests.map(_requestCard),
+              if (_hasMore) _buildLoadMoreButton(),
+            ],
+          ),
+        ),
       );
     }
 
@@ -153,36 +196,38 @@ class _AdminPaymentRequestsScreenState
       actions: [
         IconButton(
           tooltip: 'Refresh payment requests',
-          onPressed: _loading ? null : () => _loadRequests(showSpinner: false),
+          onPressed: _state.isLoading
+              ? null
+              : () => _loadRequests(showSpinner: false),
           icon: const Icon(Icons.refresh_rounded),
         ),
       ],
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: () => _loadRequests(showSpinner: false),
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (_error != null) ...[
-                    _buildErrorState(),
-                    const SizedBox(height: 16),
-                  ],
-                  _buildSummary(),
-                  const SizedBox(height: 14),
-                  _buildStatusFilters(),
-                  const SizedBox(height: 14),
-                  if (_visibleRequests.isEmpty)
-                    const SchoolDeskStatusPanel.empty(
-                      title: 'No payment requests',
-                      message: 'Parent payment requests will appear here.',
-                    )
-                  else
-                    ..._visibleRequests.map(_requestCard),
-                  if (_hasMore) _buildLoadMoreButton(),
-                ],
-              ),
-            ),
+      body: SchoolDeskRepositoryStateView<_PaymentRequestsSnapshot>(
+        state: _state,
+        onRetry: _loadRequests,
+        emptyTitle: 'No payment requests',
+        emptyMessage: 'Payment requests are not available for this scope.',
+        data: (_) => RefreshIndicator(
+          onRefresh: () => _loadRequests(showSpinner: false),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildSummary(),
+              const SizedBox(height: 14),
+              _buildStatusFilters(),
+              const SizedBox(height: 14),
+              if (_visibleRequests.isEmpty)
+                const SchoolDeskStatusPanel.empty(
+                  title: 'No payment requests',
+                  message: 'Parent payment requests will appear here.',
+                )
+              else
+                ..._visibleRequests.map(_requestCard),
+              if (_hasMore) _buildLoadMoreButton(),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -191,7 +236,7 @@ class _AdminPaymentRequestsScreenState
       Navigator.of(context).pop();
       return;
     }
-    Navigator.of(context).pushReplacementNamed(AppRoutes.feeMonitoring);
+    SchoolDeskNavigation.go(context, AppRoutes.feeMonitoring);
   }
 
   List<Map<String, dynamic>> get _visibleRequests {
@@ -211,33 +256,6 @@ class _AdminPaymentRequestsScreenState
               _statusFilter,
         )
         .toList();
-  }
-
-  Widget _buildErrorState() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.appTheme.errorContainer,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.appTheme.error.withAlpha(40)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline_rounded, color: context.appTheme.error),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _error ?? 'Unable to load payment requests',
-              style: GoogleFonts.dmSans(fontSize: 12),
-            ),
-          ),
-          TextButton(
-            onPressed: _loadRequests,
-            child: Text('Retry', style: GoogleFonts.dmSans(fontSize: 12)),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildSummary() {
@@ -516,7 +534,8 @@ class _AdminPaymentRequestsScreenState
   }
 
   Future<void> _openDecision(Map<String, dynamic> request) async {
-    final updated = await Navigator.of(context).pushNamed(
+    final updated = await SchoolDeskNavigation.push(
+      context,
       AppRoutes.principalPaymentRequestDecision,
       arguments: AdminPaymentRequestDecisionArgs(request: request),
     );

@@ -15,7 +15,9 @@ void main() {
       final screen = File(
         'lib/features/monitoring/presentation/screens/system_monitor_screen.dart',
       ).readAsStringSync();
-      final gateway = File('supabase/functions/api/index.ts').readAsStringSync();
+      final gateway = File(
+        'supabase/functions/api/index.ts',
+      ).readAsStringSync();
 
       expect(handler, contains('wipe_school_data'));
       expect(handler, contains('wipeSchoolStorage'));
@@ -28,7 +30,10 @@ void main() {
       expect(migration, contains("'users'"));
       expect(migration, contains("'username_aliases'"));
       expect(screen, contains('Wipe All School Data'));
-      expect(screen, contains('Delete Everything Except Principal & Super Admin'));
+      expect(
+        screen,
+        contains('Delete Everything Except Principal & Super Admin'),
+      );
       expect(screen, contains('Principal and Super Admin accounts remain'));
       expect(gateway, contains('Require the active application profile'));
       expect(gateway, contains('profile.is_active !== true'));

@@ -6,6 +6,8 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'desktop_platform.dart';
 
 /// App-wide keyboard shortcut definitions for desktop.
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 class DesktopKeyboardShortcutsManager extends StatelessWidget {
   final Widget child;
   final VoidCallback? onSearch;
@@ -78,7 +80,7 @@ class DesktopKeyboardShortcutsManager extends StatelessWidget {
     }
     final navigator = Navigator.maybeOf(context);
     if (navigator != null) {
-      navigator.pushNamed(route);
+      SchoolDeskNavigation.pushFromNavigator(navigator, route);
     }
   }
 }

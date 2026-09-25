@@ -1,8 +1,10 @@
-# These packages are consumed by analyzer configuration rather than Dart imports.
-allow_pins: true
 ignore:
+  # json_serializable requires this package for generated DTO sources even
+  # though application imports are carried through freezed_annotation.
+  - json_annotation
+  # These are intentionally pinned to match the local file/media plugin
+  # compatibility boundary.
+  - cross_file
+  - image
+  # This package is loaded by the Dart analyzer as a project lint plugin.
   - riverpod_lint
-  - very_good_analysis
-exclude:
-  - "build/**"
-  - "third_party/**"

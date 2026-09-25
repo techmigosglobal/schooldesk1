@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -15,9 +15,28 @@ import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_homework_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_homework_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
+@immutable
+class _ParentHomeworkSnapshot {
+  final List<Map<String, dynamic>> children;
+  final List<Map<String, dynamic>> homework;
+
+  const _ParentHomeworkSnapshot({
+    required this.children,
+    required this.homework,
+  });
+}
 
 class ParentHomeworkScreen extends StatefulWidget {
-  const ParentHomeworkScreen({super.key});
+  final ParentHomeworkRepository? repository;
+
+  const ParentHomeworkScreen({super.key, this.repository});
 
   @override
   State<ParentHomeworkScreen> createState() => _ParentHomeworkScreenState();
@@ -25,15 +44,18 @@ class ParentHomeworkScreen extends StatefulWidget {
 
 class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     with SingleTickerProviderStateMixin {
+  ParentHomeworkRepository get _repository =>
+      widget.repository ?? ApiParentHomeworkRepository.legacyDefault;
+
   int _selectedNavIndex = ParentNav.homework;
   late TabController _tabController;
   int _activeChildIndex = 0;
 
-  List<Map<String, dynamic>> _children = [];
+  RepositoryState<_ParentHomeworkSnapshot> _state =
+      const RepositoryState.loading();
 
-  List<Map<String, dynamic>> _homework = [];
-  bool _loading = true;
-  String? _error;
+  List<Map<String, dynamic>> get _children => _state.data?.children ?? const [];
+  List<Map<String, dynamic>> get _homework => _state.data?.homework ?? const [];
 
   String? get _activeStudentId => _children.isEmpty
       ? null
@@ -63,12 +85,21 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   }
 
   Future<void> _loadData() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final children = await BackendApiClient.instance.getMyStudents();
+      final childrenResult = await _repository.loadChildren();
+      _throwIfFailed(childrenResult, 'Unable to load linked students');
+      final children = childrenResult.dataOrNull!;
       final studentIds = children
           .map((child) => (child['id'] ?? '').toString())
           .where((studentId) => studentId.isNotEmpty)
@@ -76,12 +107,15 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       // Fetch each child's homework list in parallel instead of sequentially
       // awaiting one child at a time, which previously serialized N network
       // round-trips (one per child).
-      final childHomeworkLists = await Future.wait(
-        studentIds.map(
-          (studentId) =>
-              BackendApiClient.instance.getHomework(studentId: studentId),
-        ),
+      final childHomeworkResults = await Future.wait(
+        studentIds.map(_repository.loadHomework),
       );
+      for (final result in childHomeworkResults) {
+        _throwIfFailed(result, 'Unable to load homework');
+      }
+      final childHomeworkLists = childHomeworkResults
+          .map((result) => result.dataOrNull!)
+          .toList();
       final flatRows = <Map<String, dynamic>>[];
       for (var i = 0; i < studentIds.length; i++) {
         for (final row in childHomeworkLists[i]) {
@@ -99,16 +133,29 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       );
       if (!mounted) return;
       setState(() {
-        _children = children;
         _activeChildIndex = selectedIndex;
-        _homework = rows.map(_mapHomeworkFromApi).toList();
-        _loading = false;
+        final homework = rows.map(_mapHomeworkFromApi).toList();
+        _state = RepositoryState(
+          data: _ParentHomeworkSnapshot(children: children, homework: homework),
+          source: RepositorySource.remote,
+          phase: children.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
-    } on Object {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load homework from the server.';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -171,53 +218,6 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       selectedIndex: _selectedNavIndex,
       onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
     );
-    if (_loading) {
-      return SchoolDeskModuleScaffold(
-        title: 'Dairy & Assignments',
-        subtitle: 'Track pending and submitted work for linked children',
-        drawer: drawer,
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_error != null) {
-      return SchoolDeskModuleScaffold(
-        title: 'Dairy & Assignments',
-        subtitle: 'Track pending and submitted work for linked children',
-        drawer: drawer,
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_error!, textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: _loadData,
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    if (_children.isEmpty) {
-      return SchoolDeskModuleScaffold(
-        title: 'Dairy & Assignments',
-        subtitle: 'Track pending and submitted work for linked children',
-        drawer: drawer,
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'No linked students. Ask the school admin to link students to this parent account.',
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      );
-    }
     return SchoolDeskModuleScaffold(
       title: 'Dairy & Assignments',
       subtitle: 'Track pending and submitted work for linked children',
@@ -233,26 +233,34 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
           Tab(text: 'Submitted (${_submitted.length})'),
         ],
       ),
-      body: Column(
-        children: [
-          _buildChildSelector(),
-          _buildSummaryBar(),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                RefreshIndicator(
-                  onRefresh: _loadData,
-                  child: _buildHomeworkList(_pending),
-                ),
-                RefreshIndicator(
-                  onRefresh: _loadData,
-                  child: _buildHomeworkList(_submitted),
-                ),
-              ],
+      body: SchoolDeskRepositoryStateView<_ParentHomeworkSnapshot>(
+        state: _state,
+        onRetry: _loadData,
+        emptyTitle: 'No linked students',
+        emptyMessage:
+            'Ask school admin to link students to this parent account.',
+        loadingMessage: 'Loading homework…',
+        data: (_) => Column(
+          children: [
+            _buildChildSelector(),
+            _buildSummaryBar(),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  RefreshIndicator(
+                    onRefresh: _loadData,
+                    child: _buildHomeworkList(_pending),
+                  ),
+                  RefreshIndicator(
+                    onRefresh: _loadData,
+                    child: _buildHomeworkList(_submitted),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -677,10 +685,12 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     final studentId = _text(row['student_id']);
     if (homeworkId.isEmpty || studentId.isEmpty) return row;
     try {
-      final response = await BackendApiClient.instance.getHomeworkSubmissions(
+      final result = await _repository.loadSubmissions(
         homeworkId,
         studentId: studentId,
       );
+      if (result.isFailure) return row;
+      final response = result.dataOrNull!;
       final submissions = response['submissions'];
       if (submissions is! List || submissions.isEmpty) return row;
       final submission = Map<String, dynamic>.from(submissions.first as Map);
@@ -704,9 +714,15 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     }
   }
 
+  void _throwIfFailed<T>(Result<T> result, String fallback) {
+    if (result.isFailure) {
+      throw StateError(result.failureOrNull?.message ?? fallback);
+    }
+  }
+
   Future<void> _openSubmissionScreen(Map<String, dynamic> homework) async {
     final child = _children[_activeChildIndex];
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.parentHomeworkSubmit,
       arguments: ParentHomeworkSubmissionArgs(

@@ -15,13 +15,23 @@ class ApprovalFeedPage {
 extension BackendApprovalRequestsApi on BackendApiClient {
   Future<List<Map<String, dynamic>>> getApprovalAuditLog({
     int pageSize = 10,
+    String module = 'approvals',
+    String actor = '',
+    String actorRole = '',
+    String eventType = '',
+    String search = '',
+    bool currentUserOnly = true,
   }) {
     return getRawList(
       '/audit-logs',
       queryParameters: {
-        'module': 'approvals',
-        'user_id': 'current',
+        if (module.trim().isNotEmpty) 'module': module.trim(),
+        if (currentUserOnly) 'user_id': 'current',
         'page_size': pageSize,
+        if (actor.trim().isNotEmpty) 'actor': actor.trim(),
+        if (actorRole.trim().isNotEmpty) 'actor_role': actorRole.trim(),
+        if (eventType.trim().isNotEmpty) 'event_type': eventType.trim(),
+        if (search.trim().isNotEmpty) 'search': search.trim(),
       },
     );
   }

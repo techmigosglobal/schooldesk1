@@ -1,15 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_health_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_health_repository.dart';
 
 /// Parent Health Update screen — parents can set pill/medication reminders
 /// for their children. These reminders are visible to teachers and principals
 /// so they can monitor student health during school hours.
+final class _ParentHealthSnapshot {
+  const _ParentHealthSnapshot({
+    required this.children,
+    required this.healthRecords,
+  });
+
+  final List<Map<String, dynamic>> children;
+  final List<Map<String, dynamic>> healthRecords;
+}
+
 class ParentHealthUpdateScreen extends StatefulWidget {
-  const ParentHealthUpdateScreen({super.key});
+  final ParentHealthRepository? repository;
+
+  const ParentHealthUpdateScreen({super.key, this.repository});
 
   @override
   State<ParentHealthUpdateScreen> createState() =>
@@ -17,9 +32,11 @@ class ParentHealthUpdateScreen extends StatefulWidget {
 }
 
 class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
+  ParentHealthRepository get _repository =>
+      widget.repository ?? ApiParentHealthRepository.legacyDefault;
   int _selectedNavIndex = 19;
-  bool _loading = true;
-  String? _error;
+  RepositoryState<_ParentHealthSnapshot> _repositoryState =
+      const RepositoryState.loading();
   List<Map<String, dynamic>> _children = [];
   int _activeChildIndex = 0;
   List<Map<String, dynamic>> _healthRecords = [];
@@ -31,51 +48,102 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
   }
 
   Future<void> _loadData() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
-      final childrenResp = await api.getMyStudents();
+      final childrenResult = await _repository.loadChildren();
+      final childrenResp = childrenResult.dataOrNull;
+      if (childrenResp == null) {
+        throw StateError(
+          childrenResult.failureOrNull?.message ?? 'Unable to load children',
+        );
+      }
       _children = childrenResp
           .map((c) => Map<String, dynamic>.from(c as Map))
           .toList();
       if (_children.isNotEmpty) {
-        await _loadHealthRecords(_children[0]['id'].toString());
+        final selectedIndex = await ParentChildSelectionService.indexFor(
+          _children,
+          fallback: _activeChildIndex,
+        );
+        _activeChildIndex = selectedIndex;
+        await _loadHealthRecords(_children[selectedIndex]['id'].toString());
       } else {
-        setState(() => _loading = false);
+        if (!mounted) return;
+        setState(() {
+          _healthRecords = const [];
+          _repositoryState = const RepositoryState(
+            data: _ParentHealthSnapshot(children: [], healthRecords: []),
+            source: RepositorySource.remote,
+          );
+        });
       }
     } on Object catch (e) {
+      if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = 'Failed to load data: $e';
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: 'Failed to load data: $e',
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: 'Failed to load data: $e');
       });
     }
   }
 
   Future<void> _loadHealthRecords(String studentId) async {
-    setState(() => _loading = true);
-    try {
-      final api = BackendApiClient.instance;
-      final response = await api.dio.get(
-        '/health-reminders',
-        queryParameters: {'student_id': studentId},
+    final previous = _repositoryState;
+    setState(() {
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
       );
-      final data = response.data;
-      final records = data is Map
-          ? (data['data'] as List? ?? [])
-          : (data is List ? data : []);
+    });
+    try {
+      final result = await _repository.loadReminders(studentId);
+      final records = result.dataOrNull;
+      if (records == null) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to load reminders',
+        );
+      }
       setState(() {
-        _healthRecords = records
-            .map((r) => Map<String, dynamic>.from(r as Map))
-            .toList();
-        _loading = false;
+        _healthRecords = records;
+        _repositoryState = RepositoryState(
+          data: _ParentHealthSnapshot(
+            children: List.unmodifiable(_children),
+            healthRecords: List.unmodifiable(records),
+          ),
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
-    } on Object catch (_) {
+    } on Object catch (error) {
+      if (!mounted) return;
       setState(() {
-        _healthRecords = [];
-        _loading = false;
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
       });
     }
   }
@@ -254,15 +322,16 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                                 'is_active': active,
                               };
                               try {
-                                if (existing == null) {
-                                  await BackendApiClient.instance.dio.post(
-                                    '/health-reminders',
-                                    data: payload,
-                                  );
-                                } else {
-                                  await BackendApiClient.instance.dio.patch(
-                                    '/health-reminders/${existing['id']}',
-                                    data: payload,
+                                final result = existing == null
+                                    ? await _repository.createReminder(payload)
+                                    : await _repository.updateReminder(
+                                        existing['id'].toString(),
+                                        payload,
+                                      );
+                                if (result.isFailure) {
+                                  throw StateError(
+                                    result.failureOrNull?.message ??
+                                        'Unable to save reminder',
                                   );
                                 }
                                 if (mounted) {
@@ -342,38 +411,18 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add Reminder'),
       ),
-      body: _buildBody(),
+      body: SchoolDeskRepositoryStateView<_ParentHealthSnapshot>(
+        state: _repositoryState,
+        onRetry: _loadData,
+        emptyTitle: 'No linked students found',
+        emptyMessage: 'Link a student account before adding health reminders.',
+        errorTitle: 'Health data unavailable',
+        data: (_) => _buildBody(),
+      ),
     );
   }
 
   Widget _buildBody() {
-    if (_loading && _children.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton.tonal(
-                onPressed: _loadData,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
     if (_children.isEmpty) {
       return Center(
         child: Padding(
@@ -486,9 +535,12 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await BackendApiClient.instance.dio.delete(
-        '/health-reminders/$reminderId',
-      );
+      final result = await _repository.deleteReminder(reminderId);
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to delete reminder',
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,

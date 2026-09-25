@@ -36,7 +36,7 @@ void main() {
 
     // Navigation must happen AFTER clearing state but BEFORE background cleanup.
     final navigateIndex = source.indexOf(
-      'pushNamedAndRemoveUntil',
+      'goFromNavigator',
       clearAuthTokenIndex,
     );
     final backgroundCleanupIndex = source.indexOf('_backgroundCleanup');

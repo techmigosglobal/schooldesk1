@@ -6,38 +6,64 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_widgets.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+@immutable
+class _FeeLedgerSnapshot {
+  const _FeeLedgerSnapshot({
+    required this.invoices,
+    required this.payments,
+    required this.summary,
+    required this.page,
+    required this.totalInvoices,
+    required this.hasMore,
+  });
+
+  final List<Map<String, dynamic>> invoices;
+  final List<Map<String, dynamic>> payments;
+  final Map<String, dynamic> summary;
+  final int page;
+  final int totalInvoices;
+  final bool hasMore;
+}
 
 class FeeLedgerScreen extends StatefulWidget {
-  const FeeLedgerScreen({super.key});
+  final AdminFeesRepository? repository;
+
+  const FeeLedgerScreen({super.key, this.repository});
 
   @override
   State<FeeLedgerScreen> createState() => _FeeLedgerScreenState();
 }
 
 class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
-  bool _loading = true;
+  late final AdminFeesRepository _repository;
   bool _loadingMore = false;
-  bool _hasMore = false;
-  int _page = 1;
-  int _totalInvoices = 0;
-  String? _error;
+  RepositoryState<_FeeLedgerSnapshot> _state = const RepositoryState.loading();
   final _searchCtrl = TextEditingController();
   String _query = '';
   String _filter = 'all'; // all, unpaid, partial, paid
 
-  List<Map<String, dynamic>> _invoices = const [];
-  List<Map<String, dynamic>> _payments = const [];
-  Map<String, dynamic> _summary = const {};
+  _FeeLedgerSnapshot? get _snapshot => _state.data;
+  List<Map<String, dynamic>> get _invoices => _snapshot?.invoices ?? const [];
+  List<Map<String, dynamic>> get _payments => _snapshot?.payments ?? const [];
+  Map<String, dynamic> get _summary => _snapshot?.summary ?? const {};
+  bool get _hasMore => _snapshot?.hasMore ?? false;
+  int get _page => _snapshot?.page ?? 1;
+  int get _totalInvoices => _snapshot?.totalInvoices ?? 0;
   Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
+    _repository = widget.repository ?? ApiAdminFeesRepository.legacyDefault;
     _loadData();
   }
 
@@ -49,22 +75,32 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
   }
 
   Future<void> _loadData({bool resetPage = true}) async {
+    final previous = _state.data;
     setState(() {
-      _loading = resetPage;
+      if (resetPage) {
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
+      }
       _loadingMore = !resetPage;
-      _error = null;
     });
     try {
-      final api = BackendApiClient.instance;
-      final response = await api.getInvoicesPage(
+      final response = await _repository.loadInvoicesPage(
         search: _query,
         status: _filter == 'paid' || _filter == 'partial' ? _filter : null,
         page: resetPage ? 1 : _page + 1,
         pageSize: 20,
       );
-      final summary = resetPage ? await api.getFeeDashboardSummary() : _summary;
+      final summary = resetPage
+          ? await _repository.loadFeeDashboardSummary()
+          : _summary;
       final payments = resetPage
-          ? await api.getPaymentsPage(pageSize: 20)
+          ? await _repository.loadPaymentsPage(pageSize: 20)
           : null;
       if (!mounted) return;
       final invoices = response.data.map(normalizeInvoice).toList();
@@ -75,23 +111,36 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                 .where((invoice) => existingIds.add(invoice['id']))
                 .toList();
       setState(() {
-        _invoices = resetPage ? invoices : [..._invoices, ...additions];
-        if (payments != null) {
-          _payments = payments.data.map(normalizePaymentRow).toList();
-        }
-        _summary = summary;
-        _page = response.page;
-        _totalInvoices = response.total;
-        _hasMore = response.hasMore;
-        _loading = false;
+        _state = RepositoryState(
+          data: _FeeLedgerSnapshot(
+            invoices: resetPage ? invoices : [..._invoices, ...additions],
+            payments: payments != null
+                ? payments.data.map(normalizePaymentRow).toList()
+                : _payments,
+            summary: summary,
+            page: response.page,
+            totalInvoices: response.total,
+            hasMore: response.hasMore,
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         _loadingMore = false;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
-        _loading = false;
         _loadingMore = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -178,194 +227,190 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? FeeEmptyState(
-              icon: Icons.cloud_off_rounded,
-              title: 'Error',
-              message: _error!,
-              actionLabel: 'Retry',
-              onAction: _loadData,
-            )
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                children: [
-                  _LedgerSummary(
-                    outstanding: _totalDue,
-                    collected: _totalCollected,
-                    students: numValue(_summary['student_count']).round(),
-                  ),
-                  const SizedBox(height: 14),
+      body: SchoolDeskRepositoryStateView<_FeeLedgerSnapshot>(
+        state: _state,
+        onRetry: _loadData,
+        emptyTitle: 'No ledger entries',
+        emptyMessage: 'Fee ledger records are not available for this scope.',
+        data: (_) => RefreshIndicator(
+          onRefresh: _loadData,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              _LedgerSummary(
+                outstanding: _totalDue,
+                collected: _totalCollected,
+                students: numValue(_summary['student_count']).round(),
+              ),
+              const SizedBox(height: 14),
 
-                  // Search
-                  FeeSearchBox(
-                    controller: _searchCtrl..text = _query,
-                    hint: 'Search student',
-                    onChanged: _scheduleSearch,
-                  ),
-                  const SizedBox(height: 10),
+              // Search
+              FeeSearchBox(
+                controller: _searchCtrl..text = _query,
+                hint: 'Search student',
+                onChanged: _scheduleSearch,
+              ),
+              const SizedBox(height: 10),
 
-                  // Filters
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final f in [
-                          ('all', 'All'),
-                          ('unpaid', 'Unpaid'),
-                          ('partial', 'Partial'),
-                          ('paid', 'Paid'),
-                        ])
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: FilterChip(
-                              label: Text(
-                                f.$1[0].toUpperCase() + f.$1.substring(1),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: _filter == f.$1
-                                      ? context.appTheme.onPrimary
-                                      : context.appTheme.onSurface,
-                                ),
-                              ),
-                              selected: _filter == f.$1,
-                              selectedColor: context.appTheme.primary,
-                              checkmarkColor: context.appTheme.onPrimary,
-                              side: BorderSide(
-                                color: _filter == f.$1
-                                    ? context.appTheme.primary
-                                    : context.appTheme.outlineVariant,
-                              ),
-                              onSelected: (_) {
-                                setState(() => _filter = f.$1);
-                                _loadData();
-                              },
+              // Filters
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final f in [
+                      ('all', 'All'),
+                      ('unpaid', 'Unpaid'),
+                      ('partial', 'Partial'),
+                      ('paid', 'Paid'),
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          label: Text(
+                            f.$1[0].toUpperCase() + f.$1.substring(1),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: _filter == f.$1
+                                  ? context.appTheme.onPrimary
+                                  : context.appTheme.onSurface,
                             ),
                           ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+                          selected: _filter == f.$1,
+                          selectedColor: context.appTheme.primary,
+                          checkmarkColor: context.appTheme.onPrimary,
+                          side: BorderSide(
+                            color: _filter == f.$1
+                                ? context.appTheme.primary
+                                : context.appTheme.outlineVariant,
+                          ),
+                          onSelected: (_) {
+                            setState(() => _filter = f.$1);
+                            _loadData();
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
 
-                  // Student list
-                  if (_filtered.isEmpty)
-                    const FeeEmptyState(
-                      icon: Icons.groups_outlined,
-                      title: 'No students',
-                      message: 'Generate invoices before viewing the ledger.',
-                    ),
+              // Student list
+              if (_filtered.isEmpty)
+                const FeeEmptyState(
+                  icon: Icons.groups_outlined,
+                  title: 'No students',
+                  message: 'Generate invoices before viewing the ledger.',
+                ),
 
-                  for (final account in _filtered)
-                    FeeCard(
-                      onTap: () => _showLedgerSheet(account),
-                      child: Row(
+              for (final account in _filtered)
+                FeeCard(
+                  onTap: () => _showLedgerSheet(account),
+                  child: Row(
+                    children: [
+                      FeeIconBadge(
+                        icon: account.balance <= 0
+                            ? Icons.check_circle_outline
+                            : Icons.account_balance_wallet_outlined,
+                        color: account.balance <= 0
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFFEA580C),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              account.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            Text(
+                              account.classLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.appTheme.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          FeeIconBadge(
-                            icon: account.balance <= 0
-                                ? Icons.check_circle_outline
-                                : Icons.account_balance_wallet_outlined,
+                          Text(
+                            'Paid ${money(account.paid)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: context.appTheme.success,
+                            ),
+                          ),
+                          Text(
+                            'Balance ${money(account.balance)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: account.balance > 0
+                                  ? context.appTheme.error
+                                  : context.appTheme.muted,
+                            ),
+                          ),
+                          FeeStatusPill(
+                            label: account.balance <= 0
+                                ? 'Paid'
+                                : account.paid > 0
+                                ? 'Partial'
+                                : 'Due',
                             color: account.balance <= 0
                                 ? const Color(0xFF16A34A)
-                                : const Color(0xFFEA580C),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  account.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                Text(
-                                  account.classLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: context.appTheme.muted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                'Paid ${money(account.paid)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  color: context.appTheme.success,
-                                ),
-                              ),
-                              Text(
-                                'Balance ${money(account.balance)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: account.balance > 0
-                                      ? context.appTheme.error
-                                      : context.appTheme.muted,
-                                ),
-                              ),
-                              FeeStatusPill(
-                                label: account.balance <= 0
-                                    ? 'Paid'
-                                    : account.paid > 0
-                                    ? 'Partial'
-                                    : 'Due',
-                                color: account.balance <= 0
-                                    ? const Color(0xFF16A34A)
-                                    : account.paid > 0
-                                    ? const Color(0xFFF59E0B)
-                                    : const Color(0xFFEF4444),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: context.appTheme.muted,
+                                : account.paid > 0
+                                ? const Color(0xFFF59E0B)
+                                : const Color(0xFFEF4444),
                           ),
                         ],
                       ),
-                    ),
-                  if (_hasMore)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Center(
-                        child: OutlinedButton.icon(
-                          onPressed: _loadingMore
-                              ? null
-                              : () => _loadData(resetPage: false),
-                          icon: _loadingMore
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.expand_more_rounded),
-                          label: Text(
-                            _loadingMore
-                                ? 'Loading…'
-                                : 'Load more (${_invoices.length} of $_totalInvoices)',
-                          ),
-                        ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: context.appTheme.muted,
+                      ),
+                    ],
+                  ),
+                ),
+              if (_hasMore)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Center(
+                    child: OutlinedButton.icon(
+                      onPressed: _loadingMore
+                          ? null
+                          : () => _loadData(resetPage: false),
+                      icon: _loadingMore
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.expand_more_rounded),
+                      label: Text(
+                        _loadingMore
+                            ? 'Loading…'
+                            : 'Load more (${_invoices.length} of $_totalInvoices)',
                       ),
                     ),
-                ],
-              ),
-            ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -378,7 +423,7 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
         if (id.isEmpty) return invoice;
         try {
           return normalizeInvoice(
-            await BackendApiClient.instance.getInvoiceDetail(id),
+            await _repository.loadInvoiceDetail(id),
           );
         } on Object {
           // Keep the already-loaded list DTO visible if a detail request fails.
@@ -625,15 +670,14 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
     );
     if (draft == null) return;
     try {
-      final result = await BackendApiClient.instance
-          .createRaw('/fees/payments', {
-            'invoice_id': invoice['id'],
-            'amount': draft.amount,
-            'payment_method': draft.method,
-            'payment_date': _dateIso(draft.date),
-            if (draft.reference.isNotEmpty) 'reference_number': draft.reference,
-            if (draft.notes.isNotEmpty) 'remarks': draft.notes,
-          });
+      final result = await _repository.createRaw('/fees/payments', {
+        'invoice_id': invoice['id'],
+        'amount': draft.amount,
+        'payment_method': draft.method,
+        'payment_date': _dateIso(draft.date),
+        if (draft.reference.isNotEmpty) 'reference_number': draft.reference,
+        if (draft.notes.isNotEmpty) 'remarks': draft.notes,
+      });
       if (!mounted) return;
       Navigator.of(context).pop();
       await _loadData();
@@ -710,7 +754,7 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
       final balance = numValue(invoice['balance']);
       Map<String, dynamic> school = const {};
       try {
-        school = await BackendApiClient.instance.getCurrentSchool();
+        school = await _repository.loadCurrentSchool();
       } on Object {
         // The invoice remains printable from its cached ledger data when
         // branding metadata is temporarily unavailable.
@@ -795,7 +839,7 @@ class _FeeLedgerScreenState extends State<FeeLedgerScreen> {
                 .map((item) => Map<String, dynamic>.from(item))
                 .toList()
           : const <Map<String, dynamic>>[];
-      final school = await BackendApiClient.instance.getCurrentSchool();
+      final school = await _repository.loadCurrentSchool();
       final assets = await Future.wait([
         _networkImageBytes(textValue(school['logo_url'])),
         _networkImageBytes(textValue(school['authorized_signature_url'])),

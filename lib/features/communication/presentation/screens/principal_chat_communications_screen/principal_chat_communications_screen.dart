@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/chat_message_merge.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -12,12 +11,17 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_chat_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_chat_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class PrincipalChatCommunicationsScreen extends StatefulWidget {
-  const PrincipalChatCommunicationsScreen({super.key});
+  final PrincipalChatRepository? repository;
+
+  const PrincipalChatCommunicationsScreen({super.key, this.repository});
 
   @override
   State<PrincipalChatCommunicationsScreen> createState() =>
@@ -27,6 +31,9 @@ class PrincipalChatCommunicationsScreen extends StatefulWidget {
 class _PrincipalChatCommunicationsScreenState
     extends State<PrincipalChatCommunicationsScreen>
     with SingleTickerProviderStateMixin {
+  PrincipalChatRepository get _repository =>
+      widget.repository ?? ApiPrincipalChatRepository.legacyDefault;
+
   late final TabController _tabController;
   final _messageController = TextEditingController();
   final _searchController = TextEditingController();
@@ -36,10 +43,9 @@ class _PrincipalChatCommunicationsScreenState
   String _realtimeConversationId = '';
   int _realtimeRequest = 0;
 
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _sending = false;
   bool _unreadOnly = false;
-  String? _error;
   String _principalUserId = '';
   String _teacherFilter = '';
   String _parentFilter = '';
@@ -58,8 +64,7 @@ class _PrincipalChatCommunicationsScreenState
   DateTime? _messagesCursor;
 
   String get _leadershipRole =>
-      BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
-          'coordinator'
+      _repository.currentRoleName?.trim().toLowerCase() == 'coordinator'
       ? 'coordinator'
       : 'principal';
 
@@ -84,7 +89,6 @@ class _PrincipalChatCommunicationsScreenState
   // ── Realtime ──────────────────────────────────────────────────────────────
 
   Future<void> _subscribeRealtime({String conversationId = ''}) async {
-    if (DemoLocalApiService.instance.isActive) return;
     if (_realtimeConversationId == conversationId && _realtimeChannel != null) {
       await ChatRealtimeService.instance.refreshAuth();
       return;
@@ -120,17 +124,23 @@ class _PrincipalChatCommunicationsScreenState
 
   Future<void> _load({bool background = false}) async {
     if (!background) {
+      final previous = _state.data;
       setState(() {
-        _loading = true;
-        _error = null;
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
       });
     }
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getProfile(),
-        _safeChatRows(() => api.getUnifiedChatConversations(monitor: true)),
-        _safeChatRows(() => api.getUnifiedChatContacts(role: _leadershipRole)),
+        _repository.loadProfile(),
+        _safeChatRows(() => _repository.loadConversations(monitor: true)),
+        _safeChatRows(() => _repository.loadContacts(role: _leadershipRole)),
       ]);
       final profile = results[0] as dynamic;
       final allConversations = results[1] as List<Map<String, dynamic>>;
@@ -183,7 +193,7 @@ class _PrincipalChatCommunicationsScreenState
         messages = mergeChatMessagesByIdentity(
           const [],
           await _safeChatRows(
-            () => api.getUnifiedChatMessages(
+            () => _repository.loadMessages(
               conversationId: _text(selected['id']),
             ),
           ),
@@ -210,7 +220,10 @@ class _PrincipalChatCommunicationsScreenState
         } else {
           _directMessages = messages;
         }
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
       _scrollToBottom();
       unawaited(_subscribeRealtime(conversationId: newConvId));
@@ -222,8 +235,7 @@ class _PrincipalChatCommunicationsScreenState
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        if (!background) _error = error.toString();
+        if (!background) _state = RepositoryState.error(error: error);
       });
     }
   }
@@ -236,12 +248,11 @@ class _PrincipalChatCommunicationsScreenState
       return;
     }
     try {
-      final api = BackendApiClient.instance;
       final convId = _text(selected['id']);
       // Refresh conversation lists for unread count updates.
       final results = await Future.wait<Object>([
-        _safeChatRows(() => api.getUnifiedChatConversations(monitor: true)),
-        _safeChatRows(() => api.getUnifiedChatContacts(role: _leadershipRole)),
+        _safeChatRows(() => _repository.loadConversations(monitor: true)),
+        _safeChatRows(() => _repository.loadContacts(role: _leadershipRole)),
       ]);
       final allConversations = results[0] as List<Map<String, dynamic>>;
       final monitor = allConversations
@@ -268,7 +279,7 @@ class _PrincipalChatCommunicationsScreenState
       );
       monitor.sort((a, b) => _sortTime(b).compareTo(_sortTime(a)));
       final newMessages = await _safeChatRows(
-        () => api.getUnifiedChatMessages(
+        () => _repository.loadMessages(
           conversationId: convId,
           sentAfter: _messagesCursor,
         ),
@@ -312,7 +323,7 @@ class _PrincipalChatCommunicationsScreenState
         _scrollToBottom();
         if (_canSendIn(selected)) {
           unawaited(
-            BackendApiClient.instance.markUnifiedChatConversationRead(convId),
+            _repository.markConversationRead(convId),
           );
         }
       }
@@ -407,7 +418,7 @@ class _PrincipalChatCommunicationsScreenState
     final conversationId = _text(conversation['id']);
     if (conversationId.isEmpty) return;
     try {
-      await BackendApiClient.instance.markUnifiedChatConversationRead(
+      await _repository.markConversationRead(
         conversationId,
       );
     } on Object catch (_) {
@@ -501,17 +512,16 @@ class _PrincipalChatCommunicationsScreenState
     try {
       var conversationId = _text(conversation['id']);
       if (_isContactPlaceholder(conversation)) {
-        final created = await BackendApiClient.instance
-            .createUnifiedChatConversation(
-              type: _text(conversation['type'], fallback: 'principal_teacher'),
-              teacherId: _text(conversation['teacher_id']),
-              parentId: _text(conversation['parent_id']),
-              studentId: _text(conversation['student_id']),
-              title: _directTitle(conversation),
-            );
+        final created = await _repository.createConversation(
+          type: _text(conversation['type'], fallback: 'principal_teacher'),
+          teacherId: _text(conversation['teacher_id']),
+          parentId: _text(conversation['parent_id']),
+          studentId: _text(conversation['student_id']),
+          title: _directTitle(conversation),
+        );
         conversationId = _text(created['id']);
       }
-      final sent = await BackendApiClient.instance.sendUnifiedChatMessage(
+      final sent = await _repository.sendMessage(
         conversationId: conversationId,
         body: body,
       );
@@ -545,16 +555,15 @@ class _PrincipalChatCommunicationsScreenState
     final teacherId = target == 'teacher' ? _text(source['teacher_id']) : '';
     final parentId = target == 'parent' ? _text(source['parent_id']) : '';
     if (teacherId.isEmpty && parentId.isEmpty) return;
-    final created = await BackendApiClient.instance
-        .createUnifiedChatConversation(
-          type: target == 'teacher' ? 'principal_teacher' : 'principal_parent',
-          teacherId: teacherId,
-          parentId: parentId,
-          studentId: _text(source['student_id']),
-          title: target == 'teacher'
-              ? _name(_map(source['teacher']), fallback: 'Teacher')
-              : _name(_map(source['parent']), fallback: 'Parent'),
-        );
+    final created = await _repository.createConversation(
+      type: target == 'teacher' ? 'principal_teacher' : 'principal_parent',
+      teacherId: teacherId,
+      parentId: parentId,
+      studentId: _text(source['student_id']),
+      title: target == 'teacher'
+          ? _name(_map(source['teacher']), fallback: 'Teacher')
+          : _name(_map(source['parent']), fallback: 'Parent'),
+    );
     setState(() {
       _tabController.index = 1;
       _selectedDirectConversation = created;
@@ -604,32 +613,16 @@ class _PrincipalChatCommunicationsScreenState
   }
 
   Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _load,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return TabBarView(
-      controller: _tabController,
-      children: [
-        _workspace(_filteredMonitor(), monitorMode: true),
-        _workspace(_filteredDirect(), monitorMode: false),
-      ],
+    return SchoolDeskRepositoryStateView<Object>(
+      state: _state,
+      onRetry: _load,
+      data: (_) => TabBarView(
+        controller: _tabController,
+        children: [
+          _workspace(_filteredMonitor(), monitorMode: true),
+          _workspace(_filteredDirect(), monitorMode: false),
+        ],
+      ),
     );
   }
 

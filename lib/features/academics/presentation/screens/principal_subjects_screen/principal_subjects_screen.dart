@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_classes_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_classes_repository.dart';
 
 /// Read-only subjects overview screen.
 ///
@@ -14,8 +17,18 @@ import 'package:schooldesk1/routes/app_routes.dart';
 /// - Class Teacher
 /// - Co-Teacher
 /// - Subjects assigned to that class (names only)
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
+final class _PrincipalSubjectsSnapshot {
+  const _PrincipalSubjectsSnapshot(this.classes);
+
+  final List<_ClassSubjects> classes;
+}
+
 class PrincipalSubjectsScreen extends StatefulWidget {
-  const PrincipalSubjectsScreen({super.key});
+  final PrincipalClassesRepository? repository;
+
+  const PrincipalSubjectsScreen({super.key, this.repository});
 
   @override
   State<PrincipalSubjectsScreen> createState() =>
@@ -23,8 +36,11 @@ class PrincipalSubjectsScreen extends StatefulWidget {
 }
 
 class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
-  bool _loading = true;
-  String? _error;
+  PrincipalClassesRepository get _repository =>
+      widget.repository ?? ApiPrincipalClassesRepository.legacyDefault;
+
+  RepositoryState<_PrincipalSubjectsSnapshot> _repositoryState =
+      const RepositoryState.loading();
   List<_ClassSubjects> _classes = [];
 
   @override
@@ -34,18 +50,20 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   }
 
   Future<void> _loadData() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getPrincipalClassesOverview(),
-        api.getRawList(
-          '/grade-subjects',
-          queryParameters: const {'page_size': 100},
-        ),
+        _repository.loadOverview(),
+        _repository.loadGradeSubjects(),
       ]);
 
       final payload = results[0] as Map<String, dynamic>;
@@ -99,13 +117,24 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
       if (!mounted) return;
       setState(() {
         _classes = result;
-        _loading = false;
+        _repositoryState = RepositoryState(
+          data: _PrincipalSubjectsSnapshot(List.unmodifiable(result)),
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.toString();
-        _loading = false;
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
       });
     }
   }
@@ -118,62 +147,53 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
           ? null
           : const PrincipalShellBottomBar(),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: const Color(0xFF6C4CFF),
-          onRefresh: _loadData,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            slivers: [
-              SliverToBoxAdapter(child: _buildHeader()),
-              if (_loading)
-                const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_error != null)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: EmptyStateWidget(
-                      icon: Icons.cloud_off_rounded,
-                      title: 'Unable to load subjects',
-                      description: _error!,
-                      actionLabel: 'Retry',
-                      onAction: _loadData,
+        child: SchoolDeskRepositoryStateView<_PrincipalSubjectsSnapshot>(
+          state: _repositoryState,
+          onRetry: _loadData,
+          emptyTitle: 'No classes found',
+          emptyMessage:
+              'Create classes in Class Hub first, then subjects will appear here.',
+          errorTitle: 'Unable to load subjects',
+          data: (_) => RefreshIndicator(
+            color: const Color(0xFF6C4CFF),
+            onRefresh: _loadData,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              slivers: [
+                SliverToBoxAdapter(child: _buildHeader()),
+                if (_classes.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: EmptyStateWidget(
+                        icon: Icons.menu_book_rounded,
+                        title: 'No classes found',
+                        description:
+                            'Create classes in Class Hub first, then subjects will appear here.',
+                        actionLabel: 'Open Class Hub',
+                        onAction: _openClassHubForSubjects,
+                      ),
+                    ),
+                  )
+                else ...[
+                  SliverToBoxAdapter(child: _buildSummaryBar()),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(22, 16, 22, 96),
+                    sliver: SliverList.separated(
+                      itemCount: _classes.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 16),
+                      itemBuilder: (context, index) => _ClassSubjectsCard(
+                        data: _classes[index],
+                        onManageSubjects: () =>
+                            _openClassSubjectSetup(_classes[index]),
+                      ),
                     ),
                   ),
-                )
-              else if (_classes.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: EmptyStateWidget(
-                      icon: Icons.menu_book_rounded,
-                      title: 'No classes found',
-                      description:
-                          'Create classes in Class Hub first, then subjects will appear here.',
-                      actionLabel: 'Open Class Hub',
-                      onAction: _openClassHubForSubjects,
-                    ),
-                  ),
-                )
-              else ...[
-                SliverToBoxAdapter(child: _buildSummaryBar()),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 16, 22, 96),
-                  sliver: SliverList.separated(
-                    itemCount: _classes.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 16),
-                    itemBuilder: (context, index) => _ClassSubjectsCard(
-                      data: _classes[index],
-                      onManageSubjects: () =>
-                          _openClassSubjectSetup(_classes[index]),
-                    ),
-                  ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -195,7 +215,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         totalTeachers.add(cls.coTeacher);
       }
     }
-    final subtitle = _loading
+    final subtitle = _repositoryState.isLoading
         ? 'Loading...'
         : '$totalClasses ${totalClasses == 1 ? 'class' : 'classes'} '
               '$totalSubjects ${totalSubjects == 1 ? 'subject' : 'subjects'} '
@@ -250,7 +270,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   }
 
   void _openClassHubForSubjects() {
-    Navigator.of(context).pushNamed(
+    SchoolDeskNavigation.push(
+      context,
       AppRoutes.principalClasses,
       arguments: const {
         'source': 'principal_subjects',
@@ -263,7 +284,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   }
 
   void _openClassSubjectSetup(_ClassSubjects classSubjects) {
-    Navigator.of(context).pushNamed(
+    SchoolDeskNavigation.push(
+      context,
       AppRoutes.principalClasses,
       arguments: {
         'source': 'principal_subjects',

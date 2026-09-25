@@ -27,7 +27,7 @@ void main() {
     ).readAsStringSync();
 
     expect(screen, contains('List<_LessonPlannerAttachment> _attachments'));
-    expect(screen, contains('allowMultiple: true'));
+    expect(screen, contains('for (final file in result)'));
     expect(screen, contains('_attachments.map((item) => item.toJson())'));
     expect(screen, contains('attachments: _attachments.map'));
     expect(screen, contains('At least one lesson plan file is required.'));

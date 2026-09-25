@@ -29,7 +29,8 @@ void main() {
       contains('Read-only schedule from Principal timetable setup'),
     );
     expect(teacher, contains('_loadTeacherTimetableSlots'));
-    expect(teacher, contains('getTimetableSlots(sectionId: sectionId)'));
+    expect(teacher, contains('TeacherTimetableRepository'));
+    expect(teacher, contains('_repository.loadSlots(sectionId: sectionId)'));
     expect(teacher, contains('_loadWorkingDays'));
     expect(teacher, contains('_selectedDaySlots'));
     expect(teacher, contains('scrollDirection: Axis.horizontal'));
@@ -83,6 +84,9 @@ void main() {
     final flutter = File(
       'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
     ).readAsStringSync();
+    final repository = File(
+      'lib/modules/academics/data/api_admin_timetable_repository.dart',
+    ).readAsStringSync();
     final web = File(
       'schooldesk-web/components/portal/TimetableWorkspace.tsx',
     ).readAsStringSync();
@@ -90,7 +94,7 @@ void main() {
       'supabase/functions/api/handlers/timetable.ts',
     ).readAsStringSync();
 
-    expect(flutter, contains("'/grade-subjects'"));
+    expect(repository, contains("'/grade-subjects'"));
     expect(flutter, contains('mappingYear.isEmpty || mappingYear == yearId'));
     expect(web, contains('refs.gradeSubjects'));
     expect(web, contains('academicYearId'));
@@ -114,7 +118,8 @@ void main() {
     expect(parent, contains(r"hint: 'Show $dayName timetable'"));
     expect(parent, contains('current_section_id'));
     expect(parent, contains("'Sunday'"));
-    expect(parent, contains('getTimetableSlots'));
+    expect(parent, contains('ParentTimetableRepository'));
+    expect(parent, contains('_repository.loadSlots'));
     expect(handler, contains('parent_student_links'));
     expect(handler, contains('current_section_id'));
     expect(handler, contains('timetable access denied'));

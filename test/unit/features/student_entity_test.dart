@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/features/shared/domain/entities/student.dart';
+import 'package:schooldesk1/modules/people/domain/entities/student.dart';
 
 void main() {
   group('Student Entity', () {

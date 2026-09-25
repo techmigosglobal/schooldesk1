@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
+import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/roles/principal/data/api_admin_reports_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/admin_reports_repository.dart';
 
 class AdminReportsScreen extends StatefulWidget {
-  const AdminReportsScreen({super.key});
+  const AdminReportsScreen({super.key, this.repository});
+
+  final AdminReportsRepository? repository;
 
   @override
   State<AdminReportsScreen> createState() => _AdminReportsScreenState();
@@ -17,7 +23,13 @@ class AdminReportsScreen extends StatefulWidget {
 
 class _AdminReportsScreenState extends State<AdminReportsScreen>
     with SingleTickerProviderStateMixin {
+  late final AdminReportsRepository _repository =
+      widget.repository ?? ApiAdminReportsRepository.legacyDefault;
   late TabController _tabController;
+  RepositoryState<Object> _state = const RepositoryState<Object>(
+    data: Object(),
+    source: RepositorySource.remote,
+  );
 
   List<Map<String, dynamic>> get _reportCategories => [
     {
@@ -27,7 +39,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
       'reports': [
         {
           'name': 'New Admissions This Term',
-          'desc': 'List of all new admissions in Term 3 (2025–26)',
+          'desc': 'Admissions in selected reporting period',
         },
         {
           'name': 'Class-wise Enrollment',
@@ -80,7 +92,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
           'desc': 'Category-wise student data',
         },
         {
-          'name': 'Annual School Return 2025–26',
+          'name': 'Annual School Return',
           'desc': 'Government annual return data',
         },
       ],
@@ -120,9 +132,18 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
           Tab(text: 'Compliance'),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [_buildAllReports(), _buildCompliance()],
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: () => setState(() {
+          _state = const RepositoryState<Object>(
+            data: Object(),
+            source: RepositorySource.remote,
+          );
+        }),
+        data: (_) => TabBarView(
+          controller: _tabController,
+          children: [_buildAllReports(), _buildCompliance()],
+        ),
       ),
     );
   }
@@ -273,170 +294,13 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
   }
 
   Widget _buildCompliance() {
-    final complianceItems = [
-      {
-        'title': 'DISE Annual Return',
-        'deadline': '30 Jun 2025',
-        'status': 'Pending',
-        'progress': 0.3,
-      },
-      {
-        'title': 'RTE Compliance Report',
-        'deadline': '31 May 2025',
-        'status': 'In Progress',
-        'progress': 0.6,
-      },
-      {
-        'title': 'SC/ST/OBC Data Submission',
-        'deadline': '15 May 2025',
-        'status': 'Completed',
-        'progress': 1.0,
-      },
-      {
-        'title': 'Mid-Day Meal Report',
-        'deadline': '30 Apr 2025',
-        'status': 'Pending',
-        'progress': 0.1,
-      },
-      {
-        'title': 'Infrastructure Report',
-        'deadline': '31 Jul 2025',
-        'status': 'Not Started',
-        'progress': 0.0,
-      },
-    ];
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: complianceItems.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final c = complianceItems[i];
-        final statusColors = {
-          'Pending': context.appTheme.warning,
-          'In Progress': context.appTheme.info,
-          'Completed': context.appTheme.success,
-          'Not Started': context.appTheme.muted,
-        };
-        final sc = statusColors[c['status']] ?? context.appTheme.muted;
-        final progress = c['progress'] as double;
-        return Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: context.appTheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: context.appTheme.outlineVariant),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      c['title'] as String,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: sc.withAlpha(25),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      c['status'] as String,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: sc,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Deadline: ${c['deadline']}',
-                style: GoogleFonts.dmSans(
-                  fontSize: 11,
-                  color: context.appTheme.muted,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        backgroundColor: context.appTheme.outlineVariant,
-                        valueColor: AlwaysStoppedAnimation<Color>(sc),
-                        minHeight: 6,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${(progress * 100).toInt()}%',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: sc,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        _exportReport(context, c['title'] as String, 'PDF');
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                      ),
-                      child: Text(
-                        'Export PDF',
-                        style: GoogleFonts.dmSans(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () =>
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '${c['title']} shared with Principal',
-                              ),
-                              backgroundColor: context.appTheme.success,
-                            ),
-                          ),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                      ),
-                      child: Text(
-                        'Share with Principal',
-                        style: GoogleFonts.dmSans(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+    return const Padding(
+      padding: EdgeInsets.all(16),
+      child: SchoolDeskStatusPanel.empty(
+        title: 'Compliance status unavailable',
+        message:
+            'Live compliance status is not provided by reporting API yet. No placeholder status is shown.',
+      ),
     );
   }
 
@@ -446,15 +310,9 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
     String format,
   ) async {
     try {
-      final export = await BackendApiClient.instance.createReportExport(
-        '/reports/exports',
+      final export = await _repository.requestExport(
         reportTitle: name,
         format: format,
-        scope: 'admin',
-        parameters: {
-          'source_screen': 'admin_reports',
-          'requested_at': DateTime.now().toUtc().toIso8601String(),
-        },
       );
       if (!context.mounted) return;
       final status = export['status'] ?? 'requested';

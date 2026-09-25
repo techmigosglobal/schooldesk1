@@ -38,34 +38,56 @@ void main() {
     expect(RoleAccessService.teacherClassName, 'Not assigned');
   });
 
-  test('principal bootstrap does not download operational directories', () async {
-    BackendApiClient.instance.setCurrentRole('principal');
-    BackendApiClient.instance.setCurrentUserId('principal-user-1');
-    adapter.responseDelay = const Duration(milliseconds: 20);
-    adapter.routes['GET /auth/profile'] = _ok({
-      'id': 'principal-user-1',
-      'email': 'principal@example.test',
-      'role_name': 'principal',
-      'school_id': 'school-1',
-      'is_active': true,
-    });
-    adapter.routes['GET /students'] = _okList(
-      <Map<String, dynamic>>[],
-      total: 0,
-    );
-    adapter.routes['GET /staff'] = _okList(<Map<String, dynamic>>[], total: 0);
-    adapter.routes['GET /timetable/slots'] = _ok({'success': true, 'data': []});
-    adapter.routes['GET /fees/invoices'] = _okList(
-      <Map<String, dynamic>>[],
-      total: 0,
-    );
+  test(
+    'principal bootstrap does not download operational directories',
+    () async {
+      BackendApiClient.instance.setCurrentRole('principal');
+      BackendApiClient.instance.setCurrentUserId('principal-user-1');
+      adapter.responseDelay = const Duration(milliseconds: 20);
+      adapter.routes['GET /auth/profile'] = _ok({
+        'id': 'principal-user-1',
+        'email': 'principal@example.test',
+        'role_name': 'principal',
+        'school_id': 'school-1',
+        'is_active': true,
+      });
+      adapter.routes['GET /students'] = _okList(
+        <Map<String, dynamic>>[],
+        total: 0,
+      );
+      adapter.routes['GET /staff'] = _okList(
+        <Map<String, dynamic>>[],
+        total: 0,
+      );
+      adapter.routes['GET /timetable/slots'] = _ok({
+        'success': true,
+        'data': [],
+      });
+      adapter.routes['GET /fees/invoices'] = _okList(
+        <Map<String, dynamic>>[],
+        total: 0,
+      );
 
-    await RoleAccessService.initialize();
+      await RoleAccessService.initialize();
 
-    expect(adapter.requests.where((request) => request.startsWith('GET /students')), isEmpty);
-    expect(adapter.requests.where((request) => request.startsWith('GET /staff')), isEmpty);
-    expect(adapter.requests.where((request) => request.startsWith('GET /fees/invoices')), isEmpty);
-  });
+      expect(
+        adapter.requests.where(
+          (request) => request.startsWith('GET /students'),
+        ),
+        isEmpty,
+      );
+      expect(
+        adapter.requests.where((request) => request.startsWith('GET /staff')),
+        isEmpty,
+      );
+      expect(
+        adapter.requests.where(
+          (request) => request.startsWith('GET /fees/invoices'),
+        ),
+        isEmpty,
+      );
+    },
+  );
 
   test(
     'teacher profile failure never falls back to another school staff member',

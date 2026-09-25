@@ -2,22 +2,31 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/features/leave/presentation/screens/teacher_leave_screen/teacher_leave_request_form_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_leave_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_leave_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_leave_context.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class TeacherLeaveScreen extends StatefulWidget {
-  const TeacherLeaveScreen({super.key});
+  final TeacherLeaveRepository? repository;
+
+  const TeacherLeaveScreen({super.key, this.repository});
 
   @override
   State<TeacherLeaveScreen> createState() => _TeacherLeaveScreenState();
 }
 
 class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
-  bool _loading = true;
-  String? _error;
+  RepositoryState<TeacherLeaveContext> _repositoryState =
+      const RepositoryState.loading();
   String _staffId = '';
   String _staffName = 'Teacher';
   List<Map<String, dynamic>> _leaveTypes = const [];
@@ -31,51 +40,61 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
   }
 
   Future<void> _loadLeave({bool forceRefresh = false}) async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
       await RoleAccessService.initialize();
-      final api = BackendApiClient.instance;
-      final dashboard = await api.getDashboard('teacher');
-      final staffId = teacherFlowText(
-        dashboard['staff_id'],
-        fallback: RoleAccessService.teacherStaffId,
-      );
-      final results = await Future.wait([
-        api.getLeaveTypes(forceRefresh: forceRefresh),
-        api.getLeaveBalances(staffId: staffId, forceRefresh: forceRefresh),
-        api.getLeaveApplications(staffId: staffId, forceRefresh: forceRefresh),
-      ]);
+      final result =
+          await (widget.repository ?? ApiTeacherLeaveRepository.legacyDefault)
+              .load(
+                staffId: RoleAccessService.teacherStaffId,
+                forceRefresh: forceRefresh,
+              );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to load leave',
+        );
+      }
+      final snapshot = result.dataOrNull!;
       if (!mounted) return;
       setState(() {
-        _staffId = staffId;
+        _staffId = snapshot.staffId;
         _staffName = RoleAccessService.teacherName;
-        _leaveTypes = (results[0] as List)
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList();
-        _balances = (results[1] as List)
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList();
-        _applications = (results[2] as List)
-            .whereType<LeaveApplicationModel>()
-            .toList();
-        _loading = false;
+        _leaveTypes = snapshot.leaveTypes;
+        _balances = snapshot.balances;
+        _applications = snapshot.applications;
+        _repositoryState = RepositoryState(
+          data: snapshot,
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = error.toString();
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
       });
     }
   }
 
   Future<void> _openApply() async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.teacherLeaveRequestForm,
       arguments: TeacherLeaveRequestFormArgs(
@@ -83,6 +102,7 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
         staffName: _staffName,
         leaveTypes: _leaveTypes,
         balances: _balances,
+        repository: widget.repository,
       ),
     );
     if (result != null) await _loadLeave();
@@ -111,7 +131,14 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.recallLeaveApplication(app.id);
+      final result =
+          await (widget.repository ?? ApiTeacherLeaveRepository.legacyDefault)
+              .recall(app.id);
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to recall leave request',
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -137,113 +164,124 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
       title: 'My Leaves',
       subtitle: 'Apply, track status, and see substitute coverage',
       selectedIndex: TeacherNav.leave,
-      loading: _loading,
-      error: _error,
+      loading: _repositoryState.isLoading && !_repositoryState.hasData,
+      error: _repositoryState.isError && !_repositoryState.hasData
+          ? '${_repositoryState.error}'
+          : null,
       onRefresh: () => _loadLeave(forceRefresh: true),
-      child: TeacherFlowScrollView(
-        children: [
-          TeacherCurrentClassCard(
-            greeting: 'Leave desk',
-            classLabel: _staffName,
-            subject: pending == 0 ? 'No pending requests' : '$pending pending',
-            timeLabel: 'Admin review and substitute assignment',
-            actions: [
-              TeacherFlowAction(
-                label: 'Apply Leave',
-                icon: Icons.event_busy_rounded,
-                filled: true,
-                onTap: _staffId.isEmpty ? null : _openApply,
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          TeacherFlowMetricGrid(
-            metrics: [
-              TeacherFlowMetric(
-                label: 'Balance Rows',
-                value: '${_balances.length}',
-                icon: Icons.account_balance_wallet_rounded,
-                color: teacherFlowAccent,
-                tone: const Color(0xFFE3FAF5),
-              ),
-              TeacherFlowMetric(
-                label: 'Pending',
-                value: '$pending',
-                icon: Icons.hourglass_top_rounded,
-                color: Colors.orange,
-                tone: const Color(0xFFFFF4E5),
-              ),
-              TeacherFlowMetric(
-                label: 'Approved',
-                value: '$approved',
-                icon: Icons.check_circle_rounded,
-                color: Colors.green,
-                tone: const Color(0xFFEAFBF0),
-              ),
-              TeacherFlowMetric(
-                label: 'History',
-                value: '${_applications.length}',
-                icon: Icons.history_rounded,
-                color: Colors.indigo,
-                tone: const Color(0xFFEAF0FF),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          const TeacherFlowSectionHeader(title: 'Leave History'),
-          const SizedBox(height: 10),
-          if (_applications.isEmpty)
-            const TeacherFlowCard(
-              icon: Icons.event_available_rounded,
-              title: 'No leave requests',
-              subtitle: 'Your submitted leave requests appear here.',
-            )
-          else
-            ..._applications.map(
-              (app) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: TeacherFlowCard(
+      child: SchoolDeskRepositoryStateView<TeacherLeaveContext>(
+        state: _repositoryState,
+        onRetry: () => _loadLeave(),
+        emptyTitle: 'No leave data',
+        emptyMessage: 'Leave data is not available for this teacher scope.',
+        data: (_) => TeacherFlowScrollView(
+          children: [
+            TeacherCurrentClassCard(
+              greeting: 'Leave desk',
+              classLabel: _staffName,
+              subject: pending == 0
+                  ? 'No pending requests'
+                  : '$pending pending',
+              timeLabel: 'Admin review and substitute assignment',
+              actions: [
+                TeacherFlowAction(
+                  label: 'Apply Leave',
                   icon: Icons.event_busy_rounded,
-                  title: _leaveTypeLabel(app.leaveTypeId),
-                  subtitle:
-                      '${app.fromDate.split('T').first} to ${app.toDate.split('T').first} · ${app.reason ?? ''}',
-                  status: teacherFlowTitleCase(app.status),
-                  statusColor: _statusColor(app.status),
-                  body: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          TeacherInfoPill(
-                            icon: Icons.timer_rounded,
-                            label: '${app.totalDays.toStringAsFixed(1)} day(s)',
-                          ),
-                          const TeacherInfoPill(
-                            icon: Icons.swap_horiz_rounded,
-                            label: 'Substitute shown after approval',
-                          ),
-                        ],
-                      ),
-                      if (app.status == 'pending') ...[
-                        const SizedBox(height: 10),
-                        TeacherFlowActionWrap(
-                          actions: [
-                            TeacherFlowAction(
-                              label: 'Recall',
-                              icon: Icons.undo_rounded,
-                              onTap: () => _recallApplication(app),
+                  filled: true,
+                  onTap: _staffId.isEmpty ? null : _openApply,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            TeacherFlowMetricGrid(
+              metrics: [
+                TeacherFlowMetric(
+                  label: 'Balance Rows',
+                  value: '${_balances.length}',
+                  icon: Icons.account_balance_wallet_rounded,
+                  color: teacherFlowAccent,
+                  tone: const Color(0xFFE3FAF5),
+                ),
+                TeacherFlowMetric(
+                  label: 'Pending',
+                  value: '$pending',
+                  icon: Icons.hourglass_top_rounded,
+                  color: Colors.orange,
+                  tone: const Color(0xFFFFF4E5),
+                ),
+                TeacherFlowMetric(
+                  label: 'Approved',
+                  value: '$approved',
+                  icon: Icons.check_circle_rounded,
+                  color: Colors.green,
+                  tone: const Color(0xFFEAFBF0),
+                ),
+                TeacherFlowMetric(
+                  label: 'History',
+                  value: '${_applications.length}',
+                  icon: Icons.history_rounded,
+                  color: Colors.indigo,
+                  tone: const Color(0xFFEAF0FF),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            const TeacherFlowSectionHeader(title: 'Leave History'),
+            const SizedBox(height: 10),
+            if (_applications.isEmpty)
+              const TeacherFlowCard(
+                icon: Icons.event_available_rounded,
+                title: 'No leave requests',
+                subtitle: 'Your submitted leave requests appear here.',
+              )
+            else
+              ..._applications.map(
+                (app) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: TeacherFlowCard(
+                    icon: Icons.event_busy_rounded,
+                    title: _leaveTypeLabel(app.leaveTypeId),
+                    subtitle:
+                        '${app.fromDate.split('T').first} to ${app.toDate.split('T').first} · ${app.reason ?? ''}',
+                    status: teacherFlowTitleCase(app.status),
+                    statusColor: _statusColor(app.status),
+                    body: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            TeacherInfoPill(
+                              icon: Icons.timer_rounded,
+                              label:
+                                  '${app.totalDays.toStringAsFixed(1)} day(s)',
+                            ),
+                            const TeacherInfoPill(
+                              icon: Icons.swap_horiz_rounded,
+                              label: 'Substitute shown after approval',
                             ),
                           ],
                         ),
+                        if (app.status == 'pending') ...[
+                          const SizedBox(height: 10),
+                          TeacherFlowActionWrap(
+                            actions: [
+                              TeacherFlowAction(
+                                label: 'Recall',
+                                icon: Icons.undo_rounded,
+                                onTap: () => _recallApplication(app),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -1,9 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -11,6 +12,8 @@ import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_audit_log_widget.dart';
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_item_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/modules/people/data/repositories/api_approval_repository.dart';
+import 'package:schooldesk1/modules/people/domain/repositories/approval_repository.dart';
 
 enum ApprovalType {
   account,
@@ -180,34 +183,58 @@ class ApprovalModel {
 
 class ApprovalCenterScreen extends StatefulWidget {
   final ApprovalCenterRouteArgs args;
+  final ApprovalRepository? repository;
 
   const ApprovalCenterScreen({
     super.key,
     this.args = const ApprovalCenterRouteArgs(),
+    this.repository,
   });
 
   @override
   State<ApprovalCenterScreen> createState() => _ApprovalCenterScreenState();
 }
 
+@immutable
+class _ApprovalCenterSnapshot {
+  const _ApprovalCenterSnapshot({
+    required this.approvals,
+    required this.page,
+    required this.total,
+    required this.pendingCount,
+    required this.hasMore,
+  });
+
+  final List<ApprovalModel> approvals;
+  final int page;
+  final int total;
+  final int pendingCount;
+  final bool hasMore;
+}
+
 class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     with SingleTickerProviderStateMixin {
   int _selectedDrawerIndex = 3;
   late TabController _tabController;
-  List<ApprovalModel> _allApprovals = [];
-  bool _loading = true;
   bool _loadingMore = false;
-  bool _hasMore = false;
-  int _currentPage = 1;
-  int _totalApprovals = 0;
-  int _serverPendingCount = 0;
-  String? _error;
+  RepositoryState<_ApprovalCenterSnapshot> _state =
+      const RepositoryState.loading();
   List<Map<String, dynamic>> _approvalAuditLogs = const [];
   bool _approvalAuditLoading = true;
   String? _approvalAuditError;
+
+  _ApprovalCenterSnapshot? get _snapshot => _state.data;
+  List<ApprovalModel> get _allApprovals => _snapshot?.approvals ?? const [];
+  bool get _hasMore => _snapshot?.hasMore ?? false;
+  int get _currentPage => _snapshot?.page ?? 1;
+  int get _totalApprovals => _snapshot?.total ?? 0;
+  int get _serverPendingCount => _snapshot?.pendingCount ?? 0;
   final Set<String> _actionLoadingIds = {};
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
+
+  ApprovalRepository get _repository =>
+      widget.repository ?? ApiApprovalRepository.legacyDefault;
   int _queryGeneration = 0;
   String _statusFilter = 'pending';
   // Stored reference so we can reliably removeListener on dispose without
@@ -280,13 +307,20 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
 
   Future<void> _loadData() async {
     final generation = ++_queryGeneration;
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
       _loadingMore = false;
     });
     try {
-      final response = await BackendApiClient.instance.getApprovalFeed(
+      final response = await _repository.loadFeed(
         status: _statusFilter == 'resolved' ? 'all' : _statusFilter,
         search: _searchController.text,
         page: 1,
@@ -294,19 +328,31 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       );
       if (!mounted || generation != _queryGeneration) return;
       setState(() {
-        _allApprovals = response.page.data.map(ApprovalModel.fromMap).toList();
-        _currentPage = response.page.page;
-        _hasMore = response.page.hasMore;
-        _totalApprovals = response.page.total;
-        _serverPendingCount = response.pendingCount;
-        _loading = false;
-        _error = null;
+        _state = RepositoryState(
+          data: _ApprovalCenterSnapshot(
+            approvals: response.page.data.map(ApprovalModel.fromMap).toList(),
+            page: response.page.page,
+            total: response.page.total,
+            pendingCount: response.pendingCount,
+            hasMore: response.page.hasMore,
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = e.toString();
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -319,7 +365,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       });
     }
     try {
-      final logs = await BackendApiClient.instance.getApprovalAuditLog();
+      final logs = await _repository.loadAuditLog();
       if (!mounted) return;
       setState(() {
         _approvalAuditLogs = logs;
@@ -344,7 +390,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     final generation = _queryGeneration;
     setState(() => _loadingMore = true);
     try {
-      final response = await BackendApiClient.instance.getApprovalFeed(
+      final response = await _repository.loadFeed(
         status: _statusFilter == 'resolved' ? 'all' : _statusFilter,
         search: _searchController.text,
         page: _currentPage + 1,
@@ -357,11 +403,18 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           .where((item) => existingIds.add(item.id))
           .toList();
       setState(() {
-        _allApprovals = [..._allApprovals, ...additions];
-        _currentPage = response.page.page;
-        _hasMore = response.page.hasMore;
-        _totalApprovals = response.page.total;
-        _serverPendingCount = response.pendingCount;
+        _state = RepositoryState(
+          data: _ApprovalCenterSnapshot(
+            approvals: [..._allApprovals, ...additions],
+            page: response.page.page,
+            total: response.page.total,
+            pendingCount: response.pendingCount,
+            hasMore: response.page.hasMore,
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         _loadingMore = false;
       });
     } on Object catch (e) {
@@ -452,7 +505,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (approval.type == ApprovalType.studentLeave) {
       setState(() => _actionLoadingIds.add(approval.id));
       try {
-        await BackendApiClient.instance.decideStudentLeaveApplication(
+        await _repository.decideStudentLeave(
           approval.id,
           status: 'approved',
         );
@@ -481,7 +534,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     } else if (approval.type == ApprovalType.leave) {
       setState(() => _actionLoadingIds.add(approval.id));
       try {
-        await BackendApiClient.instance.decideLeaveApplication(
+        await _repository.decideLeave(
           approval.id,
           status: 'approved',
           reason: '',
@@ -549,7 +602,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (approval.type == ApprovalType.studentLeave) {
       setState(() => _actionLoadingIds.add(approval.id));
       try {
-        await BackendApiClient.instance.decideStudentLeaveApplication(
+        await _repository.decideStudentLeave(
           approval.id,
           status: 'rejected',
           rejectionReason: remarks,
@@ -579,7 +632,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     } else if (approval.type == ApprovalType.leave) {
       setState(() => _actionLoadingIds.add(approval.id));
       try {
-        await BackendApiClient.instance.decideLeaveApplication(
+        await _repository.decideLeave(
           approval.id,
           status: 'rejected',
           reason: remarks,
@@ -651,7 +704,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           'Payment proofs only support approve or reject decisions',
         );
       }
-      await BackendApiClient.instance.decideParentPaymentRequest(
+      await _repository.decidePayment(
         approval.id,
         status: status,
         adminRemarks: remarks,
@@ -664,11 +717,11 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     }
     if (path.startsWith('/approvals/')) {
       if (status == 'approved') {
-        await BackendApiClient.instance.approveApprovalRequest(approval.id);
-        await BackendApiClient.instance.applyApprovalRequest(approval.id);
+        await _repository.approve(approval.id);
+        await _repository.apply(approval.id);
         return;
       }
-      await BackendApiClient.instance.rejectApprovalRequest(
+      await _repository.reject(
         approval.id,
         reason: remarks,
       );
@@ -676,7 +729,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     }
     if (path.startsWith('/account-approvals/')) {
       final action = status == 'approved' ? 'approve' : 'reject';
-      await BackendApiClient.instance.createRaw('$path/$action', {
+      await _repository.createRaw('$path/$action', {
         'reason': remarks,
         'expected_status': 'pending',
       });
@@ -685,13 +738,13 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (path.startsWith('/event-posts/')) {
       final action = status == 'approved' ? 'approve' : 'reject';
       final eventId = path.split('/').where((part) => part.isNotEmpty).last;
-      await BackendApiClient.instance.createRaw(
+      await _repository.createRaw(
         '/event-posts/$eventId/$action',
         {'reason': remarks, 'expected_status': 'pending'},
       );
       return;
     }
-    await BackendApiClient.instance.updateRaw(path, {
+    await _repository.updateRaw(path, {
       'type': approval.type.name,
       'status': status,
       'remarks': remarks,
@@ -718,7 +771,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (_actionLoadingIds.contains(approval.id)) return;
     setState(() => _actionLoadingIds.add(approval.id));
     try {
-      await BackendApiClient.instance.requestApprovalChanges(
+      await _repository.requestChanges(
         approval.id,
         note: note,
       );
@@ -765,35 +818,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       selectedIndex: _selectedDrawerIndex,
       onDestinationSelected: (i) => setState(() => _selectedDrawerIndex = i),
     );
-    if (_loading) {
-      return SchoolDeskModuleScaffold(
-        title: 'Approval Center',
-        subtitle: 'Review pending operational requests and audit decisions',
-        drawer: drawer,
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_error != null) {
-      return SchoolDeskModuleScaffold(
-        title: 'Approval Center',
-        subtitle: 'Review pending operational requests and audit decisions',
-        drawer: drawer,
-        actions: [
-          IconButton(
-            tooltip: 'Retry approvals',
-            onPressed: _loadData,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-        body: Center(
-          child: EmptyStateWidget(
-            icon: Icons.cloud_off_rounded,
-            title: 'Approval center unavailable',
-            description: _error!,
-          ),
-        ),
-      );
-    }
     return SchoolDeskModuleScaffold(
       title: 'Approval Center',
       subtitle: '$pendingCount items pending your action',
@@ -819,7 +843,13 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           );
         }),
       ),
-      body: _buildContent(),
+      body: SchoolDeskRepositoryStateView<_ApprovalCenterSnapshot>(
+        state: _state,
+        onRetry: _loadData,
+        emptyTitle: 'No approval requests',
+        emptyMessage: 'There are no approval requests for this scope.',
+        data: (_) => _buildContent(),
+      ),
     );
   }
 

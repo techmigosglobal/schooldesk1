@@ -7,12 +7,16 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_widgets.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 enum _PaymentMode { cash, cheque, bankTransfer, other }
 
@@ -38,23 +42,27 @@ extension on _PaymentMode {
 }
 
 class FeeCollectScreen extends StatefulWidget {
-  const FeeCollectScreen({super.key});
+  final AdminFeesRepository? repository;
+
+  const FeeCollectScreen({super.key, this.repository});
   @override
   State<FeeCollectScreen> createState() => _FeeCollectScreenState();
 }
 
 class _FeeCollectScreenState extends State<FeeCollectScreen> {
+  AdminFeesRepository get _repository =>
+      widget.repository ?? ApiAdminFeesRepository.legacyDefault;
+
   final _amountController = TextEditingController();
   final _transactionController = TextEditingController();
   final _notesController = TextEditingController();
   final _searchCtrl = TextEditingController();
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _loadingMore = false;
   bool _hasMore = false;
   int _page = 1;
   int _totalInvoices = 0;
   bool _saving = false;
-  String? _error;
   String _query = '';
   String _selectedStudentId = '';
   _PaymentMode _paymentMode = _PaymentMode.cash;
@@ -79,14 +87,22 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
   }
 
   Future<void> _loadData({bool resetPage = true}) async {
+    final previous = _state.data;
     setState(() {
-      _loading = resetPage;
+      _state = resetPage
+          ? RepositoryState.loading(
+              data: previous,
+              source: previous == null
+                  ? RepositorySource.empty
+                  : RepositorySource.cache,
+              isStale: previous != null,
+              isRefreshing: previous != null,
+            )
+          : _state;
       _loadingMore = !resetPage;
-      _error = null;
     });
     try {
-      final api = BackendApiClient.instance;
-      final response = await api.getInvoicesPage(
+      final response = await _repository.loadInvoicesPage(
         search: _query,
         outstanding: true,
         page: resetPage ? 1 : _page + 1,
@@ -105,14 +121,23 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
         _page = response.page;
         _totalInvoices = response.total;
         _hasMore = response.hasMore;
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
         _loadingMore = false;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+              );
         _loadingMore = false;
       });
     }
@@ -167,19 +192,13 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
           ),
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                ? FeeEmptyState(
-                    icon: Icons.cloud_off_rounded,
-                    title: 'Error',
-                    message: _error!,
-                    actionLabel: 'Retry',
-                    onAction: _loadData,
-                  )
-                : _selectedInvoice == null
-                ? _buildStudentPicker(embedded: true)
-                : _buildPaymentForm(embedded: true),
+            child: SchoolDeskRepositoryStateView<Object>(
+              state: _state,
+              onRetry: _loadData,
+              data: (_) => _selectedInvoice == null
+                  ? _buildStudentPicker(embedded: true)
+                  : _buildPaymentForm(embedded: true),
+            ),
           ),
         ),
       );
@@ -202,19 +221,13 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? FeeEmptyState(
-              icon: Icons.cloud_off_rounded,
-              title: 'Error',
-              message: _error!,
-              actionLabel: 'Retry',
-              onAction: _loadData,
-            )
-          : _selectedInvoice == null
-          ? _buildStudentPicker()
-          : _buildPaymentForm(),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadData,
+        data: (_) => _selectedInvoice == null
+            ? _buildStudentPicker()
+            : _buildPaymentForm(),
+      ),
     );
   }
 
@@ -537,7 +550,7 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
     }
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.recordPayment(
+      await _repository.recordPayment(
         PaymentRequest(
           invoiceId: inv['id'],
           amountPaid: amount,

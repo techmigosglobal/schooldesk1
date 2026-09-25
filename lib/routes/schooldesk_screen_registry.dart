@@ -45,13 +45,6 @@ class SchoolDeskScreenRegistry {
       isPublic: true,
     ),
     SchoolDeskScreenMetadata(
-      route: '/demo-role-selector-screen',
-      title: 'Choose Demo Role',
-      module: 'Authentication',
-      portal: 'public',
-      isPublic: true,
-    ),
-    SchoolDeskScreenMetadata(
       route: '/principal-login-screen',
       title: 'Principal Sign In',
       module: 'Authentication',

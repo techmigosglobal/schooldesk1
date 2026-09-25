@@ -4,6 +4,8 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 /// Role identifiers for the dashboard FAB
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 enum DashboardRole { superAdmin, principal, coordinator, teacher, parent }
 
 /// A small floating action button that navigates back to the role dashboard.
@@ -60,10 +62,11 @@ class DashboardFabWidget extends StatelessWidget {
     return FloatingActionButton.small(
       heroTag: 'dashboard_fab_${role.name}',
       onPressed: () {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
+        SchoolDeskNavigation.goFromNavigator(
+          Navigator.of(context),
           _dashboardRoute,
-          (route) => route.settings.name == _dashboardRoute || route.isFirst,
+          legacyPredicate: (route) =>
+              route.settings.name == _dashboardRoute || route.isFirst,
         );
       },
       backgroundColor: _roleColor(context),

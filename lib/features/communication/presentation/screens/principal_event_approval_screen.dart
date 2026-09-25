@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_event_approval_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_event_approval_repository.dart';
 
 class EventApprovalRouteArgs {
   final String initialPostId;
@@ -42,10 +45,12 @@ class EventApprovalRouteArgs {
 
 class PrincipalEventApprovalScreen extends StatefulWidget {
   final EventApprovalRouteArgs args;
+  final PrincipalEventApprovalRepository? repository;
 
   const PrincipalEventApprovalScreen({
     super.key,
     this.args = const EventApprovalRouteArgs(),
+    this.repository,
   });
 
   @override
@@ -56,6 +61,9 @@ class PrincipalEventApprovalScreen extends StatefulWidget {
 class _PrincipalEventApprovalScreenState
     extends State<PrincipalEventApprovalScreen>
     with WidgetsBindingObserver {
+  PrincipalEventApprovalRepository get _repository =>
+      widget.repository ?? ApiPrincipalEventApprovalRepository.legacyDefault;
+
   static const List<String> _destinationOptions = <String>[
     'PARENTS_HOME',
     'TEACHERS_HOME',
@@ -69,9 +77,9 @@ class _PrincipalEventApprovalScreenState
   Timer? _pollingTimer;
   Timer? _refreshDebounceTimer;
   bool _requestInFlight = false;
-  bool _loading = true;
+  RepositoryState<List<Map<String, dynamic>>> _repositoryState =
+      const RepositoryState.loading();
   bool _refreshing = false;
-  String? _error;
 
   String get initialPostId => widget.args.initialPostId;
 
@@ -85,7 +93,7 @@ class _PrincipalEventApprovalScreenState
       service.addListener(_onNotificationChanged);
     });
     _pollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted && !_loading) {
+      if (mounted && !_repositoryState.isLoading) {
         _scheduleRefresh();
       }
     });
@@ -125,17 +133,32 @@ class _PrincipalEventApprovalScreenState
   }) async {
     if (_requestInFlight) return;
     _requestInFlight = true;
+    final previous = _repositoryState;
     if (showSpinner) {
       setState(() {
-        _loading = true;
-        _error = null;
+        _repositoryState = RepositoryState.loading(
+          data: previous.data,
+          source: previous.source,
+          isStale: previous.isStale,
+          isRefreshing: previous.hasData,
+          lastUpdated: previous.lastUpdated,
+        );
       });
     } else if (mounted) {
-      setState(() => _refreshing = true);
+      setState(() {
+        _refreshing = true;
+        _repositoryState = RepositoryState.loading(
+          data: previous.data,
+          source: previous.source,
+          isStale: previous.isStale,
+          isRefreshing: previous.hasData,
+          lastUpdated: previous.lastUpdated,
+        );
+      });
     }
 
     try {
-      final posts = await BackendApiClient.instance.getPrincipalEventPosts();
+      final posts = await _repository.loadPosts();
       Map<String, dynamic>? target;
       final keepPostId = keepPost?['id']?.toString().trim() ?? '';
       final targetPostId = initialPostId.isNotEmpty
@@ -143,7 +166,7 @@ class _PrincipalEventApprovalScreenState
           : keepPostId;
       if (targetPostId.isNotEmpty) {
         try {
-          target = await BackendApiClient.instance.getEventPost(targetPostId);
+          target = await _repository.loadPost(targetPostId);
         } on Object catch (_) {
           target = keepPost;
         }
@@ -168,16 +191,28 @@ class _PrincipalEventApprovalScreenState
         _viewedAttachmentPostIds.removeWhere(
           (postId) => !_posts.any((post) => post['id']?.toString() == postId),
         );
-        _loading = false;
         _refreshing = false;
-        _error = null;
+        _repositoryState = RepositoryState(
+          data: List<Map<String, dynamic>>.unmodifiable(_posts),
+          source: RepositorySource.remote,
+          phase: _posts.isEmpty ? RepositoryPhase.empty : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
         _refreshing = false;
-        _error = 'Failed to load event approvals: $e';
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                phase: RepositoryPhase.ready,
+                isStale: true,
+                error: e,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: e);
       });
     } finally {
       _requestInFlight = false;
@@ -186,7 +221,7 @@ class _PrincipalEventApprovalScreenState
 
   Future<void> _notifyAndReload({Map<String, dynamic>? keepPost}) async {
     try {
-      await BackendApiClient.instance.invalidateCachedReads();
+      await _repository.invalidateCachedReads();
     } on Object catch (_) {
       // The write already succeeded; do not let cache cleanup blank the screen.
     }
@@ -201,7 +236,7 @@ class _PrincipalEventApprovalScreenState
 
   Future<void> _approveStatus(String id) async {
     try {
-      await BackendApiClient.instance.approveEventPost(id);
+      await _repository.approve(id);
       await _notifyAndReload();
     } on Object catch (e) {
       if (!mounted) return;
@@ -274,7 +309,7 @@ class _PrincipalEventApprovalScreenState
 
     if (confirmed == true && reasonController.text.trim().isNotEmpty) {
       try {
-        await BackendApiClient.instance.rejectEventPost(
+        await _repository.reject(
           id,
           reason: reasonController.text.trim(),
         );
@@ -336,7 +371,7 @@ class _PrincipalEventApprovalScreenState
             final eventDate = rawDate.isEmpty
                 ? DateTime.now().toIso8601String()
                 : '${rawDate}T00:00:00Z';
-            updatedPost = await BackendApiClient.instance.updateEventPost(
+            updatedPost = await _repository.update(
               id: id,
               title: titleController.text.trim(),
               description: descriptionController.text.trim(),
@@ -385,7 +420,7 @@ class _PrincipalEventApprovalScreenState
           });
 
           try {
-            await BackendApiClient.instance.deleteEventPost(id);
+            await _repository.delete(id);
             deleted = true;
             if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
           } on Object catch (e) {
@@ -576,9 +611,13 @@ class _PrincipalEventApprovalScreenState
             _posts[index] = editedPost;
           }
           _selectedPost = editedPost;
-          _loading = false;
           _refreshing = false;
-          _error = null;
+          _repositoryState = RepositoryState(
+            data: List<Map<String, dynamic>>.unmodifiable(_posts),
+            source: RepositorySource.localMutation,
+            phase: RepositoryPhase.ready,
+            lastUpdated: DateTime.now().toUtc(),
+          );
         });
       }
       if (!mounted) return;
@@ -609,11 +648,14 @@ class _PrincipalEventApprovalScreenState
               : const Icon(Icons.refresh_rounded),
         ),
       ],
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? _buildErrorState()
-          : _buildApprovalBody(),
+      body: SchoolDeskRepositoryStateView<List<Map<String, dynamic>>>(
+        state: _repositoryState,
+        onRetry: _loadPosts,
+        emptyTitle: 'No event approvals yet',
+        emptyMessage: 'No event posts are waiting for this school scope.',
+        errorTitle: 'Event approvals unavailable',
+        data: (_) => _buildApprovalBody(),
+      ),
     );
   }
 
@@ -904,7 +946,7 @@ class _PrincipalEventApprovalScreenState
     if (confirmed != true) return;
 
     try {
-      await BackendApiClient.instance.deleteEventPost(id);
+      await _repository.delete(id);
       if (!mounted) return;
       setState(() {
         _posts.removeWhere((item) => item['id']?.toString() == id);
@@ -981,26 +1023,6 @@ class _PrincipalEventApprovalScreenState
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(message),
-    );
-  }
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(_error!, style: TextStyle(color: context.appTheme.error)),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: _loadPosts,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

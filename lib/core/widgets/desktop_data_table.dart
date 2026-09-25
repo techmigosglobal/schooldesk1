@@ -4,10 +4,11 @@ import 'package:schooldesk1/core/desktop/desktop_hover_effects.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
-typedef DesktopDataRowBuilder = List<Widget> Function(
-  BuildContext context,
-  int index,
-);
+typedef DesktopDataRowBuilder =
+    List<Widget> Function(
+      BuildContext context,
+      int index,
+    );
 
 /// Full-width data table with sorting and desktop-optimized density.
 class DesktopDataTable<T> extends StatefulWidget {
@@ -43,7 +44,9 @@ class _DesktopDataTableState<T> extends State<DesktopDataTable<T>> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isDesktop = DesktopBreakpoints.isDesktopWidth(constraints.maxWidth);
+        final isDesktop = DesktopBreakpoints.isDesktopWidth(
+          constraints.maxWidth,
+        );
         final theme = Theme.of(context);
         final tokens = theme.schoolDesk;
 
@@ -62,7 +65,8 @@ class _DesktopDataTableState<T> extends State<DesktopDataTable<T>> {
         if (!isDesktop) {
           return ListView.separated(
             itemCount: widget.items.length,
-            separatorBuilder: (_, _) => Divider(height: 1, color: tokens.panelBorder),
+            separatorBuilder: (_, _) =>
+                Divider(height: 1, color: tokens.panelBorder),
             itemBuilder: (context, index) {
               final cells = widget.rowBuilder(context, index);
               return ListTile(
@@ -186,8 +190,9 @@ class _HeaderRow extends StatelessWidget {
               child: columns[i].sortable && onSort != null
                   ? InkWell(
                       onTap: () {
-                        final ascending =
-                            sortColumnIndex == i ? !sortAscending : true;
+                        final ascending = sortColumnIndex == i
+                            ? !sortAscending
+                            : true;
                         onSort!(i, ascending);
                       },
                       child: Row(

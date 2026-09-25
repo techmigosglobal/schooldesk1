@@ -3,12 +3,34 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/modules/people/data/api_staff_directory_repository.dart';
+import 'package:schooldesk1/modules/people/domain/staff_directory_repository.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+@immutable
+class _AdminTeachersSnapshot {
+  const _AdminTeachersSnapshot({
+    required this.teachers,
+    required this.leaveRequests,
+    required this.page,
+    required this.total,
+    required this.hasMore,
+  });
+
+  final List<Map<String, dynamic>> teachers;
+  final List<Map<String, dynamic>> leaveRequests;
+  final int page;
+  final int total;
+  final bool hasMore;
+}
 
 class AdminTeachersScreen extends StatefulWidget {
-  const AdminTeachersScreen({super.key});
+  final StaffDirectoryRepository? repository;
+
+  const AdminTeachersScreen({super.key, this.repository});
 
   @override
   State<AdminTeachersScreen> createState() => _AdminTeachersScreenState();
@@ -16,34 +38,57 @@ class AdminTeachersScreen extends StatefulWidget {
 
 class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     with SingleTickerProviderStateMixin {
+  late final StaffDirectoryRepository _repository;
   late TabController _tabController;
   String _search = '';
 
-  List<Map<String, dynamic>> _teachers = [];
-  List<Map<String, dynamic>> _leaveRequests = [];
   bool _loadingMore = false;
-  bool _hasMore = false;
-  int _staffPage = 1;
-  int _staffTotal = 0;
+  RepositoryState<_AdminTeachersSnapshot> _state =
+      const RepositoryState.loading();
   Timer? _searchDebounce;
+
+  _AdminTeachersSnapshot? get _snapshot => _state.data;
+  List<Map<String, dynamic>> get _teachers => _snapshot?.teachers ?? const [];
+  List<Map<String, dynamic>> get _leaveRequests =>
+      _snapshot?.leaveRequests ?? const [];
+  bool get _hasMore => _snapshot?.hasMore ?? false;
+  int get _staffPage => _snapshot?.page ?? 1;
+  int get _staffTotal => _snapshot?.total ?? 0;
 
   @override
   void initState() {
     super.initState();
+    _repository =
+        widget.repository ?? ApiStaffDirectoryRepository.legacyDefault;
     _tabController = TabController(length: 3, vsync: this);
     _loadData();
   }
 
   Future<void> _loadData({bool resetPage = true}) async {
+    final previous = _state.data;
     try {
-      final api = BackendApiClient.instance;
-      if (!resetPage) setState(() => _loadingMore = true);
-      final staff = await api.getStaff(
+      if (resetPage) {
+        setState(() {
+          _state = RepositoryState.loading(
+            data: previous,
+            source: previous == null
+                ? RepositorySource.empty
+                : RepositorySource.cache,
+            isStale: previous != null,
+            isRefreshing: previous != null,
+          );
+        });
+      } else {
+        setState(() => _loadingMore = true);
+      }
+      final staff = await _repository.loadStaff(
         search: _search,
         page: resetPage ? 1 : _staffPage + 1,
         pageSize: 20,
       );
-      final leaves = resetPage ? await api.getLeaveApplications() : null;
+      final leaves = resetPage
+          ? await _repository.loadLeaveApplications()
+          : null;
       if (!mounted) return;
       final rows = staff.data
           .map(
@@ -63,36 +108,54 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
           ? rows
           : rows.where((row) => existingIds.add(row['id'])).toList();
       setState(() {
-        _teachers = resetPage ? rows : [..._teachers, ...uniqueRows];
-        if (leaves != null) {
-          _leaveRequests = leaves
-              .map(
-                (l) => {
-                  'id': l.id,
-                  'teacher': l.staffName.isNotEmpty ? l.staffName : l.staffId,
-                  'type': l.leaveTypeName.isNotEmpty
-                      ? l.leaveTypeName
-                      : l.leaveTypeId,
-                  'from': l.fromDate.split('T').first,
-                  'to': l.toDate.split('T').first,
-                  'reason': l.reason ?? '',
-                  'status': l.status,
-                  'totalDays': l.totalDays,
-                },
-              )
-              .toList();
-        }
-        _staffPage = staff.page;
-        _staffTotal = staff.total;
-        _hasMore = staff.hasMore;
+        final teachers = resetPage ? rows : [..._teachers, ...uniqueRows];
+        final leaveRequests = leaves != null
+            ? leaves
+                  .map(
+                    (l) => {
+                      'id': l.id,
+                      'teacher': l.staffName.isNotEmpty
+                          ? l.staffName
+                          : l.staffId,
+                      'type': l.leaveTypeName.isNotEmpty
+                          ? l.leaveTypeName
+                          : l.leaveTypeId,
+                      'from': l.fromDate.split('T').first,
+                      'to': l.toDate.split('T').first,
+                      'reason': l.reason ?? '',
+                      'status': l.status,
+                      'totalDays': l.totalDays,
+                    },
+                  )
+                  .toList()
+            : _leaveRequests;
+        _state = RepositoryState(
+          data: _AdminTeachersSnapshot(
+            teachers: teachers,
+            leaveRequests: leaveRequests,
+            page: staff.page,
+            total: staff.total,
+            hasMore: staff.hasMore,
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         _loadingMore = false;
       });
-    } on Object catch (_) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _teachers = [];
-        _leaveRequests = [];
         _loadingMore = false;
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -156,30 +219,36 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
           ],
         ),
       ),
-      body: Column(
-        children: [
-          Container(
-            color: context.appTheme.surface,
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              onChanged: _scheduleSearch,
-              decoration: const InputDecoration(
-                hintText: 'Search teachers...',
-                prefixIcon: Icon(Icons.search_rounded, size: 18),
+      body: SchoolDeskRepositoryStateView<_AdminTeachersSnapshot>(
+        state: _state,
+        onRetry: _loadData,
+        emptyTitle: 'No staff found',
+        emptyMessage: 'Staff records are not available for this school scope.',
+        data: (_) => Column(
+          children: [
+            Container(
+              color: context.appTheme.surface,
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                onChanged: _scheduleSearch,
+                decoration: const InputDecoration(
+                  hintText: 'Search teachers...',
+                  prefixIcon: Icon(Icons.search_rounded, size: 18),
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildTeacherList(),
-                _buildLeaveRecords(),
-                _buildPayroll(),
-              ],
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildTeacherList(),
+                  _buildLeaveRecords(),
+                  _buildPayroll(),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -614,7 +683,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
         builder: (_) => _TeacherFormPage(
           onSubmit: (values) async {
             final parts = _splitTeacherName(values.name);
-            await BackendApiClient.instance.createStaff(
+            await _repository.createStaff(
               firstName: parts.first,
               lastName: parts.last,
               designation: values.subject.isEmpty ? 'Teacher' : values.subject,
@@ -641,7 +710,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
           teacher: t,
           onSubmit: (values) async {
             final parts = _splitTeacherName(values.name);
-            await BackendApiClient.instance.updateStaff(
+            await _repository.updateStaff(
               (t['id'] ?? '').toString(),
               firstName: parts.first,
               lastName: parts.last,
@@ -670,7 +739,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
           teacher: t,
           onSubmit: (selected) async {
             final parts = _splitTeacherName((t['name'] ?? '').toString());
-            await BackendApiClient.instance.updateStaff(
+            await _repository.updateStaff(
               (t['id'] ?? '').toString(),
               firstName: parts.first,
               lastName: parts.last,
@@ -708,7 +777,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
 
   Future<void> _decideLeave(Map<String, dynamic> leave, String status) async {
     try {
-      await BackendApiClient.instance.decideLeaveApplication(
+      await _repository.decideLeave(
         (leave['id'] ?? '').toString(),
         status: status,
       );
@@ -765,7 +834,7 @@ class _TeacherFormPageState extends State<_TeacherFormPage> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _subjectCtrl;
   bool _saving = false;
-  String? _error;
+  String? _formError;
 
   @override
   void initState() {
@@ -786,7 +855,7 @@ class _TeacherFormPageState extends State<_TeacherFormPage> {
   }
 
   Future<void> _submit() async {
-    setState(() => _error = null);
+    setState(() => _formError = null);
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
@@ -801,7 +870,7 @@ class _TeacherFormPageState extends State<_TeacherFormPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Teacher save failed: $e';
+        _formError = 'Teacher save failed: $e';
       });
     }
   }
@@ -847,9 +916,9 @@ class _TeacherFormPageState extends State<_TeacherFormPage> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              if (_error != null) ...[
+              if (_formError != null) ...[
                 const SizedBox(height: 12),
-                _TeacherInlineError(message: _error!),
+                _TeacherInlineError(message: _formError!),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -904,7 +973,7 @@ class _TeacherSubjectPageState extends State<_TeacherSubjectPage> {
 
   late String _selected;
   bool _saving = false;
-  String? _error;
+  String? _subjectError;
 
   @override
   void initState() {
@@ -916,7 +985,7 @@ class _TeacherSubjectPageState extends State<_TeacherSubjectPage> {
   Future<void> _submit() async {
     setState(() {
       _saving = true;
-      _error = null;
+      _subjectError = null;
     });
     try {
       final message = await widget.onSubmit(_selected);
@@ -925,7 +994,7 @@ class _TeacherSubjectPageState extends State<_TeacherSubjectPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Subject update failed: $e';
+        _subjectError = 'Subject update failed: $e';
       });
     }
   }
@@ -965,9 +1034,9 @@ class _TeacherSubjectPageState extends State<_TeacherSubjectPage> {
                     : (value) => setState(() => _selected = value!),
               ),
             ),
-            if (_error != null) ...[
+            if (_subjectError != null) ...[
               const SizedBox(height: 12),
-              _TeacherInlineError(message: _error!),
+              _TeacherInlineError(message: _subjectError!),
             ],
             const SizedBox(height: 24),
             FilledButton.icon(

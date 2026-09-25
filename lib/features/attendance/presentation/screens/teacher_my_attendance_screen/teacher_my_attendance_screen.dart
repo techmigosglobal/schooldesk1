@@ -5,11 +5,26 @@ import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/app/router/route_arguments.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_attendance_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_attendance_repository.dart';
+
+@immutable
+class _TeacherStaffAttendanceSnapshot {
+  final StaffAttendanceModel? today;
+  final List<StaffAttendanceModel> log;
+
+  const _TeacherStaffAttendanceSnapshot({this.today, required this.log});
+}
 
 class TeacherMyAttendanceScreen extends StatefulWidget {
-  const TeacherMyAttendanceScreen({super.key});
+  final TeacherAttendanceRepository? repository;
+
+  const TeacherMyAttendanceScreen({super.key, this.repository});
 
   @override
   State<TeacherMyAttendanceScreen> createState() =>
@@ -17,15 +32,16 @@ class TeacherMyAttendanceScreen extends StatefulWidget {
 }
 
 class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
-  StaffAttendanceModel? _attendance;
-  List<StaffAttendanceModel> _attendanceLog = const [];
-  bool _loading = true;
+  RepositoryState<_TeacherStaffAttendanceSnapshot> _state =
+      const RepositoryState.loading();
   bool _submitting = false;
-  String? _error;
   String? _message;
   bool _routeArgumentsRead = false;
   bool _autoScanRequested = false;
   bool _autoScannerOpened = false;
+
+  StaffAttendanceModel? get _attendance => _state.data?.today;
+  List<StaffAttendanceModel> get _attendanceLog => _state.data?.log ?? const [];
 
   @override
   void initState() {
@@ -38,7 +54,7 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
     super.didChangeDependencies();
     if (_routeArgumentsRead) return;
     _routeArgumentsRead = true;
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = SchoolDeskRouteArguments.maybeOf<Object?>(context);
     if (args is Map) {
       _autoScanRequested = args['auto_scan'] == true;
     }
@@ -51,27 +67,53 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
   }
 
   Future<void> _loadToday() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
       _message = null;
     });
     try {
-      final api = BackendApiClient.instance;
-      final attendance = await api.getMyStaffAttendanceToday();
-      final attendanceLog = await api.getMyStaffAttendanceLog(days: 30);
+      final result =
+          await (widget.repository ??
+                  ApiTeacherAttendanceRepository.legacyDefault)
+              .loadStaffAttendance();
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to load attendance',
+        );
+      }
+      final snapshot = result.dataOrNull!;
       if (!mounted) return;
       setState(() {
-        _attendance = attendance;
-        _attendanceLog = attendanceLog;
-        _loading = false;
+        _state = RepositoryState(
+          data: _TeacherStaffAttendanceSnapshot(
+            today: snapshot.today,
+            log: snapshot.log,
+          ),
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
       _maybeOpenAutoScanner();
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = error.toString();
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -80,7 +122,7 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
     final shouldOpen =
         _autoScanRequested &&
         !_autoScannerOpened &&
-        !_loading &&
+        !_state.isLoading &&
         !_submitting &&
         !(_attendance?.checkedIn ?? false);
     if (!shouldOpen) return;
@@ -103,19 +145,31 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
     if (_submitting) return;
     setState(() {
       _submitting = true;
-      _error = null;
       _message = null;
     });
     try {
-      final attendance = await BackendApiClient.instance.scanStaffQr(token);
-      final attendanceLog = await BackendApiClient.instance
-          .getMyStaffAttendanceLog(days: 30);
+      final result =
+          await (widget.repository ??
+                  ApiTeacherAttendanceRepository.legacyDefault)
+              .scanStaffQr(token);
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to scan staff QR',
+        );
+      }
+      final snapshot = result.dataOrNull!;
       if (!mounted) return;
       setState(() {
-        _attendance = attendance;
-        _attendanceLog = attendanceLog;
+        _state = RepositoryState(
+          data: _TeacherStaffAttendanceSnapshot(
+            today: snapshot.today,
+            log: snapshot.log,
+          ),
+          source: RepositorySource.localMutation,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         _submitting = false;
-        _message = attendance.checkOut != null
+        _message = snapshot.today?.checkOut != null
             ? 'Check-out recorded'
             : 'Check-in recorded';
       });
@@ -123,7 +177,16 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = error.toString();
+        final previous = _state.data;
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -154,15 +217,29 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
     if (confirmed != true) return;
     setState(() {
       _submitting = true;
-      _error = null;
       _message = null;
     });
     try {
-      final attendance = await BackendApiClient.instance
-          .punchOutMyStaffAttendance();
+      final result =
+          await (widget.repository ??
+                  ApiTeacherAttendanceRepository.legacyDefault)
+              .punchOutStaffAttendance();
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to record check-out',
+        );
+      }
+      final attendance = result.dataOrNull!;
       if (!mounted) return;
       setState(() {
-        _attendance = attendance;
+        _state = RepositoryState(
+          data: _TeacherStaffAttendanceSnapshot(
+            today: attendance,
+            log: _attendanceLog,
+          ),
+          source: RepositorySource.localMutation,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         _submitting = false;
         _message = 'Check-out recorded';
       });
@@ -170,7 +247,16 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = error.toString();
+        final previous = _state.data;
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -181,71 +267,78 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
       title: 'My Attendance',
       subtitle: 'QR check-in and check-out',
       selectedIndex: TeacherNav.myAttendance,
-      loading: _loading,
-      error: _error,
+      loading: false,
+      error: null,
       onRefresh: _loadToday,
-      child: TeacherFlowScrollView(
-        children: [
-          Semantics(
-            label: 'Teacher QR attendance punch screen',
-            child: TeacherCurrentClassCard(
-              greeting: _attendance?.checkOut != null
-                  ? 'Checked out'
-                  : _attendance?.checkedIn == true
-                  ? 'Checked in'
-                  : 'Ready to check in',
-              classLabel: _attendance?.checkOut != null
-                  ? 'Your attendance is complete for today'
-                  : 'Scan the live staff QR',
-              subject: _attendance?.checkOut != null
-                  ? 'In ${_attendance?.checkInTimeLabel ?? '--:--'} · Out ${_attendance?.checkOutTimeLabel ?? '--:--'}'
-                  : _attendance?.checkInTimeLabel ?? 'Check-in pending',
-              timeLabel: '',
-              actions: [
-                TeacherFlowAction(
-                  label: 'Scan QR',
-                  icon: Icons.qr_code_scanner_rounded,
-                  filled: true,
-                  onTap: _openScanner,
-                ),
-                if (_attendance?.checkedIn == true &&
-                    _attendance?.checkOut == null)
+      child: SchoolDeskRepositoryStateView<_TeacherStaffAttendanceSnapshot>(
+        state: _state,
+        onRetry: _loadToday,
+        loadingMessage: 'Loading attendance…',
+        emptyTitle: 'Attendance unavailable',
+        emptyMessage: 'No attendance record is available for today.',
+        data: (_) => TeacherFlowScrollView(
+          children: [
+            Semantics(
+              label: 'Teacher QR attendance punch screen',
+              child: TeacherCurrentClassCard(
+                greeting: _attendance?.checkOut != null
+                    ? 'Checked out'
+                    : _attendance?.checkedIn == true
+                    ? 'Checked in'
+                    : 'Ready to check in',
+                classLabel: _attendance?.checkOut != null
+                    ? 'Your attendance is complete for today'
+                    : 'Scan the live staff QR',
+                subject: _attendance?.checkOut != null
+                    ? 'In ${_attendance?.checkInTimeLabel ?? '--:--'} · Out ${_attendance?.checkOutTimeLabel ?? '--:--'}'
+                    : _attendance?.checkInTimeLabel ?? 'Check-in pending',
+                timeLabel: '',
+                actions: [
                   TeacherFlowAction(
-                    label: 'Punch Out',
-                    icon: Icons.logout_rounded,
+                    label: 'Scan QR',
+                    icon: Icons.qr_code_scanner_rounded,
                     filled: true,
-                    onTap: _punchOut,
+                    onTap: _openScanner,
                   ),
-                TeacherFlowAction(
-                  label: 'Refresh Status',
-                  icon: Icons.refresh_rounded,
-                  onTap: _loadToday,
-                ),
-              ],
+                  if (_attendance?.checkedIn == true &&
+                      _attendance?.checkOut == null)
+                    TeacherFlowAction(
+                      label: 'Punch Out',
+                      icon: Icons.logout_rounded,
+                      filled: true,
+                      onTap: _punchOut,
+                    ),
+                  TeacherFlowAction(
+                    label: 'Refresh Status',
+                    icon: Icons.refresh_rounded,
+                    onTap: _loadToday,
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          _AttendanceLogCard(records: _attendanceLog),
-          if (_submitting) ...[
             const SizedBox(height: 18),
-            const TeacherFlowCard(
-              icon: Icons.hourglass_top_rounded,
-              title: 'Recording punch...',
-              subtitle: 'Saving your attendance to the system.',
-              status: 'Saving',
-              statusColor: Colors.orange,
-            ),
-          ] else if (_message != null) ...[
-            const SizedBox(height: 18),
-            TeacherFlowCard(
-              icon: Icons.check_circle_rounded,
-              title: 'Attendance saved',
-              subtitle: _message!,
-              status: 'Done',
-              statusColor: Colors.green,
-            ),
+            _AttendanceLogCard(records: _attendanceLog),
+            if (_submitting) ...[
+              const SizedBox(height: 18),
+              const TeacherFlowCard(
+                icon: Icons.hourglass_top_rounded,
+                title: 'Recording punch...',
+                subtitle: 'Saving your attendance to the system.',
+                status: 'Saving',
+                statusColor: Colors.orange,
+              ),
+            ] else if (_message != null) ...[
+              const SizedBox(height: 18),
+              TeacherFlowCard(
+                icon: Icons.check_circle_rounded,
+                title: 'Attendance saved',
+                subtitle: _message!,
+                status: 'Done',
+                statusColor: Colors.green,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

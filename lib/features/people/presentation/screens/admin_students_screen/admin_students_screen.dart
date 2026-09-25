@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/modules/people/data/api_student_directory_repository.dart';
+import 'package:schooldesk1/modules/people/domain/student_directory_repository.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -12,11 +15,38 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+@immutable
+class _AdminStudentsSnapshot {
+  const _AdminStudentsSnapshot({
+    required this.students,
+    required this.classes,
+    required this.sectionOptions,
+    required this.parentOptions,
+    required this.page,
+    required this.total,
+    required this.hasMore,
+  });
+
+  final List<Map<String, dynamic>> students;
+  final List<String> classes;
+  final List<Map<String, String>> sectionOptions;
+  final List<Map<String, String>> parentOptions;
+  final int page;
+  final int total;
+  final bool hasMore;
+}
 
 class AdminStudentsScreen extends StatefulWidget {
   final String ownerRole;
+  final StudentDirectoryRepository? repository;
 
-  const AdminStudentsScreen({super.key, this.ownerRole = 'admin'});
+  const AdminStudentsScreen({
+    super.key,
+    this.ownerRole = 'admin',
+    this.repository,
+  });
 
   @override
   State<AdminStudentsScreen> createState() => _AdminStudentsScreenState();
@@ -24,20 +54,26 @@ class AdminStudentsScreen extends StatefulWidget {
 
 class _AdminStudentsScreenState extends State<AdminStudentsScreen>
     with SingleTickerProviderStateMixin {
+  late final StudentDirectoryRepository _repository;
   late TabController _tabController;
   String _search = '';
   String _filterClass = 'All';
-  List<Map<String, dynamic>> _students = [];
   String? _defaultSectionId;
-  bool _loading = true;
   bool _loadingMore = false;
-  bool _hasMore = false;
-  int _studentPage = 1;
-  int _studentTotal = 0;
+  RepositoryState<_AdminStudentsSnapshot> _state =
+      const RepositoryState.loading();
   Timer? _searchDebounce;
-  List<String> _classes = ['All'];
-  List<Map<String, String>> _sectionOptions = [];
-  List<Map<String, String>> _parentOptions = [];
+
+  _AdminStudentsSnapshot? get _snapshot => _state.data;
+  List<Map<String, dynamic>> get _students => _snapshot?.students ?? const [];
+  List<String> get _classes => _snapshot?.classes ?? const ['All'];
+  List<Map<String, String>> get _sectionOptions =>
+      _snapshot?.sectionOptions ?? const [];
+  List<Map<String, String>> get _parentOptions =>
+      _snapshot?.parentOptions ?? const [];
+  int get _studentPage => _snapshot?.page ?? 1;
+  int get _studentTotal => _snapshot?.total ?? 0;
+  bool get _hasMore => _snapshot?.hasMore ?? false;
 
   bool get _isPrincipal => const {
     'principal',
@@ -47,6 +83,8 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   @override
   void initState() {
     super.initState();
+    _repository =
+        widget.repository ?? ApiStudentDirectoryRepository.legacyDefault;
     _tabController = TabController(length: 3, vsync: this);
     _loadData();
   }
@@ -56,22 +94,30 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   }
 
   Future<void> _refreshFromBackend({bool resetPage = true}) async {
+    final previous = _state.data;
     if (resetPage) {
       setState(() {
-        _loading = true;
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
         _loadingMore = false;
       });
     } else {
       setState(() => _loadingMore = true);
     }
     try {
-      final grades = await BackendApiClient.instance.getGrades(
+      final grades = await _repository.loadGrades(
         forceRefresh: resetPage,
       );
-      final sections = await BackendApiClient.instance.getSections(
+      final sections = await _repository.loadSections(
         forceRefresh: resetPage,
       );
-      final students = await BackendApiClient.instance.getStudents(
+      final students = await _repository.loadStudents(
         search: _search,
         sectionId: _selectedSectionId,
         page: resetPage ? 1 : _studentPage + 1,
@@ -143,9 +189,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                 .toList();
       if (!mounted) return;
       setState(() {
-        _sectionOptions = sectionOptions;
-        _classes = ['All', ...sectionOptions.map((e) => e['label']!)];
-        _parentOptions = resetPage
+        final sectionOptionsState = sectionOptions;
+        final classesState = ['All', ...sectionOptions.map((e) => e['label']!)];
+        final parentOptionsState = resetPage
             ? parents
                   .map(
                     (parent) => {
@@ -156,29 +202,45 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                   )
                   .toList()
             : _parentOptions;
-        _students = resetPage
+        final studentsState = resetPage
             ? mappedStudents
             : [..._students, ...uniqueStudents];
-        _studentPage = students.page;
-        _studentTotal = students.total;
-        _hasMore = students.hasMore;
-        _loading = false;
+        _state = RepositoryState(
+          data: _AdminStudentsSnapshot(
+            students: studentsState,
+            classes: classesState,
+            sectionOptions: sectionOptionsState,
+            parentOptions: parentOptionsState,
+            page: students.page,
+            total: students.total,
+            hasMore: students.hasMore,
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         _loadingMore = false;
       });
-    } on Object catch (_) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
         _loadingMore = false;
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
 
   Future<List<UserAccountModel>> _loadParentAccounts() async {
     try {
-      final result = await BackendApiClient.instance.getUsers(
-        role: 'Parent',
-        status: 'active',
+      final result = await _repository.loadParentAccounts(
         page: 1,
         pageSize: 20,
       );
@@ -195,7 +257,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   ) async {
     final mapped = <String, Map<String, String>>{};
     try {
-      final directory = await BackendApiClient.instance.getGuardianDirectory(
+      final directory = await _repository.loadGuardianDirectory(
         page: 1,
         pageSize: 20,
       );
@@ -293,7 +355,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   }
 
   String _dateOnly(String? value) {
-    if (value == null || value.isEmpty) return '2010-01-01';
+    if (value == null || value.isEmpty) return '';
     return value.length >= 10 ? value.substring(0, 10) : value;
   }
 
@@ -344,36 +406,35 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
           Tab(text: 'Transfers'),
         ],
       ),
-      body: _loading
-          ? const Padding(
-              padding: EdgeInsets.all(24),
-              child: SchoolDeskStatusPanel.loading(
-                message: 'Loading students from backend',
-              ),
-            )
-          : Column(
-              children: [
-                _buildSearchFilter(),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildStudentList(_filtered),
-                      _buildStudentList(
-                        _filtered
-                            .where((s) => s['status']?.toString() == 'pending')
-                            .toList(),
-                      ),
-                      _buildStudentList(
-                        _filtered
-                            .where((s) => s['status']?.toString() == 'transfer')
-                            .toList(),
-                      ),
-                    ],
+      body: SchoolDeskRepositoryStateView<_AdminStudentsSnapshot>(
+        state: _state,
+        onRetry: _refreshFromBackend,
+        emptyTitle: 'No students found',
+        emptyMessage: 'Students are not available for this school scope.',
+        data: (_) => Column(
+          children: [
+            _buildSearchFilter(),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildStudentList(_filtered),
+                  _buildStudentList(
+                    _filtered
+                        .where((s) => s['status']?.toString() == 'pending')
+                        .toList(),
                   ),
-                ),
-              ],
+                  _buildStudentList(
+                    _filtered
+                        .where((s) => s['status']?.toString() == 'transfer')
+                        .toList(),
+                  ),
+                ],
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -656,7 +717,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
     if (confirmed != true) return;
     try {
       if (_isPrincipal) {
-        await BackendApiClient.instance.deleteStudent(
+        await _repository.deleteStudent(
           (s['id'] ?? '').toString(),
         );
       } else {
@@ -720,10 +781,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               var parentUserId = values.parentUserId;
               String? newlyCreatedParentId;
               if (values.shouldCreateParentLogin) {
-                final parent = await BackendApiClient.instance.createUser(
+                final parent = await _repository.createParentAccount(
                   username: values.parentUsername,
                   password: values.parentPassword,
-                  role: 'Parent',
                   fullName: values.parentName,
                   email: values.parentEmail,
                   phone: values.parentPhone,
@@ -734,7 +794,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               }
               var studentSaved = false;
               try {
-                final created = await BackendApiClient.instance.createStudent(
+                final created = await _repository.createStudent(
                   firstName: payload['first_name']!,
                   lastName: payload['last_name']!,
                   dateOfBirth: payload['date_of_birth']!,
@@ -747,7 +807,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                   status: 'active',
                 );
                 studentSaved = true;
-                await BackendApiClient.instance.setStudentParent(
+                await _repository.setStudentParent(
                   studentId: created.id,
                   parentUserId: parentUserId,
                 );
@@ -758,7 +818,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               } on Object catch (_) {
                 if (newlyCreatedParentId != null && !studentSaved) {
                   try {
-                    await BackendApiClient.instance.deleteUser(
+                    await _repository.deleteUser(
                       newlyCreatedParentId,
                       permanent: true,
                     );
@@ -800,9 +860,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               name: values.name,
               admissionNumber: values.admissionNumber,
               studentCode: values.studentCode,
-              dateOfBirth: values.dateOfBirth.trim().isEmpty
-                  ? '2010-01-01'
-                  : values.dateOfBirth,
+              dateOfBirth: values.dateOfBirth,
               gender: values.gender,
               sectionId: values.sectionId,
               status: s['status']?.toString() ?? 'active',
@@ -811,10 +869,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               var parentUserId = values.parentUserId;
               String? newlyCreatedParentId;
               if (values.shouldCreateParentLogin) {
-                final parent = await BackendApiClient.instance.createUser(
+                final parent = await _repository.createParentAccount(
                   username: values.parentUsername,
                   password: values.parentPassword,
-                  role: 'Parent',
                   fullName: values.parentName,
                   email: values.parentEmail,
                   phone: values.parentPhone,
@@ -825,7 +882,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               }
               var studentSaved = false;
               try {
-                await BackendApiClient.instance.updateStudent(
+                await _repository.updateStudent(
                   (s['id'] ?? '').toString(),
                   firstName: payload['first_name']!,
                   lastName: payload['last_name']!,
@@ -839,7 +896,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                   status: payload['status'] ?? 'active',
                 );
                 studentSaved = true;
-                await BackendApiClient.instance.setStudentParent(
+                await _repository.setStudentParent(
                   studentId: (s['id'] ?? '').toString(),
                   parentUserId: parentUserId,
                 );
@@ -853,7 +910,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               } on Object catch (_) {
                 if (newlyCreatedParentId != null && !studentSaved) {
                   try {
-                    await BackendApiClient.instance.deleteUser(
+                    await _repository.deleteUser(
                       newlyCreatedParentId,
                       permanent: true,
                     );
@@ -1031,7 +1088,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       status: status,
     );
     if (_isPrincipal) {
-      await BackendApiClient.instance.updateStudent(
+      await _repository.updateStudent(
         (s['id'] ?? '').toString(),
         firstName: payload['first_name']!,
         lastName: payload['last_name']!,
@@ -1072,15 +1129,13 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
     return {
       'first_name': firstName,
       'last_name': lastName,
-      'date_of_birth': dateOfBirth.trim().isEmpty
-          ? '2010-01-01'
-          : dateOfBirth.trim(),
-      'gender': gender.trim().isEmpty ? 'male' : gender.trim(),
+      'date_of_birth': dateOfBirth.trim(),
+      'gender': gender.trim(),
       'admission_number': admissionNumber.trim(),
       'student_code': studentCode.trim(),
       'current_section_id': cleanSectionId,
       'class_label': _classLabelForSection(cleanSectionId),
-      'admission_date': '2026-01-01',
+      'admission_date': '',
       'status': status,
     };
   }
@@ -1094,12 +1149,8 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       name: (s['name'] ?? '').toString(),
       admissionNumber: s['admissionNumber']?.toString() ?? '',
       studentCode: s['studentCode']?.toString() ?? '',
-      dateOfBirth: (s['dob']?.toString().isNotEmpty == true)
-          ? s['dob'].toString()
-          : '2010-01-01',
-      gender: (s['gender']?.toString().isNotEmpty == true)
-          ? s['gender'].toString()
-          : 'male',
+      dateOfBirth: s['dob']?.toString() ?? '',
+      gender: s['gender']?.toString() ?? '',
       sectionId: sectionId ?? s['sectionId']?.toString(),
       status: status ?? s['status']?.toString() ?? 'active',
     );
@@ -1119,7 +1170,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
     required Map<String, String> student,
     String? parentUserId,
   }) async {
-    await BackendApiClient.instance.createRaw('/student-approvals', {
+    await _repository.createRaw('/student-approvals', {
       'action': action,
       if (studentId != null && studentId.trim().isNotEmpty)
         'student_id': studentId.trim(),
@@ -1134,7 +1185,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   ) async {
     final cleanStudentId = studentId.trim();
     if (cleanStudentId.isEmpty) return;
-    final created = await BackendApiClient.instance.createRaw('/guardians', {
+    final created = await _repository.createRaw('/guardians', {
       'student_id': cleanStudentId,
       'full_name': values.parentName.trim(),
       'relationship': 'parent',
@@ -1145,7 +1196,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
     final record = created['data'] is Map ? created['data'] as Map : created;
     final guardianId = '${record['id'] ?? ''}'.trim();
     if (guardianId.isEmpty) return;
-    await BackendApiClient.instance.linkGuardianToStudent(
+    await _repository.linkGuardianToStudent(
       studentId: cleanStudentId,
       guardianId: guardianId,
       isPrimary: true,
@@ -1228,7 +1279,7 @@ class _StudentFormPageState extends State<_StudentFormPage> {
   late String _selectedParentId;
   bool _createParentLogin = false;
   bool _saving = false;
-  String? _errorText;
+  String? _validationMessage;
 
   bool get _isEdit => widget.student != null;
 
@@ -1297,7 +1348,12 @@ class _StudentFormPageState extends State<_StudentFormPage> {
   Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      setState(() => _errorText = 'Student name is required');
+      setState(() => _validationMessage = 'Student name is required');
+      return;
+    }
+    if (_dobCtrl.text.trim().isEmpty ||
+        DateTime.tryParse(_dobCtrl.text.trim()) == null) {
+      setState(() => _validationMessage = 'A valid date of birth is required');
       return;
     }
     if (_createParentLogin &&
@@ -1305,14 +1361,14 @@ class _StudentFormPageState extends State<_StudentFormPage> {
             _parentUsernameCtrl.text.trim().isEmpty ||
             _parentPasswordCtrl.text.trim().length < 8)) {
       setState(
-        () => _errorText =
+        () => _validationMessage =
             'Parent name, username, and an 8+ character password are required',
       );
       return;
     }
     setState(() {
       _saving = true;
-      _errorText = null;
+      _validationMessage = null;
     });
     try {
       final message = await widget.onSubmit(
@@ -1338,7 +1394,7 @@ class _StudentFormPageState extends State<_StudentFormPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _errorText = widget.isPrincipal
+        _validationMessage = widget.isPrincipal
             ? 'Save failed: $e'
             : 'Submission failed: $e';
       });
@@ -1548,10 +1604,10 @@ class _StudentFormPageState extends State<_StudentFormPage> {
                       ),
                     ),
                   ],
-                  if (_errorText != null) ...[
+                  if (_validationMessage != null) ...[
                     const SizedBox(height: 12),
                     Text(
-                      _errorText!,
+                      _validationMessage!,
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         color: context.appTheme.error,
@@ -1597,7 +1653,7 @@ class _StudentPromotePage extends StatefulWidget {
 class _StudentPromotePageState extends State<_StudentPromotePage> {
   String? _selectedSectionId;
   bool _saving = false;
-  String? _errorText;
+  String? _promotionMessage;
 
   @override
   void initState() {
@@ -1619,7 +1675,7 @@ class _StudentPromotePageState extends State<_StudentPromotePage> {
   Future<void> _submit() async {
     setState(() {
       _saving = true;
-      _errorText = null;
+      _promotionMessage = null;
     });
     try {
       final message = await widget.onSubmit(_selectedSectionId);
@@ -1629,7 +1685,7 @@ class _StudentPromotePageState extends State<_StudentPromotePage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _errorText = 'Promotion failed: $e';
+        _promotionMessage = 'Promotion failed: $e';
       });
     }
   }
@@ -1681,10 +1737,10 @@ class _StudentPromotePageState extends State<_StudentPromotePage> {
                         ? null
                         : (value) => setState(() => _selectedSectionId = value),
                   ),
-                  if (_errorText != null) ...[
+                  if (_promotionMessage != null) ...[
                     const SizedBox(height: 12),
                     Text(
-                      _errorText!,
+                      _promotionMessage!,
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         color: context.appTheme.error,

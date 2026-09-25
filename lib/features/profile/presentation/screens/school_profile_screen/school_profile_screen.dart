@@ -5,23 +5,31 @@ import 'package:image_picker/image_picker.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/modules/profile/data/api_profile_repository.dart';
+import 'package:schooldesk1/modules/profile/domain/profile_repository.dart';
 
 class SchoolProfileScreen extends StatefulWidget {
-  const SchoolProfileScreen({super.key});
+  final ProfileRepository? repository;
+
+  const SchoolProfileScreen({super.key, this.repository});
 
   @override
   State<SchoolProfileScreen> createState() => _SchoolProfileScreenState();
 }
 
 class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
+  ProfileRepository get _repository =>
+      widget.repository ?? ApiProfileRepository.legacyDefault;
+
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _typeCtrl = TextEditingController();
@@ -42,11 +50,10 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
   final _currencyCtrl = TextEditingController();
   final _mottoCtrl = TextEditingController();
 
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _saving = false;
   bool _editing = false;
   AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
-  String? _error;
   String _logoPath = '';
   String _signatureUrl = '';
 
@@ -80,12 +87,19 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
   }
 
   Future<void> _load() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final school = await BackendApiClient.instance.getCurrentSchool();
+      final school = await _repository.loadCurrentSchool();
       if (!mounted) return;
       setState(() {
         _nameCtrl.text = _text(school['name']);
@@ -108,13 +122,24 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         _mottoCtrl.text = _text(school['motto']);
         _logoPath = _text(school['logo_url']);
         _signatureUrl = _text(school['authorized_signature_url']);
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -130,7 +155,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     }
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.updateCurrentSchool({
+      await _repository.updateCurrentSchool({
         'name': _nameCtrl.text.trim(),
         'school_type': _typeCtrl.text.trim(),
         'affiliation_board': _boardCtrl.text.trim(),
@@ -187,7 +212,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         mimeType: ImageUploadOptimizer.mimeTypeForFilename(croppedPath),
       );
       setState(() => _saving = true);
-      final logoPath = await BackendApiClient.instance.uploadCurrentSchoolLogo(
+      final logoPath = await _repository.uploadCurrentSchoolLogo(
         croppedPath,
         fileBytes: optimized.bytes,
         fileName: optimized.filename,
@@ -219,13 +244,12 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         preset: ImageUploadPreset.branding,
       );
       setState(() => _saving = true);
-      final signatureUrl = await BackendApiClient.instance
-          .uploadCurrentSchoolSignature(
-            picked.path,
-            fileBytes: optimized.bytes,
-            fileName: optimized.filename,
-            mimeType: optimized.mimeType,
-          );
+      final signatureUrl = await _repository.uploadCurrentSchoolSignature(
+        picked.path,
+        fileBytes: optimized.bytes,
+        fileName: optimized.filename,
+        mimeType: optimized.mimeType,
+      );
       if (!mounted) return;
       setState(() {
         _signatureUrl = signatureUrl;
@@ -279,7 +303,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
           onDestinationSelected: (_) {},
         ),
         actions: [
-          if (!_loading && _error == null)
+          if (_state.hasData)
             TextButton.icon(
               onPressed: _saving
                   ? null
@@ -296,151 +320,151 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
               label: Text(_editing ? 'Save' : 'Edit'),
             ),
         ],
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? _errorState()
-            : RefreshIndicator(
-                onRefresh: _load,
-                child: Form(
-                  key: _formKey,
-                  autovalidateMode: _editing
-                      ? _autovalidateMode
-                      : AutovalidateMode.disabled,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                    children: [
-                      _identityHeader(),
-                      const SizedBox(height: 12),
-                      _section('Receipt Authorization', [
-                        _authorizationSignatureCard(),
-                      ]),
-                      _section('Basic Details', [
-                        _field(
-                          'School Name',
-                          _nameCtrl,
-                          Icons.apartment_rounded,
-                          validator: (value) =>
-                              _requiredText(value, 'School name', max: 120),
-                        ),
-                        _field(
-                          'School Type',
-                          _typeCtrl,
-                          Icons.category_rounded,
-                          validator: (value) =>
-                              _requiredText(value, 'School type', max: 80),
-                        ),
-                        _field(
-                          'Affiliation Board',
-                          _boardCtrl,
-                          Icons.verified_rounded,
-                          validator: (value) => _requiredText(
-                            value,
-                            'Affiliation board',
-                            max: 80,
-                          ),
-                        ),
-                        _field(
-                          'Established Year',
-                          _establishedCtrl,
-                          Icons.event_available_rounded,
-                          keyboardType: TextInputType.number,
-                          validator: _requiredEstablishedYear,
-                        ),
-                        _field(
-                          'Principal Name',
-                          _principalCtrl,
-                          Icons.admin_panel_settings_rounded,
-                          validator: (value) =>
-                              _requiredText(value, 'Principal name', max: 120),
-                        ),
-                        _field(
-                          'Motto',
-                          _mottoCtrl,
-                          Icons.format_quote_rounded,
-                          validator: (value) =>
-                              _optionalText(value, 'Motto', max: 180),
-                        ),
-                      ]),
-                      _section('Contact', [
-                        _field(
-                          'School Email',
-                          _emailCtrl,
-                          Icons.alternate_email_rounded,
-                          keyboardType: TextInputType.emailAddress,
-                          validator: _requiredEmail,
-                        ),
-                        _field(
-                          'School Phone',
-                          _phoneCtrl,
-                          Icons.call_rounded,
-                          keyboardType: TextInputType.phone,
-                          validator: _requiredPhone,
-                        ),
-                        _field(
-                          'Website',
-                          _websiteCtrl,
-                          Icons.language_rounded,
-                          keyboardType: TextInputType.url,
-                          validator: _optionalWebsite,
-                        ),
-                      ]),
-                      _section('Address', [
-                        _field(
-                          'Address Line 1',
-                          _address1Ctrl,
-                          Icons.location_on_rounded,
-                          validator: (value) =>
-                              _requiredText(value, 'Address line 1', max: 160),
-                        ),
-                        _field(
-                          'Address Line 2',
-                          _address2Ctrl,
-                          Icons.add_location_alt_rounded,
-                          validator: (value) =>
-                              _optionalText(value, 'Address line 2', max: 160),
-                        ),
-                        _field(
-                          'City',
-                          _cityCtrl,
-                          Icons.location_city_rounded,
-                          validator: (value) =>
-                              _requiredText(value, 'City', max: 80),
-                        ),
-                        _field(
-                          'State',
-                          _stateCtrl,
-                          Icons.map_rounded,
-                          validator: (value) =>
-                              _requiredText(value, 'State', max: 80),
-                        ),
-                        _field(
-                          'Postal Code',
-                          _postalCtrl,
-                          Icons.local_post_office_rounded,
-                          keyboardType: TextInputType.text,
-                          validator: _requiredPostalCode,
-                        ),
-                      ]),
-                      _section('Regional Preferences', [
-                        _field(
-                          'Timezone',
-                          _timezoneCtrl,
-                          Icons.schedule_rounded,
-                          validator: _requiredTimezone,
-                        ),
-                        _field(
-                          'Currency',
-                          _currencyCtrl,
-                          Icons.currency_rupee_rounded,
-                          validator: _requiredCurrency,
-                        ),
-                      ]),
-                      _bottomActionPanel(),
-                    ],
-                  ),
-                ),
+        body: SchoolDeskRepositoryStateView<Object>(
+          state: _state,
+          onRetry: _load,
+          data: (_) => RefreshIndicator(
+            onRefresh: _load,
+            child: Form(
+              key: _formKey,
+              autovalidateMode: _editing
+                  ? _autovalidateMode
+                  : AutovalidateMode.disabled,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                children: [
+                  _identityHeader(),
+                  const SizedBox(height: 12),
+                  _section('Receipt Authorization', [
+                    _authorizationSignatureCard(),
+                  ]),
+                  _section('Basic Details', [
+                    _field(
+                      'School Name',
+                      _nameCtrl,
+                      Icons.apartment_rounded,
+                      validator: (value) =>
+                          _requiredText(value, 'School name', max: 120),
+                    ),
+                    _field(
+                      'School Type',
+                      _typeCtrl,
+                      Icons.category_rounded,
+                      validator: (value) =>
+                          _requiredText(value, 'School type', max: 80),
+                    ),
+                    _field(
+                      'Affiliation Board',
+                      _boardCtrl,
+                      Icons.verified_rounded,
+                      validator: (value) => _requiredText(
+                        value,
+                        'Affiliation board',
+                        max: 80,
+                      ),
+                    ),
+                    _field(
+                      'Established Year',
+                      _establishedCtrl,
+                      Icons.event_available_rounded,
+                      keyboardType: TextInputType.number,
+                      validator: _requiredEstablishedYear,
+                    ),
+                    _field(
+                      'Principal Name',
+                      _principalCtrl,
+                      Icons.admin_panel_settings_rounded,
+                      validator: (value) =>
+                          _requiredText(value, 'Principal name', max: 120),
+                    ),
+                    _field(
+                      'Motto',
+                      _mottoCtrl,
+                      Icons.format_quote_rounded,
+                      validator: (value) =>
+                          _optionalText(value, 'Motto', max: 180),
+                    ),
+                  ]),
+                  _section('Contact', [
+                    _field(
+                      'School Email',
+                      _emailCtrl,
+                      Icons.alternate_email_rounded,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: _requiredEmail,
+                    ),
+                    _field(
+                      'School Phone',
+                      _phoneCtrl,
+                      Icons.call_rounded,
+                      keyboardType: TextInputType.phone,
+                      validator: _requiredPhone,
+                    ),
+                    _field(
+                      'Website',
+                      _websiteCtrl,
+                      Icons.language_rounded,
+                      keyboardType: TextInputType.url,
+                      validator: _optionalWebsite,
+                    ),
+                  ]),
+                  _section('Address', [
+                    _field(
+                      'Address Line 1',
+                      _address1Ctrl,
+                      Icons.location_on_rounded,
+                      validator: (value) =>
+                          _requiredText(value, 'Address line 1', max: 160),
+                    ),
+                    _field(
+                      'Address Line 2',
+                      _address2Ctrl,
+                      Icons.add_location_alt_rounded,
+                      validator: (value) =>
+                          _optionalText(value, 'Address line 2', max: 160),
+                    ),
+                    _field(
+                      'City',
+                      _cityCtrl,
+                      Icons.location_city_rounded,
+                      validator: (value) =>
+                          _requiredText(value, 'City', max: 80),
+                    ),
+                    _field(
+                      'State',
+                      _stateCtrl,
+                      Icons.map_rounded,
+                      validator: (value) =>
+                          _requiredText(value, 'State', max: 80),
+                    ),
+                    _field(
+                      'Postal Code',
+                      _postalCtrl,
+                      Icons.local_post_office_rounded,
+                      keyboardType: TextInputType.text,
+                      validator: _requiredPostalCode,
+                    ),
+                  ]),
+                  _section('Regional Preferences', [
+                    _field(
+                      'Timezone',
+                      _timezoneCtrl,
+                      Icons.schedule_rounded,
+                      validator: _requiredTimezone,
+                    ),
+                    _field(
+                      'Currency',
+                      _currencyCtrl,
+                      Icons.currency_rupee_rounded,
+                      validator: _requiredCurrency,
+                    ),
+                  ]),
+                  _bottomActionPanel(),
+                ],
               ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -834,44 +858,6 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                 ),
         );
       },
-    );
-  }
-
-  Widget _errorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_off_rounded,
-              color: context.appTheme.error,
-              size: 40,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'School profile could not be loaded',
-              style: GoogleFonts.dmSans(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(color: context.appTheme.muted),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

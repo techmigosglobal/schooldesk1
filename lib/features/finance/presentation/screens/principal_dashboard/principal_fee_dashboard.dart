@@ -2,17 +2,46 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
+@immutable
+class _PrincipalFeeDashboardSnapshot {
+  final List<Map<String, dynamic>> feeStructures;
+  final List<Map<String, dynamic>> invoices;
+  final List<Map<String, dynamic>> recentPayments;
+  final List<Map<String, dynamic>> concessions;
+  final double outstandingTotal;
+  final double collectedTotal;
+  final int pendingRequestsCount;
+
+  const _PrincipalFeeDashboardSnapshot({
+    required this.feeStructures,
+    required this.invoices,
+    required this.recentPayments,
+    required this.concessions,
+    required this.outstandingTotal,
+    required this.collectedTotal,
+    required this.pendingRequestsCount,
+  });
+}
 
 class PrincipalFeeDashboard extends StatefulWidget {
-  const PrincipalFeeDashboard({super.key});
+  final AdminFeesRepository? repository;
+
+  const PrincipalFeeDashboard({super.key, this.repository});
 
   @override
   State<PrincipalFeeDashboard> createState() => _PrincipalFeeDashboardState();
@@ -20,17 +49,22 @@ class PrincipalFeeDashboard extends StatefulWidget {
 
 class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
     with SingleTickerProviderStateMixin {
-  bool _loading = true;
-  String? _error;
+  AdminFeesRepository get _repository =>
+      widget.repository ?? ApiAdminFeesRepository.legacyDefault;
 
-  List<Map<String, dynamic>> _feeStructures = const [];
-  List<Map<String, dynamic>> _invoices = const [];
-  List<Map<String, dynamic>> _recentPayments = const [];
-  List<Map<String, dynamic>> _concessions = const [];
+  RepositoryState<_PrincipalFeeDashboardSnapshot> _state =
+      const RepositoryState.loading();
 
-  double _outstandingTotal = 0.0;
-  double _collectedTotal = 0.0;
-  int _pendingRequestsCount = 0;
+  List<Map<String, dynamic>> get _feeStructures =>
+      _state.data?.feeStructures ?? const [];
+  List<Map<String, dynamic>> get _invoices => _state.data?.invoices ?? const [];
+  List<Map<String, dynamic>> get _recentPayments =>
+      _state.data?.recentPayments ?? const [];
+  List<Map<String, dynamic>> get _concessions =>
+      _state.data?.concessions ?? const [];
+  double get _outstandingTotal => _state.data?.outstandingTotal ?? 0;
+  double get _collectedTotal => _state.data?.collectedTotal ?? 0;
+  int get _pendingRequestsCount => _state.data?.pendingRequestsCount ?? 0;
 
   late AnimationController _animCtrl;
   late Animation<double> _pieAnimation;
@@ -56,20 +90,28 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
   }
 
   Future<void> _loadData() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
-
       final results = await Future.wait<Object>([
-        api.getFeeStructures(),
-        api.getInvoicesPage(pageSize: 20),
-        api.getPaymentsPage(pageSize: 20),
-        api.getParentPaymentRequestsPage(status: 'pending', pageSize: 20),
-        api.getFeeDashboardSummary(),
-        api.getFeeConcessionsPage(pageSize: 20),
+        _repository.loadFeeStructures(),
+        _repository.loadInvoicesPage(pageSize: 20),
+        _repository.loadPaymentsPage(pageSize: 20),
+        _repository.loadParentPaymentRequestsPage(
+          status: 'pending',
+          pageSize: 20,
+        ),
+        _repository.loadFeeDashboardSummary(),
+        _repository.loadFeeConcessionsPage(pageSize: 20),
       ]);
 
       final structures = (results[0] as List)
@@ -80,41 +122,57 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
           .cast<Map<String, dynamic>>()
           .map(normalizeInvoice)
           .toList();
-      final payments = (results[2] as PaginatedList<Map<String, dynamic>>).data
-          .cast<Map<String, dynamic>>()
-          .map(normalizePaymentRow)
-          .toList()
-        ..sort((a, b) => '${b['date'] ?? ''}'.compareTo('${a['date'] ?? ''}'));
+      final payments =
+          (results[2] as PaginatedList<Map<String, dynamic>>).data
+              .cast<Map<String, dynamic>>()
+              .map(normalizePaymentRow)
+              .toList()
+            ..sort(
+              (a, b) => '${b['date'] ?? ''}'.compareTo('${a['date'] ?? ''}'),
+            );
 
-      final requests =
-          (results[3] as PaginatedList<Map<String, dynamic>>).data.toList();
+      final requests = (results[3] as PaginatedList<Map<String, dynamic>>).data
+          .toList();
 
       final summary = results[4] as Map<String, dynamic>;
-      final concessions =
-          (results[5] as PaginatedList<Map<String, dynamic>>).data.toList();
+      final concessions = (results[5] as PaginatedList<Map<String, dynamic>>)
+          .data
+          .toList();
 
       final outstanding = (summary['outstanding'] as num?)?.toDouble() ?? 0.0;
       final collected = (summary['collected'] as num?)?.toDouble() ?? 0.0;
 
       if (!mounted) return;
       setState(() {
-        _feeStructures = structures;
-        _invoices = invoices;
-        _recentPayments = payments;
-        _concessions = concessions;
-        _outstandingTotal = outstanding;
-        _collectedTotal = collected;
-        _pendingRequestsCount =
-            (summary['pending_request_count'] as num?)?.toInt() ??
-            requests.length;
-        _loading = false;
+        _state = RepositoryState(
+          data: _PrincipalFeeDashboardSnapshot(
+            feeStructures: structures,
+            invoices: invoices,
+            recentPayments: payments,
+            concessions: concessions,
+            outstandingTotal: outstanding,
+            collectedTotal: collected,
+            pendingRequestsCount:
+                (summary['pending_request_count'] as num?)?.toInt() ??
+                requests.length,
+          ),
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
       _animCtrl.forward(from: 0);
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load dashboard data: $e';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -125,45 +183,6 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
       selectedIndex: PrincipalNav.fees,
       onDestinationSelected: (_) {},
     );
-
-    if (_loading) {
-      return SchoolDeskModuleScaffold(
-        title: 'Fee Operations',
-        subtitle: 'Key metrics and shortcuts for fee collection',
-        drawer: drawer,
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_error != null) {
-      return SchoolDeskModuleScaffold(
-        title: 'Fee Operations',
-        subtitle: 'Key metrics and shortcuts for fee collection',
-        drawer: drawer,
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.ibmPlexSans(
-                    color: context.appTheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _loadData,
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
 
     final totalTarget = _collectedTotal + _outstandingTotal;
     final progressVal = totalTarget > 0 ? (_collectedTotal / totalTarget) : 0.0;
@@ -183,56 +202,63 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
           icon: const Icon(Icons.refresh_rounded),
         ),
       ],
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF6FAFF), Color(0xFFFFF8F1)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      body: SchoolDeskRepositoryStateView<_PrincipalFeeDashboardSnapshot>(
+        state: _state,
+        onRetry: _loadData,
+        loadingMessage: 'Loading fee operations…',
+        emptyTitle: 'No fee operations data',
+        emptyMessage: 'Fee structures and collections are not available.',
+        data: (_) => Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFF6FAFF), Color(0xFFFFF8F1)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
           ),
-        ),
-        child: RefreshIndicator(
-          onRefresh: _loadData,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildKpiGrid(),
-              const SizedBox(height: 16),
-              if (_pendingRequestsCount > 0) ...[
-                _buildNeedsAttentionCard(),
+          child: RefreshIndicator(
+            onRefresh: _loadData,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _buildKpiGrid(),
                 const SizedBox(height: 16),
+                if (_pendingRequestsCount > 0) ...[
+                  _buildNeedsAttentionCard(),
+                  const SizedBox(height: 16),
+                ],
+                Text(
+                  'Quick Actions',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildQuickActionsGrid(),
+                const SizedBox(height: 20),
+                Text(
+                  'Collection Progress',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildPieChartCard(progressVal, totalTarget),
+                const SizedBox(height: 20),
+                Text(
+                  'Outstanding Aging Analysis',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildAgingBucketsCard(),
+                const SizedBox(height: 32),
               ],
-              Text(
-                'Quick Actions',
-                style: GoogleFonts.ibmPlexSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildQuickActionsGrid(),
-              const SizedBox(height: 20),
-              Text(
-                'Collection Progress',
-                style: GoogleFonts.ibmPlexSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildPieChartCard(progressVal, totalTarget),
-              const SizedBox(height: 20),
-              Text(
-                'Outstanding Aging Analysis',
-                style: GoogleFonts.ibmPlexSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildAgingBucketsCard(),
-              const SizedBox(height: 32),
-            ],
+            ),
           ),
         ),
       ),
@@ -305,7 +331,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: route != null
-            ? () => Navigator.pushNamed(context, route)
+            ? () => SchoolDeskNavigation.push(context, route)
             : () => ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('$title: $value $subtitle'),
@@ -429,8 +455,10 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
             ),
           ),
           ElevatedButton(
-            onPressed: () =>
-                Navigator.pushNamed(context, '/principal/payment-requests'),
+            onPressed: () => SchoolDeskNavigation.push(
+              context,
+              '/principal/payment-requests',
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: context.appTheme.error,
               foregroundColor: Colors.white,
@@ -504,7 +532,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
 
   Widget _actionButton(String label, IconData icon, String route, Color color) {
     return InkWell(
-      onTap: () => Navigator.pushNamed(context, route),
+      onTap: () => SchoolDeskNavigation.push(context, route),
       borderRadius: BorderRadius.circular(12),
       child: Ink(
         decoration: BoxDecoration(

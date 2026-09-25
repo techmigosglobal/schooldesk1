@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class PrincipalPaymentRequests extends StatefulWidget {
-  const PrincipalPaymentRequests({super.key});
+  final AdminFeesRepository? repository;
+
+  const PrincipalPaymentRequests({super.key, this.repository});
 
   @override
   State<PrincipalPaymentRequests> createState() =>
@@ -14,7 +19,10 @@ class PrincipalPaymentRequests extends StatefulWidget {
 }
 
 class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
-  bool _loading = true;
+  AdminFeesRepository get _repository =>
+      widget.repository ?? ApiAdminFeesRepository.legacyDefault;
+
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _loadingMore = false;
   bool _hasMore = false;
   int _page = 1;
@@ -46,20 +54,27 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
     bool resetPage = true,
   }) async {
     if (showSpinner) {
+      final previous = _state.data;
       setState(() {
-        _loading = resetPage;
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
         _loadingMore = !resetPage;
       });
     } else if (!resetPage) {
       setState(() => _loadingMore = true);
     }
     try {
-      final response = await BackendApiClient.instance
-          .getParentPaymentRequestsPage(
-            status: _statusFilter == 'all' ? null : _statusFilter,
-            page: resetPage ? 1 : _page + 1,
-            pageSize: 20,
-          );
+      final response = await _repository.loadParentPaymentRequestsPage(
+        status: _statusFilter == 'all' ? null : _statusFilter,
+        page: resetPage ? 1 : _page + 1,
+        pageSize: 20,
+      );
       final rows = response.data
           .where((row) => FeePaymentRequestStatus.isReviewRecord(row['status']))
           .toList();
@@ -83,13 +98,16 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         _page = response.page;
         _totalRequests = response.total;
         _hasMore = response.hasMore;
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
         _loadingMore = false;
       });
-    } on Object {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
+        _state = RepositoryState.error(error: error, data: _state.data);
         _loadingMore = false;
       });
     }
@@ -127,7 +145,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
 
     setState(() => _submittingMap[id] = true);
     try {
-      await BackendApiClient.instance.decideParentPaymentRequest(
+      await _repository.decideParentPaymentRequest(
         id,
         status: decision,
         adminRemarks: remarks,
@@ -183,35 +201,37 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         ],
       ),
       body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
-                  _buildSummaryCards(),
-                  _buildFilterChips(),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: () => _loadRequests(showSpinner: false),
-                      child: _visibleRequests.isEmpty
-                          ? _buildEmptyState()
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount:
-                                  _visibleRequests.length + (_hasMore ? 1 : 0),
-                              itemBuilder: (context, index) {
-                                if (index == _visibleRequests.length) {
-                                  return _buildLoadMoreButton();
-                                }
-                                return _buildRequestCard(
-                                  _visibleRequests[index],
-                                );
-                              },
-                            ),
-                    ),
-                  ),
-                ],
+        child: SchoolDeskRepositoryStateView<Object>(
+          state: _state,
+          onRetry: () => _loadRequests(),
+          data: (_) => Column(
+            children: [
+              _buildSummaryCards(),
+              _buildFilterChips(),
+              const Divider(height: 1),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () => _loadRequests(showSpinner: false),
+                  child: _visibleRequests.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount:
+                              _visibleRequests.length + (_hasMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == _visibleRequests.length) {
+                              return _buildLoadMoreButton();
+                            }
+                            return _buildRequestCard(
+                              _visibleRequests[index],
+                            );
+                          },
+                        ),
+                ),
               ),
+            ],
+          ),
+        ),
       ),
     );
   }

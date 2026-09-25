@@ -13,6 +13,8 @@ import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 class PrincipalDrawer extends StatefulWidget {
   final int? selectedIndex;
   final Function(int) onDestinationSelected;
@@ -525,10 +527,18 @@ class _PrincipalShellBottomBarState extends State<PrincipalShellBottomBar> {
     if (currentRoute == destination.route) return;
     if (destination.route == AppRoutes.principalDashboard ||
         destination.route == AppRoutes.coordinatorDashboard) {
-      navigator.pushNamedAndRemoveUntil(destination.route, (_) => false);
+      SchoolDeskNavigation.goFromNavigator(
+        navigator,
+        destination.route,
+        legacyPredicate: (_) => false,
+      );
       return;
     }
-    navigator.pushNamed(destination.route, arguments: destination.arguments);
+    SchoolDeskNavigation.pushFromNavigator(
+      navigator,
+      destination.route,
+      arguments: destination.arguments,
+    );
   }
 }
 
@@ -704,13 +714,6 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
               label: 'Issue Management',
               route: AppRoutes.superAdminIssues,
             ),
-            SchoolDeskNavigationItem(
-              index: SuperAdminNav.idCards,
-              icon: Icons.badge_outlined,
-              activeIcon: Icons.badge_rounded,
-              label: SchoolDeskGlossary.idCards,
-              route: AppRoutes.idCardGeneration,
-            ),
           ],
         ),
         SchoolDeskNavigationSection(
@@ -729,20 +732,6 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
               activeIcon: Icons.manage_accounts_rounded,
               label: SchoolDeskGlossary.accessPermissions,
               route: AppRoutes.superAdminAccess,
-            ),
-            SchoolDeskNavigationItem(
-              index: SuperAdminNav.staff,
-              icon: Icons.people_outline_rounded,
-              activeIcon: Icons.people_rounded,
-              label: SchoolDeskGlossary.staff,
-              route: AppRoutes.staffManagement,
-            ),
-            SchoolDeskNavigationItem(
-              index: SuperAdminNav.students,
-              icon: Icons.school_outlined,
-              activeIcon: Icons.school_rounded,
-              label: SchoolDeskGlossary.studentOversight,
-              route: AppRoutes.studentOversight,
             ),
           ],
         ),
@@ -949,10 +938,18 @@ class _SuperAdminShellBottomBarState extends State<SuperAdminShellBottomBar> {
     final currentRoute = ModalRoute.of(context)?.settings.name;
     if (currentRoute == destination.route) return;
     if (destination.route == AppRoutes.superAdminDashboard) {
-      navigator.pushNamedAndRemoveUntil(destination.route, (_) => false);
+      SchoolDeskNavigation.goFromNavigator(
+        navigator,
+        destination.route,
+        legacyPredicate: (_) => false,
+      );
       return;
     }
-    navigator.pushNamed(destination.route, arguments: destination.arguments);
+    SchoolDeskNavigation.pushFromNavigator(
+      navigator,
+      destination.route,
+      arguments: destination.arguments,
+    );
   }
 }
 

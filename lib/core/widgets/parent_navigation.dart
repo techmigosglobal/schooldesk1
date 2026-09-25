@@ -69,7 +69,10 @@ class _ParentDrawerState extends State<ParentDrawer> {
       final profile = results[1] as UserResponse;
       final childNames = RoleAccessService.parentChildNames;
       setState(() {
-        _schoolName = 'Arish Ville Preschool';
+        _schoolName = safeText(
+          school['organization_name'] ?? school['name'],
+          fallback: 'School',
+        );
         _schoolSubtitle = safeText(
           school['affiliation_board'],
           fallback: safeText(school['school_type'], fallback: 'Family access'),

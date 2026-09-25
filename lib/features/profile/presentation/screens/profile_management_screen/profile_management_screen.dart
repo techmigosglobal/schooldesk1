@@ -6,17 +6,29 @@ import 'package:image_picker/image_picker.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/modules/profile/data/api_profile_repository.dart';
+import 'package:schooldesk1/modules/profile/domain/profile_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class ProfileManagementScreen extends StatefulWidget {
   final String role;
-  const ProfileManagementScreen({super.key, required this.role});
+  final ProfileRepository? repository;
+
+  const ProfileManagementScreen({
+    super.key,
+    required this.role,
+    this.repository,
+  });
 
   @override
   State<ProfileManagementScreen> createState() =>
@@ -24,6 +36,9 @@ class ProfileManagementScreen extends StatefulWidget {
 }
 
 class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
+  ProfileRepository get _repository =>
+      widget.repository ?? ApiProfileRepository.legacyDefault;
+
   final _usernameCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
@@ -36,10 +51,9 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
   final _cityCtrl = TextEditingController();
   final _stateCtrl = TextEditingController();
 
-  bool _loading = true;
   bool _saving = false;
   bool _isEditing = false;
-  String? _error;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   UserResponse? _profile;
   StaffModel? _teacherStaff;
   String _avatarPath = '';
@@ -73,24 +87,29 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
   }
 
   Future<void> _load() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final profile = await BackendApiClient.instance.getProfile();
+      final profile = await _repository.loadProfile();
       Map<String, dynamic> school = {};
       if (_isPrincipal) {
-        school = await BackendApiClient.instance.getCurrentSchool();
+        school = await _repository.loadCurrentSchool();
       }
       StaffModel? teacherStaff;
       if (_isTeacher) {
         await RoleAccessService.initialize();
         final staffId = RoleAccessService.teacherStaffId;
         if (staffId.isNotEmpty) {
-          teacherStaff = await BackendApiClient.instance.getStaffMember(
-            staffId,
-          );
+          teacherStaff = await _repository.loadStaffMember(staffId);
         }
       }
       if (!mounted) return;
@@ -109,13 +128,24 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         _schoolPhoneCtrl.text = '${school['phone'] ?? ''}';
         _cityCtrl.text = '${school['city'] ?? ''}';
         _stateCtrl.text = '${school['state'] ?? ''}';
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -155,14 +185,14 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
     }
     setState(() => _saving = true);
     try {
-      final profile = await BackendApiClient.instance.updateProfile({
+      final profile = await _repository.updateProfile({
         'username': username,
         'name': _nameCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
         'phone': _phoneCtrl.text.trim(),
       });
       if (_isPrincipal) {
-        await BackendApiClient.instance.updateCurrentSchool({
+        await _repository.updateCurrentSchool({
           'name': _schoolNameCtrl.text.trim(),
           'school_type': _schoolTypeCtrl.text.trim(),
           'affiliation_board': _boardCtrl.text.trim(),
@@ -211,16 +241,14 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         preset: ImageUploadPreset.portrait,
       );
       setState(() => _saving = true);
-      final avatarPath = await BackendApiClient.instance.uploadProfileAvatar(
+      final avatarPath = await _repository.uploadAvatar(
         picked.path,
         fileBytes: optimized.bytes,
         fileName: optimized.filename,
         mimeType: optimized.mimeType,
       );
       final queued = avatarPath.startsWith('schooldesk-upload://');
-      final profile = queued
-          ? _profile
-          : await BackendApiClient.instance.getProfile();
+      final profile = queued ? _profile : await _repository.loadProfile();
       if (!mounted) return;
       setState(() {
         _avatarPath = queued ? '' : avatarPath;
@@ -266,7 +294,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
           ),
           backgroundColor: context.appTheme.surface,
           actions: [
-            if (!_loading && _error == null)
+            if (_state.hasData)
               TextButton.icon(
                 onPressed: _saving
                     ? null
@@ -286,145 +314,109 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
               ),
           ],
         ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? _buildError()
-            : Padding(
-                padding: EdgeInsets.only(bottom: bottomSafePadding),
-                child: RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        body: SchoolDeskRepositoryStateView<Object>(
+          state: _state,
+          onRetry: _load,
+          emptyTitle: 'Profile unavailable',
+          emptyMessage: 'Profile data is not available for this account.',
+          data: (_) => Padding(
+            padding: EdgeInsets.only(bottom: bottomSafePadding),
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 12),
+                  _buildSection(
+                    title: 'Personal Information',
                     children: [
-                      _buildHeader(),
-                      const SizedBox(height: 12),
-                      _buildSection(
-                        title: 'Personal Information',
-                        children: [
-                          _field(
-                            'Username',
-                            _usernameCtrl,
-                            Icons.alternate_email_rounded,
-                            helperText:
-                                'Use this username when you sign in. You can change it later.',
-                          ),
-                          _field('Full Name', _nameCtrl, Icons.person_rounded),
-                          _field(
-                            'Email Address',
-                            _emailCtrl,
-                            Icons.email_rounded,
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          _field(
-                            'Phone Number',
-                            _phoneCtrl,
-                            Icons.phone_rounded,
-                            keyboardType: TextInputType.phone,
-                          ),
-                          _avatarAttachmentControl(),
-                        ],
+                      _field(
+                        'Username',
+                        _usernameCtrl,
+                        Icons.alternate_email_rounded,
+                        helperText:
+                            'Use this username when you sign in. You can change it later.',
                       ),
-                      if (_isPrincipal) ...[
-                        const SizedBox(height: 12),
-                        _buildSection(
-                          title: 'School Basic Details',
+                      _field('Full Name', _nameCtrl, Icons.person_rounded),
+                      _field(
+                        'Email Address',
+                        _emailCtrl,
+                        Icons.email_rounded,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      _field(
+                        'Phone Number',
+                        _phoneCtrl,
+                        Icons.phone_rounded,
+                        keyboardType: TextInputType.phone,
+                      ),
+                      _avatarAttachmentControl(),
+                    ],
+                  ),
+                  if (_isPrincipal) ...[
+                    const SizedBox(height: 12),
+                    _buildSection(
+                      title: 'School Basic Details',
+                      children: [
+                        _field(
+                          'School Name',
+                          _schoolNameCtrl,
+                          Icons.apartment_rounded,
+                        ),
+                        _field(
+                          'School Type',
+                          _schoolTypeCtrl,
+                          Icons.category_rounded,
+                        ),
+                        _field(
+                          'Affiliation Board',
+                          _boardCtrl,
+                          Icons.verified_rounded,
+                        ),
+                        _field(
+                          'School Email',
+                          _schoolEmailCtrl,
+                          Icons.alternate_email_rounded,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        _field(
+                          'School Phone',
+                          _schoolPhoneCtrl,
+                          Icons.call_rounded,
+                          keyboardType: TextInputType.phone,
+                        ),
+                        Row(
                           children: [
-                            _field(
-                              'School Name',
-                              _schoolNameCtrl,
-                              Icons.apartment_rounded,
+                            Expanded(
+                              child: _field(
+                                'City',
+                                _cityCtrl,
+                                Icons.location_city_rounded,
+                              ),
                             ),
-                            _field(
-                              'School Type',
-                              _schoolTypeCtrl,
-                              Icons.category_rounded,
-                            ),
-                            _field(
-                              'Affiliation Board',
-                              _boardCtrl,
-                              Icons.verified_rounded,
-                            ),
-                            _field(
-                              'School Email',
-                              _schoolEmailCtrl,
-                              Icons.alternate_email_rounded,
-                              keyboardType: TextInputType.emailAddress,
-                            ),
-                            _field(
-                              'School Phone',
-                              _schoolPhoneCtrl,
-                              Icons.call_rounded,
-                              keyboardType: TextInputType.phone,
-                            ),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _field(
-                                    'City',
-                                    _cityCtrl,
-                                    Icons.location_city_rounded,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _field(
-                                    'State',
-                                    _stateCtrl,
-                                    Icons.map_rounded,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _field(
+                                'State',
+                                _stateCtrl,
+                                Icons.map_rounded,
+                              ),
                             ),
                           ],
                         ),
                       ],
-                      if (_isTeacher) ...[
-                        const SizedBox(height: 12),
-                        _buildTeacherStaffDetails(),
-                      ],
-                      _buildAccountActions(),
-                    ],
-                  ),
-                ),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_off_rounded,
-              color: context.appTheme.error,
-              size: 40,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Profile could not be loaded',
-              style: GoogleFonts.dmSans(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+                    ),
+                  ],
+                  if (_isTeacher) ...[
+                    const SizedBox(height: 12),
+                    _buildTeacherStaffDetails(),
+                  ],
+                  _buildAccountActions(),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(color: context.appTheme.muted),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -637,7 +629,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => Navigator.pushNamed(
+                  onPressed: () => SchoolDeskNavigation.push(
                     context,
                     AppRoutes.settingsScreen,
                     arguments: widget.role,

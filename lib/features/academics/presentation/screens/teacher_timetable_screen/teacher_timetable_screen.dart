@@ -1,22 +1,39 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_timetable_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_timetable_repository.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 import 'teacher_timetable_day_selection.dart';
 
+final class _TeacherTimetableSnapshot {
+  const _TeacherTimetableSnapshot({
+    required this.slots,
+    required this.workingDays,
+  });
+
+  final List<Map<String, dynamic>> slots;
+  final List<int> workingDays;
+}
+
 class TeacherTimetableScreen extends StatefulWidget {
-  const TeacherTimetableScreen({super.key});
+  final TeacherTimetableRepository? repository;
+
+  const TeacherTimetableScreen({super.key, this.repository});
 
   @override
   State<TeacherTimetableScreen> createState() => _TeacherTimetableScreenState();
 }
 
 class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
-  bool _loading = true;
-  String? _error;
+  TeacherTimetableRepository get _repository =>
+      widget.repository ?? ApiTeacherTimetableRepository.legacyDefault;
+  RepositoryState<_TeacherTimetableSnapshot> _repositoryState =
+      const RepositoryState.loading();
   List<Map<String, dynamic>> _slots = const [];
   String _selectedSectionId = '';
   List<int> _workingDays = defaultTeacherWorkingDays;
@@ -29,9 +46,15 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   }
 
   Future<void> _load() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
       await RoleAccessService.initialize();
@@ -56,32 +79,50 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
         _selectedSectionId = sectionIds.contains(_selectedSectionId)
             ? _selectedSectionId
             : (sectionIds.isEmpty ? '' : sectionIds.first);
-        _loading = false;
+        _repositoryState = RepositoryState(
+          data: _TeacherTimetableSnapshot(
+            slots: List.unmodifiable(slots),
+            workingDays: List.unmodifiable(normalizedWorkingDays),
+          ),
+          source: RepositorySource.remote,
+          phase: slots.isEmpty ? RepositoryPhase.empty : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = error.toString().replaceFirst('Exception: ', '');
+        final message = error.toString().replaceFirst('Exception: ', '');
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: message,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: message);
       });
     }
   }
 
   Future<List<int>> _loadWorkingDays() async {
-    try {
-      return await BackendApiClient.instance.getTimetableWorkingDays();
-    } on Object {
-      return const [];
-    }
+    final result = await _repository.loadWorkingDays();
+    return result.dataOrNull ?? const [];
   }
 
   Future<List<Map<String, dynamic>>> _loadTeacherTimetableSlots() async {
     final assignedSectionIds = RoleAccessService.teacherSectionIds;
     final classScopedSlots = <Map<String, dynamic>>[];
     for (final sectionId in assignedSectionIds) {
-      classScopedSlots.addAll(
-        await BackendApiClient.instance.getTimetableSlots(sectionId: sectionId),
-      );
+      final result = await _repository.loadSlots(sectionId: sectionId);
+      final slots = result.dataOrNull;
+      if (slots == null) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to load timetable',
+        );
+      }
+      classScopedSlots.addAll(slots);
     }
     return classScopedSlots;
   }
@@ -166,71 +207,79 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
       title: 'Weekly Timetable',
       subtitle: 'Read-only schedule from Principal timetable setup',
       selectedIndex: TeacherNav.timetable,
-      loading: _loading,
-      error: _error,
+      loading: _repositoryState.isLoading && !_repositoryState.hasData,
+      error: _repositoryState.isError && !_repositoryState.hasData
+          ? '${_repositoryState.error}'
+          : null,
       onRefresh: _load,
-      child: TeacherFlowScrollView(
-        children: [
-          if (!RoleAccessService.hasAssignedClasses)
-            const TeacherFlowCard(
-              icon: Icons.class_outlined,
-              title: 'No class assigned yet.',
-              subtitle:
-                  'Your assignment will appear after Principal assigns you.',
-            )
-          else ...[
-            if (sectionIds.length > 1) ...[
-              const TeacherFlowSectionHeader(title: 'Select class'),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: sectionIds.contains(_selectedSectionId)
-                    ? _selectedSectionId
-                    : sectionIds.first,
-                decoration: const InputDecoration(
-                  labelText: 'Class / section',
-                  border: OutlineInputBorder(),
+      child: SchoolDeskRepositoryStateView<_TeacherTimetableSnapshot>(
+        state: _repositoryState,
+        onRetry: _load,
+        emptyTitle: 'No timetable available',
+        emptyMessage: 'No timetable slots exist for this teacher scope.',
+        data: (_) => TeacherFlowScrollView(
+          children: [
+            if (!RoleAccessService.hasAssignedClasses)
+              const TeacherFlowCard(
+                icon: Icons.class_outlined,
+                title: 'No class assigned yet.',
+                subtitle:
+                    'Your assignment will appear after Principal assigns you.',
+              )
+            else ...[
+              if (sectionIds.length > 1) ...[
+                const TeacherFlowSectionHeader(title: 'Select class'),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: sectionIds.contains(_selectedSectionId)
+                      ? _selectedSectionId
+                      : sectionIds.first,
+                  decoration: const InputDecoration(
+                    labelText: 'Class / section',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: sectionIds
+                      .map(
+                        (sectionId) => DropdownMenuItem<String>(
+                          value: sectionId,
+                          child: Text(_sectionLabel(sectionId)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _selectedSectionId = value);
+                  },
                 ),
-                items: sectionIds
-                    .map(
-                      (sectionId) => DropdownMenuItem<String>(
-                        value: sectionId,
-                        child: Text(_sectionLabel(sectionId)),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _selectedSectionId = value);
-                },
+                const SizedBox(height: 16),
+              ],
+              // ── Card 1: Assigned Class Overview ───────────────────────────
+              _FullDayClassCard(
+                classLabel: classLabel,
+                subjects: subjects,
+                date: _weekLabel(),
+                mappedSubjects: RoleAccessService.teacherSubjectIds.length,
               ),
               const SizedBox(height: 16),
-            ],
-            // ── Card 1: Assigned Class Overview ───────────────────────────
-            _FullDayClassCard(
-              classLabel: classLabel,
-              subjects: subjects,
-              date: _weekLabel(),
-              mappedSubjects: RoleAccessService.teacherSubjectIds.length,
-            ),
-            const SizedBox(height: 16),
 
-            const TeacherFlowSectionHeader(title: 'Select weekday'),
-            const SizedBox(height: 8),
-            _TeacherWeekdaySelector(
-              days: _workingDays,
-              selectedDay: selectedDay,
-              onSelected: (day) => setState(() => _selectedDay = day),
-            ),
-            const SizedBox(height: 16),
-            _DayScheduleCard(
-              key: const ValueKey('teacher-timetable-selected-day'),
-              dayName: _dayName(selectedDay),
-              slots: _selectedDaySlots,
-              slotSubject: _slotSubject,
-              slotTime: _slotTime,
-            ),
+              const TeacherFlowSectionHeader(title: 'Select weekday'),
+              const SizedBox(height: 8),
+              _TeacherWeekdaySelector(
+                days: _workingDays,
+                selectedDay: selectedDay,
+                onSelected: (day) => setState(() => _selectedDay = day),
+              ),
+              const SizedBox(height: 16),
+              _DayScheduleCard(
+                key: const ValueKey('teacher-timetable-selected-day'),
+                dayName: _dayName(selectedDay),
+                slots: _selectedDaySlots,
+                slotSubject: _slotSubject,
+                slotTime: _slotTime,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

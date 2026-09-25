@@ -12,6 +12,8 @@ import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_
 ///
 /// Left (main): School feed carousel + today's highlights + quick access.
 /// Right (sidebar): Active child overview + stats + child switcher.
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 class ParentDashboardDesktopBody extends StatelessWidget {
   final List<Map<String, dynamic>> children;
   final Map<String, dynamic> dashboard;
@@ -513,7 +515,7 @@ class _ChildQuickActions extends StatelessWidget {
             label: action.$1,
             icon: action.$2,
             color: parentColor,
-            onTap: () => Navigator.pushNamed(context, action.$3),
+            onTap: () => SchoolDeskNavigation.push(context, action.$3),
           ),
       ],
     );
@@ -692,7 +694,8 @@ class _ParentQuickAccessDesktopPanel extends StatelessWidget {
                       subtitle: action.$2,
                       icon: action.$3,
                       color: action.$4,
-                      onTap: () => Navigator.pushNamed(context, action.$5),
+                      onTap: () =>
+                          SchoolDeskNavigation.push(context, action.$5),
                     ),
                 ],
               );

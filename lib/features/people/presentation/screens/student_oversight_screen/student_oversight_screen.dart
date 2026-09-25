@@ -3,17 +3,17 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/app/router/route_arguments.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
+import 'package:schooldesk1/core/network/models/backend_models.dart' as api;
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
@@ -22,6 +22,10 @@ import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/widgets/desktop_master_detail_layout.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/roles/principal/data/api_student_oversight_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/student_oversight_repository.dart';
 
 class StudentModel {
   final String id;
@@ -124,7 +128,9 @@ class StudentModel {
 }
 
 class StudentOversightScreen extends StatefulWidget {
-  const StudentOversightScreen({super.key});
+  const StudentOversightScreen({super.key, this.repository});
+
+  final StudentOversightRepository? repository;
 
   @override
   State<StudentOversightScreen> createState() => _StudentOversightScreenState();
@@ -161,14 +167,15 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   bool _routeContextRead = false;
   bool _dataLoadStarted = false;
   bool _scopedClassFilterApplied = false;
-  bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
-  bool _staleData = false;
-  String? _loadError;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   int _currentPage = 0;
   int _queryGeneration = 0;
   Timer? _searchDebounce;
+
+  StudentOversightRepository get _repository =>
+      widget.repository ?? ApiStudentOversightRepository.legacyDefault;
 
   bool get _selectionMode => _selectedStudentIds.isNotEmpty;
 
@@ -206,7 +213,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   }
 
   void _readRouteScope() {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = SchoolDeskRouteArguments.maybeOf<Object?>(context);
     if (args is! Map) return;
     _scopedSectionId = _argumentText(
       args['section_id'] ?? args['sectionId'] ?? args['class_section_id'],
@@ -221,19 +228,26 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     bool loadMetadata = true,
   }) async {
     final generation = ++_queryGeneration;
+    final previous = _state.data;
     final requestedPage = resetPage ? 1 : _currentPage + 1;
     if (mounted) {
       setState(() {
-        _loading = resetPage && _allStudents.isEmpty;
+        if (resetPage) {
+          _state = RepositoryState.loading(
+            data: previous,
+            source: previous == null
+                ? RepositorySource.empty
+                : RepositorySource.cache,
+            isStale: previous != null,
+            isRefreshing: previous != null,
+          );
+        }
         _loadingMore = !resetPage;
-        _loadError = null;
-        if (resetPage) _staleData = false;
       });
     }
 
     try {
-      final client = api.BackendApiClient.instance;
-      final studentFuture = client.getStudents(
+      final studentFuture = _repository.loadStudents(
         sectionId: _serverSectionId(),
         status: _serverStatusFilter(),
         search: _searchQuery,
@@ -250,11 +264,11 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       if (loadMetadata) {
         final results = await Future.wait<dynamic>([
           studentFuture,
-          client.getSections(forceRefresh: true),
-          client.getGrades(forceRefresh: true),
-          client.getAcademicYears(forceRefresh: true),
-          client.getStudentDirectorySummary(),
-          client.getStudentParentIntegrityReport(),
+          _repository.loadSections(forceRefresh: true),
+          _repository.loadGrades(forceRefresh: true),
+          _repository.loadAcademicYears(forceRefresh: true),
+          _repository.loadDirectorySummary(),
+          _repository.loadParentIntegrity(),
         ]);
         response = results[0] as api.PaginatedList<api.StudentModel>;
         sections = results[1] as List<api.SectionModel>;
@@ -346,10 +360,12 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         _displayedStudents = List<StudentModel>.from(_allStudents);
         _currentPage = response.page;
         _hasMore = response.hasMore && response.data.isNotEmpty;
-        _loading = false;
         _loadingMore = false;
-        _loadError = null;
-        _staleData = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+        );
         selectFirst =
             isDesktop &&
             _selectedStudent == null &&
@@ -361,10 +377,16 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     } on Object catch (error) {
       if (!mounted || generation != _queryGeneration) return;
       setState(() {
-        _loading = false;
         _loadingMore = false;
-        _loadError = error.toString();
-        _staleData = _allStudents.isNotEmpty;
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -480,9 +502,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
   Future<List<api.UserAccountModel>> _loadParentAccounts() async {
     try {
-      final result = await api.BackendApiClient.instance.getUsers(
-        role: 'Parent',
-        status: 'active',
+      final result = await _repository.loadParentAccounts(
         page: 1,
         pageSize: _pageSize,
       );
@@ -494,7 +514,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
   Future<List<Map<String, dynamic>>> _loadFeeStructuresSafely() async {
     try {
-      return await api.BackendApiClient.instance.getFeeStructures();
+      return await _repository.loadFeeStructures();
     } on Object catch (_) {
       return const <Map<String, dynamic>>[];
     }
@@ -709,7 +729,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     final failures = <String>[];
     for (final student in selected) {
       try {
-        await api.BackendApiClient.instance.deleteStudent(student.id);
+        await _repository.deleteStudent(student.id);
         removed++;
       } on Object {
         failures.add(student.name);
@@ -743,6 +763,16 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return SchoolDeskRepositoryStateView<Object>(
+      state: _state,
+      onRetry: _loadData,
+      emptyTitle: 'No students found',
+      emptyMessage: 'Student records are not available for this scope.',
+      data: (_) => _buildLoadedLayout(),
+    );
+  }
+
+  Widget _buildLoadedLayout() {
     final isDesktop = DesktopBreakpoints.isDesktopWidth(
       MediaQuery.sizeOf(context).width,
     );
@@ -777,24 +807,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             slivers: [
               SliverToBoxAdapter(child: _buildHeader(context)),
               SliverToBoxAdapter(child: _buildSearchAndFilters()),
-              if (_loading)
-                const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_loadError != null)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: EmptyStateWidget(
-                      icon: Icons.cloud_off_rounded,
-                      title: 'Unable to load students',
-                      description: _loadError!,
-                      actionLabel: 'Retry',
-                      onAction: _loadData,
-                    ),
-                  ),
-                )
-              else if (_filteredStudents.isEmpty)
+              if (_filteredStudents.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -809,8 +822,6 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
               else
                 SliverMainAxisGroup(
                   slivers: [
-                    if (_staleData)
-                      SliverToBoxAdapter(child: _buildStaleDataBanner()),
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
                       sliver: SliverList.builder(
@@ -1027,39 +1038,6 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     );
   }
 
-  Widget _buildStaleDataBanner() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(22, 8, 22, 0),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.cloud_off_rounded,
-            size: 18,
-            color: Colors.orange.shade900,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Showing cached student data. ${_loadError ?? 'Refresh failed.'}',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Colors.orange.shade900,
-              ),
-            ),
-          ),
-          TextButton(onPressed: _loadData, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-
   String _compactClassLabel(String value) {
     final classMatch = RegExp(r'Class\s+([^/]+)').firstMatch(value);
     final sectionMatch = RegExp(r'Section\s+(.+)$').firstMatch(value);
@@ -1150,8 +1128,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     int filteredCount,
   ) async {
     try {
-      await api.BackendApiClient.instance.createReportExport(
-        '/student-reports/exports',
+      await _repository.createReportExport(
         reportTitle: 'Student directory',
         format: format,
         scope: 'principal',
@@ -1266,23 +1243,20 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     final firstName = parts.isEmpty ? input.studentName.trim() : parts.first;
     final lastName = parts.length > 1 ? parts.skip(1).join(' ') : '';
 
-    final client = api.BackendApiClient.instance;
     final studentId = input.studentId;
     var parentUserId = input.parentUserId;
     String? newlyCreatedParentId;
     String? savedStudentId;
     if (input.shouldCreateParentLogin) {
-      final parent = await client.createUser(
+      final parent = await _repository.createParentAccount(
         username: input.parentUsername.trim(),
         password: input.parentPassword.trim(),
-        role: 'Parent',
         // Use father full name as the account display name
         fullName: input.fatherFullName.isNotEmpty
             ? input.fatherFullName
             : input.fatherFirstName.trim(),
         email: input.parentEmail.trim(),
         phone: input.parentPhone.trim(),
-        isActive: true,
       );
       parentUserId = parent.id;
       newlyCreatedParentId = parent.id;
@@ -1292,7 +1266,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       if (input.studentId != null &&
           !input.shouldCreateParentLogin &&
           (parentUserId ?? '').isNotEmpty) {
-        await client.updateUser(
+        await _repository.updateParentAccount(
           parentUserId!,
           fullName: input.parentFullName,
           email: input.parentEmail,
@@ -1300,7 +1274,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         );
       }
       if (studentId == null || studentId.isEmpty) {
-        final student = await client.createStudent(
+        final student = await _repository.createStudent(
           firstName: firstName,
           lastName: lastName,
           dateOfBirth: input.backendDateOfBirth,
@@ -1315,7 +1289,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         );
         savedStudentId = student.id;
       } else {
-        await client.updateStudent(
+        await _repository.updateStudent(
           studentId,
           firstName: firstName,
           lastName: lastName,
@@ -1332,7 +1306,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       }
 
       if ((parentUserId ?? '').isNotEmpty) {
-        await client.setStudentParent(
+        await _repository.setStudentParent(
           studentId: savedStudentId,
           parentUserId: parentUserId,
         );
@@ -1340,7 +1314,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     } on Object catch (_) {
       if (newlyCreatedParentId != null && savedStudentId == null) {
         try {
-          await client.deleteUser(newlyCreatedParentId, permanent: true);
+          await _repository.deleteParentAccount(
+            newlyCreatedParentId,
+            permanent: true,
+          );
         } on Object catch (_) {
           // Keep the original student-save error visible; the backend account
           // repair report will surface an orphaned login if cleanup fails.
@@ -1359,7 +1336,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
     if ((input.photoPath ?? '').isNotEmpty ||
         (input.photoBytes?.isNotEmpty ?? false)) {
-      await client.uploadStudentPhoto(
+      await _repository.uploadStudentPhoto(
         studentId: savedId,
         filePath: input.photoPath,
         fileBytes: input.photoBytes,
@@ -1368,7 +1345,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     }
 
     for (final document in input.documents) {
-      await client.uploadStudentDocument(
+      await _repository.uploadStudentDocument(
         studentId: savedId,
         filePath: document.filePath,
         fileBytes: document.fileBytes,
@@ -1401,19 +1378,18 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   ) async {
     // Father guardian
     if (input.fatherFirstName.isNotEmpty) {
-      final created = await api.BackendApiClient.instance
-          .createRaw('/guardians', {
-            'student_id': studentId,
-            'full_name': input.fatherFullName,
-            'relationship': 'father',
-            'phone': input.parentPhone.trim(),
-            'email': input.parentEmail.trim(),
-            'is_primary': true,
-          });
+      final created = await _repository.createRaw('/guardians', {
+        'student_id': studentId,
+        'full_name': input.fatherFullName,
+        'relationship': 'father',
+        'phone': input.parentPhone.trim(),
+        'email': input.parentEmail.trim(),
+        'is_primary': true,
+      });
       final record = created['data'] is Map ? created['data'] as Map : created;
       final guardianId = '${record['id'] ?? ''}'.trim();
       if (guardianId.isNotEmpty) {
-        await api.BackendApiClient.instance.linkGuardianToStudent(
+        await _repository.linkGuardianToStudent(
           studentId: studentId,
           guardianId: guardianId,
           isPrimary: true,
@@ -1423,17 +1399,16 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     }
     // Mother guardian
     if (input.motherFirstName.isNotEmpty) {
-      final created = await api.BackendApiClient.instance
-          .createRaw('/guardians', {
-            'student_id': studentId,
-            'full_name': input.motherFullName,
-            'relationship': 'mother',
-            'is_primary': false,
-          });
+      final created = await _repository.createRaw('/guardians', {
+        'student_id': studentId,
+        'full_name': input.motherFullName,
+        'relationship': 'mother',
+        'is_primary': false,
+      });
       final record = created['data'] is Map ? created['data'] as Map : created;
       final guardianId = '${record['id'] ?? ''}'.trim();
       if (guardianId.isNotEmpty) {
-        await api.BackendApiClient.instance.linkGuardianToStudent(
+        await _repository.linkGuardianToStudent(
           studentId: studentId,
           guardianId: guardianId,
           isPrimary: false,
@@ -1462,7 +1437,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           '${fee['grade_id'] ?? ''}' == section.gradeId,
     );
     if (hasStructure) {
-      await api.BackendApiClient.instance.createRaw('/fees/invoices/generate', {
+      await _repository.createRaw('/fees/invoices/generate', {
         'academic_year_id': year.id,
         'grade_id': section.gradeId,
         'section_id': input.sectionId,
@@ -1474,7 +1449,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
     if (input.concessionAmount > 0 ||
         input.concessionReason.trim().isNotEmpty) {
-      await api.BackendApiClient.instance.createRaw('/fees/concessions', {
+      await _repository.createRaw('/fees/concessions', {
         'student_id': studentId,
         'student_name': input.studentName.trim(),
         'class_section': _sectionLabelForId(input.sectionId),
@@ -1493,7 +1468,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final sectionMap = {for (final s in _sections) s.id: s};
       final gradeMap = {for (final g in _grades) g.id: g};
       final parentMap = {for (final p in _parents) p.id: p};
-      final latest = await api.BackendApiClient.instance.getStudent(student.id);
+      final latest = await _repository.loadStudent(student.id);
       detailStudent = _mapApiStudentToUi(
         latest,
         sectionMap,
@@ -1595,7 +1570,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     if (confirmed != true) return false;
 
     try {
-      await api.BackendApiClient.instance.deleteStudent(student.id);
+      await _repository.deleteStudent(student.id);
       return true;
     } on Object catch (error) {
       if (detailContext.mounted) {
@@ -1623,7 +1598,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final sectionMap = {for (final s in _sections) s.id: s};
       final gradeMap = {for (final g in _grades) g.id: g};
       final parentMap = {for (final p in _parents) p.id: p};
-      final latest = await api.BackendApiClient.instance.getStudent(student.id);
+      final latest = await _repository.loadStudent(student.id);
       final detailed = _mapApiStudentToUi(
         latest,
         sectionMap,
@@ -1699,19 +1674,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                 ),
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
                 Expanded(
-                  child: _loading && _filteredStudents.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
-                      : _loadError != null && _filteredStudents.isEmpty
-                      ? Center(
-                          child: EmptyStateWidget(
-                            icon: Icons.cloud_off_rounded,
-                            title: 'Unable to load students',
-                            description: _loadError!,
-                            actionLabel: 'Retry',
-                            onAction: _loadData,
-                          ),
-                        )
-                      : _filteredStudents.isEmpty
+                  child: _filteredStudents.isEmpty
                       ? const Center(
                           child: EmptyStateWidget(
                             icon: Icons.school_outlined,
@@ -1725,16 +1688,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                           child: ListView.builder(
                             padding: const EdgeInsets.all(16),
                             itemCount:
-                                _displayedStudents.length +
-                                (_hasMore ? 1 : 0) +
-                                (_staleData ? 1 : 0),
+                                _displayedStudents.length + (_hasMore ? 1 : 0),
                             itemBuilder: (context, index) {
-                              if (_staleData && index == 0) {
-                                return _buildStaleDataBanner();
-                              }
-                              final studentIndex = _staleData
-                                  ? index - 1
-                                  : index;
+                              final studentIndex = index;
                               if (_hasMore &&
                                   studentIndex == _displayedStudents.length) {
                                 return _buildLoadMoreButton();
@@ -2360,7 +2316,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   // A label controller for each document in _documents (editable in the UI)
   final List<TextEditingController> _documentLabelControllers = [];
   bool _saving = false;
-  String? _error;
+  String? _formError;
   bool get _isEdit => widget.initialStudent != null;
 
   @override
@@ -2458,34 +2414,34 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
-      allowMultiple: true,
-      withData: kIsWeb,
     );
-    if (result == null || !mounted) return;
-    final newDocs = result.files
-        .where(
-          (file) =>
-              (file.path ?? '').trim().isNotEmpty ||
-              (file.bytes?.isNotEmpty ?? false),
-        )
-        .map((file) {
-          // Default label is filename without extension
-          final nameWithoutExt = file.name.contains('.')
-              ? file.name.substring(0, file.name.lastIndexOf('.'))
-              : file.name;
-          return (
-            doc: _StudentDocumentInput(
-              filePath: (file.path ?? '').trim().isEmpty
-                  ? null
-                  : file.path!.trim(),
-              fileBytes: file.bytes,
-              fileName: file.name,
-              docType: 'student_document',
-            ),
-            label: nameWithoutExt,
-          );
-        })
-        .toList();
+    if (!mounted) return;
+    final newDocs =
+        <
+          ({
+            _StudentDocumentInput doc,
+            String label,
+          })
+        >[];
+    for (final file in result) {
+      final bytes = await file.readAsBytes();
+      final path = (file.path ?? '').trim();
+      if (path.isEmpty && bytes.isEmpty) continue;
+      final nameWithoutExt = file.name.contains('.')
+          ? file.name.substring(0, file.name.lastIndexOf('.'))
+          : file.name;
+      newDocs.add(
+        (
+          doc: _StudentDocumentInput(
+            filePath: path.isEmpty ? null : path,
+            fileBytes: bytes.isEmpty ? null : bytes,
+            fileName: file.name,
+            docType: 'student_document',
+          ),
+          label: nameWithoutExt,
+        ),
+      );
+    }
     if (newDocs.isEmpty) return;
     setState(() {
       for (final item in newDocs) {
@@ -2522,13 +2478,13 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     if (!_formKey.currentState!.validate()) return;
     if (widget.sections.isEmpty || (_sectionId ?? '').isEmpty) {
       setState(
-        () =>
-            _error = 'Create a class / section before adding student accounts',
+        () => _formError =
+            'Create a class / section before adding student accounts',
       );
       return;
     }
     if (_systemIdCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'Student ID is required');
+      setState(() => _formError = 'Student ID is required');
       return;
     }
     if (_createParentLogin &&
@@ -2536,14 +2492,14 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
             _parentUsernameCtrl.text.trim().isEmpty ||
             _parentPasswordCtrl.text.trim().length < 8)) {
       setState(
-        () => _error =
+        () => _formError =
             'Father first name, username, and an 8+ character password are required',
       );
       return;
     }
     if (!_createParentLogin && (_parentUserId ?? '').trim().isEmpty) {
       setState(
-        () => _error =
+        () => _formError =
             'Select an existing parent login or create one before saving',
       );
       return;
@@ -2551,7 +2507,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
 
     setState(() {
       _saving = true;
-      _error = null;
+      _formError = null;
     });
 
     try {
@@ -2621,7 +2577,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error =
+        _formError =
             '${_isEdit ? 'Update' : 'Add'} student failed: ${_friendlyStudentSaveError(error)}';
       });
     }
@@ -2672,7 +2628,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       _parentPhoneCtrl.clear();
       _concessionAmountCtrl.clear();
       _concessionReasonCtrl.clear();
-      _error = null;
+      _formError = null;
     });
   }
 
@@ -3267,10 +3223,10 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                       ],
                     ),
 
-                    if (_error != null) ...[
+                    if (_formError != null) ...[
                       const SizedBox(height: 12),
                       Text(
-                        _error!,
+                        _formError!,
                         style: GoogleFonts.dmSans(
                           color: context.appTheme.error,
                           fontSize: 12,

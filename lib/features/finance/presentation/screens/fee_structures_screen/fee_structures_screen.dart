@@ -1,24 +1,51 @@
 /// Fee Structures — manage fee components per class/section.
 library;
 
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_widgets.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
+
+final class _FeeStructuresSnapshot {
+  const _FeeStructuresSnapshot({
+    required this.structures,
+    required this.academicYears,
+    required this.grades,
+    required this.sections,
+    required this.feeCategories,
+  });
+
+  final List<Map<String, dynamic>> structures;
+  final List<AcademicYearModel> academicYears;
+  final List<GradeModel> grades;
+  final List<SectionModel> sections;
+  final List<Map<String, dynamic>> feeCategories;
+}
 
 class FeeStructuresScreen extends StatefulWidget {
-  const FeeStructuresScreen({super.key});
+  final AdminFeesRepository? repository;
+
+  const FeeStructuresScreen({super.key, this.repository});
   @override
   State<FeeStructuresScreen> createState() => _FeeStructuresScreenState();
 }
 
 class _FeeStructuresScreenState extends State<FeeStructuresScreen> {
-  bool _loading = true;
-  String? _error;
+  AdminFeesRepository get _repository =>
+      widget.repository ?? ApiAdminFeesRepository.legacyDefault;
+
+  RepositoryState<_FeeStructuresSnapshot> _repositoryState =
+      const RepositoryState.loading();
   String _query = '';
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _structures = const [];
@@ -41,41 +68,67 @@ class _FeeStructuresScreenState extends State<FeeStructuresScreen> {
   }
 
   Future<void> _loadData() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getFeeStructures(),
-        api.getAcademicYears(),
-        api.getGrades(),
-        api.getSections(),
-        api.getFeeCategories(),
+        _repository.loadFeeStructures(),
+        _repository.loadAcademicYears(),
+        _repository.loadGrades(),
+        _repository.loadSections(),
+        _repository.loadFeeCategories(),
       ]);
       if (!mounted) return;
       final years = results[1] as List<AcademicYearModel>;
+      final structures = (results[0] as List)
+          .cast<Map<String, dynamic>>()
+          .map(normalizeFeeStructure)
+          .toList();
+      final grades = results[2] as List<GradeModel>;
+      final sections = results[3] as List<SectionModel>;
+      final feeCategories = (results[4] as List).cast<Map<String, dynamic>>();
       setState(() {
-        _structures = (results[0] as List)
-            .cast<Map<String, dynamic>>()
-            .map(normalizeFeeStructure)
-            .toList();
+        _structures = structures;
         _academicYears = years;
-        _grades = results[2] as List<GradeModel>;
-        _sections = results[3] as List<SectionModel>;
-        _feeCategories = (results[4] as List).cast<Map<String, dynamic>>();
+        _grades = grades;
+        _sections = sections;
+        _feeCategories = feeCategories;
         _selectedAcademicYearId = _selectedAcademicYearId.isEmpty
             ? (years.firstWhereOrNull((y) => y.isCurrent)?.id ??
                   (years.isEmpty ? '' : years.first.id))
             : _selectedAcademicYearId;
-        _loading = false;
+        _repositoryState = RepositoryState(
+          data: _FeeStructuresSnapshot(
+            structures: List.unmodifiable(structures),
+            academicYears: List.unmodifiable(years),
+            grades: List.unmodifiable(grades),
+            sections: List.unmodifiable(sections),
+            feeCategories: List.unmodifiable(feeCategories),
+          ),
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
-        _loading = false;
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: e);
       });
     }
   }
@@ -122,144 +175,140 @@ class _FeeStructuresScreenState extends State<FeeStructuresScreen> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? FeeEmptyState(
-              icon: Icons.cloud_off_rounded,
-              title: 'Error',
-              message: _error!,
-              actionLabel: 'Retry',
-              onAction: _loadData,
-            )
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                children: [
-                  if (_academicYears.isNotEmpty) ...[
-                    DropdownButtonFormField<String>(
-                      value: _selectedAcademicYearId.isEmpty
-                          ? null
-                          : _selectedAcademicYearId,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                        labelText: 'Academic Year',
-                      ),
-                      items: _academicYears
-                          .map(
-                            (y) => DropdownMenuItem(
-                              value: y.id,
-                              child: Text(y.yearLabel),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        setState(() => _selectedAcademicYearId = v ?? '');
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  FeeSearchBox(
-                    controller: _searchCtrl..text = _query,
-                    hint: 'Search structures',
-                    onChanged: (v) => setState(() => _query = v),
+      body: SchoolDeskRepositoryStateView<_FeeStructuresSnapshot>(
+        state: _repositoryState,
+        onRetry: _loadData,
+        emptyTitle: 'No fee structures',
+        emptyMessage: 'Create fee structures to start collecting fees.',
+        errorTitle: 'Fee structures unavailable',
+        data: (_) => RefreshIndicator(
+          onRefresh: _loadData,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              if (_academicYears.isNotEmpty) ...[
+                DropdownButtonFormField<String>(
+                  value: _selectedAcademicYearId.isEmpty
+                      ? null
+                      : _selectedAcademicYearId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    labelText: 'Academic Year',
                   ),
-                  const SizedBox(height: 12),
-                  if (_filtered.isEmpty)
-                    const FeeEmptyState(
-                      icon: Icons.assignment_outlined,
-                      title: 'No fee structures',
-                      message:
-                          'Create fee structures to start collecting fees.',
-                    ),
-                  for (final s in _filtered)
-                    FeeCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  items: _academicYears
+                      .map(
+                        (y) => DropdownMenuItem(
+                          value: y.id,
+                          child: Text(y.yearLabel),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    setState(() => _selectedAcademicYearId = v ?? '');
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+              FeeSearchBox(
+                controller: _searchCtrl..text = _query,
+                hint: 'Search structures',
+                onChanged: (v) => setState(() => _query = v),
+              ),
+              const SizedBox(height: 12),
+              if (_filtered.isEmpty)
+                const FeeEmptyState(
+                  icon: Icons.assignment_outlined,
+                  title: 'No fee structures',
+                  message: 'Create fee structures to start collecting fees.',
+                ),
+              for (final s in _filtered)
+                FeeCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Row(
-                            children: [
-                              const FeeIconBadge(
-                                icon: Icons.price_change_outlined,
-                                color: Color(0xFF2563EB),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      s['category'] ?? 'Fee',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${s['class']} - ${s['section']}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: context.appTheme.muted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              FeeStatusPill(
-                                label: money(numValue(s['amount'])),
-                                color: const Color(0xFF2563EB),
-                              ),
-                            ],
+                          const FeeIconBadge(
+                            icon: Icons.price_change_outlined,
+                            color: Color(0xFF2563EB),
                           ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              FeeInfoTile(
-                                label: 'Amount',
-                                value: money(numValue(s['amount'])),
-                              ),
-                              const SizedBox(width: 16),
-                              FeeInfoTile(
-                                label: 'Frequency',
-                                value: textValue(
-                                  s['frequency'],
-                                  fallback: 'term',
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s['category'] ?? 'Fee',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 14,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 16),
-                              FeeInfoTile(
-                                label: 'Due Day',
-                                value: '${s['due_day'] ?? 10}',
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: IconButton(
-                              tooltip: 'Delete',
-                              icon: const Icon(
-                                Icons.delete_outline_rounded,
-                                size: 20,
-                              ),
-                              color: context.appTheme.error,
-                              onPressed: () => _deleteStructure(s),
+                                Text(
+                                  '${s['class']} - ${s['section']}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: context.appTheme.muted,
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
+                          FeeStatusPill(
+                            label: money(numValue(s['amount'])),
+                            color: const Color(0xFF2563EB),
                           ),
                         ],
                       ),
-                    ),
-                ],
-              ),
-            ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          FeeInfoTile(
+                            label: 'Amount',
+                            value: money(numValue(s['amount'])),
+                          ),
+                          const SizedBox(width: 16),
+                          FeeInfoTile(
+                            label: 'Frequency',
+                            value: textValue(
+                              s['frequency'],
+                              fallback: 'term',
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          FeeInfoTile(
+                            label: 'Due Day',
+                            value: '${s['due_day'] ?? 10}',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          tooltip: 'Delete',
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 20,
+                          ),
+                          color: context.appTheme.error,
+                          onPressed: () => _deleteStructure(s),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   Future<void> _openCreateForm({Map<String, dynamic>? existing}) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.principalFeeStructureForm,
       arguments: AdminFeeStructureFormArgs(
@@ -303,7 +352,7 @@ class _FeeStructuresScreenState extends State<FeeStructuresScreen> {
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.deleteFeeStructure(
+      await _repository.deleteFeeStructure(
         id,
         removePending: true,
       );

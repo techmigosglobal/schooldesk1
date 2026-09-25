@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/features/shared/data/models/api_contracts.dart'
+import 'package:schooldesk1/core/network/models/api_contracts.dart'
     as contracts;
-import 'package:schooldesk1/features/shared/data/models/backend_models.dart'
+import 'package:schooldesk1/core/network/models/backend_models.dart'
     as backend_models;
 
 void main() {

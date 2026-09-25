@@ -4,13 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:schooldesk1/core/constants/app_constants.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
+import 'package:schooldesk1/modules/communication/data/api_event_post_repository.dart';
+import 'package:schooldesk1/modules/communication/domain/event_post_repository.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
 class LandingPageScreen extends StatefulWidget {
-  const LandingPageScreen({super.key});
+  final EventPostRepository? eventPostRepository;
+
+  const LandingPageScreen({super.key, this.eventPostRepository});
 
   @override
   State<LandingPageScreen> createState() => _LandingPageScreenState();
@@ -37,6 +44,14 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
 
   // Network-fetched landing post images (prepend to static assets when loaded)
   List<String> _networkImageUrls = const [];
+  RepositoryState<List<String>> _landingState =
+      const RepositoryState<List<String>>(
+        data: _slideAssets,
+        source: RepositorySource.remote,
+      );
+
+  EventPostRepository get _eventPostRepository =>
+      widget.eventPostRepository ?? ApiEventPostRepository.legacyDefault;
 
   @override
   void initState() {
@@ -49,7 +64,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
     final schoolId = await TokenStorageService.getSchoolId() ?? '';
     if (schoolId.isEmpty) return;
     try {
-      final posts = await BackendApiClient.instance.getLandingEventPosts(
+      final posts = await _eventPostRepository.loadLandingPosts(
         schoolId: schoolId,
       );
       final urls = <String>[];
@@ -64,11 +79,24 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
       if (urls.isEmpty || !mounted) return;
       setState(() {
         _networkImageUrls = urls;
+        _landingState = RepositoryState<List<String>>(
+          data: urls,
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         // Reset to first slide when new content loads
         _activeSlide = 0;
       });
-    } on Object catch (_) {
-      // Silent fail — static assets remain as fallback
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _landingState = RepositoryState<List<String>>(
+          data: _slideAssets,
+          source: RepositorySource.cache,
+          isStale: true,
+          error: error,
+        );
+      });
     }
   }
 
@@ -156,7 +184,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
 
   void _openLogin() {
     HapticFeedback.lightImpact();
-    Navigator.pushNamed(context, AppRoutes.principalLogin);
+    SchoolDeskNavigation.push(context, AppRoutes.principalLogin);
   }
 
   @override
@@ -191,22 +219,27 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                           padding: EdgeInsets.symmetric(
                             horizontal: isSmall ? 8 : 16,
                           ),
-                          child: _LandingCarousel(
-                            controller: _controller,
-                            slides: _allSlides,
-                            networkSlideCount: _networkImageUrls.length,
-                            onPageChanged: (index) =>
-                                setState(() => _activeSlide = index),
-                            onScrollStart: _pauseAutoSlide,
-                            onScrollEnd: _resumeAutoSlide,
-                            onPrevious: () => _goToSlide(
-                              (_activeSlide - 1 + _allSlides.length) %
-                                  _allSlides.length,
-                              manual: true,
-                            ),
-                            onNext: () => _goToSlide(
-                              (_activeSlide + 1) % _allSlides.length,
-                              manual: true,
+                          child: SchoolDeskRepositoryStateView<List<String>>(
+                            state: _landingState,
+                            onRetry: _fetchLandingPosts,
+                            errorTitle: 'Unable to load school updates',
+                            data: (_) => _LandingCarousel(
+                              controller: _controller,
+                              slides: _allSlides,
+                              networkSlideCount: _networkImageUrls.length,
+                              onPageChanged: (index) =>
+                                  setState(() => _activeSlide = index),
+                              onScrollStart: _pauseAutoSlide,
+                              onScrollEnd: _resumeAutoSlide,
+                              onPrevious: () => _goToSlide(
+                                (_activeSlide - 1 + _allSlides.length) %
+                                    _allSlides.length,
+                                manual: true,
+                              ),
+                              onNext: () => _goToSlide(
+                                (_activeSlide + 1) % _allSlides.length,
+                                manual: true,
+                              ),
                             ),
                           ),
                         ),

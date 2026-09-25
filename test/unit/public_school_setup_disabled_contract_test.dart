@@ -13,7 +13,7 @@ void main() {
     ).readAsStringSync();
     final authBarrel = File('lib/features/auth/auth.dart').readAsStringSync();
     final models = File(
-      'lib/features/shared/data/models/backend_models.dart',
+      'lib/core/network/models/backend_models.dart',
     ).readAsStringSync();
     final handler = File(
       'supabase/functions/api/handlers/schools.ts',

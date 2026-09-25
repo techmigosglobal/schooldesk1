@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
@@ -19,10 +19,20 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/modules/communication/data/api_notification_diagnostics_repository.dart';
+import 'package:schooldesk1/modules/communication/domain/notification_diagnostics_repository.dart';
 
 class NotificationCenterScreen extends StatefulWidget {
   final String role;
-  const NotificationCenterScreen({super.key, required this.role});
+  final NotificationDiagnosticsRepository? diagnosticsRepository;
+
+  const NotificationCenterScreen({
+    super.key,
+    required this.role,
+    this.diagnosticsRepository,
+  });
 
   @override
   State<NotificationCenterScreen> createState() =>
@@ -33,12 +43,18 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   NotificationService? _service;
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _markingAllRead = false;
   bool _runningPushDiagnostic = false;
-  String? _error;
   String _parentFilter = 'all';
   RealtimeRefreshSubscription? _realtimeSubscription;
+
+  NotificationDiagnosticsRepository get _diagnosticsRepository =>
+      widget.diagnosticsRepository ??
+      ApiNotificationDiagnosticsRepository.legacyDefault;
+
+  bool get _loading => _state.isLoading;
+  String? get _error => _state.error?.toString();
 
   bool get _isSchoolLeader => const {
     'principal',
@@ -65,9 +81,16 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   }
 
   Future<void> _init({bool forceRefresh = false}) async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
       _service = await NotificationService.getInstance();
@@ -78,9 +101,27 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         count: _service?.totalUnread,
       );
     } on Object catch (error) {
-      _error = error.toString();
+      if (!mounted) return;
+      setState(() {
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
+      });
+      return;
     }
-    if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() {
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
+      });
+    }
   }
 
   @override
@@ -156,81 +197,114 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         indicatorColor: context.appTheme.primary,
         tabs: _tabsForRole(widget.role),
       ),
-      body: ColoredBox(
-        color: bgColor,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
-                controller: _tabController,
-                children: widget.role.trim().toLowerCase() == 'teacher'
-                    ? [
-                        _buildList(
-                          null,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.homework,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.birthday,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.healthAlert,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.general,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                      ]
-                    : _isSchoolLeader
-                    ? [
-                        _buildList(
-                          null,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.pendingApproval,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.birthday,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.healthAlert,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        if (!_isCoordinator)
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: () => _init(forceRefresh: true),
+        data: (_) => ColoredBox(
+          color: bgColor,
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : TabBarView(
+                  controller: _tabController,
+                  children: widget.role.trim().toLowerCase() == 'teacher'
+                      ? [
+                          _buildList(
+                            null,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          _buildList(
+                            NotificationCategory.homework,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          _buildList(
+                            NotificationCategory.birthday,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          _buildList(
+                            NotificationCategory.healthAlert,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          _buildList(
+                            NotificationCategory.general,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                        ]
+                      : _isSchoolLeader
+                      ? [
+                          _buildList(
+                            null,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          _buildList(
+                            NotificationCategory.pendingApproval,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          _buildList(
+                            NotificationCategory.birthday,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          _buildList(
+                            NotificationCategory.healthAlert,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          if (!_isCoordinator)
+                            _buildList(
+                              NotificationCategory.feeDue,
+                              bgColor,
+                              surfaceColor,
+                              onSurfaceColor,
+                              mutedColor,
+                            ),
+                          _buildList(
+                            NotificationCategory.event,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                        ]
+                      : [
+                          _buildList(
+                            null,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          _buildList(
+                            NotificationCategory.pendingApproval,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
                           _buildList(
                             NotificationCategory.feeDue,
                             bgColor,
@@ -238,45 +312,16 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                             onSurfaceColor,
                             mutedColor,
                           ),
-                        _buildList(
-                          NotificationCategory.event,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                      ]
-                    : [
-                        _buildList(
-                          null,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.pendingApproval,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.feeDue,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
-                          NotificationCategory.general,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                      ],
-              ),
+                          _buildList(
+                            NotificationCategory.general,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                        ],
+                ),
+        ),
       ),
     );
   }
@@ -715,7 +760,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     setState(() => _runningPushDiagnostic = true);
     try {
       await PushNotificationService.instance.registerDeviceTokenIfPossible();
-      final report = await BackendApiClient.instance.runPushDiagnostics();
+      final report = await _diagnosticsRepository.runPushDiagnostics();
       if (!mounted) return;
       await showModalBottomSheet<void>(
         context: context,
@@ -765,9 +810,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       currentRole: widget.role,
     );
     if (target.route != AppRoutes.notificationCenter) {
-      await Navigator.of(
+      await SchoolDeskNavigation.push(
         context,
-      ).pushNamed(target.route, arguments: target.arguments);
+        target.route,
+        arguments: target.arguments,
+      );
     }
   }
 

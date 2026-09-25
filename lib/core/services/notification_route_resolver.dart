@@ -78,10 +78,19 @@ class NotificationRouteResolver {
       'admission_inquiry' => AppRoutes.admissionInquiries,
       _ => AppRoutes.notificationCenter,
     };
+    final safeRoute = _safeFallbackRoute(fallbackRoute, role);
     return NotificationRouteTarget(
-      route: fallbackRoute,
-      arguments: _argumentsFor(fallbackRoute, role, data),
+      route: safeRoute,
+      arguments: _argumentsFor(safeRoute, role, data),
     );
+  }
+
+  static String _safeFallbackRoute(String candidate, String role) {
+    if (_isRouteAllowed(candidate, role)) return candidate;
+    if (_isRouteAllowed(AppRoutes.notificationCenter, role)) {
+      return AppRoutes.notificationCenter;
+    }
+    return RouteAccessGuard.dashboardForRole(role) ?? AppRoutes.landingPage;
   }
 
   static bool _isRouteAllowed(String route, String role) {

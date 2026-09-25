@@ -10,6 +10,9 @@ void main() {
     final api = File(
       'lib/core/network/api_modules/attendance_api.dart',
     ).readAsStringSync();
+    final repository = File(
+      'lib/roles/teacher/data/api_teacher_attendance_repository.dart',
+    ).readAsStringSync();
 
     expect(screen, contains("label: 'Scan QR'"));
     expect(screen, contains("label: 'Refresh Status'"));
@@ -21,7 +24,7 @@ void main() {
     expect(screen, isNot(contains("label: 'Status'")));
     expect(screen, isNot(contains("label: 'Source'")));
 
-    expect(api, contains('getMyStaffAttendanceLog'));
+    expect(repository, contains('getMyStaffAttendanceLog'));
     expect(api, contains('Duration(days: days - 1)'));
     expect(api, contains('filtered.take(days).toList()'));
   });

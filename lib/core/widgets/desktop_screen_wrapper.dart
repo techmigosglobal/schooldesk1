@@ -261,8 +261,9 @@ class _BreadcrumbTrail extends StatelessWidget {
               color: i == items.length - 1
                   ? theme.colorScheme.primary
                   : tokens.textMuted,
-              fontWeight:
-                  i == items.length - 1 ? FontWeight.w700 : FontWeight.w500,
+              fontWeight: i == items.length - 1
+                  ? FontWeight.w700
+                  : FontWeight.w500,
             ),
           ),
           if (i < items.length - 1)

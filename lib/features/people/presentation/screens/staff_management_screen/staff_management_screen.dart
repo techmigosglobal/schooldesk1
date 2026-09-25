@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,6 +14,10 @@ import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/modules/people/data/api_staff_directory_repository.dart';
+import 'package:schooldesk1/modules/people/domain/staff_directory_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class StaffModel {
   final String id;
@@ -166,14 +169,22 @@ class _StaffAssignmentLabels {
 
 class StaffManagementScreen extends StatefulWidget {
   final String ownerRole;
+  final StaffDirectoryRepository? repository;
 
-  const StaffManagementScreen({super.key, this.ownerRole = 'principal'});
+  const StaffManagementScreen({
+    super.key,
+    this.ownerRole = 'principal',
+    this.repository,
+  });
 
   @override
   State<StaffManagementScreen> createState() => _StaffManagementScreenState();
 }
 
 class _StaffManagementScreenState extends State<StaffManagementScreen> {
+  StaffDirectoryRepository get _repository =>
+      widget.repository ?? ApiStaffDirectoryRepository.legacyDefault;
+
   static const int _pageSize = 20;
   static const Color _background = Color(0xFFEFF8FD);
 
@@ -191,7 +202,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   List<api.SectionModel> _sections = const [];
   List<Map<String, dynamic>> _subjects = const [];
   List<Map<String, dynamic>> _staffSubjects = const [];
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _staleData = false;
@@ -231,15 +242,25 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     final generation = ++_queryGeneration;
     final requestedPage = resetPage ? 1 : _currentPage + 1;
     if (mounted) {
+      final previous = _state.data;
       setState(() {
-        _loading = resetPage && _allStaff.isEmpty;
+        _state = resetPage
+            ? RepositoryState.loading(
+                data: previous,
+                source: previous == null
+                    ? RepositorySource.empty
+                    : RepositorySource.cache,
+                isStale: previous != null,
+                isRefreshing: previous != null,
+              )
+            : _state;
         _loadingMore = !resetPage;
         _loadError = null;
         if (resetPage) _staleData = false;
       });
     }
     try {
-      final response = await api.BackendApiClient.instance.getStaff(
+      final response = await _repository.loadStaff(
         search: _searchQuery,
         status: _serverStatusFilter(),
         designation: _selectedDesignation == 'All'
@@ -307,7 +328,10 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         }
         _currentPage = response.page;
         _hasMore = response.hasMore && response.data.isNotEmpty;
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
         _loadingMore = false;
         _staleData = false;
         _loadError = null;
@@ -315,7 +339,14 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     } on Object catch (error) {
       if (!mounted || generation != _queryGeneration) return;
       setState(() {
-        _loading = false;
+        _state = _allStaff.isEmpty
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: _state.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
         _loadingMore = false;
         _loadError = error.toString();
         _staleData = _allStaff.isNotEmpty;
@@ -335,53 +366,13 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   }
 
   Future<_StaffSupportData> _loadStaffSupportData() async {
-    var grades = <api.GradeModel>[];
-    var sections = <api.SectionModel>[];
-    var subjects = <Map<String, dynamic>>[];
-    var staffSubjects = <Map<String, dynamic>>[];
-    var users = <api.UserAccountModel>[];
-
-    try {
-      grades = await api.BackendApiClient.instance.getGrades();
-    } on Object catch (_) {
-      grades = const [];
-    }
-    try {
-      sections = await api.BackendApiClient.instance.getSections();
-    } on Object catch (_) {
-      sections = const [];
-    }
-    try {
-      subjects = await api.BackendApiClient.instance.getRawList(
-        '/subjects',
-        queryParameters: const {'page': 1, 'page_size': 20},
-      );
-    } on Object catch (_) {
-      subjects = const [];
-    }
-    try {
-      staffSubjects = await api.BackendApiClient.instance.getRawList(
-        '/staff-subjects',
-        queryParameters: const {'page': 1, 'page_size': 20},
-      );
-    } on Object catch (_) {
-      staffSubjects = const [];
-    }
-    try {
-      users = (await api.BackendApiClient.instance.getUsers(
-        page: 1,
-        pageSize: 20,
-      )).data;
-    } on Object catch (_) {
-      users = const [];
-    }
-
+    final support = await _repository.loadSupportData();
     return _StaffSupportData(
-      grades: grades,
-      sections: sections,
-      subjects: subjects,
-      staffSubjects: staffSubjects,
-      users: users,
+      grades: support.grades,
+      sections: support.sections,
+      subjects: support.subjects,
+      staffSubjects: support.staffSubjects,
+      users: support.users,
     );
   }
 
@@ -685,7 +676,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         if (_isAdminOwner) {
           await _submitStaffRemovalApproval(staff);
         } else {
-          await api.BackendApiClient.instance.deleteStaff(staff.id);
+          await _repository.deleteStaff(staff.id);
         }
         removed++;
       } on Object catch (_) {
@@ -736,81 +727,86 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
               child: const Icon(Icons.add_rounded, size: 30),
             ),
       bottomNavigationBar: const PrincipalShellBottomBar(),
-      body: SafeArea(
-        child: RefreshIndicator(
-          color: const Color(0xFF0887F2),
-          onRefresh: _loadStaffFromBackend,
-          child: CustomScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            slivers: [
-              SliverToBoxAdapter(child: _buildHeader(context)),
-              SliverToBoxAdapter(child: _buildSearchAndFilters()),
-              if (_loading && _filteredStaff.isEmpty)
-                const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_loadError != null && _filteredStaff.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: EmptyStateWidget(
-                      icon: Icons.cloud_off_rounded,
-                      title: 'Unable to load staff',
-                      description: _loadError!,
-                      actionLabel: 'Retry',
-                      onAction: _loadStaffFromBackend,
-                    ),
-                  ),
-                )
-              else if (_filteredStaff.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: EmptyStateWidget(
-                      icon: Icons.co_present_outlined,
-                      title: 'No staff found',
-                      description:
-                          'Adjust your search or filters to find staff.',
-                    ),
-                  ),
-                )
-              else
-                SliverMainAxisGroup(
-                  slivers: [
-                    if (_staleData)
-                      SliverToBoxAdapter(child: _buildStaleDataBanner()),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-                      sliver: SliverList.builder(
-                        itemCount: _displayedStaff.length + (_hasMore ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == _displayedStaff.length) {
-                            return _buildLoadMoreButton();
-                          }
-                          final staff = _displayedStaff[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 13),
-                            child: _TeacherDirectoryCard(
-                              staff: staff,
-                              imageUrl: _absoluteImageUrl(staff.photoUrl),
-                              selected: _selectedStaffIds.contains(staff.id),
-                              onTap: () => _selectionMode
-                                  ? _toggleStaffSelection(staff)
-                                  : _openStaffDetail(staff),
-                              onLongPress: _isAdminOwner
-                                  ? () {}
-                                  : () => _toggleStaffSelection(staff),
-                            ),
-                          );
-                        },
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadStaffFromBackend,
+        data: (_) => SafeArea(
+          child: RefreshIndicator(
+            color: const Color(0xFF0887F2),
+            onRefresh: _loadStaffFromBackend,
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              slivers: [
+                SliverToBoxAdapter(child: _buildHeader(context)),
+                SliverToBoxAdapter(child: _buildSearchAndFilters()),
+                if (_state.isLoading && _filteredStaff.isEmpty)
+                  const SliverFillRemaining(
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_loadError != null && _filteredStaff.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: EmptyStateWidget(
+                        icon: Icons.cloud_off_rounded,
+                        title: 'Unable to load staff',
+                        description: _loadError!,
+                        actionLabel: 'Retry',
+                        onAction: _loadStaffFromBackend,
                       ),
                     ),
-                  ],
-                ),
-            ],
+                  )
+                else if (_filteredStaff.isEmpty)
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: EmptyStateWidget(
+                        icon: Icons.co_present_outlined,
+                        title: 'No staff found',
+                        description:
+                            'Adjust your search or filters to find staff.',
+                      ),
+                    ),
+                  )
+                else
+                  SliverMainAxisGroup(
+                    slivers: [
+                      if (_staleData)
+                        SliverToBoxAdapter(child: _buildStaleDataBanner()),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+                        sliver: SliverList.builder(
+                          itemCount:
+                              _displayedStaff.length + (_hasMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == _displayedStaff.length) {
+                              return _buildLoadMoreButton();
+                            }
+                            final staff = _displayedStaff[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 13),
+                              child: _TeacherDirectoryCard(
+                                staff: staff,
+                                imageUrl: _absoluteImageUrl(staff.photoUrl),
+                                selected: _selectedStaffIds.contains(staff.id),
+                                onTap: () => _selectionMode
+                                    ? _toggleStaffSelection(staff)
+                                    : _openStaffDetail(staff),
+                                onLongPress: _isAdminOwner
+                                    ? () {}
+                                    : () => _toggleStaffSelection(staff),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1100,7 +1096,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     var staffId = input.staffId ?? '';
 
     if (input.staffId == null) {
-      final staff = await api.BackendApiClient.instance.createStaff(
+      final staff = await _repository.createStaff(
         firstName: firstName,
         lastName: lastName,
         staffCode: input.employeeId,
@@ -1143,7 +1139,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         );
         return;
       }
-      await api.BackendApiClient.instance.updateStaff(
+      await _repository.updateStaff(
         staffId,
         firstName: firstName,
         lastName: lastName,
@@ -1163,7 +1159,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
 
     if ((input.photoPath ?? '').isNotEmpty ||
         (input.photoBytes?.isNotEmpty ?? false)) {
-      await api.BackendApiClient.instance.uploadStaffPhoto(
+      await _repository.uploadStaffPhoto(
         staffId: staffId,
         filePath: input.photoPath,
         fileBytes: input.photoBytes,
@@ -1172,7 +1168,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     }
 
     for (final document in input.documents) {
-      await api.BackendApiClient.instance.uploadStaffDocument(
+      await _repository.uploadStaffDocument(
         staffId: staffId,
         filePath: document.filePath,
         fileBytes: document.fileBytes,
@@ -1201,7 +1197,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       throw Exception('Backend staff ID is missing for approval request');
     }
     final afterSnapshot = _staffApprovalPayload(input);
-    final request = await api.BackendApiClient.instance.createApprovalRequest(
+    final request = await _repository.createApprovalRequest(
       module: 'staff',
       operationType: 'update',
       entityType: 'staff',
@@ -1216,7 +1212,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
 
   Future<void> _submitStaffRemovalApproval(StaffModel staff) async {
     final snapshot = staff.toMap();
-    final request = await api.BackendApiClient.instance.createApprovalRequest(
+    final request = await _repository.createApprovalRequest(
       module: 'staff',
       operationType: 'delete',
       entityType: 'staff',
@@ -1240,7 +1236,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     if (approvalId.isEmpty) {
       throw Exception('Approval request ID missing from backend response');
     }
-    await api.BackendApiClient.instance.submitApprovalRequest(approvalId);
+    await _repository.submitApprovalRequest(approvalId);
   }
 
   StaffModel? _staffById(String staffId) {
@@ -1377,7 +1373,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       final id = _stringValue(row['id']);
       if (id.isEmpty) continue;
       if (!desiredKeys.contains(_assignmentKeyFromRow(row))) {
-        await api.BackendApiClient.instance.deleteRaw('/staff-subjects/$id');
+        await _repository.deleteStaffSubject(id);
       }
     }
 
@@ -1393,7 +1389,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       if (assignment.sectionId.isNotEmpty) {
         payload['section_id'] = assignment.sectionId;
       }
-      await api.BackendApiClient.instance.createRaw('/staff-subjects', payload);
+      await _repository.createStaffSubject(payload);
     }
   }
 
@@ -1407,7 +1403,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     required String? classTeacherId,
     required String? coTeacherId,
   }) async {
-    await api.BackendApiClient.instance.updateRaw('/sections/${section.id}', {
+    await _repository.updateSection(section.id, {
       'grade_id': section.gradeId,
       'academic_year_id': section.academicYearId,
       'section_name': section.sectionName,
@@ -1539,7 +1535,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       if (_isAdminOwner) {
         await _submitStaffRemovalApproval(staff);
       } else {
-        await api.BackendApiClient.instance.deleteStaff(staff.id);
+        await _repository.deleteStaff(staff.id);
       }
       if (!mounted) return;
       _showStaffMessage(
@@ -2016,7 +2012,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
   bool _loginEnabled = true;
   bool _passwordVisible = false;
   bool _saving = false;
-  String? _error;
+  String? _formError;
 
   bool get _isEdit => widget.initialStaff != null;
 
@@ -2104,29 +2100,24 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
 
   Future<void> _pickDocuments() async {
     final result = await FilePicker.pickFiles(
-      allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
-      withData: kIsWeb,
     );
-    if (result == null || !mounted) return;
-    final selected = result.files
-        .where(
-          (file) =>
-              (file.path ?? '').trim().isNotEmpty ||
-              (file.bytes?.isNotEmpty ?? false),
-        )
-        .map(
-          (file) => _StaffDocumentInput(
-            documentType: _documentType,
-            filePath: (file.path ?? '').trim().isEmpty
-                ? null
-                : file.path!.trim(),
-            fileBytes: file.bytes,
-            fileName: file.name,
-          ),
-        )
-        .toList();
+    if (!mounted) return;
+    final selected = <_StaffDocumentInput>[];
+    for (final file in result) {
+      final bytes = await file.readAsBytes();
+      final path = (file.path ?? '').trim();
+      if (path.isEmpty && bytes.isEmpty) continue;
+      selected.add(
+        _StaffDocumentInput(
+          documentType: _documentType,
+          filePath: path.isEmpty ? null : path,
+          fileBytes: bytes.isEmpty ? null : bytes,
+          fileName: file.name,
+        ),
+      );
+    }
     if (selected.isEmpty) return;
     setState(() => _documents.addAll(selected));
   }
@@ -2137,28 +2128,28 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
         ? _selectedSubjectId
         : null;
     if (sectionId == null) {
-      setState(() => _error = 'Select class and section before adding');
+      setState(() => _formError = 'Select class and section before adding');
       return;
     }
     final section = _sectionById(sectionId);
     if (section == null) {
-      setState(() => _error = 'Selected section is not available');
+      setState(() => _formError = 'Selected section is not available');
       return;
     }
     if (_selectedAssignmentRole == 'subject' &&
         (subjectId == null || subjectId.isEmpty)) {
       setState(
-        () => _error = 'Select a subject for a subject-teacher assignment',
+        () => _formError = 'Select a subject for a subject-teacher assignment',
       );
       return;
     }
     final assignmentKey = '$sectionId|${subjectId ?? _selectedAssignmentRole}';
     if (_assignments.any((item) => item.key == assignmentKey)) {
-      setState(() => _error = 'This section assignment already exists');
+      setState(() => _formError = 'This section assignment already exists');
       return;
     }
     setState(() {
-      _error = null;
+      _formError = null;
       _assignments.add(
         _StaffAssignmentInput(
           gradeId: section.gradeId,
@@ -2184,25 +2175,27 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
     if (_joiningDate == null) {
-      setState(() => _error = 'Joining date is required');
+      setState(() => _formError = 'Joining date is required');
       return;
     }
     if (_dob != null && _joiningDate!.isBefore(_dob!)) {
-      setState(() => _error = 'Joining date cannot be before date of birth');
+      setState(
+        () => _formError = 'Joining date cannot be before date of birth',
+      );
       return;
     }
     if (_dob != null && _joiningDate!.difference(_dob!).inDays < 18 * 365) {
-      setState(() => _error = 'Staff member must be at least 18 years old');
+      setState(() => _formError = 'Staff member must be at least 18 years old');
       return;
     }
     if (_loginEnabled && _usernameCtrl.text.trim().isEmpty) {
       setState(
-        () => _error = 'Username is required when login access is enabled',
+        () => _formError = 'Username is required when login access is enabled',
       );
       return;
     }
     if (_loginEnabled && _passwordCtrl.text.trim().length < 6) {
-      setState(() => _error = 'Password must be at least 6 characters');
+      setState(() => _formError = 'Password must be at least 6 characters');
       return;
     }
     final assignmentRoles = <String, Set<String>>{};
@@ -2218,20 +2211,20 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
           roles.contains('class_teacher') && roles.contains('co_teacher'),
     )) {
       setState(
-        () => _error =
+        () => _formError =
             'A teacher cannot be both class teacher and co-teacher in the same section',
       );
       return;
     }
     final designation = _resolvedDesignation;
     if (designation == null) {
-      setState(() => _error = 'Designation is required');
+      setState(() => _formError = 'Designation is required');
       return;
     }
 
     setState(() {
       _saving = true;
-      _error = null;
+      _formError = null;
     });
 
     try {
@@ -2275,7 +2268,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = _isAdminOwner
+        _formError = _isAdminOwner
             ? 'Staff request submission failed: ${_friendlyError(error)}'
             : '${_isEdit ? 'Update' : 'Add'} staff failed: ${_friendlyError(error)}';
       });
@@ -2313,10 +2306,10 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
                           ? 'Staff profile changes are submitted to the Principal approval queue.'
                           : 'Staff profile, login access, assignments, and documents will sync with the central academic server on submission.',
                     ),
-                    if (_error != null) ...[
+                    if (_formError != null) ...[
                       const SizedBox(height: 12),
                       Text(
-                        _error!,
+                        _formError!,
                         style: GoogleFonts.dmSans(
                           color: context.appTheme.error,
                           fontSize: 12,
@@ -2902,7 +2895,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       );
       _loginEnabled = !_isEdit;
       _employeeCtrl.text = staff?.employeeId ?? '';
-      _error = null;
+      _formError = null;
     });
   }
 

@@ -2,12 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/modules/people/data/repositories/api_approval_repository.dart';
+import 'package:schooldesk1/modules/people/domain/repositories/approval_repository.dart';
 
 class PrincipalAuditLogsScreen extends StatefulWidget {
-  const PrincipalAuditLogsScreen({super.key});
+  final String role;
+  final ApprovalRepository? repository;
+
+  const PrincipalAuditLogsScreen({
+    super.key,
+    this.role = 'principal',
+    this.repository,
+  });
 
   @override
   State<PrincipalAuditLogsScreen> createState() =>
@@ -20,9 +30,12 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
   String _module = '';
   String _actorRole = '';
   String _eventType = '';
-  bool _loading = true;
-  String? _error;
+  RepositoryState<List<Map<String, dynamic>>> _repositoryState =
+      const RepositoryState.loading();
   List<Map<String, dynamic>> _logs = const [];
+
+  ApprovalRepository get _repository =>
+      widget.repository ?? ApiApprovalRepository.legacyDefault;
 
   @override
   void initState() {
@@ -38,44 +51,61 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
   }
 
   Future<void> _loadLogs() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
-      final logs = await BackendApiClient.instance.getRawList(
-        '/audit-logs',
-        queryParameters: {
-          'page_size': 50,
-          if (_module.isNotEmpty) 'module': _module,
-          if (_userController.text.trim().isNotEmpty)
-            'actor': _userController.text.trim(),
-          if (_actorRole.isNotEmpty) 'actor_role': _actorRole,
-          if (_eventType.isNotEmpty) 'event_type': _eventType,
-          if (_searchController.text.trim().isNotEmpty)
-            'search': _searchController.text.trim(),
-        },
+      final logs = await _repository.loadAuditLog(
+        pageSize: 50,
+        module: _module,
+        actor: _userController.text.trim(),
+        actorRole: _actorRole,
+        eventType: _eventType,
+        search: _searchController.text.trim(),
+        currentUserOnly: false,
       );
       if (!mounted) return;
-      final isPrincipal =
-          BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
-          'principal';
-      setState(
-        () => _logs = isPrincipal
-            ? logs
-                  .where(
-                    (log) =>
-                        '${log['actor_role'] ?? ''}'.trim().toLowerCase() !=
-                        'super_admin',
-                  )
-                  .toList()
-            : logs,
-      );
+      final isPrincipal = widget.role.trim().toLowerCase() == 'principal';
+      final filtered = isPrincipal
+          ? logs
+                .where(
+                  (log) =>
+                      '${log['actor_role'] ?? ''}'.trim().toLowerCase() !=
+                      'super_admin',
+                )
+                .toList()
+          : logs;
+      setState(() {
+        _logs = filtered;
+        _repositoryState = RepositoryState(
+          data: List<Map<String, dynamic>>.unmodifiable(filtered),
+          source: RepositorySource.remote,
+          phase: filtered.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
+      });
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      setState(() {
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
+      });
     }
   }
 
@@ -95,31 +125,30 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
           onPressed: _loadLogs,
         ),
       ],
-      body: RefreshIndicator(
-        onRefresh: _loadLogs,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildFilters(),
-            const SizedBox(height: 16),
-            if (_loading)
-              const Center(child: CircularProgressIndicator())
-            else if (_error != null)
-              _StateCard(
-                icon: Icons.error_outline_rounded,
-                title: 'Unable to load audit logs',
-                message: _error!,
-              )
-            else if (_logs.isEmpty)
-              const _StateCard(
-                icon: Icons.history_rounded,
-                title: 'No audit logs found',
-                message: 'Try another module or user filter.',
-              )
-            else
-              ..._logs.map(_AuditLogTile.new),
-          ],
-        ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: _buildFilters(),
+          ),
+          Expanded(
+            child: SchoolDeskRepositoryStateView<List<Map<String, dynamic>>>(
+              state: _repositoryState,
+              onRetry: _loadLogs,
+              emptyTitle: 'No audit logs found',
+              emptyMessage: 'Try another module or user filter.',
+              errorTitle: 'Unable to load audit logs',
+              data: (_) => RefreshIndicator(
+                onRefresh: _loadLogs,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                  children: _logs.map(_AuditLogTile.new).toList(),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -404,34 +433,4 @@ class _AuditLogPresentation {
 
   static String _sentenceCase(String value) =>
       value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';
-}
-
-class _StateCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-
-  const _StateCard({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Icon(icon, size: 42),
-            const SizedBox(height: 12),
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 6),
-            Text(message, textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
-  }
 }

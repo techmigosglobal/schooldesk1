@@ -66,7 +66,10 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
       final school = results[0] as Map<String, dynamic>;
       final profile = results[1] as UserResponse;
       setState(() {
-        _schoolName = 'Arish Ville Preschool';
+        _schoolName = safeText(
+          school['organization_name'] ?? school['name'],
+          fallback: 'School',
+        );
         _schoolSubtitle = safeText(
           school['affiliation_board'],
           fallback: safeText(

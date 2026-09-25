@@ -114,16 +114,11 @@ extension BackendEventsApi on BackendApiClient {
       if (academicYearId != null && academicYearId.trim().isNotEmpty) {
         filters['academic_year_id'] = academicYearId.trim();
       }
-      // The generated client remains the real-user transport contract. Demo
-      // sessions use BackendApiClient's intercepted Dio because the generated
-      // client owns a separate Dio instance.
-      final pageResult = DemoLocalApiService.instance.isActive
-          ? _eventPageFromPayload(
-              _asMap((await _get('/events', queryParameters: filters)).data),
-              page: page,
-              pageSize: pageSize,
-            )
-          : await _generatedEventPage(filters, page: page, pageSize: pageSize);
+      final pageResult = await _generatedEventPage(
+        filters,
+        page: page,
+        pageSize: pageSize,
+      );
       return PaginatedList<Map<String, dynamic>>(
         data: pageResult.data.map((event) {
           final normalized = Map<String, dynamic>.from(event);
@@ -154,29 +149,6 @@ extension BackendEventsApi on BackendApiClient {
       page: 1,
       pageSize: 100,
     )).data;
-  }
-
-  PaginatedList<Map<String, dynamic>> _eventPageFromPayload(
-    Map<String, dynamic> envelope, {
-    required int page,
-    required int pageSize,
-  }) {
-    final raw = envelope['data'];
-    final payload = raw is Map ? _asMap(raw) : <String, dynamic>{};
-    final rows = _asListMap(payload['data'] ?? payload['items'] ?? raw);
-    final total = _asInt(
-      payload['total'] ?? envelope['total'],
-      fallback: rows.length,
-    );
-    return PaginatedList<Map<String, dynamic>>(
-      data: rows,
-      total: total,
-      page: _asInt(payload['page'] ?? envelope['page'], fallback: page),
-      pageSize: _asInt(
-        payload['page_size'] ?? envelope['page_size'],
-        fallback: pageSize,
-      ),
-    );
   }
 
   Future<PaginatedList<Map<String, dynamic>>> _generatedEventPage(
@@ -237,11 +209,14 @@ extension BackendEventsApi on BackendApiClient {
     return getRawMap('/event-posts/$safeId');
   }
 
-  Future<List<Map<String, dynamic>>> getGalleryEventPosts() async {
+  Future<List<Map<String, dynamic>>> getGalleryEventPosts({
+    bool forceRefresh = false,
+  }) async {
     try {
       return (await _getEventPostsPage(
         '/event-posts/gallery',
         pageSize: 100,
+        forceRefresh: forceRefresh,
       )).data;
     } on DioException catch (e) {
       throw _handleError(e);
@@ -281,11 +256,17 @@ extension BackendEventsApi on BackendApiClient {
     String path, {
     int page = 1,
     int pageSize = 20,
+    bool forceRefresh = false,
   }) async {
     try {
       final response = await _get(
         path,
-        queryParameters: {'page': page, 'page_size': pageSize},
+        queryParameters: {
+          'page': page,
+          'page_size': pageSize,
+          if (forceRefresh)
+            'refresh_nonce': DateTime.now().millisecondsSinceEpoch,
+        },
       );
       final envelope = _asMap(response.data);
       if (envelope['success'] == false) {

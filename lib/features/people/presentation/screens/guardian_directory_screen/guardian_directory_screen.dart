@@ -7,10 +7,14 @@ import 'package:image_picker/image_picker.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
+import 'package:schooldesk1/core/network/models/backend_models.dart' as api;
+import 'package:schooldesk1/modules/people/data/api_guardian_directory_repository.dart';
+import 'package:schooldesk1/modules/people/domain/guardian_directory_repository.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 
@@ -24,8 +28,13 @@ String _parentFacingRelationship(String value) {
 
 class GuardianDirectoryScreen extends StatefulWidget {
   final String ownerRole;
+  final GuardianDirectoryRepository? repository;
 
-  const GuardianDirectoryScreen({super.key, this.ownerRole = 'principal'});
+  const GuardianDirectoryScreen({
+    super.key,
+    this.ownerRole = 'principal',
+    this.repository,
+  });
 
   @override
   State<GuardianDirectoryScreen> createState() =>
@@ -33,6 +42,7 @@ class GuardianDirectoryScreen extends StatefulWidget {
 }
 
 class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
+  late final GuardianDirectoryRepository _repository;
   static const Color _background = Color(0xFFEFF8FD);
   static const int _pageSize = 20;
 
@@ -46,11 +56,9 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   String _searchQuery = '';
   String _selectedStatus = 'All';
   String _selectedRelationship = 'All';
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _loadingMore = false;
   bool _hasMore = true;
-  bool _staleData = false;
-  String? _loadError;
   int _currentPage = 0;
   int _queryGeneration = 0;
   Timer? _searchDebounce;
@@ -61,6 +69,8 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   @override
   void initState() {
     super.initState();
+    _repository =
+        widget.repository ?? ApiGuardianDirectoryRepository.legacyDefault;
     _loadData();
     _scrollController.addListener(_onScroll);
   }
@@ -82,16 +92,22 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   Future<void> _loadData({bool resetPage = true}) async {
     final generation = ++_queryGeneration;
     final requestedPage = resetPage ? 1 : _currentPage + 1;
+    final previous = _state.data;
     if (mounted) {
       setState(() {
-        _loading = resetPage && _allGuardians.isEmpty;
+        _state = RepositoryState<Object>.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
         _loadingMore = !resetPage;
-        _loadError = null;
-        if (resetPage) _staleData = false;
       });
     }
     try {
-      final response = await api.BackendApiClient.instance.getGuardianDirectory(
+      final response = await _repository.loadGuardians(
         search: _searchQuery,
         status: _selectedStatus == 'All' ? null : _selectedStatus.toLowerCase(),
         page: requestedPage,
@@ -131,18 +147,24 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         _displayedGuardians = List<GuardianDirectoryEntry>.from(_allGuardians);
         _currentPage = response.page;
         _hasMore = response.hasMore && response.data.isNotEmpty;
-        _loading = false;
         _loadingMore = false;
-        _loadError = null;
-        _staleData = false;
+        _state = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted || generation != _queryGeneration) return;
       setState(() {
-        _loading = false;
         _loadingMore = false;
-        _loadError = error.toString();
-        _staleData = _allGuardians.isNotEmpty;
+        _state = previous == null
+            ? RepositoryState<Object>.error(error: error)
+            : RepositoryState<Object>(
+                data: Object(),
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
       });
     }
   }
@@ -379,81 +401,67 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       ),
       bottomNavigationBar: const PrincipalShellBottomBar(),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: const Color(0xFF0887F2),
-          onRefresh: _loadData,
-          child: CustomScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            slivers: [
-              SliverToBoxAdapter(child: _buildHeader(context)),
-              SliverToBoxAdapter(child: _buildSearchAndFilters()),
-              if (_loading && _filteredGuardians.isEmpty)
-                const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_loadError != null && _filteredGuardians.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: EmptyStateWidget(
-                      icon: Icons.cloud_off_rounded,
-                      title: 'Unable to load parents',
-                      description: _loadError!,
-                      actionLabel: 'Retry',
-                      onAction: _loadData,
-                    ),
-                  ),
-                )
-              else if (_filteredGuardians.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: EmptyStateWidget(
-                      icon: Icons.family_restroom_rounded,
-                      title: 'No parents found',
-                      description:
-                          'Adjust your search or filters to find parents.',
-                    ),
-                  ),
-                )
-              else
-                SliverMainAxisGroup(
-                  slivers: [
-                    if (_staleData)
-                      SliverToBoxAdapter(child: _buildStaleDataBanner()),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-                      sliver: SliverList.builder(
-                        itemCount:
-                            _displayedGuardians.length + (_hasMore ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == _displayedGuardians.length) {
-                            return _buildLoadMoreButton();
-                          }
-                          final guardian = _displayedGuardians[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 13),
-                            child: _GuardianDirectoryCard(
-                              guardian: guardian,
-                              selected: _selectedGuardianIds.contains(
-                                guardian.id,
-                              ),
-                              onTap: () => _selectionMode
-                                  ? _toggleGuardianSelection(guardian)
-                                  : _openGuardianDetail(guardian),
-                              onLongPress: () =>
-                                  _toggleGuardianSelection(guardian),
-                            ),
-                          );
-                        },
+        child: SchoolDeskRepositoryStateView<Object>(
+          state: _state,
+          onRetry: _loadData,
+          errorTitle: 'Unable to load parents',
+          data: (_) => RefreshIndicator(
+            color: const Color(0xFF0887F2),
+            onRefresh: _loadData,
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              slivers: [
+                SliverToBoxAdapter(child: _buildHeader(context)),
+                SliverToBoxAdapter(child: _buildSearchAndFilters()),
+                if (_filteredGuardians.isEmpty)
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: EmptyStateWidget(
+                        icon: Icons.family_restroom_rounded,
+                        title: 'No parents found',
+                        description:
+                            'Adjust your search or filters to find parents.',
                       ),
                     ),
-                  ],
-                ),
-            ],
+                  )
+                else
+                  SliverMainAxisGroup(
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+                        sliver: SliverList.builder(
+                          itemCount:
+                              _displayedGuardians.length + (_hasMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == _displayedGuardians.length) {
+                              return _buildLoadMoreButton();
+                            }
+                            final guardian = _displayedGuardians[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 13),
+                              child: _GuardianDirectoryCard(
+                                guardian: guardian,
+                                selected: _selectedGuardianIds.contains(
+                                  guardian.id,
+                                ),
+                                onTap: () => _selectionMode
+                                    ? _toggleGuardianSelection(guardian)
+                                    : _openGuardianDetail(guardian),
+                                onLongPress: () =>
+                                    _toggleGuardianSelection(guardian),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -633,39 +641,6 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     );
   }
 
-  Widget _buildStaleDataBanner() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(22, 8, 22, 0),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.cloud_off_rounded,
-            size: 18,
-            color: Colors.orange.shade900,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Showing cached parent data. ${_loadError ?? 'Refresh failed.'}',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Colors.orange.shade900,
-              ),
-            ),
-          ),
-          TextButton(onPressed: _loadData, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-
   Future<void> _chooseFilter({
     required String title,
     required List<String> options,
@@ -731,7 +706,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   Future<void> _ensureGuardianFormStudents() async {
     if (_students.isNotEmpty) return;
     try {
-      final response = await api.BackendApiClient.instance.getStudents(
+      final response = await _repository.loadStudents(
         page: 1,
         pageSize: _pageSize,
       );
@@ -744,26 +719,23 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   }
 
   Future<void> _saveGuardian(_GuardianProfileInput input) async {
-    final client = api.BackendApiClient.instance;
     final bool isEdit = input.guardianId != null;
     late api.UserAccountModel parent;
 
     if (isEdit) {
-      parent = await client.updateUser(
+      parent = await _repository.updateParent(
         input.guardianId!,
         username: input.username,
         password: input.password.trim().isEmpty ? null : input.password.trim(),
-        role: 'Parent',
         fullName: input.fullName,
         email: input.email,
         phone: input.phone,
         isActive: input.isActive,
       );
     } else {
-      parent = await client.createUser(
+      parent = await _repository.createParent(
         username: input.username,
         password: input.password,
-        role: 'Parent',
         fullName: input.fullName,
         email: input.email,
         phone: input.phone,
@@ -779,7 +751,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         preset: ImageUploadPreset.portrait,
         mimeType: 'image/jpeg',
       );
-      await client.uploadUserAvatar(
+      await _repository.uploadAvatar(
         userId: parent.id,
         filePath: input.photoPath!,
         fileBytes: optimized.bytes,
@@ -788,7 +760,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       );
     }
 
-    await client.assignParentStudents(
+    await _repository.assignStudents(
       parentUserId: parent.id,
       studentIds: input.linkedStudents
           .map((student) => student.studentId)
@@ -841,7 +813,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         final rowStudentId = _stringValue(row['student_id']);
         final rowId = _stringValue(row['id']);
         if (rowId.isEmpty || nextStudentIds.contains(rowStudentId)) continue;
-        await api.BackendApiClient.instance.deleteRaw('/guardians/$rowId');
+        await _repository.deleteRaw('/guardians/$rowId');
       }
     }
 
@@ -860,7 +832,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       String guardianRowId;
 
       if (existing == null) {
-        final created = await api.BackendApiClient.instance.createRaw(
+        final created = await _repository.createRaw(
           '/guardians',
           {
             ...payloadBase,
@@ -876,7 +848,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         guardianRowId = _stringValue(record['id']);
       } else {
         guardianRowId = _stringValue(existing['id']);
-        await api.BackendApiClient.instance.updateRaw(
+        await _repository.updateRaw(
           '/guardians/$guardianRowId',
           {...payloadBase, 'is_primary': isPrimary},
         );
@@ -888,7 +860,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       // payload which is a no-op (gorm:"-").
       if (guardianRowId.trim().isNotEmpty) {
         try {
-          await api.BackendApiClient.instance.linkGuardianToStudent(
+          await _repository.linkGuardian(
             studentId: student.studentId,
             guardianId: guardianRowId,
             isPrimary: isPrimary,
@@ -927,7 +899,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     for (final row in _guardianRowsForEntry(guardian)) {
       final rowId = _stringValue(row['id']);
       if (rowId.isEmpty) continue;
-      await api.BackendApiClient.instance.deleteRaw('/guardians/$rowId');
+      await _repository.deleteRaw('/guardians/$rowId');
     }
   }
 
@@ -976,10 +948,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     bool active,
   ) async {
     try {
-      await api.BackendApiClient.instance.updateUser(
-        guardian.id,
-        isActive: active,
-      );
+      await _repository.setActive(guardian.id, active);
       await _loadData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1038,10 +1007,9 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   }
 
   Future<void> _deleteGuardianRecord(GuardianDirectoryEntry guardian) async {
-    final client = api.BackendApiClient.instance;
     await _deleteGuardianRowsFor(guardian);
-    await client.deleteUser(guardian.id);
-    await client.deleteUser(guardian.id, permanent: true);
+    await _repository.deleteParent(guardian.id);
+    await _repository.deleteParent(guardian.id, permanent: true);
   }
 
   void _showError(String message) {
@@ -1413,7 +1381,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
   bool _canPickup = true;
   bool _isPrimary = true;
   bool _saving = false;
-  String? _error;
+  String? _formError;
   late List<GuardianStudentLink> _linkedStudents;
 
   bool get _isEdit => widget.initialGuardian != null;
@@ -1486,21 +1454,21 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
     if (_linkedStudents.isEmpty) {
-      setState(() => _error = 'Assign at least one student');
+      setState(() => _formError = 'Assign at least one student');
       return;
     }
     if (!_isEdit && _passwordCtrl.text.trim().length < 6) {
-      setState(() => _error = 'Password must be at least 6 characters');
+      setState(() => _formError = 'Password must be at least 6 characters');
       return;
     }
     if (_isEdit && _resetPassword && _passwordCtrl.text.trim().length < 6) {
-      setState(() => _error = 'New password must be at least 6 characters');
+      setState(() => _formError = 'New password must be at least 6 characters');
       return;
     }
 
     setState(() {
       _saving = true;
-      _error = null;
+      _formError = null;
     });
 
     try {
@@ -1528,7 +1496,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error =
+        _formError =
             '${_isEdit ? 'Update' : 'Add'} parent failed: ${error.toString()}';
       });
     }
@@ -1554,7 +1522,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
       }
     }
     if (match == null) {
-      setState(() => _error = 'Admission number not found');
+      setState(() => _formError = 'Admission number not found');
       return;
     }
     _addStudentLink(match);
@@ -1563,20 +1531,20 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
 
   void _addStudentLink(api.StudentModel student) {
     if (_linkedStudents.any((item) => item.studentId == student.id)) {
-      setState(() => _error = 'Student already assigned');
+      setState(() => _formError = 'Student already assigned');
       return;
     }
     final linkedParentId = student.parentUserId;
     final currentParentId = widget.initialGuardian?.id;
     if (linkedParentId != null && linkedParentId != currentParentId) {
       setState(
-        () => _error =
+        () => _formError =
             'This student is already linked to another parent. Edit the student to change the parent association.',
       );
       return;
     }
     setState(() {
-      _error = null;
+      _formError = null;
       _selectedStudentId = null;
       _linkedStudents.add(
         GuardianStudentLink(
@@ -1622,10 +1590,10 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
                       text:
                           'Parent profile, login, and linked students will sync with the central academic server on submission.',
                     ),
-                    if (_error != null) ...[
+                    if (_formError != null) ...[
                       const SizedBox(height: 12),
                       Text(
-                        _error!,
+                        _formError!,
                         style: GoogleFonts.dmSans(
                           color: context.appTheme.error,
                           fontSize: 12,
@@ -2108,7 +2076,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
       _linkedStudents = List<GuardianStudentLink>.from(
         guardian?.linkedStudents ?? const [],
       );
-      _error = null;
+      _formError = null;
     });
   }
 

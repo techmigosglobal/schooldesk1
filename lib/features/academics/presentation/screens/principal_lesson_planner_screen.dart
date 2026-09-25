@@ -1,15 +1,30 @@
 import 'package:flutter/material.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/status_badge_widget.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_lesson_planner_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_lesson_planner_repository.dart';
+
+final class _PrincipalLessonPlannerSnapshot {
+  const _PrincipalLessonPlannerSnapshot({
+    required this.planners,
+    required this.classes,
+  });
+
+  final List<Map<String, dynamic>> planners;
+  final List<Map<String, dynamic>> classes;
+}
 
 class PrincipalLessonPlannerScreen extends StatefulWidget {
-  const PrincipalLessonPlannerScreen({super.key});
+  const PrincipalLessonPlannerScreen({super.key, this.repository});
+
+  final PrincipalLessonPlannerRepository? repository;
 
   @override
   State<PrincipalLessonPlannerScreen> createState() =>
@@ -18,8 +33,11 @@ class PrincipalLessonPlannerScreen extends StatefulWidget {
 
 class _PrincipalLessonPlannerScreenState
     extends State<PrincipalLessonPlannerScreen> {
-  bool _loading = true;
-  String? _error;
+  PrincipalLessonPlannerRepository get _repository =>
+      widget.repository ?? ApiPrincipalLessonPlannerRepository.legacyDefault;
+
+  RepositoryState<_PrincipalLessonPlannerSnapshot> _repositoryState =
+      const RepositoryState.loading();
   String _query = '';
   String _statusFilter = 'all';
   List<Map<String, dynamic>> _planners = const [];
@@ -33,42 +51,63 @@ class _PrincipalLessonPlannerScreenState
   }
 
   Future<void> _loadPlanners() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
-      final plannerFuture = BackendApiClient.instance
-          .getPrincipalLessonPlanners();
-      final sectionFuture = BackendApiClient.instance.getSections();
+      final plannerFuture = _repository.loadLessonPlanners();
+      final sectionFuture = _repository.loadSections();
       final rows = await plannerFuture;
       final sections = await sectionFuture;
       if (!mounted) return;
+      final classes = sections
+          .map(
+            (section) => {
+              'id': section['id'],
+              'label': [section['grade_name'], section['section_name']]
+                  .whereType<String>()
+                  .where((value) => value.trim().isNotEmpty)
+                  .join(' - '),
+            },
+          )
+          .where((row) => _text(row['id']).isNotEmpty)
+          .toList();
       setState(() {
         _planners = rows;
-        _classes = sections
-            .map(
-              (section) => {
-                'id': section.id,
-                'label': [
-                  section.gradeName,
-                  section.sectionName,
-                ].where((value) => value.trim().isNotEmpty).join(' - '),
-              },
-            )
-            .where((row) => _text(row['id']).isNotEmpty)
-            .toList();
+        _classes = classes;
         if (_selectedSectionId.isNotEmpty &&
             !_classes.any((row) => row['id'] == _selectedSectionId)) {
           _selectedSectionId = '';
         }
-        _loading = false;
+        _repositoryState = RepositoryState(
+          data: _PrincipalLessonPlannerSnapshot(
+            planners: List.unmodifiable(rows),
+            classes: List.unmodifiable(classes),
+          ),
+          source: RepositorySource.remote,
+          phase: rows.isEmpty ? RepositoryPhase.empty : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.toString();
-        _loading = false;
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
       });
     }
   }
@@ -114,37 +153,24 @@ class _PrincipalLessonPlannerScreenState
         selectedIndex: PrincipalNav.lessonPlanner,
         onDestinationSelected: (_) {},
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadPlanners,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _LessonPlannerSummary(planners: _classScopedPlanners),
-            const SizedBox(height: 16),
-            _buildFilters(),
-            const SizedBox(height: 16),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.only(top: 48),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null)
-              _StatePanel(
-                icon: Icons.error_outline_rounded,
-                title: 'Lesson planners unavailable',
-                message: _error!,
-                actionLabel: 'Retry',
-                onAction: _loadPlanners,
-              )
-            else if (filteredPlanners.isEmpty)
-              const _StatePanel(
-                icon: Icons.auto_stories_outlined,
-                title: 'No lesson planners found',
-                message: 'Uploaded or created class teacher plans appear here.',
-              )
-            else
+      body: SchoolDeskRepositoryStateView<_PrincipalLessonPlannerSnapshot>(
+        state: _repositoryState,
+        onRetry: _loadPlanners,
+        emptyTitle: 'No lesson planners found',
+        emptyMessage: 'Uploaded or created class teacher plans appear here.',
+        errorTitle: 'Lesson planners unavailable',
+        data: (_) => RefreshIndicator(
+          onRefresh: _loadPlanners,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _LessonPlannerSummary(planners: _classScopedPlanners),
+              const SizedBox(height: 16),
+              _buildFilters(),
+              const SizedBox(height: 16),
               ...filteredPlanners.map(_LessonPlannerCard.new),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -401,47 +427,6 @@ List<Map<String, dynamic>> _lessonPlannerAttachments(
   return [
     {'url': url, 'name': 'Open attachment'},
   ];
-}
-
-class _StatePanel extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  const _StatePanel({
-    required this.icon,
-    required this.title,
-    required this.message,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Column(
-        children: [
-          Icon(icon, size: 42, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          Text(message, textAlign: TextAlign.center),
-          if (actionLabel != null && onAction != null) ...[
-            const SizedBox(height: 14),
-            FilledButton(onPressed: onAction, child: Text(actionLabel!)),
-          ],
-        ],
-      ),
-    );
-  }
 }
 
 String _classLabel(Map<String, dynamic> planner) {

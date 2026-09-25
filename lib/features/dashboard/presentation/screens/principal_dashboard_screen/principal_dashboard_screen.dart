@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:developer' as developer;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -10,7 +9,7 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -18,12 +17,21 @@ import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/branch_switcher.dart';
 import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/principal_dashboard_desktop_shell.dart';
+import 'package:schooldesk1/roles/principal/data/api_leadership_dashboard_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/leadership_dashboard_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/leadership_dashboard_snapshot.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class PrincipalDashboardScreen extends StatefulWidget {
-  const PrincipalDashboardScreen({super.key});
+  const PrincipalDashboardScreen({super.key, this.dashboardRepository});
+
+  final LeadershipDashboardRepository? dashboardRepository;
 
   @override
   State<PrincipalDashboardScreen> createState() =>
@@ -31,23 +39,24 @@ class PrincipalDashboardScreen extends StatefulWidget {
 }
 
 class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
-  bool _loading = true;
   bool _setupLoading = false;
   String? _setupError;
-  String? _error;
   DateTime? _lastBackPressedAt;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
   Map<String, dynamic> _staffAttendanceSummary = const {};
   List<Map<String, dynamic>> _recentSchoolActivity = const [];
+  RepositoryState<LeadershipDashboardCriticalSnapshot> _criticalState =
+      const RepositoryState<LeadershipDashboardCriticalSnapshot>.loading();
+
+  String get _criticalError =>
+      _criticalState.error?.toString() ?? 'Unable to load dashboard data.';
   RealtimeRefreshSubscription? _realtimeSubscription;
 
-  bool get _isCoordinator =>
-      BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
-      'coordinator';
+  bool get _isCoordinator => RoleAccessService.currentRoleName == 'coordinator';
 
   String get _leadershipRole {
-    final role = BackendApiClient.instance.currentRoleName?.trim().toLowerCase();
-    if (role == 'coordinator' || role == 'admin') return role!;
+    final role = RoleAccessService.currentRoleName;
+    if (role == 'coordinator' || role == 'admin') return role;
     return 'principal';
   }
 
@@ -55,15 +64,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   void initState() {
     super.initState();
     // Defensive guard: redirect super_admin to their own dashboard.
-    final role =
-        BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
+    final role = RoleAccessService.currentRoleName;
     if (role == 'super_admin') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           final redirect = RouteAccessGuard.dashboardForRole(role);
-          Navigator.of(
+          SchoolDeskNavigation.go(
             context,
-          ).pushReplacementNamed(redirect ?? AppRoutes.landingPage);
+            redirect ?? AppRoutes.landingPage,
+          );
         }
       });
       return;
@@ -85,153 +94,124 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   }
 
   Future<void> _loadDashboard() async {
+    final previous = _criticalState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _criticalState =
+          RepositoryState<LeadershipDashboardCriticalSnapshot>.loading(
+            data: previous.data,
+            source: previous.source,
+            isStale: previous.isStale,
+            isRefreshing: previous.hasData,
+            lastUpdated: previous.lastUpdated,
+          );
     });
 
     try {
-      final api = BackendApiClient.instance;
-
       // ── Phase 1: Critical data ──────────────────────────────────────────────
       // Only 3 calls needed to paint the dashboard. Render immediately.
-      final criticalResults =
-          await Future.wait<Object>([
-            api.getDashboard(_leadershipRole, forceRefresh: true),
-            api.getCurrentSchool(),
-            api.getProfile(),
-          ]).timeout(
+      final repository =
+          widget.dashboardRepository ??
+          ApiLeadershipDashboardRepository.legacyDefault;
+      final criticalResult = await repository
+          .loadCritical(role: _leadershipRole)
+          .timeout(
             const Duration(seconds: 30),
             onTimeout: () => throw TimeoutException(
               'Dashboard data took too long. Check your connection.',
             ),
           );
-
-      final dashboard = Map<String, dynamic>.from(criticalResults[0] as Map);
-      final school = Map<String, dynamic>.from(criticalResults[1] as Map);
-      final profile = criticalResults[2] as UserResponse;
+      if (criticalResult.isFailure) {
+        final state =
+            RepositoryState.fromResult<LeadershipDashboardCriticalSnapshot>(
+              criticalResult,
+              previous: previous.hasData ? previous : null,
+            );
+        if (!mounted) return;
+        setState(() {
+          _criticalState = state;
+        });
+        return;
+      }
+      final critical = criticalResult.dataOrNull!;
+      final dashboard = critical.dashboard;
+      final school = critical.school;
+      final profile = critical.profile;
 
       if (!mounted) return;
       setState(() {
+        _criticalState =
+            RepositoryState.fromResult<LeadershipDashboardCriticalSnapshot>(
+              criticalResult,
+              previous: previous.hasData ? previous : null,
+            );
         _data = _PrincipalHomeData.fromCritical(
           dashboard: dashboard,
           school: school,
           profile: profile,
         );
-        _loading = false;
         _setupLoading =
             true; // Setup section shows a spinner until phase 2 is done
       });
 
       // ── Phase 2: Optional data ──────────────────────────────────────────────
       // Fires in background after the UI is visible. Does not block rendering.
-      _loadSetupData(api, dashboard, school, profile);
+      _loadSetupData(repository, dashboard, school);
     } on TimeoutException catch (error) {
       if (!mounted) return;
       setState(() {
-        _error =
-            error.message ??
-            'Dashboard data took too long. Check your connection.';
-        _loading = false;
+        _criticalState =
+            RepositoryState<LeadershipDashboardCriticalSnapshot>.error(
+              error: error.message ?? 'Dashboard data took too long.',
+              data: previous.data,
+              source: previous.source,
+              isStale: previous.hasData,
+              lastUpdated: previous.lastUpdated,
+            );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
-        _loading = false;
+        _criticalState =
+            RepositoryState<LeadershipDashboardCriticalSnapshot>.error(
+              error: '$e',
+              data: previous.data,
+              source: previous.source,
+              isStale: previous.hasData,
+              lastUpdated: previous.lastUpdated,
+            );
       });
     }
   }
 
   Future<void> _loadSetupData(
-    BackendApiClient api,
+    LeadershipDashboardRepository repository,
     Map<String, dynamic> dashboard,
     Map<String, dynamic> school,
-    UserResponse profile,
   ) async {
     try {
-      final optionalResults = await Future.wait<Object>([
-        _loadOptional(
-          label: 'academic years',
-          request: api.getAcademicYears(),
-          fallback: <AcademicYearModel>[],
-        ),
-        _loadOptional(
-          label: 'grades',
-          request: api.getGrades(),
-          fallback: <GradeModel>[],
-        ),
-        _loadOptional(
-          label: 'sections',
-          request: api.getSections(),
-          fallback: <SectionModel>[],
-        ),
-        _loadOptional(
-          label: 'subjects',
-          request: api.getRawList('/subjects'),
-          fallback: <Map<String, dynamic>>[],
-        ),
-        _loadOptional(
-          label: 'staff count',
-          request: api.getStaff(page: 1, pageSize: 1),
-          fallback: const PaginatedList<StaffModel>(
-            data: [],
-            total: 0,
-            page: 1,
-            pageSize: 1,
-          ),
-        ),
-        _loadOptional(
-          label: 'student count',
-          request: api.getStudents(page: 1, pageSize: 1),
-          fallback: const PaginatedList<StudentModel>(
-            data: [],
-            total: 0,
-            page: 1,
-            pageSize: 1,
-          ),
-        ),
-        if (!_isCoordinator)
-          _loadOptional(
-            label: 'fee structures',
-            request: api.getFeeStructures(),
-            fallback: <Map<String, dynamic>>[],
-          )
-        else
-          Future.value(<Map<String, dynamic>>[]),
-        _loadOptional(
-          label: 'notifications',
-          request: api.getNotifications(),
-          fallback: <Map<String, dynamic>>[],
-        ),
-        _loadOptional(
-          label: 'staff attendance summary',
-          request: api.getStaffDailyAttendanceSummary(),
-          fallback: <String, dynamic>{},
-        ),
-        _loadOptional(
-          label: 'recent school activity',
-          request: api.getRawList(
-            '/audit-logs',
-            queryParameters: const {'page': 1, 'page_size': 3},
-          ),
-          fallback: <Map<String, dynamic>>[],
-        ),
-      ]).timeout(const Duration(seconds: 45));
+      final optionalResult = await repository.loadOptional(
+        role: _leadershipRole,
+        dashboard: dashboard,
+      );
+      if (optionalResult.isFailure) {
+        throw StateError(
+          optionalResult.failureOrNull?.message ?? 'Optional data failed',
+        );
+      }
+      final optional = optionalResult.dataOrNull!;
 
       if (!mounted) return;
 
-      final academicYears = optionalResults[0] as List<AcademicYearModel>;
-      final grades = optionalResults[1] as List<GradeModel>;
-      final sections = optionalResults[2] as List<SectionModel>;
-      final subjects = optionalResults[3] as List<Map<String, dynamic>>;
-      final staff = optionalResults[4] as PaginatedList<StaffModel>;
-      final students = optionalResults[5] as PaginatedList<StudentModel>;
-      final feeStructures = optionalResults[6] as List<Map<String, dynamic>>;
-      final notifications = optionalResults[7] as List<Map<String, dynamic>>;
-      final staffAttendanceSummary = optionalResults[8] as Map<String, dynamic>;
-      final recentSchoolActivity =
-          optionalResults[9] as List<Map<String, dynamic>>;
+      final academicYears = optional.academicYears;
+      final grades = optional.grades;
+      final sections = optional.sections;
+      final subjects = optional.subjects;
+      final staff = optional.staff;
+      final students = optional.students;
+      final feeStructures = optional.feeStructures;
+      final notifications = optional.notifications;
+      final staffAttendanceSummary = optional.staffAttendanceSummary;
+      final recentSchoolActivity = optional.recentSchoolActivity;
 
       setState(() {
         _data = _data.withSetupData(
@@ -265,30 +245,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     }
   }
 
-  Future<T> _loadOptional<T>({
-    required String label,
-    required Future<T> request,
-    required T fallback,
-  }) async {
-    try {
-      return await request;
-    } on Object catch (error, stackTrace) {
-      if (EnvConfig.enableLogging) {
-        developer.log(
-          'Principal dashboard optional load failed: $label',
-          name: 'PrincipalDashboardScreen',
-          error: error,
-          stackTrace: stackTrace,
-        );
-      }
-      return fallback;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final currentRole =
-        BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
+    final currentRole = RoleAccessService.currentRoleName;
     final isSuperAdmin = currentRole == 'super_admin';
 
     return LayoutBuilder(
@@ -364,12 +323,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   }
 
   Widget _buildDesktopBody(BuildContext context) {
-    if (_loading) {
+    if (_criticalState.isLoading && !_criticalState.hasData) {
       return const SchoolDeskPageSkeleton(cardCount: 6);
     }
 
-    if (_error != null) {
-      return _PrincipalErrorState(message: _error!, onRetry: _loadDashboard);
+    if (_criticalState.isError && !_criticalState.hasData) {
+      return _PrincipalErrorState(
+        message: _criticalError,
+        onRetry: _loadDashboard,
+      );
     }
 
     final completedSetup = _data.setupSteps
@@ -386,6 +348,11 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             onNotifications: () =>
                 _open(AppRoutes.notificationCenter, arguments: _leadershipRole),
           ),
+          if (_criticalState.isOffline)
+            SchoolDeskStatusPanel.stale(
+              message: 'Showing saved dashboard data while offline.',
+              onAction: _loadDashboard,
+            ),
           const SizedBox(height: 12),
           BranchSwitcher(onChanged: _loadDashboard),
         ],
@@ -596,12 +563,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
-    if (_loading) {
+    if (_criticalState.isLoading && !_criticalState.hasData) {
       return const SchoolDeskPageSkeleton(cardCount: 6);
     }
 
-    if (_error != null) {
-      return _PrincipalErrorState(message: _error!, onRetry: _loadDashboard);
+    if (_criticalState.isError && !_criticalState.hasData) {
+      return _PrincipalErrorState(
+        message: _criticalError,
+        onRetry: _loadDashboard,
+      );
     }
 
     final completedSetup = _data.setupSteps
@@ -625,6 +595,11 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                   arguments: _leadershipRole,
                 ),
               ),
+              if (_criticalState.isOffline)
+                SchoolDeskStatusPanel.stale(
+                  message: 'Showing saved dashboard data while offline.',
+                  onAction: _loadDashboard,
+                ),
               BranchSwitcher(onChanged: _loadDashboard),
               const SizedBox(height: 18),
               _DashboardSearchBar(
@@ -852,7 +827,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   }
 
   Future<void> _open(String route, {Object? arguments}) async {
-    await Navigator.pushNamed(context, route, arguments: arguments);
+    await SchoolDeskNavigation.push(context, route, arguments: arguments);
     if (mounted && route == AppRoutes.notificationCenter) {
       await _loadDashboard();
     }
@@ -1529,8 +1504,10 @@ class _PrincipalAppHeader extends StatelessWidget {
                                 color: Colors.white,
                               ),
                               tooltip: 'Help',
-                              onPressed: () =>
-                                  Navigator.pushNamed(ctx, AppRoutes.help),
+                              onPressed: () => SchoolDeskNavigation.push(
+                                ctx,
+                                AppRoutes.help,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 4),
@@ -2567,7 +2544,7 @@ class _MiniStatCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => Navigator.pushNamed(context, route),
+        onTap: () => SchoolDeskNavigation.push(context, route),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
           decoration: BoxDecoration(

@@ -22,8 +22,7 @@ void main() {
       'lib/features/reports/presentation/screens/reports_analytics_screen/reports_analytics_screen.dart',
     ).readAsStringSync();
 
-    expect(source, contains('getLeaveApplications('));
-    expect(source, contains("status: 'approved'"));
+    expect(source, contains('_repository.loadApprovedLeaveApplications'));
     expect(source, contains('_staffOnLeaveIds'));
     expect(source, contains("'On leave'"));
   });

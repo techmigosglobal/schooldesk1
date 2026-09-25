@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -16,6 +16,14 @@ import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_scr
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/data/api_payment_config_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/payment_config_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 enum _FinanceView { structures, invoices, payments, concessions, reports }
 
@@ -24,18 +32,23 @@ class AdminFeesScreen extends StatefulWidget {
     super.key,
     this.initialSection = 'invoices',
     this.concessionOnly = false,
+    this.repository,
+    this.paymentConfigRepository,
   });
 
   final String initialSection;
   final bool concessionOnly;
+  final AdminFeesRepository? repository;
+  final PaymentConfigRepository? paymentConfigRepository;
 
   @override
   State<AdminFeesScreen> createState() => _AdminFeesScreenState();
 }
 
 class _AdminFeesScreenState extends State<AdminFeesScreen> {
-  bool _loading = true;
-  String? _error;
+  late final AdminFeesRepository _repository;
+  late final PaymentConfigRepository _paymentConfigRepository;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   late _FinanceView _view;
 
   List<Map<String, dynamic>> _feeStructures = [];
@@ -65,6 +78,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   @override
   void initState() {
     super.initState();
+    _repository = widget.repository ?? ApiAdminFeesRepository.legacyDefault;
+    _paymentConfigRepository =
+        widget.paymentConfigRepository ??
+        ApiPaymentConfigRepository.legacyDefault;
     _view = switch (widget.initialSection.toLowerCase()) {
       'structures' => _FinanceView.structures,
       'payments' => _FinanceView.payments,
@@ -84,25 +101,35 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   }
 
   Future<void> _loadData() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
-      final feeStructures = await api.getFeeStructures();
-      await api.applyLateFineAdjustments();
-      final invoicePage = await api.getInvoicesPage(pageSize: 20);
-      final paymentPage = await api.getPaymentsPage(pageSize: 20);
-      final feeCategories = await api.getRawList('/fees/categories');
-      final concessionPage = await api.getFeeConcessionsPage(pageSize: 20);
-      final feeSummary = await api.getFeeDashboardSummary();
-      final paymentConfig = await api.getPaymentConfig();
-      final paymentConfigs = await api.getPaymentConfigs();
-      final academicYears = await api.getAcademicYears();
-      final grades = await api.getGrades();
-      final sections = await api.getSections();
-      final normalizedInvoices = invoicePage.data.map(_normalizeInvoice).toList();
+      final feeStructures = await _repository.loadFeeStructures();
+      await _repository.applyLateFineAdjustments();
+      final invoicePage = await _repository.loadInvoicesPage(pageSize: 20);
+      final paymentPage = await _repository.loadPaymentsPage(pageSize: 20);
+      final feeCategories = await _repository.loadFeeCategories();
+      final concessionPage = await _repository.loadFeeConcessionsPage(
+        pageSize: 20,
+      );
+      final feeSummary = await _repository.loadFeeDashboardSummary();
+      final paymentConfig = await _paymentConfigRepository.loadConfig();
+      final paymentConfigs = await _repository.loadPaymentConfigs();
+      final academicYears = await _repository.loadAcademicYears();
+      final grades = await _repository.loadGrades();
+      final sections = await _repository.loadSections();
+      final normalizedInvoices = invoicePage.data
+          .map(_normalizeInvoice)
+          .toList();
       if (!mounted) return;
       setState(() {
         _feeStructures = feeStructures.map(_normalizeFeeStructure).toList();
@@ -121,13 +148,24 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
             .where((invoice) => _numValue(invoice['balance']) > 0)
             .toList();
         _recentPayments = paymentPage.data.map(normalizePaymentRow).toList();
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load finance workspace from backend. $error';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(
+                error: 'Unable to load finance workspace from backend. $error',
+              )
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
       });
     }
   }
@@ -163,23 +201,15 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           onPressed: _loadData,
         ),
       ],
-      body: _buildBody(),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadData,
+        data: (_) => _buildBody(),
+      ),
     );
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return _buildLoadingSkeleton();
-    }
-    if (_error != null) {
-      return OpsEmptyState(
-        icon: Icons.account_balance_wallet_outlined,
-        title: 'Finance unavailable',
-        message: _error!,
-        actionLabel: 'Retry',
-        onAction: _loadData,
-      );
-    }
     if (widget.concessionOnly) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -224,106 +254,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _buildViewPicker(),
         _buildPaymentQrSettings(),
         _buildCurrentView(),
-      ],
-    );
-  }
-
-  Widget _buildLoadingSkeleton() {
-    final base = context.appTheme.surfaceVariant.withOpacity(0.35);
-    final highlight = context.appTheme.surfaceVariant.withOpacity(0.6);
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Metric cards skeleton
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: List.generate(
-            4,
-            (_) => Container(
-              width: 160,
-              height: 80,
-              decoration: BoxDecoration(
-                color: base,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 80,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: highlight,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    width: 50,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: highlight,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        // Row skeletons
-        for (var i = 0; i < 4; i++) ...[
-          Container(
-            height: 64,
-            decoration: BoxDecoration(
-              color: base,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: highlight,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 130,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: highlight,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: 80,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: highlight,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -480,8 +410,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       subtitle:
           'Admin prepares finance requests; Principal final-approves decisions',
       trailing: TextButton.icon(
-        onPressed: () =>
-            Navigator.pushNamed(context, AppRoutes.principalPaymentRequests),
+        onPressed: () => SchoolDeskNavigation.push(
+          context,
+          AppRoutes.principalPaymentRequests,
+        ),
         icon: const Icon(Icons.fact_check_outlined),
         label: const Text('Payment requests'),
       ),
@@ -1101,7 +1033,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     reasonController.dispose();
     if (payload == null || !mounted) return;
     try {
-      await BackendApiClient.instance.createRaw('/fees/concessions', payload);
+      await _repository.createRaw('/fees/concessions', payload);
       if (!mounted) return;
       await _loadData();
       _snack('Concession applied and student balance updated.', success: true);
@@ -1135,7 +1067,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _updatingConcessionIds.add(id));
     try {
-      await BackendApiClient.instance.deleteRaw('/fees/concessions/$id');
+      await _repository.deleteRaw('/fees/concessions/$id');
       if (!mounted) return;
       await _loadData();
       _snack('Concession removed and balance restored.', success: true);
@@ -1261,7 +1193,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     if (payload == null || !mounted) return;
     setState(() => _updatingConcessionIds.add(id));
     try {
-      await BackendApiClient.instance.updateRaw(
+      await _repository.updateRaw(
         '/fees/concessions/$id',
         payload,
       );
@@ -1290,7 +1222,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     setState(() => _updatingConcessionIds.add(id));
     final targetStatus = approved ? 'approved' : 'rejected';
     try {
-      final updated = await BackendApiClient.instance.updateRaw(
+      final updated = await _repository.updateRaw(
         '/fees/concessions/$id',
         {'status': targetStatus},
       );
@@ -1560,7 +1492,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.deleteFeeStructure(
+      await _repository.deleteFeeStructure(
         id,
         removePending: true,
       );
@@ -1580,7 +1512,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   }
 
   Future<void> _openFeeStructureForm({Map<String, dynamic>? structure}) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.principalFeeStructureForm,
       arguments: AdminFeeStructureFormArgs(
@@ -1597,7 +1529,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   }
 
   Future<void> _openRecordPaymentForm({Map<String, dynamic>? invoice}) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.principalPaymentRecordForm,
       arguments: AdminPaymentRecordFormArgs(
@@ -1620,7 +1552,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       return;
     }
     try {
-      await BackendApiClient.instance.createRaw('/fees/reminders', {
+      await _repository.createRaw('/fees/reminders', {
         'invoice_id': invoiceId,
         'student_id': due['student_id'],
         'message':
@@ -1634,11 +1566,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
 
   Future<void> _requestReportExport(String reportType, String format) async {
     try {
-      await BackendApiClient.instance.createReportExport(
+      await _repository.queueReportExport(
         '/fees/reports/exports',
         reportTitle: reportType,
         reportType: reportType,
         format: format,
+        scope: 'principal',
         parameters: {
           'pending_count': _pendingDues.length,
           'structure_count': _feeStructures.length,
@@ -1654,12 +1587,13 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
 
   Future<void> _exportReceipt(Map<String, dynamic> payment) async {
     try {
-      await BackendApiClient.instance.createReportExport(
+      await _repository.queueReportExport(
         '/fees/reports/exports',
         reportTitle:
             'Receipt Export - ${_textValue(payment['transaction_id'])}',
         reportType: 'receipt_export',
         format: 'pdf',
+        scope: 'principal',
         parameters: {
           'transaction_id': payment['transaction_id'],
           'invoice_id': payment['invoice_id'],
@@ -1681,9 +1615,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final invoiceId = _textValue(payment['invoice_id']);
       if (invoiceId.isNotEmpty) {
         try {
-          final detail = await BackendApiClient.instance.getInvoiceDetail(
-            invoiceId,
-          );
+          final detail = await _repository.loadInvoiceDetail(invoiceId);
           final rawItems = detail['items'];
           if (rawItems is List && rawItems.isNotEmpty) {
             feeItems = rawItems.whereType<Map>().map((item) {
@@ -1709,7 +1641,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           {'description': 'Fee payment', 'amount': amount, 'status': 'Paid'},
         ];
       }
-      final school = await BackendApiClient.instance.getCurrentSchool();
+      final school = await _repository.loadCurrentSchool();
       final assets = await Future.wait([
         _networkImageBytes(_textValue(school['logo_url'])),
         _networkImageBytes(_textValue(school['authorized_signature_url'])),
@@ -1773,9 +1705,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
 
       List<Map<String, dynamic>> feeItems = [];
       try {
-        final detail = await BackendApiClient.instance.getInvoiceDetail(
-          invoiceId,
-        );
+        final detail = await _repository.loadInvoiceDetail(invoiceId);
         final rawItems = detail['items'];
         if (rawItems is List && rawItems.isNotEmpty) {
           feeItems = rawItems.whereType<Map>().map((item) {
@@ -1910,16 +1840,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Future<void> _savePaymentConfig() async {
     setState(() => _savingPaymentConfig = true);
     try {
-      final config = await BackendApiClient.instance
-          .updateRaw('/fees/payment-config', {
-            'upi_id': _upiIdController.text.trim(),
-            'payee_name': _payeeNameController.text.trim(),
-            'qr_note': _qrNoteController.text.trim(),
-            'qr_image_url': _textValue(_paymentConfig['qr_image_url']),
-            'upi_enabled':
-                _upiIdController.text.trim().isNotEmpty ||
-                _textValue(_paymentConfig['qr_image_url']).isNotEmpty,
-          });
+      final config = await _paymentConfigRepository.updateConfig(
+        upiId: _upiIdController.text.trim(),
+        payeeName: _payeeNameController.text.trim(),
+        qrNote: _qrNoteController.text.trim(),
+        qrImageUrl: _textValue(_paymentConfig['qr_image_url']),
+      );
       if (!mounted) return;
       setState(() => _paymentConfig = config);
       _snack('Payment details saved for parent fee payments.', success: true);
@@ -1934,15 +1860,15 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.single;
+    if (result.isEmpty) return;
+    final file = result.single;
     final path = file.path ?? '';
+    final fileBytes = await file.readAsBytes();
     final mimeType = ImageUploadOptimizer.mimeTypeForFilename(file.name);
-    final optimized = file.bytes != null
+    final optimized = fileBytes.isNotEmpty
         ? ImageUploadOptimizer.fromBytes(
-            file.bytes!,
+            fileBytes,
             filename: file.name,
             mimeType: mimeType,
             preset: ImageUploadPreset.branding,
@@ -1953,10 +1879,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
             mimeType: mimeType,
             preset: ImageUploadPreset.branding,
           );
-    if (path.isEmpty && file.bytes == null) return;
+    if (path.isEmpty && fileBytes.isEmpty) return;
     setState(() => _uploadingQr = true);
     try {
-      final data = await BackendApiClient.instance.uploadPaymentQr(
+      final data = await _paymentConfigRepository.uploadQr(
         path: path,
         fileName: optimized.filename,
         fileBytes: optimized.bytes,

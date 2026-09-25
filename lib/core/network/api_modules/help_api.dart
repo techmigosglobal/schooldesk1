@@ -39,9 +39,19 @@ extension HelpApi on BackendApiClient {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getHelpContent(String role) async {
+  Future<List<Map<String, dynamic>>> getHelpContent(
+    String role, {
+    bool forceRefresh = false,
+  }) async {
     try {
-      final response = await _get('/help', queryParameters: {'role': role});
+      final response = await _get(
+        '/help',
+        queryParameters: {
+          'role': role,
+          if (forceRefresh)
+            'refresh_nonce': DateTime.now().millisecondsSinceEpoch,
+        },
+      );
       final data = _asMap(response.data);
       if (data['success'] == true) {
         final list = data['data'] as List?;

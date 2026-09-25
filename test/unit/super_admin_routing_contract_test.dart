@@ -9,7 +9,6 @@ import 'package:schooldesk1/routes/route_access_guard.dart';
 /// 2. `initialRouteFor` for super_admin returns `superAdminDashboard`
 /// 3. `redirectFor` for super_admin on principal routes redirects to `superAdminDashboard`
 /// 4. `isRoleAllowedFor` correctly gates super admin to system-level routes only
-/// 5. Super admin bypasses route guards (existing behavior)
 void main() {
   group('Super Admin Dashboard Routing', () {
     test('dashboardForRole("super_admin") returns superAdminDashboard', () {
@@ -149,9 +148,8 @@ void main() {
     });
   });
 
-  group('Super Admin Bypasses Route Guards', () {
-    test('super_admin bypasses redirectFor for any route', () {
-      // Super admin should be able to access any route without being redirected
+  group('Super Admin Route Isolation', () {
+    test('super_admin redirects away from school operational routes', () {
       final routesToCheck = [
         AppRoutes.principalDashboard,
         AppRoutes.staffManagement,
@@ -159,8 +157,6 @@ void main() {
         AppRoutes.feeMonitoring,
         AppRoutes.principalClasses,
         AppRoutes.principalAttendance,
-        AppRoutes.superAdminDashboard,
-        AppRoutes.superAdminAuditLogs,
       ];
 
       for (final route in routesToCheck) {
@@ -170,36 +166,51 @@ void main() {
             isAuthenticated: true,
             currentRole: 'super_admin',
           ),
-          isNull,
-          reason: 'Super admin should bypass redirectFor for $route',
+          AppRoutes.superAdminDashboard,
+          reason: 'Super admin must not inherit school route $route',
         );
       }
     });
 
-    test('isRoleAllowedFor returns true for super_admin on any route', () {
-      final routesToCheck = [
-        AppRoutes.principalDashboard,
-        AppRoutes.staffManagement,
-        AppRoutes.studentOversight,
-        AppRoutes.feeMonitoring,
-        AppRoutes.principalClasses,
-        AppRoutes.superAdminDashboard,
-        AppRoutes.superAdminAuditLogs,
-        AppRoutes.teacherDashboard,
-        AppRoutes.parentDashboard,
-      ];
+    test(
+      'isRoleAllowedFor limits super_admin to platform and tenant routes',
+      () {
+        final routesToCheck = [
+          AppRoutes.principalDashboard,
+          AppRoutes.staffManagement,
+          AppRoutes.studentOversight,
+          AppRoutes.feeMonitoring,
+          AppRoutes.principalClasses,
+          AppRoutes.teacherDashboard,
+          AppRoutes.parentDashboard,
+        ];
 
-      for (final route in routesToCheck) {
+        for (final route in routesToCheck) {
+          expect(
+            RouteAccessGuard.isRoleAllowedFor(
+              routeName: route,
+              role: 'super_admin',
+            ),
+            isFalse,
+            reason: 'Super admin must not access school operation $route',
+          );
+        }
         expect(
           RouteAccessGuard.isRoleAllowedFor(
-            routeName: route,
+            routeName: AppRoutes.superAdminDashboard,
             role: 'super_admin',
           ),
           isTrue,
-          reason: 'Super admin should have isRoleAllowedFor=true for $route',
         );
-      }
-    });
+        expect(
+          RouteAccessGuard.isRoleAllowedFor(
+            routeName: AppRoutes.principalSchoolProfile,
+            role: 'super_admin',
+          ),
+          isTrue,
+        );
+      },
+    );
   });
 
   group('Super Admin Route Exclusivity', () {

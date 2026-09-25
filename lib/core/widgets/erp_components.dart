@@ -2070,7 +2070,14 @@ class SchoolDeskDataToolbar extends StatelessWidget {
   }
 }
 
-enum SchoolDeskStatusKind { loading, empty, error, permission, offline }
+enum SchoolDeskStatusKind {
+  loading,
+  empty,
+  error,
+  permission,
+  offline,
+  stale,
+}
 
 class SchoolDeskStatusPanel extends StatelessWidget {
   final SchoolDeskStatusKind kind;
@@ -2124,6 +2131,15 @@ class SchoolDeskStatusPanel extends StatelessWidget {
     this.onAction,
     this.illustrationAsset,
   }) : kind = SchoolDeskStatusKind.offline;
+
+  const SchoolDeskStatusPanel.stale({
+    super.key,
+    this.title = 'Showing saved information',
+    required this.message,
+    this.actionLabel = 'Refresh',
+    this.onAction,
+    this.illustrationAsset,
+  }) : kind = SchoolDeskStatusKind.stale;
 
   @override
   Widget build(BuildContext context) {
@@ -2187,6 +2203,7 @@ class SchoolDeskStatusPanel extends StatelessWidget {
       SchoolDeskStatusKind.error => Icons.error_outline_rounded,
       SchoolDeskStatusKind.permission => Icons.lock_outline_rounded,
       SchoolDeskStatusKind.offline => Icons.cloud_off_rounded,
+      SchoolDeskStatusKind.stale => Icons.history_toggle_off_rounded,
     };
     final tone = switch (kind) {
       SchoolDeskStatusKind.loading => theme.colorScheme.primary,
@@ -2194,6 +2211,9 @@ class SchoolDeskStatusPanel extends StatelessWidget {
       SchoolDeskStatusKind.error => theme.colorScheme.error,
       SchoolDeskStatusKind.permission => theme.colorScheme.error,
       SchoolDeskStatusKind.offline => theme.colorScheme.secondary,
+      // Stale data is intentionally distinct from an error and does not rely
+      // on red/green alone to communicate freshness.
+      SchoolDeskStatusKind.stale => theme.colorScheme.tertiary,
     };
 
     return Container(
@@ -2236,6 +2256,72 @@ class SchoolDeskStatusPanel extends StatelessWidget {
             SchoolDeskButton(label: actionLabel!, onPressed: onAction),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Inline warning for routes whose mutations need a live backend.
+/// Cached reads remain visible below this banner.
+class SchoolDeskOnlineRequiredBanner extends StatelessWidget {
+  const SchoolDeskOnlineRequiredBanner({
+    super.key,
+    this.onRetry,
+    this.message =
+        'Connect to the internet to create, approve, or change records.',
+  });
+
+  final VoidCallback? onRetry;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: 'Online connection required. $message',
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+          horizontal: tokens.spacing.md,
+          vertical: tokens.spacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.tertiaryContainer,
+          border: Border(
+            bottom: BorderSide(color: theme.colorScheme.tertiary),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.cloud_off_rounded,
+              color: theme.colorScheme.onTertiaryContainer,
+            ),
+            SizedBox(width: tokens.spacing.sm),
+            Expanded(
+              child: SchoolDeskAdaptiveText(
+                message,
+                maxLines: 3,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onTertiaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (onRetry != null) ...[
+              SizedBox(width: tokens.spacing.sm),
+              SchoolDeskButton.outlined(
+                label: 'Retry',
+                icon: Icons.refresh_rounded,
+                onPressed: onRetry,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

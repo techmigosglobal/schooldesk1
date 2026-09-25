@@ -13,6 +13,9 @@ void main() {
     final parentDashboard = File(
       'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
     ).readAsStringSync();
+    final parentDashboardRepository = File(
+      'lib/roles/parent/data/api_parent_dashboard_repository.dart',
+    ).readAsStringSync();
 
     expect(
       studentsApi,
@@ -24,11 +27,15 @@ void main() {
     );
     expect(
       parentFees,
-      contains('getMyStudents(\n        refreshNonce: refreshNonce,'),
+      contains(
+        '_repository.loadChildren(\n        refreshNonce: refreshNonce,',
+      ),
     );
     expect(
-      parentDashboard,
-      contains("api.getDashboard('parent', forceRefresh: forceRefresh)"),
+      parentDashboardRepository,
+      contains(
+        "_api.getDashboard(\n        'parent',\n        forceRefresh: forceRefresh,",
+      ),
     );
     // Parent dashboard children are returned by its role-scoped DTO. The
     // fee hub owns its own refreshable child request, so the dashboard must
@@ -45,8 +52,14 @@ void main() {
       final principalClasses = File(
         'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
       ).readAsStringSync();
+      final principalClassesRepository = File(
+        'lib/roles/principal/data/api_principal_classes_repository.dart',
+      ).readAsStringSync();
       final principalDashboard = File(
         'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
+      ).readAsStringSync();
+      final leadershipRepository = File(
+        'lib/roles/principal/data/api_leadership_dashboard_repository.dart',
       ).readAsStringSync();
 
       expect(
@@ -59,11 +72,18 @@ void main() {
       );
       expect(
         principalClasses,
-        contains('api.getPrincipalClassesOverview(forceRefresh: true)'),
+        contains('_repository.loadOverview(forceRefresh: true)'),
       );
       expect(
+        principalClassesRepository,
+        contains(
+          '_api.getPrincipalClassesOverview(forceRefresh: forceRefresh)',
+        ),
+      );
+      expect(leadershipRepository, contains('_api.getDashboard(role'));
+      expect(
         principalDashboard,
-        contains('api.getDashboard(_leadershipRole, forceRefresh: true)'),
+        contains('loadCritical(role: _leadershipRole)'),
       );
     },
   );

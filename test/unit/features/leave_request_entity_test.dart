@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/features/shared/domain/entities/leave_request.dart';
+import 'package:schooldesk1/modules/leave/domain/entities/leave_request.dart';
 
 void main() {
   group('LeaveRequest Entity', () {

@@ -4,17 +4,28 @@ import 'package:provider/provider.dart';
 import 'package:schooldesk1/core/services/theme_provider.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/backup_restore_service.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
+import 'package:schooldesk1/modules/profile/data/api_profile_repository.dart';
+import 'package:schooldesk1/modules/profile/domain/profile_repository.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class AppSettingsScreen extends StatefulWidget {
   final String role;
-  const AppSettingsScreen({super.key, required this.role});
+  final ProfileRepository? repository;
+
+  const AppSettingsScreen({
+    super.key,
+    required this.role,
+    this.repository,
+  });
 
   @override
   State<AppSettingsScreen> createState() => _AppSettingsScreenState();
@@ -24,7 +35,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
   NotificationService? _notifService;
   BackupRestoreService? _backupService;
   AppSettingsProvider? _settingsProvider;
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _backupInProgress = false;
   Map<String, dynamic>? _backupMeta;
 
@@ -35,10 +46,21 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
   }
 
   Future<void> _init() async {
-    _notifService = await NotificationService.getInstance();
-    _backupService = await BackupRestoreService.getInstance();
-    _backupMeta = _backupService?.getBackupMeta();
-    if (mounted) setState(() => _loading = false);
+    try {
+      _notifService = await NotificationService.getInstance();
+      _backupService = await BackupRestoreService.getInstance();
+      _backupMeta = _backupService?.getBackupMeta();
+      if (mounted) {
+        setState(() {
+          _state = const RepositoryState(
+            data: Object(),
+            source: RepositorySource.localMutation,
+          );
+        });
+      }
+    } on Object catch (error) {
+      if (mounted) setState(() => _state = RepositoryState.error(error: error));
+    }
   }
 
   @override
@@ -67,268 +89,268 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
         elevation: 0,
         iconTheme: IconThemeData(color: onSurfaceColor),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildSection(
-                  'APPEARANCE',
-                  surfaceColor,
-                  outlineColor,
-                  mutedColor,
-                  [
-                    _buildSwitchTile(
-                      icon: Icons.dark_mode_outlined,
-                      iconColor: const Color(0xFF5C6BC0),
-                      title: 'Dark Mode',
-                      subtitle: 'Switch between light and dark theme',
-                      value: themeProvider.isDark,
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      onChanged: (v) async {
-                        await themeProvider.toggleDarkMode();
-                      },
-                    ),
-                    _buildDropdownTile(
-                      icon: Icons.text_fields_rounded,
-                      iconColor: context.appTheme.primary,
-                      title: 'App Text Size',
-                      subtitle:
-                          'Uses Arish Ville sizing, not the phone display size',
-                      value:
-                          _settingsProvider?.getSetting(
-                            'font_size',
-                            'medium',
-                          ) ??
-                          'medium',
-                      options: const ['small', 'medium', 'large'],
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      onChanged: (v) async {
-                        await _settingsProvider?.setSetting('font_size', v);
-                        if (mounted) setState(() {});
-                      },
-                    ),
-                    _buildSwitchTile(
-                      icon: Icons.view_compact_rounded,
-                      iconColor: context.appTheme.secondary,
-                      title: 'Compact View',
-                      subtitle: 'Show more content with reduced spacing',
-                      value:
-                          _settingsProvider?.getSetting(
-                            'compact_view',
-                            false,
-                          ) ??
-                          false,
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      onChanged: (v) async {
-                        await _settingsProvider?.setSetting('compact_view', v);
-                        if (mounted) setState(() {});
-                      },
-                    ),
-                  ],
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _init,
+        data: (_) => ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildSection(
+              'APPEARANCE',
+              surfaceColor,
+              outlineColor,
+              mutedColor,
+              [
+                _buildSwitchTile(
+                  icon: Icons.dark_mode_outlined,
+                  iconColor: const Color(0xFF5C6BC0),
+                  title: 'Dark Mode',
+                  subtitle: 'Switch between light and dark theme',
+                  value: themeProvider.isDark,
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  onChanged: (v) async {
+                    await themeProvider.toggleDarkMode();
+                  },
                 ),
-                const SizedBox(height: 16),
-                _buildSection(
-                  'NOTIFICATIONS',
-                  surfaceColor,
-                  outlineColor,
-                  mutedColor,
-                  [
-                    _buildSwitchTile(
-                      icon: Icons.pending_actions_rounded,
-                      iconColor: context.appTheme.warning,
-                      title: 'Pending Approvals',
-                      subtitle: 'Alerts for leave and document requests',
-                      value:
-                          _notifService?.getSetting('pending_approvals') ??
-                          true,
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      onChanged: (v) async {
-                        await _notifService?.updateSetting(
-                          'pending_approvals',
-                          v,
-                        );
-                        if (mounted) setState(() {});
-                      },
-                    ),
-                    _buildSwitchTile(
-                      icon: Icons.account_balance_wallet_rounded,
-                      iconColor: context.appTheme.error,
-                      title: 'Fee Reminders',
-                      subtitle: 'Alerts for due and overdue fees',
-                      value: _notifService?.getSetting('fee_reminders') ?? true,
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      onChanged: (v) async {
-                        await _notifService?.updateSetting('fee_reminders', v);
-                        if (mounted) setState(() {});
-                      },
-                    ),
-                    _buildSwitchTile(
-                      icon: Icons.how_to_reg_rounded,
-                      iconColor: context.appTheme.success,
-                      title: 'Attendance Alerts',
-                      subtitle: 'Alerts for low attendance warnings',
-                      value:
-                          _settingsProvider?.getSetting(
-                            'show_attendance_alerts',
-                            true,
-                          ) ??
-                          true,
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      onChanged: (v) async {
-                        await _settingsProvider?.setSetting(
-                          'show_attendance_alerts',
-                          v,
-                        );
-                        if (mounted) setState(() {});
-                      },
-                    ),
-                  ],
+                _buildDropdownTile(
+                  icon: Icons.text_fields_rounded,
+                  iconColor: context.appTheme.primary,
+                  title: 'App Text Size',
+                  subtitle:
+                      'Uses Arish Ville sizing, not the phone display size',
+                  value:
+                      _settingsProvider?.getSetting(
+                        'font_size',
+                        'medium',
+                      ) ??
+                      'medium',
+                  options: const ['small', 'medium', 'large'],
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  onChanged: (v) async {
+                    await _settingsProvider?.setSetting('font_size', v);
+                    if (mounted) setState(() {});
+                  },
                 ),
-                const SizedBox(height: 16),
-                _buildSection(
-                  'DATA & BACKUP',
-                  surfaceColor,
-                  outlineColor,
-                  mutedColor,
-                  [
-                    _buildActionTile(
-                      icon: Icons.backup_rounded,
-                      iconColor: context.appTheme.success,
-                      title: 'Create Backup',
-                      subtitle: _backupMeta != null
-                          ? 'Last backup: ${_formatDate(_backupMeta!['lastBackup'] as String?)}'
-                          : 'No backup created yet',
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      trailing: _backupInProgress
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Icon(
-                              Icons.chevron_right_rounded,
-                              color: mutedColor,
-                            ),
-                      onTap: _createBackup,
-                    ),
-                    _buildActionTile(
-                      icon: Icons.restore_rounded,
-                      iconColor: context.appTheme.primary,
-                      title: 'Restore Backup',
-                      subtitle: 'Restore data from a previous backup',
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      trailing: Icon(
-                        Icons.chevron_right_rounded,
-                        color: mutedColor,
-                      ),
-                      onTap: _showRestoreDialog,
-                    ),
-                    _buildActionTile(
-                      icon: Icons.delete_sweep_rounded,
-                      iconColor: context.appTheme.error,
-                      title: 'Clear All Data',
-                      subtitle: 'Reset app to factory defaults',
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      trailing: Icon(
-                        Icons.chevron_right_rounded,
-                        color: mutedColor,
-                      ),
-                      onTap: _showClearDataDialog,
-                    ),
-                  ],
+                _buildSwitchTile(
+                  icon: Icons.view_compact_rounded,
+                  iconColor: context.appTheme.secondary,
+                  title: 'Compact View',
+                  subtitle: 'Show more content with reduced spacing',
+                  value:
+                      _settingsProvider?.getSetting(
+                        'compact_view',
+                        false,
+                      ) ??
+                      false,
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  onChanged: (v) async {
+                    await _settingsProvider?.setSetting('compact_view', v);
+                    if (mounted) setState(() {});
+                  },
                 ),
-                const SizedBox(height: 16),
-                _buildSection(
-                  'ACCOUNT',
-                  surfaceColor,
-                  outlineColor,
-                  mutedColor,
-                  [
-                    _buildActionTile(
-                      icon: Icons.person_outline_rounded,
-                      iconColor: context.appTheme.primary,
-                      title: 'My Profile',
-                      subtitle: 'View and edit your profile',
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      trailing: Icon(
-                        Icons.chevron_right_rounded,
-                        color: mutedColor,
-                      ),
-                      onTap: () => Navigator.pushNamed(
-                        context,
-                        AppRoutes.profileScreen,
-                        arguments: widget.role,
-                      ),
-                    ),
-                    _buildActionTile(
-                      icon: Icons.lock_outline_rounded,
-                      iconColor: context.appTheme.secondary,
-                      title: 'Change Password',
-                      subtitle: 'Update your login password',
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      trailing: Icon(
-                        Icons.chevron_right_rounded,
-                        color: mutedColor,
-                      ),
-                      onTap: _openChangePasswordPage,
-                    ),
-                    _buildActionTile(
-                      icon: Icons.logout_rounded,
-                      iconColor: context.appTheme.error,
-                      title: 'Sign Out',
-                      subtitle: 'Log out from your account',
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      trailing: Icon(
-                        Icons.chevron_right_rounded,
-                        color: mutedColor,
-                      ),
-                      onTap: () => LogoutService.signOut(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildSection('ABOUT', surfaceColor, outlineColor, mutedColor, [
-                  _buildInfoTile(
-                    icon: Icons.info_outline_rounded,
-                    iconColor: mutedColor,
-                    title: 'App Version',
-                    value: '1.0.21+32',
-                    onSurfaceColor: onSurfaceColor,
-                    mutedColor: mutedColor,
-                  ),
-                  _buildInfoTile(
-                    icon: Icons.school_rounded,
-                    iconColor: context.appTheme.primary,
-                    title: 'Application',
-                    value: 'Public School',
-                    onSurfaceColor: onSurfaceColor,
-                    mutedColor: mutedColor,
-                  ),
-                  _buildInfoTile(
-                    icon: Icons.build_outlined,
-                    iconColor: mutedColor,
-                    title: 'Build',
-                    value: 'Production',
-                    onSurfaceColor: onSurfaceColor,
-                    mutedColor: mutedColor,
-                  ),
-                ]),
-                const SizedBox(height: 32),
               ],
             ),
+            const SizedBox(height: 16),
+            _buildSection(
+              'NOTIFICATIONS',
+              surfaceColor,
+              outlineColor,
+              mutedColor,
+              [
+                _buildSwitchTile(
+                  icon: Icons.pending_actions_rounded,
+                  iconColor: context.appTheme.warning,
+                  title: 'Pending Approvals',
+                  subtitle: 'Alerts for leave and document requests',
+                  value: _notifService?.getSetting('pending_approvals') ?? true,
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  onChanged: (v) async {
+                    await _notifService?.updateSetting(
+                      'pending_approvals',
+                      v,
+                    );
+                    if (mounted) setState(() {});
+                  },
+                ),
+                _buildSwitchTile(
+                  icon: Icons.account_balance_wallet_rounded,
+                  iconColor: context.appTheme.error,
+                  title: 'Fee Reminders',
+                  subtitle: 'Alerts for due and overdue fees',
+                  value: _notifService?.getSetting('fee_reminders') ?? true,
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  onChanged: (v) async {
+                    await _notifService?.updateSetting('fee_reminders', v);
+                    if (mounted) setState(() {});
+                  },
+                ),
+                _buildSwitchTile(
+                  icon: Icons.how_to_reg_rounded,
+                  iconColor: context.appTheme.success,
+                  title: 'Attendance Alerts',
+                  subtitle: 'Alerts for low attendance warnings',
+                  value:
+                      _settingsProvider?.getSetting(
+                        'show_attendance_alerts',
+                        true,
+                      ) ??
+                      true,
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  onChanged: (v) async {
+                    await _settingsProvider?.setSetting(
+                      'show_attendance_alerts',
+                      v,
+                    );
+                    if (mounted) setState(() {});
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildSection(
+              'DATA & BACKUP',
+              surfaceColor,
+              outlineColor,
+              mutedColor,
+              [
+                _buildActionTile(
+                  icon: Icons.backup_rounded,
+                  iconColor: context.appTheme.success,
+                  title: 'Create Backup',
+                  subtitle: _backupMeta != null
+                      ? 'Last backup: ${_formatDate(_backupMeta!['lastBackup'] as String?)}'
+                      : 'No backup created yet',
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  trailing: _backupInProgress
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          Icons.chevron_right_rounded,
+                          color: mutedColor,
+                        ),
+                  onTap: _createBackup,
+                ),
+                _buildActionTile(
+                  icon: Icons.restore_rounded,
+                  iconColor: context.appTheme.primary,
+                  title: 'Restore Backup',
+                  subtitle: 'Restore data from a previous backup',
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: mutedColor,
+                  ),
+                  onTap: _showRestoreDialog,
+                ),
+                _buildActionTile(
+                  icon: Icons.delete_sweep_rounded,
+                  iconColor: context.appTheme.error,
+                  title: 'Clear All Data',
+                  subtitle: 'Reset app to factory defaults',
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: mutedColor,
+                  ),
+                  onTap: _showClearDataDialog,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildSection(
+              'ACCOUNT',
+              surfaceColor,
+              outlineColor,
+              mutedColor,
+              [
+                _buildActionTile(
+                  icon: Icons.person_outline_rounded,
+                  iconColor: context.appTheme.primary,
+                  title: 'My Profile',
+                  subtitle: 'View and edit your profile',
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: mutedColor,
+                  ),
+                  onTap: () => SchoolDeskNavigation.push(
+                    context,
+                    AppRoutes.profileScreen,
+                    arguments: widget.role,
+                  ),
+                ),
+                _buildActionTile(
+                  icon: Icons.lock_outline_rounded,
+                  iconColor: context.appTheme.secondary,
+                  title: 'Change Password',
+                  subtitle: 'Update your login password',
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: mutedColor,
+                  ),
+                  onTap: _openChangePasswordPage,
+                ),
+                _buildActionTile(
+                  icon: Icons.logout_rounded,
+                  iconColor: context.appTheme.error,
+                  title: 'Sign Out',
+                  subtitle: 'Log out from your account',
+                  onSurfaceColor: onSurfaceColor,
+                  mutedColor: mutedColor,
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: mutedColor,
+                  ),
+                  onTap: () => LogoutService.signOut(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildSection('ABOUT', surfaceColor, outlineColor, mutedColor, [
+              _buildInfoTile(
+                icon: Icons.info_outline_rounded,
+                iconColor: mutedColor,
+                title: 'App Version',
+                value: '1.0.21+32',
+                onSurfaceColor: onSurfaceColor,
+                mutedColor: mutedColor,
+              ),
+              _buildInfoTile(
+                icon: Icons.school_rounded,
+                iconColor: context.appTheme.primary,
+                title: 'Application',
+                value: 'Public School',
+                onSurfaceColor: onSurfaceColor,
+                mutedColor: mutedColor,
+              ),
+              _buildInfoTile(
+                icon: Icons.build_outlined,
+                iconColor: mutedColor,
+                title: 'Build',
+                value: 'Production',
+                onSurfaceColor: onSurfaceColor,
+                mutedColor: mutedColor,
+              ),
+            ]),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
     );
   }
 
@@ -697,10 +719,10 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
+                  SchoolDeskNavigation.goFromNavigator(
+                    Navigator.of(context),
                     AppRoutes.landingPage,
-                    (r) => false,
+                    legacyPredicate: (r) => false,
                   );
                 }
               } on Object {
@@ -730,7 +752,11 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
 
   void _openChangePasswordPage() {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const _ChangePasswordPage()),
+      MaterialPageRoute<void>(
+        builder: (_) => _ChangePasswordPage(
+          repository: widget.repository ?? ApiProfileRepository.legacyDefault,
+        ),
+      ),
     );
   }
 
@@ -745,7 +771,9 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
 }
 
 class _ChangePasswordPage extends StatefulWidget {
-  const _ChangePasswordPage();
+  final ProfileRepository repository;
+
+  const _ChangePasswordPage({required this.repository});
 
   @override
   State<_ChangePasswordPage> createState() => _ChangePasswordPageState();
@@ -760,7 +788,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _submitting = false;
-  String? _errorText;
+  String? _passwordErrorText;
   String? _successText;
 
   @override
@@ -773,14 +801,14 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
 
   Future<void> _submit() async {
     setState(() {
-      _errorText = null;
+      _passwordErrorText = null;
       _successText = null;
     });
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _submitting = true);
     try {
-      await BackendApiClient.instance.changePassword(
+      await widget.repository.changePassword(
         currentPassword: _currentCtrl.text,
         newPassword: _newCtrl.text,
       );
@@ -792,20 +820,14 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
         _submitting = false;
         _successText = 'Password updated successfully. Please sign in again.';
       });
-      await TokenStorageService.clear();
-      BackendApiClient.instance.clearAuthToken();
       await Future<void>.delayed(const Duration(milliseconds: 700));
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        AppRoutes.landingPage,
-        (route) => false,
-      );
+      await LogoutService.signOut(context);
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _errorText = _friendlyPasswordError(error);
+        _passwordErrorText = _friendlyPasswordError(error);
       });
     }
   }
@@ -882,10 +904,10 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
                   return null;
                 },
               ),
-              if (_errorText != null) ...[
+              if (_passwordErrorText != null) ...[
                 const SizedBox(height: 16),
                 _InlineStateMessage(
-                  message: _errorText!,
+                  message: _passwordErrorText!,
                   color: context.appTheme.error,
                   icon: Icons.error_outline_rounded,
                 ),

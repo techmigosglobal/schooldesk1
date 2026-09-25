@@ -3,19 +3,28 @@ import 'package:flutter/services.dart';
 
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/modules/academics/data/api_admin_timetable_repository.dart';
+import 'package:schooldesk1/modules/academics/domain/admin_timetable_repository.dart';
 
 enum _TimetableStage { selectClass, editor }
 
 class AdminTimetableScreen extends StatefulWidget {
-  const AdminTimetableScreen({super.key});
+  final AdminTimetableRepository? repository;
+
+  const AdminTimetableScreen({super.key, this.repository});
 
   @override
   State<AdminTimetableScreen> createState() => _AdminTimetableScreenState();
 }
 
 class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
+  AdminTimetableRepository get _repository =>
+      widget.repository ?? ApiAdminTimetableRepository.legacyDefault;
+
   static const _accent = Color(0xFF0877D8);
   static const _ink = Color(0xFF172B3A);
   static const _muted = Color(0xFF667989);
@@ -35,9 +44,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _timePattern = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
 
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _saving = false;
-  String? _error;
   String _selectedSectionId = '';
   _TimetableStage _stage = _TimetableStage.selectClass;
   List<int> _workingDays = [..._defaultWorkingDays];
@@ -64,26 +72,26 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   }
 
   Future<void> _loadData() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState<Object>.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getAcademicYears(forceRefresh: true),
-        api.getSections(forceRefresh: true),
-        api.getTimetableWorkingDays().catchError((_) => _defaultWorkingDays),
-        api.getTimetableSlots(),
-        api.getRawList('/subjects', queryParameters: const {'page_size': 100}),
-        api.getRawList(
-          '/grade-subjects',
-          queryParameters: const {'page_size': 100},
-        ),
-        api.getRawList(
-          '/staff-subjects',
-          queryParameters: const {'page_size': 100},
-        ),
+        _repository.loadAcademicYears(forceRefresh: true),
+        _repository.loadSections(forceRefresh: true),
+        _repository.loadWorkingDays().catchError((_) => _defaultWorkingDays),
+        _repository.loadSlots(),
+        _repository.loadSubjects(),
+        _repository.loadGradeSubjects(),
+        _repository.loadStaffSubjects(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -111,13 +119,24 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         if (!_sections.any((section) => section.id == _selectedSectionId)) {
           _selectedSectionId = _sections.isEmpty ? '' : _sections.first.id;
         }
-        _loading = false;
+        _state = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = 'Unable to load timetable setup. $error';
+        _state = previous == null
+            ? RepositoryState<Object>.error(
+                error: 'Unable to load timetable setup. $error',
+              )
+            : RepositoryState<Object>(
+                data: Object(),
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
       });
     }
   }
@@ -140,39 +159,25 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: isDesktop ? 1040 : 560),
-            child: RefreshIndicator(
-              color: _accent,
-              onRefresh: _loadData,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                slivers: [
-                  SliverToBoxAdapter(child: _buildHeader()),
-                  if (_loading)
-                    const SliverFillRemaining(
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (_error != null)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: _emptyState(
-                          icon: Icons.cloud_off_rounded,
-                          title: 'Timetable unavailable',
-                          message: _error!,
-                          actionLabel: 'Retry',
-                          onAction: _loadData,
-                        ),
-                      ),
-                    )
-                  else
+            child: SchoolDeskRepositoryStateView<Object>(
+              state: _state,
+              onRetry: _loadData,
+              errorTitle: 'Timetable unavailable',
+              data: (_) => RefreshIndicator(
+                color: _accent,
+                onRefresh: _loadData,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildHeader()),
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(18, 8, 18, 96),
                       sliver: SliverToBoxAdapter(child: _buildContent()),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -916,7 +921,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.replaceTimetableDays(
+      await _repository.replaceTimetableDays(
         sectionId: section.id,
         academicYearId: yearId,
         days: _selectedDays.toList()..sort(),

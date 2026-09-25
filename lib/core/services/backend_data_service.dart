@@ -300,6 +300,17 @@ class BackendDataService {
     }
   }
 
+  Future<String> getCurrentAcademicYearLabel() async {
+    final years = await _api.getAcademicYears();
+    final current = years.where((year) => year.isCurrent).toList();
+    final selected = current.isNotEmpty
+        ? current.first
+        : (years.isNotEmpty ? years.first : null);
+    return selected?.yearLabel.trim() ?? '';
+  }
+
+  Future<Map<String, dynamic>> getCurrentSchool() => _api.getCurrentSchool();
+
   Future<List<T>> _fetchAll<T>(
     Future<PaginatedList<T>> Function(int page, int pageSize) fetchPage, {
     int pageSize = _defaultDirectoryPageSize,
@@ -674,6 +685,10 @@ Map<String, dynamic> _studentDirectoryMap(StudentModel student) {
   final gradeName = _nestedText(section, 'grade', 'grade_name');
   final sectionName = _text(section['section_name']);
   final classTeacherName = _personName(section['class_teacher']);
+  final className = [
+    gradeName,
+    sectionName,
+  ].where((value) => value.isNotEmpty).join(' ');
 
   return {
     'id': student.id,
@@ -689,6 +704,7 @@ Map<String, dynamic> _studentDirectoryMap(StudentModel student) {
     'photo': student.photoUrl,
     'photo_url': student.photoUrl,
     'class': gradeName,
+    'className': className,
     'grade_name': gradeName,
     'section': sectionName,
     'section_name': sectionName,
@@ -703,6 +719,8 @@ Map<String, dynamic> _studentDirectoryMap(StudentModel student) {
     'feeStatus': student.feeStatus,
     'primaryGuardian': student.primaryGuardianName,
     'primary_guardian_name': student.primaryGuardianName,
+    'parentName': student.primaryGuardianName,
+    'contact': student.primaryGuardianPhone,
   };
 }
 

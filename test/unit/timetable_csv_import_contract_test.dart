@@ -27,7 +27,7 @@ void main() {
       'supabase/functions/api/handlers/timetable.ts',
     ).readAsStringSync();
     expect(teacher, contains('RoleAccessService.teacherSectionIds'));
-    expect(teacher, contains('getTimetableSlots(sectionId: sectionId)'));
+    expect(teacher, contains('_repository.loadSlots(sectionId: sectionId)'));
     expect(teacher, contains('_selectedSectionId'));
     expect(
       teacher,

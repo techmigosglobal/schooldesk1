@@ -8,6 +8,8 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 enum BulkCsvImportTarget { students, staff, parents, classes, classTimetables }
 
 class BulkCsvImportService {
@@ -23,13 +25,12 @@ class BulkCsvImportService {
     final picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['csv'],
-      withData: true,
     );
-    if (picked == null || picked.files.isEmpty) return false;
+    if (picked.isEmpty) return false;
 
-    final file = picked.files.single;
-    final bytes = file.bytes;
-    if (bytes == null || bytes.isEmpty) {
+    final file = picked.single;
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) {
       if (context.mounted) {
         _snack(
           context,
@@ -704,7 +705,7 @@ class BulkCsvImportService {
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                Navigator.of(context).pushNamed(action.route);
+                SchoolDeskNavigation.push(context, action.route);
               },
               icon: Icon(action.icon, size: 18),
               label: Text(action.label),

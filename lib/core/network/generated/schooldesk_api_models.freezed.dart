@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // coverage:ignore-file
-// ignore_for_file: type=lint
+// ignore_for_file: type=lint, type=warning, deprecated_member_use, deprecated_member_use_from_same_package
 // ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 
 part of 'schooldesk_api_models.dart';
@@ -9,6 +9,7 @@ part of 'schooldesk_api_models.dart';
 // FreezedGenerator
 // **************************************************************************
 
+// GENERATED CODE - DO NOT MODIFY BY HAND
 // dart format off
 T _$identity<T>(T value) => value;
 
@@ -28,16 +29,21 @@ $ApiEnvelopeCopyWith<ApiEnvelope> get copyWith => _$ApiEnvelopeCopyWithImpl<ApiE
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ApiEnvelope&&(identical(other.success, success) || other.success == success)&&(identical(other.code, code) || other.code == code)&&(identical(other.message, message) || other.message == message)&&const DeepCollectionEquality().equals(other.data, data)&&(identical(other.error, error) || other.error == error)&&const DeepCollectionEquality().equals(other.details, details)&&(identical(other.requestId, requestId) || other.requestId == requestId));
+  final _this = this as ApiEnvelope;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ApiEnvelope&&(identical(other.success, _this.success) || other.success == _this.success)&&(identical(other.code, _this.code) || other.code == _this.code)&&(identical(other.message, _this.message) || other.message == _this.message)&&const DeepCollectionEquality().equals(other.data, _this.data)&&(identical(other.error, _this.error) || other.error == _this.error)&&const DeepCollectionEquality().equals(other.details, _this.details)&&(identical(other.requestId, _this.requestId) || other.requestId == _this.requestId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,success,code,message,const DeepCollectionEquality().hash(data),error,const DeepCollectionEquality().hash(details),requestId);
+int get hashCode {
+  final _this = this as ApiEnvelope;
+  return Object.hash(runtimeType,_this.success,_this.code,_this.message,const DeepCollectionEquality().hash(_this.data),_this.error,const DeepCollectionEquality().hash(_this.details),_this.requestId);
+}
 
 @override
 String toString() {
-  return 'ApiEnvelope(success: $success, code: $code, message: $message, data: $data, error: $error, details: $details, requestId: $requestId)';
+  final _this = this as ApiEnvelope;
+  return 'ApiEnvelope(success: ${_this.success}, code: ${_this.code}, message: ${_this.message}, data: ${_this.data}, error: ${_this.error}, details: ${_this.details}, requestId: ${_this.requestId})';
 }
 
 
@@ -66,7 +72,7 @@ class _$ApiEnvelopeCopyWithImpl<$Res>
 /// Create a copy of ApiEnvelope
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? success = null,Object? code = freezed,Object? message = freezed,Object? data = freezed,Object? error = freezed,Object? details = freezed,Object? requestId = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(ApiEnvelope(
 success: null == success ? _self.success : success // ignore: cast_nullable_to_non_nullable
 as bool,code: freezed == code ? _self.code : code // ignore: cast_nullable_to_non_nullable
 as String?,message: freezed == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
@@ -239,16 +245,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ApiEnvelope&&(identical(other.success, success) || other.success == success)&&(identical(other.code, code) || other.code == code)&&(identical(other.message, message) || other.message == message)&&const DeepCollectionEquality().equals(other.data, data)&&(identical(other.error, error) || other.error == error)&&const DeepCollectionEquality().equals(other.details, details)&&(identical(other.requestId, requestId) || other.requestId == requestId));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _ApiEnvelope&&(identical(other.success, success) || other.success == success)&&(identical(other.code, code) || other.code == code)&&(identical(other.message, message) || other.message == message)&&const DeepCollectionEquality().equals(other.data, data)&&(identical(other.error, error) || other.error == error)&&const DeepCollectionEquality().equals(other.details, details)&&(identical(other.requestId, requestId) || other.requestId == requestId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,success,code,message,const DeepCollectionEquality().hash(data),error,const DeepCollectionEquality().hash(details),requestId);
+int get hashCode {
+    return Object.hash(runtimeType,success,code,message,const DeepCollectionEquality().hash(data),error,const DeepCollectionEquality().hash(details),requestId);
+}
 
 @override
 String toString() {
-  return 'ApiEnvelope(success: $success, code: $code, message: $message, data: $data, error: $error, details: $details, requestId: $requestId)';
+    return 'ApiEnvelope(success: $success, code: $code, message: $message, data: $data, error: $error, details: $details, requestId: $requestId)';
 }
 
 
@@ -309,16 +317,21 @@ $PaginatedEnvelopeCopyWith<PaginatedEnvelope> get copyWith => _$PaginatedEnvelop
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PaginatedEnvelope&&(identical(other.success, success) || other.success == success)&&const DeepCollectionEquality().equals(other.data, data)&&(identical(other.page, page) || other.page == page)&&(identical(other.pageSize, pageSize) || other.pageSize == pageSize)&&(identical(other.total, total) || other.total == total)&&(identical(other.totalPages, totalPages) || other.totalPages == totalPages));
+  final _this = this as PaginatedEnvelope;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PaginatedEnvelope&&(identical(other.success, _this.success) || other.success == _this.success)&&const DeepCollectionEquality().equals(other.data, _this.data)&&(identical(other.page, _this.page) || other.page == _this.page)&&(identical(other.pageSize, _this.pageSize) || other.pageSize == _this.pageSize)&&(identical(other.total, _this.total) || other.total == _this.total)&&(identical(other.totalPages, _this.totalPages) || other.totalPages == _this.totalPages));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,success,const DeepCollectionEquality().hash(data),page,pageSize,total,totalPages);
+int get hashCode {
+  final _this = this as PaginatedEnvelope;
+  return Object.hash(runtimeType,_this.success,const DeepCollectionEquality().hash(_this.data),_this.page,_this.pageSize,_this.total,_this.totalPages);
+}
 
 @override
 String toString() {
-  return 'PaginatedEnvelope(success: $success, data: $data, page: $page, pageSize: $pageSize, total: $total, totalPages: $totalPages)';
+  final _this = this as PaginatedEnvelope;
+  return 'PaginatedEnvelope(success: ${_this.success}, data: ${_this.data}, page: ${_this.page}, pageSize: ${_this.pageSize}, total: ${_this.total}, totalPages: ${_this.totalPages})';
 }
 
 
@@ -347,7 +360,7 @@ class _$PaginatedEnvelopeCopyWithImpl<$Res>
 /// Create a copy of PaginatedEnvelope
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? success = null,Object? data = null,Object? page = null,Object? pageSize = null,Object? total = null,Object? totalPages = null,}) {
-  return _then(_self.copyWith(
+  return _then(PaginatedEnvelope(
 success: null == success ? _self.success : success // ignore: cast_nullable_to_non_nullable
 as bool,data: null == data ? _self.data : data // ignore: cast_nullable_to_non_nullable
 as List<dynamic>,page: null == page ? _self.page : page // ignore: cast_nullable_to_non_nullable
@@ -495,7 +508,7 @@ return $default(_that.success,_that.data,_that.page,_that.pageSize,_that.total,_
 @JsonSerializable()
 
 class _PaginatedEnvelope implements PaginatedEnvelope {
-  const _PaginatedEnvelope({this.success = false, final  List<dynamic> data = const <dynamic>[], this.page = 1, @JsonKey(name: 'page_size') this.pageSize = 20, this.total = 0, @JsonKey(name: 'total_pages') this.totalPages = 0}): _data = data;
+  const _PaginatedEnvelope({this.success = false,  List<dynamic> data = const <dynamic>[], this.page = 1, @JsonKey(name: 'page_size') this.pageSize = 20, this.total = 0, @JsonKey(name: 'total_pages') this.totalPages = 0}): _data = data;
   factory _PaginatedEnvelope.fromJson(Map<String, dynamic> json) => _$PaginatedEnvelopeFromJson(json);
 
 @override@JsonKey() final  bool success;
@@ -524,16 +537,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PaginatedEnvelope&&(identical(other.success, success) || other.success == success)&&const DeepCollectionEquality().equals(other._data, _data)&&(identical(other.page, page) || other.page == page)&&(identical(other.pageSize, pageSize) || other.pageSize == pageSize)&&(identical(other.total, total) || other.total == total)&&(identical(other.totalPages, totalPages) || other.totalPages == totalPages));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PaginatedEnvelope&&(identical(other.success, success) || other.success == success)&&const DeepCollectionEquality().equals(other.data, _data)&&(identical(other.page, page) || other.page == page)&&(identical(other.pageSize, pageSize) || other.pageSize == pageSize)&&(identical(other.total, total) || other.total == total)&&(identical(other.totalPages, totalPages) || other.totalPages == totalPages));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,success,const DeepCollectionEquality().hash(_data),page,pageSize,total,totalPages);
+int get hashCode {
+    return Object.hash(runtimeType,success,const DeepCollectionEquality().hash(_data),page,pageSize,total,totalPages);
+}
 
 @override
 String toString() {
-  return 'PaginatedEnvelope(success: $success, data: $data, page: $page, pageSize: $pageSize, total: $total, totalPages: $totalPages)';
+    return 'PaginatedEnvelope(success: $success, data: $data, page: $page, pageSize: $pageSize, total: $total, totalPages: $totalPages)';
 }
 
 
@@ -593,16 +608,21 @@ $LoginRequestDtoCopyWith<LoginRequestDto> get copyWith => _$LoginRequestDtoCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is LoginRequestDto&&(identical(other.username, username) || other.username == username)&&(identical(other.email, email) || other.email == email)&&(identical(other.password, password) || other.password == password));
+  final _this = this as LoginRequestDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LoginRequestDto&&(identical(other.username, _this.username) || other.username == _this.username)&&(identical(other.email, _this.email) || other.email == _this.email)&&(identical(other.password, _this.password) || other.password == _this.password));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,username,email,password);
+int get hashCode {
+  final _this = this as LoginRequestDto;
+  return Object.hash(runtimeType,_this.username,_this.email,_this.password);
+}
 
 @override
 String toString() {
-  return 'LoginRequestDto(username: $username, email: $email, password: $password)';
+  final _this = this as LoginRequestDto;
+  return 'LoginRequestDto(username: ${_this.username}, email: ${_this.email}, password: ${_this.password})';
 }
 
 
@@ -631,7 +651,7 @@ class _$LoginRequestDtoCopyWithImpl<$Res>
 /// Create a copy of LoginRequestDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? username = freezed,Object? email = freezed,Object? password = null,}) {
-  return _then(_self.copyWith(
+  return _then(LoginRequestDto(
 username: freezed == username ? _self.username : username // ignore: cast_nullable_to_non_nullable
 as String?,email: freezed == email ? _self.email : email // ignore: cast_nullable_to_non_nullable
 as String?,password: null == password ? _self.password : password // ignore: cast_nullable_to_non_nullable
@@ -796,16 +816,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _LoginRequestDto&&(identical(other.username, username) || other.username == username)&&(identical(other.email, email) || other.email == email)&&(identical(other.password, password) || other.password == password));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _LoginRequestDto&&(identical(other.username, username) || other.username == username)&&(identical(other.email, email) || other.email == email)&&(identical(other.password, password) || other.password == password));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,username,email,password);
+int get hashCode {
+    return Object.hash(runtimeType,username,email,password);
+}
 
 @override
 String toString() {
-  return 'LoginRequestDto(username: $username, email: $email, password: $password)';
+    return 'LoginRequestDto(username: $username, email: $email, password: $password)';
 }
 
 
@@ -862,16 +884,21 @@ $UserDtoCopyWith<UserDto> get copyWith => _$UserDtoCopyWithImpl<UserDto>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.username, username) || other.username == username)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.roleId, roleId) || other.roleId == roleId)&&(identical(other.roleName, roleName) || other.roleName == roleName)&&(identical(other.linkedType, linkedType) || other.linkedType == linkedType)&&(identical(other.linkedId, linkedId) || other.linkedId == linkedId)&&(identical(other.isActive, isActive) || other.isActive == isActive)&&(identical(other.isVerified, isVerified) || other.isVerified == isVerified));
+  final _this = this as UserDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.username, _this.username) || other.username == _this.username)&&(identical(other.name, _this.name) || other.name == _this.name)&&(identical(other.email, _this.email) || other.email == _this.email)&&(identical(other.phone, _this.phone) || other.phone == _this.phone)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.roleId, _this.roleId) || other.roleId == _this.roleId)&&(identical(other.roleName, _this.roleName) || other.roleName == _this.roleName)&&(identical(other.linkedType, _this.linkedType) || other.linkedType == _this.linkedType)&&(identical(other.linkedId, _this.linkedId) || other.linkedId == _this.linkedId)&&(identical(other.isActive, _this.isActive) || other.isActive == _this.isActive)&&(identical(other.isVerified, _this.isVerified) || other.isVerified == _this.isVerified));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,username,name,email,phone,schoolId,roleId,roleName,linkedType,linkedId,isActive,isVerified);
+int get hashCode {
+  final _this = this as UserDto;
+  return Object.hash(runtimeType,_this.id,_this.username,_this.name,_this.email,_this.phone,_this.schoolId,_this.roleId,_this.roleName,_this.linkedType,_this.linkedId,_this.isActive,_this.isVerified);
+}
 
 @override
 String toString() {
-  return 'UserDto(id: $id, username: $username, name: $name, email: $email, phone: $phone, schoolId: $schoolId, roleId: $roleId, roleName: $roleName, linkedType: $linkedType, linkedId: $linkedId, isActive: $isActive, isVerified: $isVerified)';
+  final _this = this as UserDto;
+  return 'UserDto(id: ${_this.id}, username: ${_this.username}, name: ${_this.name}, email: ${_this.email}, phone: ${_this.phone}, schoolId: ${_this.schoolId}, roleId: ${_this.roleId}, roleName: ${_this.roleName}, linkedType: ${_this.linkedType}, linkedId: ${_this.linkedId}, isActive: ${_this.isActive}, isVerified: ${_this.isVerified})';
 }
 
 
@@ -900,7 +927,7 @@ class _$UserDtoCopyWithImpl<$Res>
 /// Create a copy of UserDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? username = freezed,Object? name = freezed,Object? email = freezed,Object? phone = freezed,Object? schoolId = freezed,Object? roleId = freezed,Object? roleName = freezed,Object? linkedType = freezed,Object? linkedId = freezed,Object? isActive = freezed,Object? isVerified = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(UserDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,username: freezed == username ? _self.username : username // ignore: cast_nullable_to_non_nullable
 as String?,name: freezed == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -1083,16 +1110,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.username, username) || other.username == username)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.roleId, roleId) || other.roleId == roleId)&&(identical(other.roleName, roleName) || other.roleName == roleName)&&(identical(other.linkedType, linkedType) || other.linkedType == linkedType)&&(identical(other.linkedId, linkedId) || other.linkedId == linkedId)&&(identical(other.isActive, isActive) || other.isActive == isActive)&&(identical(other.isVerified, isVerified) || other.isVerified == isVerified));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.username, username) || other.username == username)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.roleId, roleId) || other.roleId == roleId)&&(identical(other.roleName, roleName) || other.roleName == roleName)&&(identical(other.linkedType, linkedType) || other.linkedType == linkedType)&&(identical(other.linkedId, linkedId) || other.linkedId == linkedId)&&(identical(other.isActive, isActive) || other.isActive == isActive)&&(identical(other.isVerified, isVerified) || other.isVerified == isVerified));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,username,name,email,phone,schoolId,roleId,roleName,linkedType,linkedId,isActive,isVerified);
+int get hashCode {
+    return Object.hash(runtimeType,id,username,name,email,phone,schoolId,roleId,roleName,linkedType,linkedId,isActive,isVerified);
+}
 
 @override
 String toString() {
-  return 'UserDto(id: $id, username: $username, name: $name, email: $email, phone: $phone, schoolId: $schoolId, roleId: $roleId, roleName: $roleName, linkedType: $linkedType, linkedId: $linkedId, isActive: $isActive, isVerified: $isVerified)';
+    return 'UserDto(id: $id, username: $username, name: $name, email: $email, phone: $phone, schoolId: $schoolId, roleId: $roleId, roleName: $roleName, linkedType: $linkedType, linkedId: $linkedId, isActive: $isActive, isVerified: $isVerified)';
 }
 
 
@@ -1158,16 +1187,21 @@ $LoginPayloadDtoCopyWith<LoginPayloadDto> get copyWith => _$LoginPayloadDtoCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is LoginPayloadDto&&(identical(other.token, token) || other.token == token)&&(identical(other.refreshToken, refreshToken) || other.refreshToken == refreshToken)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.user, user) || other.user == user));
+  final _this = this as LoginPayloadDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LoginPayloadDto&&(identical(other.token, _this.token) || other.token == _this.token)&&(identical(other.refreshToken, _this.refreshToken) || other.refreshToken == _this.refreshToken)&&(identical(other.expiresAt, _this.expiresAt) || other.expiresAt == _this.expiresAt)&&(identical(other.user, _this.user) || other.user == _this.user));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,token,refreshToken,expiresAt,user);
+int get hashCode {
+  final _this = this as LoginPayloadDto;
+  return Object.hash(runtimeType,_this.token,_this.refreshToken,_this.expiresAt,_this.user);
+}
 
 @override
 String toString() {
-  return 'LoginPayloadDto(token: $token, refreshToken: $refreshToken, expiresAt: $expiresAt, user: $user)';
+  final _this = this as LoginPayloadDto;
+  return 'LoginPayloadDto(token: ${_this.token}, refreshToken: ${_this.refreshToken}, expiresAt: ${_this.expiresAt}, user: ${_this.user})';
 }
 
 
@@ -1196,7 +1230,7 @@ class _$LoginPayloadDtoCopyWithImpl<$Res>
 /// Create a copy of LoginPayloadDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? token = freezed,Object? refreshToken = freezed,Object? expiresAt = freezed,Object? user = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(LoginPayloadDto(
 token: freezed == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
 as String?,refreshToken: freezed == refreshToken ? _self.refreshToken : refreshToken // ignore: cast_nullable_to_non_nullable
 as String?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
@@ -1375,16 +1409,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _LoginPayloadDto&&(identical(other.token, token) || other.token == token)&&(identical(other.refreshToken, refreshToken) || other.refreshToken == refreshToken)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.user, user) || other.user == user));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _LoginPayloadDto&&(identical(other.token, token) || other.token == token)&&(identical(other.refreshToken, refreshToken) || other.refreshToken == refreshToken)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.user, user) || other.user == user));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,token,refreshToken,expiresAt,user);
+int get hashCode {
+    return Object.hash(runtimeType,token,refreshToken,expiresAt,user);
+}
 
 @override
 String toString() {
-  return 'LoginPayloadDto(token: $token, refreshToken: $refreshToken, expiresAt: $expiresAt, user: $user)';
+    return 'LoginPayloadDto(token: $token, refreshToken: $refreshToken, expiresAt: $expiresAt, user: $user)';
 }
 
 
@@ -1454,16 +1490,21 @@ $TablesMdClassDtoCopyWith<TablesMdClassDto> get copyWith => _$TablesMdClassDtoCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is TablesMdClassDto&&(identical(other.id, id) || other.id == id)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.className, className) || other.className == className)&&(identical(other.classCode, classCode) || other.classCode == classCode)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.classTeacherId, classTeacherId) || other.classTeacherId == classTeacherId)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.medium, medium) || other.medium == medium)&&(identical(other.sortOrder, sortOrder) || other.sortOrder == sortOrder)&&(identical(other.isActive, isActive) || other.isActive == isActive));
+  final _this = this as TablesMdClassDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is TablesMdClassDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.classId, _this.classId) || other.classId == _this.classId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.academicYearId, _this.academicYearId) || other.academicYearId == _this.academicYearId)&&(identical(other.className, _this.className) || other.className == _this.className)&&(identical(other.classCode, _this.classCode) || other.classCode == _this.classCode)&&(identical(other.sectionId, _this.sectionId) || other.sectionId == _this.sectionId)&&(identical(other.classTeacherId, _this.classTeacherId) || other.classTeacherId == _this.classTeacherId)&&(identical(other.roomId, _this.roomId) || other.roomId == _this.roomId)&&(identical(other.medium, _this.medium) || other.medium == _this.medium)&&(identical(other.sortOrder, _this.sortOrder) || other.sortOrder == _this.sortOrder)&&(identical(other.isActive, _this.isActive) || other.isActive == _this.isActive));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,classId,schoolId,academicYearId,className,classCode,sectionId,classTeacherId,roomId,medium,sortOrder,isActive);
+int get hashCode {
+  final _this = this as TablesMdClassDto;
+  return Object.hash(runtimeType,_this.id,_this.classId,_this.schoolId,_this.academicYearId,_this.className,_this.classCode,_this.sectionId,_this.classTeacherId,_this.roomId,_this.medium,_this.sortOrder,_this.isActive);
+}
 
 @override
 String toString() {
-  return 'TablesMdClassDto(id: $id, classId: $classId, schoolId: $schoolId, academicYearId: $academicYearId, className: $className, classCode: $classCode, sectionId: $sectionId, classTeacherId: $classTeacherId, roomId: $roomId, medium: $medium, sortOrder: $sortOrder, isActive: $isActive)';
+  final _this = this as TablesMdClassDto;
+  return 'TablesMdClassDto(id: ${_this.id}, classId: ${_this.classId}, schoolId: ${_this.schoolId}, academicYearId: ${_this.academicYearId}, className: ${_this.className}, classCode: ${_this.classCode}, sectionId: ${_this.sectionId}, classTeacherId: ${_this.classTeacherId}, roomId: ${_this.roomId}, medium: ${_this.medium}, sortOrder: ${_this.sortOrder}, isActive: ${_this.isActive})';
 }
 
 
@@ -1492,7 +1533,7 @@ class _$TablesMdClassDtoCopyWithImpl<$Res>
 /// Create a copy of TablesMdClassDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? classId = freezed,Object? schoolId = freezed,Object? academicYearId = freezed,Object? className = freezed,Object? classCode = freezed,Object? sectionId = freezed,Object? classTeacherId = freezed,Object? roomId = freezed,Object? medium = freezed,Object? sortOrder = freezed,Object? isActive = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(TablesMdClassDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,classId: freezed == classId ? _self.classId : classId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -1675,16 +1716,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _TablesMdClassDto&&(identical(other.id, id) || other.id == id)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.className, className) || other.className == className)&&(identical(other.classCode, classCode) || other.classCode == classCode)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.classTeacherId, classTeacherId) || other.classTeacherId == classTeacherId)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.medium, medium) || other.medium == medium)&&(identical(other.sortOrder, sortOrder) || other.sortOrder == sortOrder)&&(identical(other.isActive, isActive) || other.isActive == isActive));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _TablesMdClassDto&&(identical(other.id, id) || other.id == id)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.className, className) || other.className == className)&&(identical(other.classCode, classCode) || other.classCode == classCode)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.classTeacherId, classTeacherId) || other.classTeacherId == classTeacherId)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.medium, medium) || other.medium == medium)&&(identical(other.sortOrder, sortOrder) || other.sortOrder == sortOrder)&&(identical(other.isActive, isActive) || other.isActive == isActive));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,classId,schoolId,academicYearId,className,classCode,sectionId,classTeacherId,roomId,medium,sortOrder,isActive);
+int get hashCode {
+    return Object.hash(runtimeType,id,classId,schoolId,academicYearId,className,classCode,sectionId,classTeacherId,roomId,medium,sortOrder,isActive);
+}
 
 @override
 String toString() {
-  return 'TablesMdClassDto(id: $id, classId: $classId, schoolId: $schoolId, academicYearId: $academicYearId, className: $className, classCode: $classCode, sectionId: $sectionId, classTeacherId: $classTeacherId, roomId: $roomId, medium: $medium, sortOrder: $sortOrder, isActive: $isActive)';
+    return 'TablesMdClassDto(id: $id, classId: $classId, schoolId: $schoolId, academicYearId: $academicYearId, className: $className, classCode: $classCode, sectionId: $sectionId, classTeacherId: $classTeacherId, roomId: $roomId, medium: $medium, sortOrder: $sortOrder, isActive: $isActive)';
 }
 
 
@@ -1750,16 +1793,21 @@ $TablesMdAttendanceDtoCopyWith<TablesMdAttendanceDto> get copyWith => _$TablesMd
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is TablesMdAttendanceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.attendanceId, attendanceId) || other.attendanceId == attendanceId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.attendanceType, attendanceType) || other.attendanceType == attendanceType)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&const DeepCollectionEquality().equals(other.attendanceDate, attendanceDate)&&(identical(other.status, status) || other.status == status)&&(identical(other.markedBy, markedBy) || other.markedBy == markedBy)&&(identical(other.remarks, remarks) || other.remarks == remarks));
+  final _this = this as TablesMdAttendanceDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is TablesMdAttendanceDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.attendanceId, _this.attendanceId) || other.attendanceId == _this.attendanceId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.academicYearId, _this.academicYearId) || other.academicYearId == _this.academicYearId)&&(identical(other.attendanceType, _this.attendanceType) || other.attendanceType == _this.attendanceType)&&(identical(other.studentId, _this.studentId) || other.studentId == _this.studentId)&&(identical(other.staffId, _this.staffId) || other.staffId == _this.staffId)&&(identical(other.classId, _this.classId) || other.classId == _this.classId)&&(identical(other.sectionId, _this.sectionId) || other.sectionId == _this.sectionId)&&const DeepCollectionEquality().equals(other.attendanceDate, _this.attendanceDate)&&(identical(other.status, _this.status) || other.status == _this.status)&&(identical(other.markedBy, _this.markedBy) || other.markedBy == _this.markedBy)&&(identical(other.remarks, _this.remarks) || other.remarks == _this.remarks));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,attendanceId,schoolId,academicYearId,attendanceType,studentId,staffId,classId,sectionId,const DeepCollectionEquality().hash(attendanceDate),status,markedBy,remarks);
+int get hashCode {
+  final _this = this as TablesMdAttendanceDto;
+  return Object.hash(runtimeType,_this.id,_this.attendanceId,_this.schoolId,_this.academicYearId,_this.attendanceType,_this.studentId,_this.staffId,_this.classId,_this.sectionId,const DeepCollectionEquality().hash(_this.attendanceDate),_this.status,_this.markedBy,_this.remarks);
+}
 
 @override
 String toString() {
-  return 'TablesMdAttendanceDto(id: $id, attendanceId: $attendanceId, schoolId: $schoolId, academicYearId: $academicYearId, attendanceType: $attendanceType, studentId: $studentId, staffId: $staffId, classId: $classId, sectionId: $sectionId, attendanceDate: $attendanceDate, status: $status, markedBy: $markedBy, remarks: $remarks)';
+  final _this = this as TablesMdAttendanceDto;
+  return 'TablesMdAttendanceDto(id: ${_this.id}, attendanceId: ${_this.attendanceId}, schoolId: ${_this.schoolId}, academicYearId: ${_this.academicYearId}, attendanceType: ${_this.attendanceType}, studentId: ${_this.studentId}, staffId: ${_this.staffId}, classId: ${_this.classId}, sectionId: ${_this.sectionId}, attendanceDate: ${_this.attendanceDate}, status: ${_this.status}, markedBy: ${_this.markedBy}, remarks: ${_this.remarks})';
 }
 
 
@@ -1788,7 +1836,7 @@ class _$TablesMdAttendanceDtoCopyWithImpl<$Res>
 /// Create a copy of TablesMdAttendanceDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? attendanceId = freezed,Object? schoolId = freezed,Object? academicYearId = freezed,Object? attendanceType = freezed,Object? studentId = freezed,Object? staffId = freezed,Object? classId = freezed,Object? sectionId = freezed,Object? attendanceDate = freezed,Object? status = freezed,Object? markedBy = freezed,Object? remarks = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(TablesMdAttendanceDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,attendanceId: freezed == attendanceId ? _self.attendanceId : attendanceId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -1973,16 +2021,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _TablesMdAttendanceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.attendanceId, attendanceId) || other.attendanceId == attendanceId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.attendanceType, attendanceType) || other.attendanceType == attendanceType)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&const DeepCollectionEquality().equals(other.attendanceDate, attendanceDate)&&(identical(other.status, status) || other.status == status)&&(identical(other.markedBy, markedBy) || other.markedBy == markedBy)&&(identical(other.remarks, remarks) || other.remarks == remarks));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _TablesMdAttendanceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.attendanceId, attendanceId) || other.attendanceId == attendanceId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.attendanceType, attendanceType) || other.attendanceType == attendanceType)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&const DeepCollectionEquality().equals(other.attendanceDate, attendanceDate)&&(identical(other.status, status) || other.status == status)&&(identical(other.markedBy, markedBy) || other.markedBy == markedBy)&&(identical(other.remarks, remarks) || other.remarks == remarks));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,attendanceId,schoolId,academicYearId,attendanceType,studentId,staffId,classId,sectionId,const DeepCollectionEquality().hash(attendanceDate),status,markedBy,remarks);
+int get hashCode {
+    return Object.hash(runtimeType,id,attendanceId,schoolId,academicYearId,attendanceType,studentId,staffId,classId,sectionId,const DeepCollectionEquality().hash(attendanceDate),status,markedBy,remarks);
+}
 
 @override
 String toString() {
-  return 'TablesMdAttendanceDto(id: $id, attendanceId: $attendanceId, schoolId: $schoolId, academicYearId: $academicYearId, attendanceType: $attendanceType, studentId: $studentId, staffId: $staffId, classId: $classId, sectionId: $sectionId, attendanceDate: $attendanceDate, status: $status, markedBy: $markedBy, remarks: $remarks)';
+    return 'TablesMdAttendanceDto(id: $id, attendanceId: $attendanceId, schoolId: $schoolId, academicYearId: $academicYearId, attendanceType: $attendanceType, studentId: $studentId, staffId: $staffId, classId: $classId, sectionId: $sectionId, attendanceDate: $attendanceDate, status: $status, markedBy: $markedBy, remarks: $remarks)';
 }
 
 
@@ -2049,16 +2099,21 @@ $TablesMdFeeDtoCopyWith<TablesMdFeeDto> get copyWith => _$TablesMdFeeDtoCopyWith
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is TablesMdFeeDto&&(identical(other.id, id) || other.id == id)&&(identical(other.feeId, feeId) || other.feeId == feeId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.feeTypeId, feeTypeId) || other.feeTypeId == feeTypeId)&&(identical(other.invoiceNo, invoiceNo) || other.invoiceNo == invoiceNo)&&(identical(other.receiptNo, receiptNo) || other.receiptNo == receiptNo)&&const DeepCollectionEquality().equals(other.dueDate, dueDate)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.discountAmount, discountAmount) || other.discountAmount == discountAmount)&&(identical(other.fineAmount, fineAmount) || other.fineAmount == fineAmount)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.balanceAmount, balanceAmount) || other.balanceAmount == balanceAmount)&&(identical(other.paymentMode, paymentMode) || other.paymentMode == paymentMode)&&(identical(other.paymentStatus, paymentStatus) || other.paymentStatus == paymentStatus)&&(identical(other.transactionId, transactionId) || other.transactionId == transactionId)&&(identical(other.remarks, remarks) || other.remarks == remarks));
+  final _this = this as TablesMdFeeDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is TablesMdFeeDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.feeId, _this.feeId) || other.feeId == _this.feeId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.academicYearId, _this.academicYearId) || other.academicYearId == _this.academicYearId)&&(identical(other.studentId, _this.studentId) || other.studentId == _this.studentId)&&(identical(other.classId, _this.classId) || other.classId == _this.classId)&&(identical(other.sectionId, _this.sectionId) || other.sectionId == _this.sectionId)&&(identical(other.feeTypeId, _this.feeTypeId) || other.feeTypeId == _this.feeTypeId)&&(identical(other.invoiceNo, _this.invoiceNo) || other.invoiceNo == _this.invoiceNo)&&(identical(other.receiptNo, _this.receiptNo) || other.receiptNo == _this.receiptNo)&&const DeepCollectionEquality().equals(other.dueDate, _this.dueDate)&&(identical(other.amount, _this.amount) || other.amount == _this.amount)&&(identical(other.discountAmount, _this.discountAmount) || other.discountAmount == _this.discountAmount)&&(identical(other.fineAmount, _this.fineAmount) || other.fineAmount == _this.fineAmount)&&(identical(other.paidAmount, _this.paidAmount) || other.paidAmount == _this.paidAmount)&&(identical(other.balanceAmount, _this.balanceAmount) || other.balanceAmount == _this.balanceAmount)&&(identical(other.paymentMode, _this.paymentMode) || other.paymentMode == _this.paymentMode)&&(identical(other.paymentStatus, _this.paymentStatus) || other.paymentStatus == _this.paymentStatus)&&(identical(other.transactionId, _this.transactionId) || other.transactionId == _this.transactionId)&&(identical(other.remarks, _this.remarks) || other.remarks == _this.remarks));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,feeId,schoolId,academicYearId,studentId,classId,sectionId,feeTypeId,invoiceNo,receiptNo,const DeepCollectionEquality().hash(dueDate),amount,discountAmount,fineAmount,paidAmount,balanceAmount,paymentMode,paymentStatus,transactionId,remarks]);
+int get hashCode {
+  final _this = this as TablesMdFeeDto;
+  return Object.hashAll([runtimeType,_this.id,_this.feeId,_this.schoolId,_this.academicYearId,_this.studentId,_this.classId,_this.sectionId,_this.feeTypeId,_this.invoiceNo,_this.receiptNo,const DeepCollectionEquality().hash(_this.dueDate),_this.amount,_this.discountAmount,_this.fineAmount,_this.paidAmount,_this.balanceAmount,_this.paymentMode,_this.paymentStatus,_this.transactionId,_this.remarks]);
+}
 
 @override
 String toString() {
-  return 'TablesMdFeeDto(id: $id, feeId: $feeId, schoolId: $schoolId, academicYearId: $academicYearId, studentId: $studentId, classId: $classId, sectionId: $sectionId, feeTypeId: $feeTypeId, invoiceNo: $invoiceNo, receiptNo: $receiptNo, dueDate: $dueDate, amount: $amount, discountAmount: $discountAmount, fineAmount: $fineAmount, paidAmount: $paidAmount, balanceAmount: $balanceAmount, paymentMode: $paymentMode, paymentStatus: $paymentStatus, transactionId: $transactionId, remarks: $remarks)';
+  final _this = this as TablesMdFeeDto;
+  return 'TablesMdFeeDto(id: ${_this.id}, feeId: ${_this.feeId}, schoolId: ${_this.schoolId}, academicYearId: ${_this.academicYearId}, studentId: ${_this.studentId}, classId: ${_this.classId}, sectionId: ${_this.sectionId}, feeTypeId: ${_this.feeTypeId}, invoiceNo: ${_this.invoiceNo}, receiptNo: ${_this.receiptNo}, dueDate: ${_this.dueDate}, amount: ${_this.amount}, discountAmount: ${_this.discountAmount}, fineAmount: ${_this.fineAmount}, paidAmount: ${_this.paidAmount}, balanceAmount: ${_this.balanceAmount}, paymentMode: ${_this.paymentMode}, paymentStatus: ${_this.paymentStatus}, transactionId: ${_this.transactionId}, remarks: ${_this.remarks})';
 }
 
 
@@ -2087,7 +2142,7 @@ class _$TablesMdFeeDtoCopyWithImpl<$Res>
 /// Create a copy of TablesMdFeeDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? feeId = freezed,Object? schoolId = freezed,Object? academicYearId = freezed,Object? studentId = freezed,Object? classId = freezed,Object? sectionId = freezed,Object? feeTypeId = freezed,Object? invoiceNo = freezed,Object? receiptNo = freezed,Object? dueDate = freezed,Object? amount = freezed,Object? discountAmount = freezed,Object? fineAmount = freezed,Object? paidAmount = freezed,Object? balanceAmount = freezed,Object? paymentMode = freezed,Object? paymentStatus = freezed,Object? transactionId = freezed,Object? remarks = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(TablesMdFeeDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,feeId: freezed == feeId ? _self.feeId : feeId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -2286,16 +2341,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _TablesMdFeeDto&&(identical(other.id, id) || other.id == id)&&(identical(other.feeId, feeId) || other.feeId == feeId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.feeTypeId, feeTypeId) || other.feeTypeId == feeTypeId)&&(identical(other.invoiceNo, invoiceNo) || other.invoiceNo == invoiceNo)&&(identical(other.receiptNo, receiptNo) || other.receiptNo == receiptNo)&&const DeepCollectionEquality().equals(other.dueDate, dueDate)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.discountAmount, discountAmount) || other.discountAmount == discountAmount)&&(identical(other.fineAmount, fineAmount) || other.fineAmount == fineAmount)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.balanceAmount, balanceAmount) || other.balanceAmount == balanceAmount)&&(identical(other.paymentMode, paymentMode) || other.paymentMode == paymentMode)&&(identical(other.paymentStatus, paymentStatus) || other.paymentStatus == paymentStatus)&&(identical(other.transactionId, transactionId) || other.transactionId == transactionId)&&(identical(other.remarks, remarks) || other.remarks == remarks));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _TablesMdFeeDto&&(identical(other.id, id) || other.id == id)&&(identical(other.feeId, feeId) || other.feeId == feeId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.feeTypeId, feeTypeId) || other.feeTypeId == feeTypeId)&&(identical(other.invoiceNo, invoiceNo) || other.invoiceNo == invoiceNo)&&(identical(other.receiptNo, receiptNo) || other.receiptNo == receiptNo)&&const DeepCollectionEquality().equals(other.dueDate, dueDate)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.discountAmount, discountAmount) || other.discountAmount == discountAmount)&&(identical(other.fineAmount, fineAmount) || other.fineAmount == fineAmount)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.balanceAmount, balanceAmount) || other.balanceAmount == balanceAmount)&&(identical(other.paymentMode, paymentMode) || other.paymentMode == paymentMode)&&(identical(other.paymentStatus, paymentStatus) || other.paymentStatus == paymentStatus)&&(identical(other.transactionId, transactionId) || other.transactionId == transactionId)&&(identical(other.remarks, remarks) || other.remarks == remarks));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,feeId,schoolId,academicYearId,studentId,classId,sectionId,feeTypeId,invoiceNo,receiptNo,const DeepCollectionEquality().hash(dueDate),amount,discountAmount,fineAmount,paidAmount,balanceAmount,paymentMode,paymentStatus,transactionId,remarks]);
+int get hashCode {
+    return Object.hashAll([runtimeType,id,feeId,schoolId,academicYearId,studentId,classId,sectionId,feeTypeId,invoiceNo,receiptNo,const DeepCollectionEquality().hash(dueDate),amount,discountAmount,fineAmount,paidAmount,balanceAmount,paymentMode,paymentStatus,transactionId,remarks]);
+}
 
 @override
 String toString() {
-  return 'TablesMdFeeDto(id: $id, feeId: $feeId, schoolId: $schoolId, academicYearId: $academicYearId, studentId: $studentId, classId: $classId, sectionId: $sectionId, feeTypeId: $feeTypeId, invoiceNo: $invoiceNo, receiptNo: $receiptNo, dueDate: $dueDate, amount: $amount, discountAmount: $discountAmount, fineAmount: $fineAmount, paidAmount: $paidAmount, balanceAmount: $balanceAmount, paymentMode: $paymentMode, paymentStatus: $paymentStatus, transactionId: $transactionId, remarks: $remarks)';
+    return 'TablesMdFeeDto(id: $id, feeId: $feeId, schoolId: $schoolId, academicYearId: $academicYearId, studentId: $studentId, classId: $classId, sectionId: $sectionId, feeTypeId: $feeTypeId, invoiceNo: $invoiceNo, receiptNo: $receiptNo, dueDate: $dueDate, amount: $amount, discountAmount: $discountAmount, fineAmount: $fineAmount, paidAmount: $paidAmount, balanceAmount: $balanceAmount, paymentMode: $paymentMode, paymentStatus: $paymentStatus, transactionId: $transactionId, remarks: $remarks)';
 }
 
 
@@ -2369,16 +2426,21 @@ $HomeworkDtoCopyWith<HomeworkDto> get copyWith => _$HomeworkDtoCopyWithImpl<Home
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is HomeworkDto&&(identical(other.id, id) || other.id == id)&&(identical(other.homeworkId, homeworkId) || other.homeworkId == homeworkId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.subjectId, subjectId) || other.subjectId == subjectId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&const DeepCollectionEquality().equals(other.assignedDate, assignedDate)&&const DeepCollectionEquality().equals(other.submissionDate, submissionDate)&&(identical(other.attachmentUrl, attachmentUrl) || other.attachmentUrl == attachmentUrl)&&(identical(other.submissionMode, submissionMode) || other.submissionMode == submissionMode)&&(identical(other.status, status) || other.status == status));
+  final _this = this as HomeworkDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is HomeworkDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.homeworkId, _this.homeworkId) || other.homeworkId == _this.homeworkId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.academicYearId, _this.academicYearId) || other.academicYearId == _this.academicYearId)&&(identical(other.classId, _this.classId) || other.classId == _this.classId)&&(identical(other.sectionId, _this.sectionId) || other.sectionId == _this.sectionId)&&(identical(other.subjectId, _this.subjectId) || other.subjectId == _this.subjectId)&&(identical(other.staffId, _this.staffId) || other.staffId == _this.staffId)&&(identical(other.studentId, _this.studentId) || other.studentId == _this.studentId)&&(identical(other.title, _this.title) || other.title == _this.title)&&(identical(other.description, _this.description) || other.description == _this.description)&&const DeepCollectionEquality().equals(other.assignedDate, _this.assignedDate)&&const DeepCollectionEquality().equals(other.submissionDate, _this.submissionDate)&&(identical(other.attachmentUrl, _this.attachmentUrl) || other.attachmentUrl == _this.attachmentUrl)&&(identical(other.submissionMode, _this.submissionMode) || other.submissionMode == _this.submissionMode)&&(identical(other.status, _this.status) || other.status == _this.status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,homeworkId,schoolId,academicYearId,classId,sectionId,subjectId,staffId,studentId,title,description,const DeepCollectionEquality().hash(assignedDate),const DeepCollectionEquality().hash(submissionDate),attachmentUrl,submissionMode,status);
+int get hashCode {
+  final _this = this as HomeworkDto;
+  return Object.hash(runtimeType,_this.id,_this.homeworkId,_this.schoolId,_this.academicYearId,_this.classId,_this.sectionId,_this.subjectId,_this.staffId,_this.studentId,_this.title,_this.description,const DeepCollectionEquality().hash(_this.assignedDate),const DeepCollectionEquality().hash(_this.submissionDate),_this.attachmentUrl,_this.submissionMode,_this.status);
+}
 
 @override
 String toString() {
-  return 'HomeworkDto(id: $id, homeworkId: $homeworkId, schoolId: $schoolId, academicYearId: $academicYearId, classId: $classId, sectionId: $sectionId, subjectId: $subjectId, staffId: $staffId, studentId: $studentId, title: $title, description: $description, assignedDate: $assignedDate, submissionDate: $submissionDate, attachmentUrl: $attachmentUrl, submissionMode: $submissionMode, status: $status)';
+  final _this = this as HomeworkDto;
+  return 'HomeworkDto(id: ${_this.id}, homeworkId: ${_this.homeworkId}, schoolId: ${_this.schoolId}, academicYearId: ${_this.academicYearId}, classId: ${_this.classId}, sectionId: ${_this.sectionId}, subjectId: ${_this.subjectId}, staffId: ${_this.staffId}, studentId: ${_this.studentId}, title: ${_this.title}, description: ${_this.description}, assignedDate: ${_this.assignedDate}, submissionDate: ${_this.submissionDate}, attachmentUrl: ${_this.attachmentUrl}, submissionMode: ${_this.submissionMode}, status: ${_this.status})';
 }
 
 
@@ -2407,7 +2469,7 @@ class _$HomeworkDtoCopyWithImpl<$Res>
 /// Create a copy of HomeworkDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? homeworkId = freezed,Object? schoolId = freezed,Object? academicYearId = freezed,Object? classId = freezed,Object? sectionId = freezed,Object? subjectId = freezed,Object? staffId = freezed,Object? studentId = freezed,Object? title = freezed,Object? description = freezed,Object? assignedDate = freezed,Object? submissionDate = freezed,Object? attachmentUrl = freezed,Object? submissionMode = freezed,Object? status = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(HomeworkDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,homeworkId: freezed == homeworkId ? _self.homeworkId : homeworkId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -2598,16 +2660,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _HomeworkDto&&(identical(other.id, id) || other.id == id)&&(identical(other.homeworkId, homeworkId) || other.homeworkId == homeworkId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.subjectId, subjectId) || other.subjectId == subjectId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&const DeepCollectionEquality().equals(other.assignedDate, assignedDate)&&const DeepCollectionEquality().equals(other.submissionDate, submissionDate)&&(identical(other.attachmentUrl, attachmentUrl) || other.attachmentUrl == attachmentUrl)&&(identical(other.submissionMode, submissionMode) || other.submissionMode == submissionMode)&&(identical(other.status, status) || other.status == status));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _HomeworkDto&&(identical(other.id, id) || other.id == id)&&(identical(other.homeworkId, homeworkId) || other.homeworkId == homeworkId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.classId, classId) || other.classId == classId)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.subjectId, subjectId) || other.subjectId == subjectId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&const DeepCollectionEquality().equals(other.assignedDate, assignedDate)&&const DeepCollectionEquality().equals(other.submissionDate, submissionDate)&&(identical(other.attachmentUrl, attachmentUrl) || other.attachmentUrl == attachmentUrl)&&(identical(other.submissionMode, submissionMode) || other.submissionMode == submissionMode)&&(identical(other.status, status) || other.status == status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,homeworkId,schoolId,academicYearId,classId,sectionId,subjectId,staffId,studentId,title,description,const DeepCollectionEquality().hash(assignedDate),const DeepCollectionEquality().hash(submissionDate),attachmentUrl,submissionMode,status);
+int get hashCode {
+    return Object.hash(runtimeType,id,homeworkId,schoolId,academicYearId,classId,sectionId,subjectId,staffId,studentId,title,description,const DeepCollectionEquality().hash(assignedDate),const DeepCollectionEquality().hash(submissionDate),attachmentUrl,submissionMode,status);
+}
 
 @override
 String toString() {
-  return 'HomeworkDto(id: $id, homeworkId: $homeworkId, schoolId: $schoolId, academicYearId: $academicYearId, classId: $classId, sectionId: $sectionId, subjectId: $subjectId, staffId: $staffId, studentId: $studentId, title: $title, description: $description, assignedDate: $assignedDate, submissionDate: $submissionDate, attachmentUrl: $attachmentUrl, submissionMode: $submissionMode, status: $status)';
+    return 'HomeworkDto(id: $id, homeworkId: $homeworkId, schoolId: $schoolId, academicYearId: $academicYearId, classId: $classId, sectionId: $sectionId, subjectId: $subjectId, staffId: $staffId, studentId: $studentId, title: $title, description: $description, assignedDate: $assignedDate, submissionDate: $submissionDate, attachmentUrl: $attachmentUrl, submissionMode: $submissionMode, status: $status)';
 }
 
 
@@ -2677,16 +2741,21 @@ $LeaveDtoCopyWith<LeaveDto> get copyWith => _$LeaveDtoCopyWithImpl<LeaveDto>(thi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is LeaveDto&&(identical(other.id, id) || other.id == id)&&(identical(other.leaveId, leaveId) || other.leaveId == leaveId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.userType, userType) || other.userType == userType)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&(identical(other.leaveTypeId, leaveTypeId) || other.leaveTypeId == leaveTypeId)&&const DeepCollectionEquality().equals(other.fromDate, fromDate)&&const DeepCollectionEquality().equals(other.toDate, toDate)&&(identical(other.totalDays, totalDays) || other.totalDays == totalDays)&&(identical(other.reason, reason) || other.reason == reason)&&(identical(other.approvalStatus, approvalStatus) || other.approvalStatus == approvalStatus)&&(identical(other.approvedBy, approvedBy) || other.approvedBy == approvedBy)&&const DeepCollectionEquality().equals(other.approvedAt, approvedAt)&&(identical(other.remarks, remarks) || other.remarks == remarks));
+  final _this = this as LeaveDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LeaveDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.leaveId, _this.leaveId) || other.leaveId == _this.leaveId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.userType, _this.userType) || other.userType == _this.userType)&&(identical(other.studentId, _this.studentId) || other.studentId == _this.studentId)&&(identical(other.staffId, _this.staffId) || other.staffId == _this.staffId)&&(identical(other.leaveTypeId, _this.leaveTypeId) || other.leaveTypeId == _this.leaveTypeId)&&const DeepCollectionEquality().equals(other.fromDate, _this.fromDate)&&const DeepCollectionEquality().equals(other.toDate, _this.toDate)&&(identical(other.totalDays, _this.totalDays) || other.totalDays == _this.totalDays)&&(identical(other.reason, _this.reason) || other.reason == _this.reason)&&(identical(other.approvalStatus, _this.approvalStatus) || other.approvalStatus == _this.approvalStatus)&&(identical(other.approvedBy, _this.approvedBy) || other.approvedBy == _this.approvedBy)&&const DeepCollectionEquality().equals(other.approvedAt, _this.approvedAt)&&(identical(other.remarks, _this.remarks) || other.remarks == _this.remarks));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,leaveId,schoolId,userType,studentId,staffId,leaveTypeId,const DeepCollectionEquality().hash(fromDate),const DeepCollectionEquality().hash(toDate),totalDays,reason,approvalStatus,approvedBy,const DeepCollectionEquality().hash(approvedAt),remarks);
+int get hashCode {
+  final _this = this as LeaveDto;
+  return Object.hash(runtimeType,_this.id,_this.leaveId,_this.schoolId,_this.userType,_this.studentId,_this.staffId,_this.leaveTypeId,const DeepCollectionEquality().hash(_this.fromDate),const DeepCollectionEquality().hash(_this.toDate),_this.totalDays,_this.reason,_this.approvalStatus,_this.approvedBy,const DeepCollectionEquality().hash(_this.approvedAt),_this.remarks);
+}
 
 @override
 String toString() {
-  return 'LeaveDto(id: $id, leaveId: $leaveId, schoolId: $schoolId, userType: $userType, studentId: $studentId, staffId: $staffId, leaveTypeId: $leaveTypeId, fromDate: $fromDate, toDate: $toDate, totalDays: $totalDays, reason: $reason, approvalStatus: $approvalStatus, approvedBy: $approvedBy, approvedAt: $approvedAt, remarks: $remarks)';
+  final _this = this as LeaveDto;
+  return 'LeaveDto(id: ${_this.id}, leaveId: ${_this.leaveId}, schoolId: ${_this.schoolId}, userType: ${_this.userType}, studentId: ${_this.studentId}, staffId: ${_this.staffId}, leaveTypeId: ${_this.leaveTypeId}, fromDate: ${_this.fromDate}, toDate: ${_this.toDate}, totalDays: ${_this.totalDays}, reason: ${_this.reason}, approvalStatus: ${_this.approvalStatus}, approvedBy: ${_this.approvedBy}, approvedAt: ${_this.approvedAt}, remarks: ${_this.remarks})';
 }
 
 
@@ -2715,7 +2784,7 @@ class _$LeaveDtoCopyWithImpl<$Res>
 /// Create a copy of LeaveDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? leaveId = freezed,Object? schoolId = freezed,Object? userType = freezed,Object? studentId = freezed,Object? staffId = freezed,Object? leaveTypeId = freezed,Object? fromDate = freezed,Object? toDate = freezed,Object? totalDays = freezed,Object? reason = freezed,Object? approvalStatus = freezed,Object? approvedBy = freezed,Object? approvedAt = freezed,Object? remarks = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(LeaveDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,leaveId: freezed == leaveId ? _self.leaveId : leaveId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -2904,16 +2973,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _LeaveDto&&(identical(other.id, id) || other.id == id)&&(identical(other.leaveId, leaveId) || other.leaveId == leaveId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.userType, userType) || other.userType == userType)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&(identical(other.leaveTypeId, leaveTypeId) || other.leaveTypeId == leaveTypeId)&&const DeepCollectionEquality().equals(other.fromDate, fromDate)&&const DeepCollectionEquality().equals(other.toDate, toDate)&&(identical(other.totalDays, totalDays) || other.totalDays == totalDays)&&(identical(other.reason, reason) || other.reason == reason)&&(identical(other.approvalStatus, approvalStatus) || other.approvalStatus == approvalStatus)&&(identical(other.approvedBy, approvedBy) || other.approvedBy == approvedBy)&&const DeepCollectionEquality().equals(other.approvedAt, approvedAt)&&(identical(other.remarks, remarks) || other.remarks == remarks));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _LeaveDto&&(identical(other.id, id) || other.id == id)&&(identical(other.leaveId, leaveId) || other.leaveId == leaveId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.userType, userType) || other.userType == userType)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&(identical(other.leaveTypeId, leaveTypeId) || other.leaveTypeId == leaveTypeId)&&const DeepCollectionEquality().equals(other.fromDate, fromDate)&&const DeepCollectionEquality().equals(other.toDate, toDate)&&(identical(other.totalDays, totalDays) || other.totalDays == totalDays)&&(identical(other.reason, reason) || other.reason == reason)&&(identical(other.approvalStatus, approvalStatus) || other.approvalStatus == approvalStatus)&&(identical(other.approvedBy, approvedBy) || other.approvedBy == approvedBy)&&const DeepCollectionEquality().equals(other.approvedAt, approvedAt)&&(identical(other.remarks, remarks) || other.remarks == remarks));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,leaveId,schoolId,userType,studentId,staffId,leaveTypeId,const DeepCollectionEquality().hash(fromDate),const DeepCollectionEquality().hash(toDate),totalDays,reason,approvalStatus,approvedBy,const DeepCollectionEquality().hash(approvedAt),remarks);
+int get hashCode {
+    return Object.hash(runtimeType,id,leaveId,schoolId,userType,studentId,staffId,leaveTypeId,const DeepCollectionEquality().hash(fromDate),const DeepCollectionEquality().hash(toDate),totalDays,reason,approvalStatus,approvedBy,const DeepCollectionEquality().hash(approvedAt),remarks);
+}
 
 @override
 String toString() {
-  return 'LeaveDto(id: $id, leaveId: $leaveId, schoolId: $schoolId, userType: $userType, studentId: $studentId, staffId: $staffId, leaveTypeId: $leaveTypeId, fromDate: $fromDate, toDate: $toDate, totalDays: $totalDays, reason: $reason, approvalStatus: $approvalStatus, approvedBy: $approvedBy, approvedAt: $approvedAt, remarks: $remarks)';
+    return 'LeaveDto(id: $id, leaveId: $leaveId, schoolId: $schoolId, userType: $userType, studentId: $studentId, staffId: $staffId, leaveTypeId: $leaveTypeId, fromDate: $fromDate, toDate: $toDate, totalDays: $totalDays, reason: $reason, approvalStatus: $approvalStatus, approvedBy: $approvedBy, approvedAt: $approvedAt, remarks: $remarks)';
 }
 
 
@@ -2982,16 +3053,21 @@ $NotificationDtoCopyWith<NotificationDto> get copyWith => _$NotificationDtoCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is NotificationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.notificationId, notificationId) || other.notificationId == notificationId)&&(identical(other.notificationLogId, notificationLogId) || other.notificationLogId == notificationLogId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.title, title) || other.title == title)&&(identical(other.message, message) || other.message == message)&&(identical(other.body, body) || other.body == body)&&(identical(other.notificationType, notificationType) || other.notificationType == notificationType)&&(identical(other.type, type) || other.type == type)&&(identical(other.targetRole, targetRole) || other.targetRole == targetRole)&&(identical(other.targetUserId, targetUserId) || other.targetUserId == targetUserId)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.route, route) || other.route == route)&&(identical(other.referenceType, referenceType) || other.referenceType == referenceType)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&const DeepCollectionEquality().equals(other.readAt, readAt)&&const DeepCollectionEquality().equals(other.sentAt, sentAt));
+  final _this = this as NotificationDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is NotificationDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.notificationId, _this.notificationId) || other.notificationId == _this.notificationId)&&(identical(other.notificationLogId, _this.notificationLogId) || other.notificationLogId == _this.notificationLogId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.title, _this.title) || other.title == _this.title)&&(identical(other.message, _this.message) || other.message == _this.message)&&(identical(other.body, _this.body) || other.body == _this.body)&&(identical(other.notificationType, _this.notificationType) || other.notificationType == _this.notificationType)&&(identical(other.type, _this.type) || other.type == _this.type)&&(identical(other.targetRole, _this.targetRole) || other.targetRole == _this.targetRole)&&(identical(other.targetUserId, _this.targetUserId) || other.targetUserId == _this.targetUserId)&&(identical(other.priority, _this.priority) || other.priority == _this.priority)&&(identical(other.route, _this.route) || other.route == _this.route)&&(identical(other.referenceType, _this.referenceType) || other.referenceType == _this.referenceType)&&(identical(other.referenceId, _this.referenceId) || other.referenceId == _this.referenceId)&&(identical(other.isRead, _this.isRead) || other.isRead == _this.isRead)&&const DeepCollectionEquality().equals(other.readAt, _this.readAt)&&const DeepCollectionEquality().equals(other.sentAt, _this.sentAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,notificationId,notificationLogId,schoolId,title,message,body,notificationType,type,targetRole,targetUserId,priority,route,referenceType,referenceId,isRead,const DeepCollectionEquality().hash(readAt),const DeepCollectionEquality().hash(sentAt));
+int get hashCode {
+  final _this = this as NotificationDto;
+  return Object.hash(runtimeType,_this.id,_this.notificationId,_this.notificationLogId,_this.schoolId,_this.title,_this.message,_this.body,_this.notificationType,_this.type,_this.targetRole,_this.targetUserId,_this.priority,_this.route,_this.referenceType,_this.referenceId,_this.isRead,const DeepCollectionEquality().hash(_this.readAt),const DeepCollectionEquality().hash(_this.sentAt));
+}
 
 @override
 String toString() {
-  return 'NotificationDto(id: $id, notificationId: $notificationId, notificationLogId: $notificationLogId, schoolId: $schoolId, title: $title, message: $message, body: $body, notificationType: $notificationType, type: $type, targetRole: $targetRole, targetUserId: $targetUserId, priority: $priority, route: $route, referenceType: $referenceType, referenceId: $referenceId, isRead: $isRead, readAt: $readAt, sentAt: $sentAt)';
+  final _this = this as NotificationDto;
+  return 'NotificationDto(id: ${_this.id}, notificationId: ${_this.notificationId}, notificationLogId: ${_this.notificationLogId}, schoolId: ${_this.schoolId}, title: ${_this.title}, message: ${_this.message}, body: ${_this.body}, notificationType: ${_this.notificationType}, type: ${_this.type}, targetRole: ${_this.targetRole}, targetUserId: ${_this.targetUserId}, priority: ${_this.priority}, route: ${_this.route}, referenceType: ${_this.referenceType}, referenceId: ${_this.referenceId}, isRead: ${_this.isRead}, readAt: ${_this.readAt}, sentAt: ${_this.sentAt})';
 }
 
 
@@ -3020,7 +3096,7 @@ class _$NotificationDtoCopyWithImpl<$Res>
 /// Create a copy of NotificationDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? notificationId = freezed,Object? notificationLogId = freezed,Object? schoolId = freezed,Object? title = freezed,Object? message = freezed,Object? body = freezed,Object? notificationType = freezed,Object? type = freezed,Object? targetRole = freezed,Object? targetUserId = freezed,Object? priority = freezed,Object? route = freezed,Object? referenceType = freezed,Object? referenceId = freezed,Object? isRead = freezed,Object? readAt = freezed,Object? sentAt = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(NotificationDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,notificationId: freezed == notificationId ? _self.notificationId : notificationId // ignore: cast_nullable_to_non_nullable
 as String?,notificationLogId: freezed == notificationLogId ? _self.notificationLogId : notificationLogId // ignore: cast_nullable_to_non_nullable
@@ -3215,16 +3291,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _NotificationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.notificationId, notificationId) || other.notificationId == notificationId)&&(identical(other.notificationLogId, notificationLogId) || other.notificationLogId == notificationLogId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.title, title) || other.title == title)&&(identical(other.message, message) || other.message == message)&&(identical(other.body, body) || other.body == body)&&(identical(other.notificationType, notificationType) || other.notificationType == notificationType)&&(identical(other.type, type) || other.type == type)&&(identical(other.targetRole, targetRole) || other.targetRole == targetRole)&&(identical(other.targetUserId, targetUserId) || other.targetUserId == targetUserId)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.route, route) || other.route == route)&&(identical(other.referenceType, referenceType) || other.referenceType == referenceType)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&const DeepCollectionEquality().equals(other.readAt, readAt)&&const DeepCollectionEquality().equals(other.sentAt, sentAt));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _NotificationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.notificationId, notificationId) || other.notificationId == notificationId)&&(identical(other.notificationLogId, notificationLogId) || other.notificationLogId == notificationLogId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.title, title) || other.title == title)&&(identical(other.message, message) || other.message == message)&&(identical(other.body, body) || other.body == body)&&(identical(other.notificationType, notificationType) || other.notificationType == notificationType)&&(identical(other.type, type) || other.type == type)&&(identical(other.targetRole, targetRole) || other.targetRole == targetRole)&&(identical(other.targetUserId, targetUserId) || other.targetUserId == targetUserId)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.route, route) || other.route == route)&&(identical(other.referenceType, referenceType) || other.referenceType == referenceType)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&const DeepCollectionEquality().equals(other.readAt, readAt)&&const DeepCollectionEquality().equals(other.sentAt, sentAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,notificationId,notificationLogId,schoolId,title,message,body,notificationType,type,targetRole,targetUserId,priority,route,referenceType,referenceId,isRead,const DeepCollectionEquality().hash(readAt),const DeepCollectionEquality().hash(sentAt));
+int get hashCode {
+    return Object.hash(runtimeType,id,notificationId,notificationLogId,schoolId,title,message,body,notificationType,type,targetRole,targetUserId,priority,route,referenceType,referenceId,isRead,const DeepCollectionEquality().hash(readAt),const DeepCollectionEquality().hash(sentAt));
+}
 
 @override
 String toString() {
-  return 'NotificationDto(id: $id, notificationId: $notificationId, notificationLogId: $notificationLogId, schoolId: $schoolId, title: $title, message: $message, body: $body, notificationType: $notificationType, type: $type, targetRole: $targetRole, targetUserId: $targetUserId, priority: $priority, route: $route, referenceType: $referenceType, referenceId: $referenceId, isRead: $isRead, readAt: $readAt, sentAt: $sentAt)';
+    return 'NotificationDto(id: $id, notificationId: $notificationId, notificationLogId: $notificationLogId, schoolId: $schoolId, title: $title, message: $message, body: $body, notificationType: $notificationType, type: $type, targetRole: $targetRole, targetUserId: $targetUserId, priority: $priority, route: $route, referenceType: $referenceType, referenceId: $referenceId, isRead: $isRead, readAt: $readAt, sentAt: $sentAt)';
 }
 
 
@@ -3296,16 +3374,21 @@ $HolidayDtoCopyWith<HolidayDto> get copyWith => _$HolidayDtoCopyWithImpl<Holiday
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is HolidayDto&&(identical(other.id, id) || other.id == id)&&(identical(other.holidayId, holidayId) || other.holidayId == holidayId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.holidayName, holidayName) || other.holidayName == holidayName)&&(identical(other.holidayType, holidayType) || other.holidayType == holidayType)&&const DeepCollectionEquality().equals(other.startDate, startDate)&&const DeepCollectionEquality().equals(other.endDate, endDate)&&(identical(other.description, description) || other.description == description)&&(identical(other.isOptional, isOptional) || other.isOptional == isOptional)&&(identical(other.applicableFor, applicableFor) || other.applicableFor == applicableFor)&&(identical(other.status, status) || other.status == status));
+  final _this = this as HolidayDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is HolidayDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.holidayId, _this.holidayId) || other.holidayId == _this.holidayId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.holidayName, _this.holidayName) || other.holidayName == _this.holidayName)&&(identical(other.holidayType, _this.holidayType) || other.holidayType == _this.holidayType)&&const DeepCollectionEquality().equals(other.startDate, _this.startDate)&&const DeepCollectionEquality().equals(other.endDate, _this.endDate)&&(identical(other.description, _this.description) || other.description == _this.description)&&(identical(other.isOptional, _this.isOptional) || other.isOptional == _this.isOptional)&&(identical(other.applicableFor, _this.applicableFor) || other.applicableFor == _this.applicableFor)&&(identical(other.status, _this.status) || other.status == _this.status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,holidayId,schoolId,holidayName,holidayType,const DeepCollectionEquality().hash(startDate),const DeepCollectionEquality().hash(endDate),description,isOptional,applicableFor,status);
+int get hashCode {
+  final _this = this as HolidayDto;
+  return Object.hash(runtimeType,_this.id,_this.holidayId,_this.schoolId,_this.holidayName,_this.holidayType,const DeepCollectionEquality().hash(_this.startDate),const DeepCollectionEquality().hash(_this.endDate),_this.description,_this.isOptional,_this.applicableFor,_this.status);
+}
 
 @override
 String toString() {
-  return 'HolidayDto(id: $id, holidayId: $holidayId, schoolId: $schoolId, holidayName: $holidayName, holidayType: $holidayType, startDate: $startDate, endDate: $endDate, description: $description, isOptional: $isOptional, applicableFor: $applicableFor, status: $status)';
+  final _this = this as HolidayDto;
+  return 'HolidayDto(id: ${_this.id}, holidayId: ${_this.holidayId}, schoolId: ${_this.schoolId}, holidayName: ${_this.holidayName}, holidayType: ${_this.holidayType}, startDate: ${_this.startDate}, endDate: ${_this.endDate}, description: ${_this.description}, isOptional: ${_this.isOptional}, applicableFor: ${_this.applicableFor}, status: ${_this.status})';
 }
 
 
@@ -3334,7 +3417,7 @@ class _$HolidayDtoCopyWithImpl<$Res>
 /// Create a copy of HolidayDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? holidayId = freezed,Object? schoolId = freezed,Object? holidayName = freezed,Object? holidayType = freezed,Object? startDate = freezed,Object? endDate = freezed,Object? description = freezed,Object? isOptional = freezed,Object? applicableFor = freezed,Object? status = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(HolidayDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,holidayId: freezed == holidayId ? _self.holidayId : holidayId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -3515,16 +3598,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _HolidayDto&&(identical(other.id, id) || other.id == id)&&(identical(other.holidayId, holidayId) || other.holidayId == holidayId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.holidayName, holidayName) || other.holidayName == holidayName)&&(identical(other.holidayType, holidayType) || other.holidayType == holidayType)&&const DeepCollectionEquality().equals(other.startDate, startDate)&&const DeepCollectionEquality().equals(other.endDate, endDate)&&(identical(other.description, description) || other.description == description)&&(identical(other.isOptional, isOptional) || other.isOptional == isOptional)&&(identical(other.applicableFor, applicableFor) || other.applicableFor == applicableFor)&&(identical(other.status, status) || other.status == status));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _HolidayDto&&(identical(other.id, id) || other.id == id)&&(identical(other.holidayId, holidayId) || other.holidayId == holidayId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.holidayName, holidayName) || other.holidayName == holidayName)&&(identical(other.holidayType, holidayType) || other.holidayType == holidayType)&&const DeepCollectionEquality().equals(other.startDate, startDate)&&const DeepCollectionEquality().equals(other.endDate, endDate)&&(identical(other.description, description) || other.description == description)&&(identical(other.isOptional, isOptional) || other.isOptional == isOptional)&&(identical(other.applicableFor, applicableFor) || other.applicableFor == applicableFor)&&(identical(other.status, status) || other.status == status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,holidayId,schoolId,holidayName,holidayType,const DeepCollectionEquality().hash(startDate),const DeepCollectionEquality().hash(endDate),description,isOptional,applicableFor,status);
+int get hashCode {
+    return Object.hash(runtimeType,id,holidayId,schoolId,holidayName,holidayType,const DeepCollectionEquality().hash(startDate),const DeepCollectionEquality().hash(endDate),description,isOptional,applicableFor,status);
+}
 
 @override
 String toString() {
-  return 'HolidayDto(id: $id, holidayId: $holidayId, schoolId: $schoolId, holidayName: $holidayName, holidayType: $holidayType, startDate: $startDate, endDate: $endDate, description: $description, isOptional: $isOptional, applicableFor: $applicableFor, status: $status)';
+    return 'HolidayDto(id: $id, holidayId: $holidayId, schoolId: $schoolId, holidayName: $holidayName, holidayType: $holidayType, startDate: $startDate, endDate: $endDate, description: $description, isOptional: $isOptional, applicableFor: $applicableFor, status: $status)';
 }
 
 
@@ -3589,16 +3674,21 @@ $EventDtoCopyWith<EventDto> get copyWith => _$EventDtoCopyWithImpl<EventDto>(thi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is EventDto&&(identical(other.id, id) || other.id == id)&&(identical(other.eventId, eventId) || other.eventId == eventId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.eventName, eventName) || other.eventName == eventName)&&(identical(other.eventType, eventType) || other.eventType == eventType)&&(identical(other.description, description) || other.description == description)&&const DeepCollectionEquality().equals(other.startDate, startDate)&&const DeepCollectionEquality().equals(other.endDate, endDate)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.venue, venue) || other.venue == venue)&&(identical(other.organizerId, organizerId) || other.organizerId == organizerId)&&(identical(other.audienceType, audienceType) || other.audienceType == audienceType)&&(identical(other.attachmentUrl, attachmentUrl) || other.attachmentUrl == attachmentUrl)&&(identical(other.status, status) || other.status == status)&&(identical(other.isHoliday, isHoliday) || other.isHoliday == isHoliday)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId));
+  final _this = this as EventDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is EventDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.eventId, _this.eventId) || other.eventId == _this.eventId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.eventName, _this.eventName) || other.eventName == _this.eventName)&&(identical(other.eventType, _this.eventType) || other.eventType == _this.eventType)&&(identical(other.description, _this.description) || other.description == _this.description)&&const DeepCollectionEquality().equals(other.startDate, _this.startDate)&&const DeepCollectionEquality().equals(other.endDate, _this.endDate)&&(identical(other.startTime, _this.startTime) || other.startTime == _this.startTime)&&(identical(other.endTime, _this.endTime) || other.endTime == _this.endTime)&&(identical(other.venue, _this.venue) || other.venue == _this.venue)&&(identical(other.organizerId, _this.organizerId) || other.organizerId == _this.organizerId)&&(identical(other.audienceType, _this.audienceType) || other.audienceType == _this.audienceType)&&(identical(other.attachmentUrl, _this.attachmentUrl) || other.attachmentUrl == _this.attachmentUrl)&&(identical(other.status, _this.status) || other.status == _this.status)&&(identical(other.isHoliday, _this.isHoliday) || other.isHoliday == _this.isHoliday)&&(identical(other.academicYearId, _this.academicYearId) || other.academicYearId == _this.academicYearId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,eventId,schoolId,eventName,eventType,description,const DeepCollectionEquality().hash(startDate),const DeepCollectionEquality().hash(endDate),startTime,endTime,venue,organizerId,audienceType,attachmentUrl,status,isHoliday,academicYearId);
+int get hashCode {
+  final _this = this as EventDto;
+  return Object.hash(runtimeType,_this.id,_this.eventId,_this.schoolId,_this.eventName,_this.eventType,_this.description,const DeepCollectionEquality().hash(_this.startDate),const DeepCollectionEquality().hash(_this.endDate),_this.startTime,_this.endTime,_this.venue,_this.organizerId,_this.audienceType,_this.attachmentUrl,_this.status,_this.isHoliday,_this.academicYearId);
+}
 
 @override
 String toString() {
-  return 'EventDto(id: $id, eventId: $eventId, schoolId: $schoolId, eventName: $eventName, eventType: $eventType, description: $description, startDate: $startDate, endDate: $endDate, startTime: $startTime, endTime: $endTime, venue: $venue, organizerId: $organizerId, audienceType: $audienceType, attachmentUrl: $attachmentUrl, status: $status, isHoliday: $isHoliday, academicYearId: $academicYearId)';
+  final _this = this as EventDto;
+  return 'EventDto(id: ${_this.id}, eventId: ${_this.eventId}, schoolId: ${_this.schoolId}, eventName: ${_this.eventName}, eventType: ${_this.eventType}, description: ${_this.description}, startDate: ${_this.startDate}, endDate: ${_this.endDate}, startTime: ${_this.startTime}, endTime: ${_this.endTime}, venue: ${_this.venue}, organizerId: ${_this.organizerId}, audienceType: ${_this.audienceType}, attachmentUrl: ${_this.attachmentUrl}, status: ${_this.status}, isHoliday: ${_this.isHoliday}, academicYearId: ${_this.academicYearId})';
 }
 
 
@@ -3627,7 +3717,7 @@ class _$EventDtoCopyWithImpl<$Res>
 /// Create a copy of EventDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? eventId = freezed,Object? schoolId = freezed,Object? eventName = freezed,Object? eventType = freezed,Object? description = freezed,Object? startDate = freezed,Object? endDate = freezed,Object? startTime = freezed,Object? endTime = freezed,Object? venue = freezed,Object? organizerId = freezed,Object? audienceType = freezed,Object? attachmentUrl = freezed,Object? status = freezed,Object? isHoliday = freezed,Object? academicYearId = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(EventDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,eventId: freezed == eventId ? _self.eventId : eventId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -3820,16 +3910,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EventDto&&(identical(other.id, id) || other.id == id)&&(identical(other.eventId, eventId) || other.eventId == eventId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.eventName, eventName) || other.eventName == eventName)&&(identical(other.eventType, eventType) || other.eventType == eventType)&&(identical(other.description, description) || other.description == description)&&const DeepCollectionEquality().equals(other.startDate, startDate)&&const DeepCollectionEquality().equals(other.endDate, endDate)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.venue, venue) || other.venue == venue)&&(identical(other.organizerId, organizerId) || other.organizerId == organizerId)&&(identical(other.audienceType, audienceType) || other.audienceType == audienceType)&&(identical(other.attachmentUrl, attachmentUrl) || other.attachmentUrl == attachmentUrl)&&(identical(other.status, status) || other.status == status)&&(identical(other.isHoliday, isHoliday) || other.isHoliday == isHoliday)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _EventDto&&(identical(other.id, id) || other.id == id)&&(identical(other.eventId, eventId) || other.eventId == eventId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.eventName, eventName) || other.eventName == eventName)&&(identical(other.eventType, eventType) || other.eventType == eventType)&&(identical(other.description, description) || other.description == description)&&const DeepCollectionEquality().equals(other.startDate, startDate)&&const DeepCollectionEquality().equals(other.endDate, endDate)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.venue, venue) || other.venue == venue)&&(identical(other.organizerId, organizerId) || other.organizerId == organizerId)&&(identical(other.audienceType, audienceType) || other.audienceType == audienceType)&&(identical(other.attachmentUrl, attachmentUrl) || other.attachmentUrl == attachmentUrl)&&(identical(other.status, status) || other.status == status)&&(identical(other.isHoliday, isHoliday) || other.isHoliday == isHoliday)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,eventId,schoolId,eventName,eventType,description,const DeepCollectionEquality().hash(startDate),const DeepCollectionEquality().hash(endDate),startTime,endTime,venue,organizerId,audienceType,attachmentUrl,status,isHoliday,academicYearId);
+int get hashCode {
+    return Object.hash(runtimeType,id,eventId,schoolId,eventName,eventType,description,const DeepCollectionEquality().hash(startDate),const DeepCollectionEquality().hash(endDate),startTime,endTime,venue,organizerId,audienceType,attachmentUrl,status,isHoliday,academicYearId);
+}
 
 @override
 String toString() {
-  return 'EventDto(id: $id, eventId: $eventId, schoolId: $schoolId, eventName: $eventName, eventType: $eventType, description: $description, startDate: $startDate, endDate: $endDate, startTime: $startTime, endTime: $endTime, venue: $venue, organizerId: $organizerId, audienceType: $audienceType, attachmentUrl: $attachmentUrl, status: $status, isHoliday: $isHoliday, academicYearId: $academicYearId)';
+    return 'EventDto(id: $id, eventId: $eventId, schoolId: $schoolId, eventName: $eventName, eventType: $eventType, description: $description, startDate: $startDate, endDate: $endDate, startTime: $startTime, endTime: $endTime, venue: $venue, organizerId: $organizerId, audienceType: $audienceType, attachmentUrl: $attachmentUrl, status: $status, isHoliday: $isHoliday, academicYearId: $academicYearId)';
 }
 
 
@@ -3900,16 +3992,21 @@ $ApprovalRequestDtoCopyWith<ApprovalRequestDto> get copyWith => _$ApprovalReques
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ApprovalRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.approvalId, approvalId) || other.approvalId == approvalId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.requestType, requestType) || other.requestType == requestType)&&(identical(other.moduleName, moduleName) || other.moduleName == moduleName)&&(identical(other.referenceTable, referenceTable) || other.referenceTable == referenceTable)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.approvalStatus, approvalStatus) || other.approvalStatus == approvalStatus)&&(identical(other.approvedBy, approvedBy) || other.approvedBy == approvedBy)&&const DeepCollectionEquality().equals(other.approvedAt, approvedAt));
+  final _this = this as ApprovalRequestDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ApprovalRequestDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.approvalId, _this.approvalId) || other.approvalId == _this.approvalId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.requestType, _this.requestType) || other.requestType == _this.requestType)&&(identical(other.moduleName, _this.moduleName) || other.moduleName == _this.moduleName)&&(identical(other.referenceTable, _this.referenceTable) || other.referenceTable == _this.referenceTable)&&(identical(other.referenceId, _this.referenceId) || other.referenceId == _this.referenceId)&&(identical(other.title, _this.title) || other.title == _this.title)&&(identical(other.description, _this.description) || other.description == _this.description)&&(identical(other.priority, _this.priority) || other.priority == _this.priority)&&(identical(other.approvalStatus, _this.approvalStatus) || other.approvalStatus == _this.approvalStatus)&&(identical(other.approvedBy, _this.approvedBy) || other.approvedBy == _this.approvedBy)&&const DeepCollectionEquality().equals(other.approvedAt, _this.approvedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,approvalId,schoolId,requestType,moduleName,referenceTable,referenceId,title,description,priority,approvalStatus,approvedBy,const DeepCollectionEquality().hash(approvedAt));
+int get hashCode {
+  final _this = this as ApprovalRequestDto;
+  return Object.hash(runtimeType,_this.id,_this.approvalId,_this.schoolId,_this.requestType,_this.moduleName,_this.referenceTable,_this.referenceId,_this.title,_this.description,_this.priority,_this.approvalStatus,_this.approvedBy,const DeepCollectionEquality().hash(_this.approvedAt));
+}
 
 @override
 String toString() {
-  return 'ApprovalRequestDto(id: $id, approvalId: $approvalId, schoolId: $schoolId, requestType: $requestType, moduleName: $moduleName, referenceTable: $referenceTable, referenceId: $referenceId, title: $title, description: $description, priority: $priority, approvalStatus: $approvalStatus, approvedBy: $approvedBy, approvedAt: $approvedAt)';
+  final _this = this as ApprovalRequestDto;
+  return 'ApprovalRequestDto(id: ${_this.id}, approvalId: ${_this.approvalId}, schoolId: ${_this.schoolId}, requestType: ${_this.requestType}, moduleName: ${_this.moduleName}, referenceTable: ${_this.referenceTable}, referenceId: ${_this.referenceId}, title: ${_this.title}, description: ${_this.description}, priority: ${_this.priority}, approvalStatus: ${_this.approvalStatus}, approvedBy: ${_this.approvedBy}, approvedAt: ${_this.approvedAt})';
 }
 
 
@@ -3938,7 +4035,7 @@ class _$ApprovalRequestDtoCopyWithImpl<$Res>
 /// Create a copy of ApprovalRequestDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? approvalId = freezed,Object? schoolId = freezed,Object? requestType = freezed,Object? moduleName = freezed,Object? referenceTable = freezed,Object? referenceId = freezed,Object? title = freezed,Object? description = freezed,Object? priority = freezed,Object? approvalStatus = freezed,Object? approvedBy = freezed,Object? approvedAt = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(ApprovalRequestDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,approvalId: freezed == approvalId ? _self.approvalId : approvalId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -4123,16 +4220,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ApprovalRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.approvalId, approvalId) || other.approvalId == approvalId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.requestType, requestType) || other.requestType == requestType)&&(identical(other.moduleName, moduleName) || other.moduleName == moduleName)&&(identical(other.referenceTable, referenceTable) || other.referenceTable == referenceTable)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.approvalStatus, approvalStatus) || other.approvalStatus == approvalStatus)&&(identical(other.approvedBy, approvedBy) || other.approvedBy == approvedBy)&&const DeepCollectionEquality().equals(other.approvedAt, approvedAt));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _ApprovalRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.approvalId, approvalId) || other.approvalId == approvalId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.requestType, requestType) || other.requestType == requestType)&&(identical(other.moduleName, moduleName) || other.moduleName == moduleName)&&(identical(other.referenceTable, referenceTable) || other.referenceTable == referenceTable)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.approvalStatus, approvalStatus) || other.approvalStatus == approvalStatus)&&(identical(other.approvedBy, approvedBy) || other.approvedBy == approvedBy)&&const DeepCollectionEquality().equals(other.approvedAt, approvedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,approvalId,schoolId,requestType,moduleName,referenceTable,referenceId,title,description,priority,approvalStatus,approvedBy,const DeepCollectionEquality().hash(approvedAt));
+int get hashCode {
+    return Object.hash(runtimeType,id,approvalId,schoolId,requestType,moduleName,referenceTable,referenceId,title,description,priority,approvalStatus,approvedBy,const DeepCollectionEquality().hash(approvedAt));
+}
 
 @override
 String toString() {
-  return 'ApprovalRequestDto(id: $id, approvalId: $approvalId, schoolId: $schoolId, requestType: $requestType, moduleName: $moduleName, referenceTable: $referenceTable, referenceId: $referenceId, title: $title, description: $description, priority: $priority, approvalStatus: $approvalStatus, approvedBy: $approvedBy, approvedAt: $approvedAt)';
+    return 'ApprovalRequestDto(id: $id, approvalId: $approvalId, schoolId: $schoolId, requestType: $requestType, moduleName: $moduleName, referenceTable: $referenceTable, referenceId: $referenceId, title: $title, description: $description, priority: $priority, approvalStatus: $approvalStatus, approvedBy: $approvedBy, approvedAt: $approvedAt)';
 }
 
 
@@ -4199,16 +4298,21 @@ $CommunicationDtoCopyWith<CommunicationDto> get copyWith => _$CommunicationDtoCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is CommunicationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.messageId, messageId) || other.messageId == messageId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.senderId, senderId) || other.senderId == senderId)&&(identical(other.senderRole, senderRole) || other.senderRole == senderRole)&&(identical(other.receiverId, receiverId) || other.receiverId == receiverId)&&(identical(other.receiverRole, receiverRole) || other.receiverRole == receiverRole)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.messageType, messageType) || other.messageType == messageType)&&(identical(other.messageContent, messageContent) || other.messageContent == messageContent)&&(identical(other.attachmentUrl, attachmentUrl) || other.attachmentUrl == attachmentUrl)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&const DeepCollectionEquality().equals(other.sentAt, sentAt));
+  final _this = this as CommunicationDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CommunicationDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.messageId, _this.messageId) || other.messageId == _this.messageId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.senderId, _this.senderId) || other.senderId == _this.senderId)&&(identical(other.senderRole, _this.senderRole) || other.senderRole == _this.senderRole)&&(identical(other.receiverId, _this.receiverId) || other.receiverId == _this.receiverId)&&(identical(other.receiverRole, _this.receiverRole) || other.receiverRole == _this.receiverRole)&&(identical(other.studentId, _this.studentId) || other.studentId == _this.studentId)&&(identical(other.messageType, _this.messageType) || other.messageType == _this.messageType)&&(identical(other.messageContent, _this.messageContent) || other.messageContent == _this.messageContent)&&(identical(other.attachmentUrl, _this.attachmentUrl) || other.attachmentUrl == _this.attachmentUrl)&&(identical(other.isRead, _this.isRead) || other.isRead == _this.isRead)&&const DeepCollectionEquality().equals(other.sentAt, _this.sentAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,messageId,schoolId,senderId,senderRole,receiverId,receiverRole,studentId,messageType,messageContent,attachmentUrl,isRead,const DeepCollectionEquality().hash(sentAt));
+int get hashCode {
+  final _this = this as CommunicationDto;
+  return Object.hash(runtimeType,_this.id,_this.messageId,_this.schoolId,_this.senderId,_this.senderRole,_this.receiverId,_this.receiverRole,_this.studentId,_this.messageType,_this.messageContent,_this.attachmentUrl,_this.isRead,const DeepCollectionEquality().hash(_this.sentAt));
+}
 
 @override
 String toString() {
-  return 'CommunicationDto(id: $id, messageId: $messageId, schoolId: $schoolId, senderId: $senderId, senderRole: $senderRole, receiverId: $receiverId, receiverRole: $receiverRole, studentId: $studentId, messageType: $messageType, messageContent: $messageContent, attachmentUrl: $attachmentUrl, isRead: $isRead, sentAt: $sentAt)';
+  final _this = this as CommunicationDto;
+  return 'CommunicationDto(id: ${_this.id}, messageId: ${_this.messageId}, schoolId: ${_this.schoolId}, senderId: ${_this.senderId}, senderRole: ${_this.senderRole}, receiverId: ${_this.receiverId}, receiverRole: ${_this.receiverRole}, studentId: ${_this.studentId}, messageType: ${_this.messageType}, messageContent: ${_this.messageContent}, attachmentUrl: ${_this.attachmentUrl}, isRead: ${_this.isRead}, sentAt: ${_this.sentAt})';
 }
 
 
@@ -4237,7 +4341,7 @@ class _$CommunicationDtoCopyWithImpl<$Res>
 /// Create a copy of CommunicationDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? messageId = freezed,Object? schoolId = freezed,Object? senderId = freezed,Object? senderRole = freezed,Object? receiverId = freezed,Object? receiverRole = freezed,Object? studentId = freezed,Object? messageType = freezed,Object? messageContent = freezed,Object? attachmentUrl = freezed,Object? isRead = freezed,Object? sentAt = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(CommunicationDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,messageId: freezed == messageId ? _self.messageId : messageId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -4422,16 +4526,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CommunicationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.messageId, messageId) || other.messageId == messageId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.senderId, senderId) || other.senderId == senderId)&&(identical(other.senderRole, senderRole) || other.senderRole == senderRole)&&(identical(other.receiverId, receiverId) || other.receiverId == receiverId)&&(identical(other.receiverRole, receiverRole) || other.receiverRole == receiverRole)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.messageType, messageType) || other.messageType == messageType)&&(identical(other.messageContent, messageContent) || other.messageContent == messageContent)&&(identical(other.attachmentUrl, attachmentUrl) || other.attachmentUrl == attachmentUrl)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&const DeepCollectionEquality().equals(other.sentAt, sentAt));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _CommunicationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.messageId, messageId) || other.messageId == messageId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.senderId, senderId) || other.senderId == senderId)&&(identical(other.senderRole, senderRole) || other.senderRole == senderRole)&&(identical(other.receiverId, receiverId) || other.receiverId == receiverId)&&(identical(other.receiverRole, receiverRole) || other.receiverRole == receiverRole)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.messageType, messageType) || other.messageType == messageType)&&(identical(other.messageContent, messageContent) || other.messageContent == messageContent)&&(identical(other.attachmentUrl, attachmentUrl) || other.attachmentUrl == attachmentUrl)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&const DeepCollectionEquality().equals(other.sentAt, sentAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,messageId,schoolId,senderId,senderRole,receiverId,receiverRole,studentId,messageType,messageContent,attachmentUrl,isRead,const DeepCollectionEquality().hash(sentAt));
+int get hashCode {
+    return Object.hash(runtimeType,id,messageId,schoolId,senderId,senderRole,receiverId,receiverRole,studentId,messageType,messageContent,attachmentUrl,isRead,const DeepCollectionEquality().hash(sentAt));
+}
 
 @override
 String toString() {
-  return 'CommunicationDto(id: $id, messageId: $messageId, schoolId: $schoolId, senderId: $senderId, senderRole: $senderRole, receiverId: $receiverId, receiverRole: $receiverRole, studentId: $studentId, messageType: $messageType, messageContent: $messageContent, attachmentUrl: $attachmentUrl, isRead: $isRead, sentAt: $sentAt)';
+    return 'CommunicationDto(id: $id, messageId: $messageId, schoolId: $schoolId, senderId: $senderId, senderRole: $senderRole, receiverId: $receiverId, receiverRole: $receiverRole, studentId: $studentId, messageType: $messageType, messageContent: $messageContent, attachmentUrl: $attachmentUrl, isRead: $isRead, sentAt: $sentAt)';
 }
 
 
@@ -4498,16 +4604,21 @@ $PrincipalReportDtoCopyWith<PrincipalReportDto> get copyWith => _$PrincipalRepor
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrincipalReportDto&&(identical(other.id, id) || other.id == id)&&(identical(other.reportId, reportId) || other.reportId == reportId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.reportName, reportName) || other.reportName == reportName)&&(identical(other.reportType, reportType) || other.reportType == reportType)&&(identical(other.moduleName, moduleName) || other.moduleName == moduleName)&&(identical(other.generatedBy, generatedBy) || other.generatedBy == generatedBy)&&(identical(other.generatedRole, generatedRole) || other.generatedRole == generatedRole)&&(identical(other.reportStatus, reportStatus) || other.reportStatus == reportStatus)&&(identical(other.reportFileUrl, reportFileUrl) || other.reportFileUrl == reportFileUrl)&&(identical(other.totalRecords, totalRecords) || other.totalRecords == totalRecords));
+  final _this = this as PrincipalReportDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrincipalReportDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.reportId, _this.reportId) || other.reportId == _this.reportId)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.reportName, _this.reportName) || other.reportName == _this.reportName)&&(identical(other.reportType, _this.reportType) || other.reportType == _this.reportType)&&(identical(other.moduleName, _this.moduleName) || other.moduleName == _this.moduleName)&&(identical(other.generatedBy, _this.generatedBy) || other.generatedBy == _this.generatedBy)&&(identical(other.generatedRole, _this.generatedRole) || other.generatedRole == _this.generatedRole)&&(identical(other.reportStatus, _this.reportStatus) || other.reportStatus == _this.reportStatus)&&(identical(other.reportFileUrl, _this.reportFileUrl) || other.reportFileUrl == _this.reportFileUrl)&&(identical(other.totalRecords, _this.totalRecords) || other.totalRecords == _this.totalRecords));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,reportId,schoolId,reportName,reportType,moduleName,generatedBy,generatedRole,reportStatus,reportFileUrl,totalRecords);
+int get hashCode {
+  final _this = this as PrincipalReportDto;
+  return Object.hash(runtimeType,_this.id,_this.reportId,_this.schoolId,_this.reportName,_this.reportType,_this.moduleName,_this.generatedBy,_this.generatedRole,_this.reportStatus,_this.reportFileUrl,_this.totalRecords);
+}
 
 @override
 String toString() {
-  return 'PrincipalReportDto(id: $id, reportId: $reportId, schoolId: $schoolId, reportName: $reportName, reportType: $reportType, moduleName: $moduleName, generatedBy: $generatedBy, generatedRole: $generatedRole, reportStatus: $reportStatus, reportFileUrl: $reportFileUrl, totalRecords: $totalRecords)';
+  final _this = this as PrincipalReportDto;
+  return 'PrincipalReportDto(id: ${_this.id}, reportId: ${_this.reportId}, schoolId: ${_this.schoolId}, reportName: ${_this.reportName}, reportType: ${_this.reportType}, moduleName: ${_this.moduleName}, generatedBy: ${_this.generatedBy}, generatedRole: ${_this.generatedRole}, reportStatus: ${_this.reportStatus}, reportFileUrl: ${_this.reportFileUrl}, totalRecords: ${_this.totalRecords})';
 }
 
 
@@ -4536,7 +4647,7 @@ class _$PrincipalReportDtoCopyWithImpl<$Res>
 /// Create a copy of PrincipalReportDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? reportId = freezed,Object? schoolId = freezed,Object? reportName = freezed,Object? reportType = freezed,Object? moduleName = freezed,Object? generatedBy = freezed,Object? generatedRole = freezed,Object? reportStatus = freezed,Object? reportFileUrl = freezed,Object? totalRecords = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(PrincipalReportDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,reportId: freezed == reportId ? _self.reportId : reportId // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -4717,16 +4828,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrincipalReportDto&&(identical(other.id, id) || other.id == id)&&(identical(other.reportId, reportId) || other.reportId == reportId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.reportName, reportName) || other.reportName == reportName)&&(identical(other.reportType, reportType) || other.reportType == reportType)&&(identical(other.moduleName, moduleName) || other.moduleName == moduleName)&&(identical(other.generatedBy, generatedBy) || other.generatedBy == generatedBy)&&(identical(other.generatedRole, generatedRole) || other.generatedRole == generatedRole)&&(identical(other.reportStatus, reportStatus) || other.reportStatus == reportStatus)&&(identical(other.reportFileUrl, reportFileUrl) || other.reportFileUrl == reportFileUrl)&&(identical(other.totalRecords, totalRecords) || other.totalRecords == totalRecords));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrincipalReportDto&&(identical(other.id, id) || other.id == id)&&(identical(other.reportId, reportId) || other.reportId == reportId)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.reportName, reportName) || other.reportName == reportName)&&(identical(other.reportType, reportType) || other.reportType == reportType)&&(identical(other.moduleName, moduleName) || other.moduleName == moduleName)&&(identical(other.generatedBy, generatedBy) || other.generatedBy == generatedBy)&&(identical(other.generatedRole, generatedRole) || other.generatedRole == generatedRole)&&(identical(other.reportStatus, reportStatus) || other.reportStatus == reportStatus)&&(identical(other.reportFileUrl, reportFileUrl) || other.reportFileUrl == reportFileUrl)&&(identical(other.totalRecords, totalRecords) || other.totalRecords == totalRecords));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,reportId,schoolId,reportName,reportType,moduleName,generatedBy,generatedRole,reportStatus,reportFileUrl,totalRecords);
+int get hashCode {
+    return Object.hash(runtimeType,id,reportId,schoolId,reportName,reportType,moduleName,generatedBy,generatedRole,reportStatus,reportFileUrl,totalRecords);
+}
 
 @override
 String toString() {
-  return 'PrincipalReportDto(id: $id, reportId: $reportId, schoolId: $schoolId, reportName: $reportName, reportType: $reportType, moduleName: $moduleName, generatedBy: $generatedBy, generatedRole: $generatedRole, reportStatus: $reportStatus, reportFileUrl: $reportFileUrl, totalRecords: $totalRecords)';
+    return 'PrincipalReportDto(id: $id, reportId: $reportId, schoolId: $schoolId, reportName: $reportName, reportType: $reportType, moduleName: $moduleName, generatedBy: $generatedBy, generatedRole: $generatedRole, reportStatus: $reportStatus, reportFileUrl: $reportFileUrl, totalRecords: $totalRecords)';
 }
 
 
@@ -4791,16 +4904,21 @@ $DashboardDtoCopyWith<DashboardDto> get copyWith => _$DashboardDtoCopyWithImpl<D
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is DashboardDto&&(identical(other.role, role) || other.role == role)&&const DeepCollectionEquality().equals(other.metrics, metrics)&&const DeepCollectionEquality().equals(other.fees, fees)&&const DeepCollectionEquality().equals(other.todayAttendance, todayAttendance)&&const DeepCollectionEquality().equals(other.children, children)&&const DeepCollectionEquality().equals(other.assignedClasses, assignedClasses)&&(identical(other.staffId, staffId) || other.staffId == staffId));
+  final _this = this as DashboardDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is DashboardDto&&(identical(other.role, _this.role) || other.role == _this.role)&&const DeepCollectionEquality().equals(other.metrics, _this.metrics)&&const DeepCollectionEquality().equals(other.fees, _this.fees)&&const DeepCollectionEquality().equals(other.todayAttendance, _this.todayAttendance)&&const DeepCollectionEquality().equals(other.children, _this.children)&&const DeepCollectionEquality().equals(other.assignedClasses, _this.assignedClasses)&&(identical(other.staffId, _this.staffId) || other.staffId == _this.staffId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,role,const DeepCollectionEquality().hash(metrics),const DeepCollectionEquality().hash(fees),const DeepCollectionEquality().hash(todayAttendance),const DeepCollectionEquality().hash(children),const DeepCollectionEquality().hash(assignedClasses),staffId);
+int get hashCode {
+  final _this = this as DashboardDto;
+  return Object.hash(runtimeType,_this.role,const DeepCollectionEquality().hash(_this.metrics),const DeepCollectionEquality().hash(_this.fees),const DeepCollectionEquality().hash(_this.todayAttendance),const DeepCollectionEquality().hash(_this.children),const DeepCollectionEquality().hash(_this.assignedClasses),_this.staffId);
+}
 
 @override
 String toString() {
-  return 'DashboardDto(role: $role, metrics: $metrics, fees: $fees, todayAttendance: $todayAttendance, children: $children, assignedClasses: $assignedClasses, staffId: $staffId)';
+  final _this = this as DashboardDto;
+  return 'DashboardDto(role: ${_this.role}, metrics: ${_this.metrics}, fees: ${_this.fees}, todayAttendance: ${_this.todayAttendance}, children: ${_this.children}, assignedClasses: ${_this.assignedClasses}, staffId: ${_this.staffId})';
 }
 
 
@@ -4829,7 +4947,7 @@ class _$DashboardDtoCopyWithImpl<$Res>
 /// Create a copy of DashboardDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? role = freezed,Object? metrics = null,Object? fees = null,Object? todayAttendance = null,Object? children = null,Object? assignedClasses = null,Object? staffId = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(DashboardDto(
 role: freezed == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
 as String?,metrics: null == metrics ? _self.metrics : metrics // ignore: cast_nullable_to_non_nullable
 as Map<String, dynamic>,fees: null == fees ? _self.fees : fees // ignore: cast_nullable_to_non_nullable
@@ -4978,7 +5096,7 @@ return $default(_that.role,_that.metrics,_that.fees,_that.todayAttendance,_that.
 @JsonSerializable()
 
 class _DashboardDto implements DashboardDto {
-  const _DashboardDto({this.role, final  Map<String, dynamic> metrics = const <String, dynamic>{}, final  Map<String, dynamic> fees = const <String, dynamic>{}, @JsonKey(name: 'today_attendance') final  Map<String, dynamic> todayAttendance = const <String, dynamic>{}, final  List<dynamic> children = const <dynamic>[], @JsonKey(name: 'assigned_classes') final  List<dynamic> assignedClasses = const <dynamic>[], @JsonKey(name: 'staff_id') this.staffId}): _metrics = metrics,_fees = fees,_todayAttendance = todayAttendance,_children = children,_assignedClasses = assignedClasses;
+  const _DashboardDto({this.role,  Map<String, dynamic> metrics = const <String, dynamic>{},  Map<String, dynamic> fees = const <String, dynamic>{}, @JsonKey(name: 'today_attendance')  Map<String, dynamic> todayAttendance = const <String, dynamic>{},  List<dynamic> children = const <dynamic>[], @JsonKey(name: 'assigned_classes')  List<dynamic> assignedClasses = const <dynamic>[], @JsonKey(name: 'staff_id') this.staffId}): _metrics = metrics,_fees = fees,_todayAttendance = todayAttendance,_children = children,_assignedClasses = assignedClasses;
   factory _DashboardDto.fromJson(Map<String, dynamic> json) => _$DashboardDtoFromJson(json);
 
 @override final  String? role;
@@ -5032,16 +5150,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _DashboardDto&&(identical(other.role, role) || other.role == role)&&const DeepCollectionEquality().equals(other._metrics, _metrics)&&const DeepCollectionEquality().equals(other._fees, _fees)&&const DeepCollectionEquality().equals(other._todayAttendance, _todayAttendance)&&const DeepCollectionEquality().equals(other._children, _children)&&const DeepCollectionEquality().equals(other._assignedClasses, _assignedClasses)&&(identical(other.staffId, staffId) || other.staffId == staffId));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _DashboardDto&&(identical(other.role, role) || other.role == role)&&const DeepCollectionEquality().equals(other.metrics, _metrics)&&const DeepCollectionEquality().equals(other.fees, _fees)&&const DeepCollectionEquality().equals(other.todayAttendance, _todayAttendance)&&const DeepCollectionEquality().equals(other.children, _children)&&const DeepCollectionEquality().equals(other.assignedClasses, _assignedClasses)&&(identical(other.staffId, staffId) || other.staffId == staffId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,role,const DeepCollectionEquality().hash(_metrics),const DeepCollectionEquality().hash(_fees),const DeepCollectionEquality().hash(_todayAttendance),const DeepCollectionEquality().hash(_children),const DeepCollectionEquality().hash(_assignedClasses),staffId);
+int get hashCode {
+    return Object.hash(runtimeType,role,const DeepCollectionEquality().hash(_metrics),const DeepCollectionEquality().hash(_fees),const DeepCollectionEquality().hash(_todayAttendance),const DeepCollectionEquality().hash(_children),const DeepCollectionEquality().hash(_assignedClasses),staffId);
+}
 
 @override
 String toString() {
-  return 'DashboardDto(role: $role, metrics: $metrics, fees: $fees, todayAttendance: $todayAttendance, children: $children, assignedClasses: $assignedClasses, staffId: $staffId)';
+    return 'DashboardDto(role: $role, metrics: $metrics, fees: $fees, todayAttendance: $todayAttendance, children: $children, assignedClasses: $assignedClasses, staffId: $staffId)';
 }
 
 
@@ -5102,16 +5222,21 @@ $StudentDtoCopyWith<StudentDto> get copyWith => _$StudentDtoCopyWithImpl<Student
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is StudentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.studentCode, studentCode) || other.studentCode == studentCode)&&(identical(other.admissionNumber, admissionNumber) || other.admissionNumber == admissionNumber)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.dateOfBirth, dateOfBirth) || other.dateOfBirth == dateOfBirth)&&(identical(other.currentSectionId, currentSectionId) || other.currentSectionId == currentSectionId)&&(identical(other.status, status) || other.status == status));
+  final _this = this as StudentDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StudentDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.studentCode, _this.studentCode) || other.studentCode == _this.studentCode)&&(identical(other.admissionNumber, _this.admissionNumber) || other.admissionNumber == _this.admissionNumber)&&(identical(other.firstName, _this.firstName) || other.firstName == _this.firstName)&&(identical(other.lastName, _this.lastName) || other.lastName == _this.lastName)&&(identical(other.dateOfBirth, _this.dateOfBirth) || other.dateOfBirth == _this.dateOfBirth)&&(identical(other.currentSectionId, _this.currentSectionId) || other.currentSectionId == _this.currentSectionId)&&(identical(other.status, _this.status) || other.status == _this.status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,studentCode,admissionNumber,firstName,lastName,dateOfBirth,currentSectionId,status);
+int get hashCode {
+  final _this = this as StudentDto;
+  return Object.hash(runtimeType,_this.id,_this.schoolId,_this.studentCode,_this.admissionNumber,_this.firstName,_this.lastName,_this.dateOfBirth,_this.currentSectionId,_this.status);
+}
 
 @override
 String toString() {
-  return 'StudentDto(id: $id, schoolId: $schoolId, studentCode: $studentCode, admissionNumber: $admissionNumber, firstName: $firstName, lastName: $lastName, dateOfBirth: $dateOfBirth, currentSectionId: $currentSectionId, status: $status)';
+  final _this = this as StudentDto;
+  return 'StudentDto(id: ${_this.id}, schoolId: ${_this.schoolId}, studentCode: ${_this.studentCode}, admissionNumber: ${_this.admissionNumber}, firstName: ${_this.firstName}, lastName: ${_this.lastName}, dateOfBirth: ${_this.dateOfBirth}, currentSectionId: ${_this.currentSectionId}, status: ${_this.status})';
 }
 
 
@@ -5140,7 +5265,7 @@ class _$StudentDtoCopyWithImpl<$Res>
 /// Create a copy of StudentDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? schoolId = freezed,Object? studentCode = freezed,Object? admissionNumber = freezed,Object? firstName = freezed,Object? lastName = freezed,Object? dateOfBirth = freezed,Object? currentSectionId = freezed,Object? status = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(StudentDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
 as String?,studentCode: freezed == studentCode ? _self.studentCode : studentCode // ignore: cast_nullable_to_non_nullable
@@ -5317,16 +5442,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _StudentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.studentCode, studentCode) || other.studentCode == studentCode)&&(identical(other.admissionNumber, admissionNumber) || other.admissionNumber == admissionNumber)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.dateOfBirth, dateOfBirth) || other.dateOfBirth == dateOfBirth)&&(identical(other.currentSectionId, currentSectionId) || other.currentSectionId == currentSectionId)&&(identical(other.status, status) || other.status == status));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _StudentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.studentCode, studentCode) || other.studentCode == studentCode)&&(identical(other.admissionNumber, admissionNumber) || other.admissionNumber == admissionNumber)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.dateOfBirth, dateOfBirth) || other.dateOfBirth == dateOfBirth)&&(identical(other.currentSectionId, currentSectionId) || other.currentSectionId == currentSectionId)&&(identical(other.status, status) || other.status == status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,studentCode,admissionNumber,firstName,lastName,dateOfBirth,currentSectionId,status);
+int get hashCode {
+    return Object.hash(runtimeType,id,schoolId,studentCode,admissionNumber,firstName,lastName,dateOfBirth,currentSectionId,status);
+}
 
 @override
 String toString() {
-  return 'StudentDto(id: $id, schoolId: $schoolId, studentCode: $studentCode, admissionNumber: $admissionNumber, firstName: $firstName, lastName: $lastName, dateOfBirth: $dateOfBirth, currentSectionId: $currentSectionId, status: $status)';
+    return 'StudentDto(id: $id, schoolId: $schoolId, studentCode: $studentCode, admissionNumber: $admissionNumber, firstName: $firstName, lastName: $lastName, dateOfBirth: $dateOfBirth, currentSectionId: $currentSectionId, status: $status)';
 }
 
 
@@ -5389,16 +5516,21 @@ $StaffDtoCopyWith<StaffDto> get copyWith => _$StaffDtoCopyWithImpl<StaffDto>(thi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is StaffDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.staffCode, staffCode) || other.staffCode == staffCode)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.designation, designation) || other.designation == designation)&&(identical(other.status, status) || other.status == status));
+  final _this = this as StaffDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StaffDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.staffCode, _this.staffCode) || other.staffCode == _this.staffCode)&&(identical(other.firstName, _this.firstName) || other.firstName == _this.firstName)&&(identical(other.lastName, _this.lastName) || other.lastName == _this.lastName)&&(identical(other.email, _this.email) || other.email == _this.email)&&(identical(other.phone, _this.phone) || other.phone == _this.phone)&&(identical(other.designation, _this.designation) || other.designation == _this.designation)&&(identical(other.status, _this.status) || other.status == _this.status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,staffCode,firstName,lastName,email,phone,designation,status);
+int get hashCode {
+  final _this = this as StaffDto;
+  return Object.hash(runtimeType,_this.id,_this.schoolId,_this.staffCode,_this.firstName,_this.lastName,_this.email,_this.phone,_this.designation,_this.status);
+}
 
 @override
 String toString() {
-  return 'StaffDto(id: $id, schoolId: $schoolId, staffCode: $staffCode, firstName: $firstName, lastName: $lastName, email: $email, phone: $phone, designation: $designation, status: $status)';
+  final _this = this as StaffDto;
+  return 'StaffDto(id: ${_this.id}, schoolId: ${_this.schoolId}, staffCode: ${_this.staffCode}, firstName: ${_this.firstName}, lastName: ${_this.lastName}, email: ${_this.email}, phone: ${_this.phone}, designation: ${_this.designation}, status: ${_this.status})';
 }
 
 
@@ -5427,7 +5559,7 @@ class _$StaffDtoCopyWithImpl<$Res>
 /// Create a copy of StaffDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? schoolId = freezed,Object? staffCode = freezed,Object? firstName = freezed,Object? lastName = freezed,Object? email = freezed,Object? phone = freezed,Object? designation = freezed,Object? status = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(StaffDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
 as String?,staffCode: freezed == staffCode ? _self.staffCode : staffCode // ignore: cast_nullable_to_non_nullable
@@ -5604,16 +5736,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _StaffDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.staffCode, staffCode) || other.staffCode == staffCode)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.designation, designation) || other.designation == designation)&&(identical(other.status, status) || other.status == status));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _StaffDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.staffCode, staffCode) || other.staffCode == staffCode)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.designation, designation) || other.designation == designation)&&(identical(other.status, status) || other.status == status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,staffCode,firstName,lastName,email,phone,designation,status);
+int get hashCode {
+    return Object.hash(runtimeType,id,schoolId,staffCode,firstName,lastName,email,phone,designation,status);
+}
 
 @override
 String toString() {
-  return 'StaffDto(id: $id, schoolId: $schoolId, staffCode: $staffCode, firstName: $firstName, lastName: $lastName, email: $email, phone: $phone, designation: $designation, status: $status)';
+    return 'StaffDto(id: $id, schoolId: $schoolId, staffCode: $staffCode, firstName: $firstName, lastName: $lastName, email: $email, phone: $phone, designation: $designation, status: $status)';
 }
 
 
@@ -5676,16 +5810,21 @@ $AttendanceSessionDtoCopyWith<AttendanceSessionDto> get copyWith => _$Attendance
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AttendanceSessionDto&&(identical(other.id, id) || other.id == id)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.subjectId, subjectId) || other.subjectId == subjectId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&const DeepCollectionEquality().equals(other.date, date)&&(identical(other.periodNumber, periodNumber) || other.periodNumber == periodNumber)&&(identical(other.totalStudents, totalStudents) || other.totalStudents == totalStudents)&&(identical(other.presentCount, presentCount) || other.presentCount == presentCount)&&(identical(other.isFinalized, isFinalized) || other.isFinalized == isFinalized));
+  final _this = this as AttendanceSessionDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AttendanceSessionDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.sectionId, _this.sectionId) || other.sectionId == _this.sectionId)&&(identical(other.subjectId, _this.subjectId) || other.subjectId == _this.subjectId)&&(identical(other.staffId, _this.staffId) || other.staffId == _this.staffId)&&const DeepCollectionEquality().equals(other.date, _this.date)&&(identical(other.periodNumber, _this.periodNumber) || other.periodNumber == _this.periodNumber)&&(identical(other.totalStudents, _this.totalStudents) || other.totalStudents == _this.totalStudents)&&(identical(other.presentCount, _this.presentCount) || other.presentCount == _this.presentCount)&&(identical(other.isFinalized, _this.isFinalized) || other.isFinalized == _this.isFinalized));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,sectionId,subjectId,staffId,const DeepCollectionEquality().hash(date),periodNumber,totalStudents,presentCount,isFinalized);
+int get hashCode {
+  final _this = this as AttendanceSessionDto;
+  return Object.hash(runtimeType,_this.id,_this.sectionId,_this.subjectId,_this.staffId,const DeepCollectionEquality().hash(_this.date),_this.periodNumber,_this.totalStudents,_this.presentCount,_this.isFinalized);
+}
 
 @override
 String toString() {
-  return 'AttendanceSessionDto(id: $id, sectionId: $sectionId, subjectId: $subjectId, staffId: $staffId, date: $date, periodNumber: $periodNumber, totalStudents: $totalStudents, presentCount: $presentCount, isFinalized: $isFinalized)';
+  final _this = this as AttendanceSessionDto;
+  return 'AttendanceSessionDto(id: ${_this.id}, sectionId: ${_this.sectionId}, subjectId: ${_this.subjectId}, staffId: ${_this.staffId}, date: ${_this.date}, periodNumber: ${_this.periodNumber}, totalStudents: ${_this.totalStudents}, presentCount: ${_this.presentCount}, isFinalized: ${_this.isFinalized})';
 }
 
 
@@ -5714,7 +5853,7 @@ class _$AttendanceSessionDtoCopyWithImpl<$Res>
 /// Create a copy of AttendanceSessionDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? sectionId = freezed,Object? subjectId = freezed,Object? staffId = freezed,Object? date = freezed,Object? periodNumber = freezed,Object? totalStudents = freezed,Object? presentCount = freezed,Object? isFinalized = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(AttendanceSessionDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,sectionId: freezed == sectionId ? _self.sectionId : sectionId // ignore: cast_nullable_to_non_nullable
 as String?,subjectId: freezed == subjectId ? _self.subjectId : subjectId // ignore: cast_nullable_to_non_nullable
@@ -5891,16 +6030,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AttendanceSessionDto&&(identical(other.id, id) || other.id == id)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.subjectId, subjectId) || other.subjectId == subjectId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&const DeepCollectionEquality().equals(other.date, date)&&(identical(other.periodNumber, periodNumber) || other.periodNumber == periodNumber)&&(identical(other.totalStudents, totalStudents) || other.totalStudents == totalStudents)&&(identical(other.presentCount, presentCount) || other.presentCount == presentCount)&&(identical(other.isFinalized, isFinalized) || other.isFinalized == isFinalized));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AttendanceSessionDto&&(identical(other.id, id) || other.id == id)&&(identical(other.sectionId, sectionId) || other.sectionId == sectionId)&&(identical(other.subjectId, subjectId) || other.subjectId == subjectId)&&(identical(other.staffId, staffId) || other.staffId == staffId)&&const DeepCollectionEquality().equals(other.date, date)&&(identical(other.periodNumber, periodNumber) || other.periodNumber == periodNumber)&&(identical(other.totalStudents, totalStudents) || other.totalStudents == totalStudents)&&(identical(other.presentCount, presentCount) || other.presentCount == presentCount)&&(identical(other.isFinalized, isFinalized) || other.isFinalized == isFinalized));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,sectionId,subjectId,staffId,const DeepCollectionEquality().hash(date),periodNumber,totalStudents,presentCount,isFinalized);
+int get hashCode {
+    return Object.hash(runtimeType,id,sectionId,subjectId,staffId,const DeepCollectionEquality().hash(date),periodNumber,totalStudents,presentCount,isFinalized);
+}
 
 @override
 String toString() {
-  return 'AttendanceSessionDto(id: $id, sectionId: $sectionId, subjectId: $subjectId, staffId: $staffId, date: $date, periodNumber: $periodNumber, totalStudents: $totalStudents, presentCount: $presentCount, isFinalized: $isFinalized)';
+    return 'AttendanceSessionDto(id: $id, sectionId: $sectionId, subjectId: $subjectId, staffId: $staffId, date: $date, periodNumber: $periodNumber, totalStudents: $totalStudents, presentCount: $presentCount, isFinalized: $isFinalized)';
 }
 
 
@@ -5963,16 +6104,21 @@ $FeeInvoiceDtoCopyWith<FeeInvoiceDto> get copyWith => _$FeeInvoiceDtoCopyWithImp
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is FeeInvoiceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.invoiceNumber, invoiceNumber) || other.invoiceNumber == invoiceNumber)&&const DeepCollectionEquality().equals(other.dueDate, dueDate)&&(identical(other.totalAmount, totalAmount) || other.totalAmount == totalAmount)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.balance, balance) || other.balance == balance)&&(identical(other.status, status) || other.status == status));
+  final _this = this as FeeInvoiceDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is FeeInvoiceDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.studentId, _this.studentId) || other.studentId == _this.studentId)&&(identical(other.academicYearId, _this.academicYearId) || other.academicYearId == _this.academicYearId)&&(identical(other.invoiceNumber, _this.invoiceNumber) || other.invoiceNumber == _this.invoiceNumber)&&const DeepCollectionEquality().equals(other.dueDate, _this.dueDate)&&(identical(other.totalAmount, _this.totalAmount) || other.totalAmount == _this.totalAmount)&&(identical(other.paidAmount, _this.paidAmount) || other.paidAmount == _this.paidAmount)&&(identical(other.balance, _this.balance) || other.balance == _this.balance)&&(identical(other.status, _this.status) || other.status == _this.status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,studentId,academicYearId,invoiceNumber,const DeepCollectionEquality().hash(dueDate),totalAmount,paidAmount,balance,status);
+int get hashCode {
+  final _this = this as FeeInvoiceDto;
+  return Object.hash(runtimeType,_this.id,_this.studentId,_this.academicYearId,_this.invoiceNumber,const DeepCollectionEquality().hash(_this.dueDate),_this.totalAmount,_this.paidAmount,_this.balance,_this.status);
+}
 
 @override
 String toString() {
-  return 'FeeInvoiceDto(id: $id, studentId: $studentId, academicYearId: $academicYearId, invoiceNumber: $invoiceNumber, dueDate: $dueDate, totalAmount: $totalAmount, paidAmount: $paidAmount, balance: $balance, status: $status)';
+  final _this = this as FeeInvoiceDto;
+  return 'FeeInvoiceDto(id: ${_this.id}, studentId: ${_this.studentId}, academicYearId: ${_this.academicYearId}, invoiceNumber: ${_this.invoiceNumber}, dueDate: ${_this.dueDate}, totalAmount: ${_this.totalAmount}, paidAmount: ${_this.paidAmount}, balance: ${_this.balance}, status: ${_this.status})';
 }
 
 
@@ -6001,7 +6147,7 @@ class _$FeeInvoiceDtoCopyWithImpl<$Res>
 /// Create a copy of FeeInvoiceDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? studentId = freezed,Object? academicYearId = freezed,Object? invoiceNumber = freezed,Object? dueDate = freezed,Object? totalAmount = freezed,Object? paidAmount = freezed,Object? balance = freezed,Object? status = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(FeeInvoiceDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,studentId: freezed == studentId ? _self.studentId : studentId // ignore: cast_nullable_to_non_nullable
 as String?,academicYearId: freezed == academicYearId ? _self.academicYearId : academicYearId // ignore: cast_nullable_to_non_nullable
@@ -6178,16 +6324,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _FeeInvoiceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.invoiceNumber, invoiceNumber) || other.invoiceNumber == invoiceNumber)&&const DeepCollectionEquality().equals(other.dueDate, dueDate)&&(identical(other.totalAmount, totalAmount) || other.totalAmount == totalAmount)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.balance, balance) || other.balance == balance)&&(identical(other.status, status) || other.status == status));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _FeeInvoiceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.invoiceNumber, invoiceNumber) || other.invoiceNumber == invoiceNumber)&&const DeepCollectionEquality().equals(other.dueDate, dueDate)&&(identical(other.totalAmount, totalAmount) || other.totalAmount == totalAmount)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.balance, balance) || other.balance == balance)&&(identical(other.status, status) || other.status == status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,studentId,academicYearId,invoiceNumber,const DeepCollectionEquality().hash(dueDate),totalAmount,paidAmount,balance,status);
+int get hashCode {
+    return Object.hash(runtimeType,id,studentId,academicYearId,invoiceNumber,const DeepCollectionEquality().hash(dueDate),totalAmount,paidAmount,balance,status);
+}
 
 @override
 String toString() {
-  return 'FeeInvoiceDto(id: $id, studentId: $studentId, academicYearId: $academicYearId, invoiceNumber: $invoiceNumber, dueDate: $dueDate, totalAmount: $totalAmount, paidAmount: $paidAmount, balance: $balance, status: $status)';
+    return 'FeeInvoiceDto(id: $id, studentId: $studentId, academicYearId: $academicYearId, invoiceNumber: $invoiceNumber, dueDate: $dueDate, totalAmount: $totalAmount, paidAmount: $paidAmount, balance: $balance, status: $status)';
 }
 
 
@@ -6250,16 +6398,21 @@ $PaymentDtoCopyWith<PaymentDto> get copyWith => _$PaymentDtoCopyWithImpl<Payment
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PaymentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.invoiceId, invoiceId) || other.invoiceId == invoiceId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.paymentMode, paymentMode) || other.paymentMode == paymentMode)&&(identical(other.transactionId, transactionId) || other.transactionId == transactionId)&&const DeepCollectionEquality().equals(other.paidAt, paidAt));
+  final _this = this as PaymentDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PaymentDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.invoiceId, _this.invoiceId) || other.invoiceId == _this.invoiceId)&&(identical(other.studentId, _this.studentId) || other.studentId == _this.studentId)&&(identical(other.amount, _this.amount) || other.amount == _this.amount)&&(identical(other.paymentMode, _this.paymentMode) || other.paymentMode == _this.paymentMode)&&(identical(other.transactionId, _this.transactionId) || other.transactionId == _this.transactionId)&&const DeepCollectionEquality().equals(other.paidAt, _this.paidAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,invoiceId,studentId,amount,paymentMode,transactionId,const DeepCollectionEquality().hash(paidAt));
+int get hashCode {
+  final _this = this as PaymentDto;
+  return Object.hash(runtimeType,_this.id,_this.invoiceId,_this.studentId,_this.amount,_this.paymentMode,_this.transactionId,const DeepCollectionEquality().hash(_this.paidAt));
+}
 
 @override
 String toString() {
-  return 'PaymentDto(id: $id, invoiceId: $invoiceId, studentId: $studentId, amount: $amount, paymentMode: $paymentMode, transactionId: $transactionId, paidAt: $paidAt)';
+  final _this = this as PaymentDto;
+  return 'PaymentDto(id: ${_this.id}, invoiceId: ${_this.invoiceId}, studentId: ${_this.studentId}, amount: ${_this.amount}, paymentMode: ${_this.paymentMode}, transactionId: ${_this.transactionId}, paidAt: ${_this.paidAt})';
 }
 
 
@@ -6288,7 +6441,7 @@ class _$PaymentDtoCopyWithImpl<$Res>
 /// Create a copy of PaymentDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? invoiceId = freezed,Object? studentId = freezed,Object? amount = freezed,Object? paymentMode = freezed,Object? transactionId = freezed,Object? paidAt = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(PaymentDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,invoiceId: freezed == invoiceId ? _self.invoiceId : invoiceId // ignore: cast_nullable_to_non_nullable
 as String?,studentId: freezed == studentId ? _self.studentId : studentId // ignore: cast_nullable_to_non_nullable
@@ -6461,16 +6614,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PaymentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.invoiceId, invoiceId) || other.invoiceId == invoiceId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.paymentMode, paymentMode) || other.paymentMode == paymentMode)&&(identical(other.transactionId, transactionId) || other.transactionId == transactionId)&&const DeepCollectionEquality().equals(other.paidAt, paidAt));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PaymentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.invoiceId, invoiceId) || other.invoiceId == invoiceId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.paymentMode, paymentMode) || other.paymentMode == paymentMode)&&(identical(other.transactionId, transactionId) || other.transactionId == transactionId)&&const DeepCollectionEquality().equals(other.paidAt, paidAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,invoiceId,studentId,amount,paymentMode,transactionId,const DeepCollectionEquality().hash(paidAt));
+int get hashCode {
+    return Object.hash(runtimeType,id,invoiceId,studentId,amount,paymentMode,transactionId,const DeepCollectionEquality().hash(paidAt));
+}
 
 @override
 String toString() {
-  return 'PaymentDto(id: $id, invoiceId: $invoiceId, studentId: $studentId, amount: $amount, paymentMode: $paymentMode, transactionId: $transactionId, paidAt: $paidAt)';
+    return 'PaymentDto(id: $id, invoiceId: $invoiceId, studentId: $studentId, amount: $amount, paymentMode: $paymentMode, transactionId: $transactionId, paidAt: $paidAt)';
 }
 
 
@@ -6531,16 +6686,21 @@ $ParentPaymentRequestDtoCopyWith<ParentPaymentRequestDto> get copyWith => _$Pare
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ParentPaymentRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.invoiceId, invoiceId) || other.invoiceId == invoiceId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.parentUserId, parentUserId) || other.parentUserId == parentUserId)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.status, status) || other.status == status)&&(identical(other.remarks, remarks) || other.remarks == remarks));
+  final _this = this as ParentPaymentRequestDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ParentPaymentRequestDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.invoiceId, _this.invoiceId) || other.invoiceId == _this.invoiceId)&&(identical(other.studentId, _this.studentId) || other.studentId == _this.studentId)&&(identical(other.parentUserId, _this.parentUserId) || other.parentUserId == _this.parentUserId)&&(identical(other.amount, _this.amount) || other.amount == _this.amount)&&(identical(other.status, _this.status) || other.status == _this.status)&&(identical(other.remarks, _this.remarks) || other.remarks == _this.remarks));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,invoiceId,studentId,parentUserId,amount,status,remarks);
+int get hashCode {
+  final _this = this as ParentPaymentRequestDto;
+  return Object.hash(runtimeType,_this.id,_this.invoiceId,_this.studentId,_this.parentUserId,_this.amount,_this.status,_this.remarks);
+}
 
 @override
 String toString() {
-  return 'ParentPaymentRequestDto(id: $id, invoiceId: $invoiceId, studentId: $studentId, parentUserId: $parentUserId, amount: $amount, status: $status, remarks: $remarks)';
+  final _this = this as ParentPaymentRequestDto;
+  return 'ParentPaymentRequestDto(id: ${_this.id}, invoiceId: ${_this.invoiceId}, studentId: ${_this.studentId}, parentUserId: ${_this.parentUserId}, amount: ${_this.amount}, status: ${_this.status}, remarks: ${_this.remarks})';
 }
 
 
@@ -6569,7 +6729,7 @@ class _$ParentPaymentRequestDtoCopyWithImpl<$Res>
 /// Create a copy of ParentPaymentRequestDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? invoiceId = freezed,Object? studentId = freezed,Object? parentUserId = freezed,Object? amount = freezed,Object? status = freezed,Object? remarks = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(ParentPaymentRequestDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,invoiceId: freezed == invoiceId ? _self.invoiceId : invoiceId // ignore: cast_nullable_to_non_nullable
 as String?,studentId: freezed == studentId ? _self.studentId : studentId // ignore: cast_nullable_to_non_nullable
@@ -6742,16 +6902,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ParentPaymentRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.invoiceId, invoiceId) || other.invoiceId == invoiceId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.parentUserId, parentUserId) || other.parentUserId == parentUserId)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.status, status) || other.status == status)&&(identical(other.remarks, remarks) || other.remarks == remarks));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _ParentPaymentRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.invoiceId, invoiceId) || other.invoiceId == invoiceId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.parentUserId, parentUserId) || other.parentUserId == parentUserId)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.status, status) || other.status == status)&&(identical(other.remarks, remarks) || other.remarks == remarks));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,invoiceId,studentId,parentUserId,amount,status,remarks);
+int get hashCode {
+    return Object.hash(runtimeType,id,invoiceId,studentId,parentUserId,amount,status,remarks);
+}
 
 @override
 String toString() {
-  return 'ParentPaymentRequestDto(id: $id, invoiceId: $invoiceId, studentId: $studentId, parentUserId: $parentUserId, amount: $amount, status: $status, remarks: $remarks)';
+    return 'ParentPaymentRequestDto(id: $id, invoiceId: $invoiceId, studentId: $studentId, parentUserId: $parentUserId, amount: $amount, status: $status, remarks: $remarks)';
 }
 
 
@@ -6812,16 +6974,21 @@ $MessageConversationDtoCopyWith<MessageConversationDto> get copyWith => _$Messag
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MessageConversationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.teacherId, teacherId) || other.teacherId == teacherId)&&(identical(other.parentId, parentId) || other.parentId == parentId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.title, title) || other.title == title)&&(identical(other.lastMessage, lastMessage) || other.lastMessage == lastMessage)&&const DeepCollectionEquality().equals(other.lastMessageTime, lastMessageTime));
+  final _this = this as MessageConversationDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MessageConversationDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.teacherId, _this.teacherId) || other.teacherId == _this.teacherId)&&(identical(other.parentId, _this.parentId) || other.parentId == _this.parentId)&&(identical(other.studentId, _this.studentId) || other.studentId == _this.studentId)&&(identical(other.title, _this.title) || other.title == _this.title)&&(identical(other.lastMessage, _this.lastMessage) || other.lastMessage == _this.lastMessage)&&const DeepCollectionEquality().equals(other.lastMessageTime, _this.lastMessageTime));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,teacherId,parentId,studentId,title,lastMessage,const DeepCollectionEquality().hash(lastMessageTime));
+int get hashCode {
+  final _this = this as MessageConversationDto;
+  return Object.hash(runtimeType,_this.id,_this.schoolId,_this.teacherId,_this.parentId,_this.studentId,_this.title,_this.lastMessage,const DeepCollectionEquality().hash(_this.lastMessageTime));
+}
 
 @override
 String toString() {
-  return 'MessageConversationDto(id: $id, schoolId: $schoolId, teacherId: $teacherId, parentId: $parentId, studentId: $studentId, title: $title, lastMessage: $lastMessage, lastMessageTime: $lastMessageTime)';
+  final _this = this as MessageConversationDto;
+  return 'MessageConversationDto(id: ${_this.id}, schoolId: ${_this.schoolId}, teacherId: ${_this.teacherId}, parentId: ${_this.parentId}, studentId: ${_this.studentId}, title: ${_this.title}, lastMessage: ${_this.lastMessage}, lastMessageTime: ${_this.lastMessageTime})';
 }
 
 
@@ -6850,7 +7017,7 @@ class _$MessageConversationDtoCopyWithImpl<$Res>
 /// Create a copy of MessageConversationDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? schoolId = freezed,Object? teacherId = freezed,Object? parentId = freezed,Object? studentId = freezed,Object? title = freezed,Object? lastMessage = freezed,Object? lastMessageTime = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(MessageConversationDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
 as String?,teacherId: freezed == teacherId ? _self.teacherId : teacherId // ignore: cast_nullable_to_non_nullable
@@ -7025,16 +7192,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MessageConversationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.teacherId, teacherId) || other.teacherId == teacherId)&&(identical(other.parentId, parentId) || other.parentId == parentId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.title, title) || other.title == title)&&(identical(other.lastMessage, lastMessage) || other.lastMessage == lastMessage)&&const DeepCollectionEquality().equals(other.lastMessageTime, lastMessageTime));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _MessageConversationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.teacherId, teacherId) || other.teacherId == teacherId)&&(identical(other.parentId, parentId) || other.parentId == parentId)&&(identical(other.studentId, studentId) || other.studentId == studentId)&&(identical(other.title, title) || other.title == title)&&(identical(other.lastMessage, lastMessage) || other.lastMessage == lastMessage)&&const DeepCollectionEquality().equals(other.lastMessageTime, lastMessageTime));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,teacherId,parentId,studentId,title,lastMessage,const DeepCollectionEquality().hash(lastMessageTime));
+int get hashCode {
+    return Object.hash(runtimeType,id,schoolId,teacherId,parentId,studentId,title,lastMessage,const DeepCollectionEquality().hash(lastMessageTime));
+}
 
 @override
 String toString() {
-  return 'MessageConversationDto(id: $id, schoolId: $schoolId, teacherId: $teacherId, parentId: $parentId, studentId: $studentId, title: $title, lastMessage: $lastMessage, lastMessageTime: $lastMessageTime)';
+    return 'MessageConversationDto(id: $id, schoolId: $schoolId, teacherId: $teacherId, parentId: $parentId, studentId: $studentId, title: $title, lastMessage: $lastMessage, lastMessageTime: $lastMessageTime)';
 }
 
 
@@ -7096,16 +7265,21 @@ $MessageDtoCopyWith<MessageDto> get copyWith => _$MessageDtoCopyWithImpl<Message
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MessageDto&&(identical(other.id, id) || other.id == id)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.senderId, senderId) || other.senderId == senderId)&&(identical(other.senderRole, senderRole) || other.senderRole == senderRole)&&(identical(other.senderName, senderName) || other.senderName == senderName)&&(identical(other.body, body) || other.body == body)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&const DeepCollectionEquality().equals(other.sentAt, sentAt));
+  final _this = this as MessageDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MessageDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.conversationId, _this.conversationId) || other.conversationId == _this.conversationId)&&(identical(other.senderId, _this.senderId) || other.senderId == _this.senderId)&&(identical(other.senderRole, _this.senderRole) || other.senderRole == _this.senderRole)&&(identical(other.senderName, _this.senderName) || other.senderName == _this.senderName)&&(identical(other.body, _this.body) || other.body == _this.body)&&(identical(other.isRead, _this.isRead) || other.isRead == _this.isRead)&&const DeepCollectionEquality().equals(other.sentAt, _this.sentAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,conversationId,senderId,senderRole,senderName,body,isRead,const DeepCollectionEquality().hash(sentAt));
+int get hashCode {
+  final _this = this as MessageDto;
+  return Object.hash(runtimeType,_this.id,_this.conversationId,_this.senderId,_this.senderRole,_this.senderName,_this.body,_this.isRead,const DeepCollectionEquality().hash(_this.sentAt));
+}
 
 @override
 String toString() {
-  return 'MessageDto(id: $id, conversationId: $conversationId, senderId: $senderId, senderRole: $senderRole, senderName: $senderName, body: $body, isRead: $isRead, sentAt: $sentAt)';
+  final _this = this as MessageDto;
+  return 'MessageDto(id: ${_this.id}, conversationId: ${_this.conversationId}, senderId: ${_this.senderId}, senderRole: ${_this.senderRole}, senderName: ${_this.senderName}, body: ${_this.body}, isRead: ${_this.isRead}, sentAt: ${_this.sentAt})';
 }
 
 
@@ -7134,7 +7308,7 @@ class _$MessageDtoCopyWithImpl<$Res>
 /// Create a copy of MessageDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? conversationId = freezed,Object? senderId = freezed,Object? senderRole = freezed,Object? senderName = freezed,Object? body = freezed,Object? isRead = freezed,Object? sentAt = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(MessageDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,conversationId: freezed == conversationId ? _self.conversationId : conversationId // ignore: cast_nullable_to_non_nullable
 as String?,senderId: freezed == senderId ? _self.senderId : senderId // ignore: cast_nullable_to_non_nullable
@@ -7309,16 +7483,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MessageDto&&(identical(other.id, id) || other.id == id)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.senderId, senderId) || other.senderId == senderId)&&(identical(other.senderRole, senderRole) || other.senderRole == senderRole)&&(identical(other.senderName, senderName) || other.senderName == senderName)&&(identical(other.body, body) || other.body == body)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&const DeepCollectionEquality().equals(other.sentAt, sentAt));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _MessageDto&&(identical(other.id, id) || other.id == id)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.senderId, senderId) || other.senderId == senderId)&&(identical(other.senderRole, senderRole) || other.senderRole == senderRole)&&(identical(other.senderName, senderName) || other.senderName == senderName)&&(identical(other.body, body) || other.body == body)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&const DeepCollectionEquality().equals(other.sentAt, sentAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,conversationId,senderId,senderRole,senderName,body,isRead,const DeepCollectionEquality().hash(sentAt));
+int get hashCode {
+    return Object.hash(runtimeType,id,conversationId,senderId,senderRole,senderName,body,isRead,const DeepCollectionEquality().hash(sentAt));
+}
 
 @override
 String toString() {
-  return 'MessageDto(id: $id, conversationId: $conversationId, senderId: $senderId, senderRole: $senderRole, senderName: $senderName, body: $body, isRead: $isRead, sentAt: $sentAt)';
+    return 'MessageDto(id: $id, conversationId: $conversationId, senderId: $senderId, senderRole: $senderRole, senderName: $senderName, body: $body, isRead: $isRead, sentAt: $sentAt)';
 }
 
 
@@ -7380,16 +7556,21 @@ $PrePrimaryTimetableTemplateDtoCopyWith<PrePrimaryTimetableTemplateDto> get copy
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrePrimaryTimetableTemplateDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other.days, days));
+  final _this = this as PrePrimaryTimetableTemplateDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrePrimaryTimetableTemplateDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.schoolId, _this.schoolId) || other.schoolId == _this.schoolId)&&(identical(other.academicYearId, _this.academicYearId) || other.academicYearId == _this.academicYearId)&&(identical(other.name, _this.name) || other.name == _this.name)&&const DeepCollectionEquality().equals(other.days, _this.days));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,academicYearId,name,const DeepCollectionEquality().hash(days));
+int get hashCode {
+  final _this = this as PrePrimaryTimetableTemplateDto;
+  return Object.hash(runtimeType,_this.id,_this.schoolId,_this.academicYearId,_this.name,const DeepCollectionEquality().hash(_this.days));
+}
 
 @override
 String toString() {
-  return 'PrePrimaryTimetableTemplateDto(id: $id, schoolId: $schoolId, academicYearId: $academicYearId, name: $name, days: $days)';
+  final _this = this as PrePrimaryTimetableTemplateDto;
+  return 'PrePrimaryTimetableTemplateDto(id: ${_this.id}, schoolId: ${_this.schoolId}, academicYearId: ${_this.academicYearId}, name: ${_this.name}, days: ${_this.days})';
 }
 
 
@@ -7418,7 +7599,7 @@ class _$PrePrimaryTimetableTemplateDtoCopyWithImpl<$Res>
 /// Create a copy of PrePrimaryTimetableTemplateDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? schoolId = freezed,Object? academicYearId = freezed,Object? name = freezed,Object? days = null,}) {
-  return _then(_self.copyWith(
+  return _then(PrePrimaryTimetableTemplateDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
 as String?,academicYearId: freezed == academicYearId ? _self.academicYearId : academicYearId // ignore: cast_nullable_to_non_nullable
@@ -7565,7 +7746,7 @@ return $default(_that.id,_that.schoolId,_that.academicYearId,_that.name,_that.da
 @JsonSerializable()
 
 class _PrePrimaryTimetableTemplateDto implements PrePrimaryTimetableTemplateDto {
-  const _PrePrimaryTimetableTemplateDto({this.id, @JsonKey(name: 'school_id') this.schoolId, @JsonKey(name: 'academic_year_id') this.academicYearId, this.name, final  List<PrePrimaryTimetableDayDto> days = const <PrePrimaryTimetableDayDto>[]}): _days = days;
+  const _PrePrimaryTimetableTemplateDto({this.id, @JsonKey(name: 'school_id') this.schoolId, @JsonKey(name: 'academic_year_id') this.academicYearId, this.name,  List<PrePrimaryTimetableDayDto> days = const <PrePrimaryTimetableDayDto>[]}): _days = days;
   factory _PrePrimaryTimetableTemplateDto.fromJson(Map<String, dynamic> json) => _$PrePrimaryTimetableTemplateDtoFromJson(json);
 
 @override final  String? id;
@@ -7593,16 +7774,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrePrimaryTimetableTemplateDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other._days, _days));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrePrimaryTimetableTemplateDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other.days, _days));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,academicYearId,name,const DeepCollectionEquality().hash(_days));
+int get hashCode {
+    return Object.hash(runtimeType,id,schoolId,academicYearId,name,const DeepCollectionEquality().hash(_days));
+}
 
 @override
 String toString() {
-  return 'PrePrimaryTimetableTemplateDto(id: $id, schoolId: $schoolId, academicYearId: $academicYearId, name: $name, days: $days)';
+    return 'PrePrimaryTimetableTemplateDto(id: $id, schoolId: $schoolId, academicYearId: $academicYearId, name: $name, days: $days)';
 }
 
 
@@ -7661,16 +7844,21 @@ $PrePrimaryTimetableDayDtoCopyWith<PrePrimaryTimetableDayDto> get copyWith => _$
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrePrimaryTimetableDayDto&&(identical(other.id, id) || other.id == id)&&(identical(other.templateId, templateId) || other.templateId == templateId)&&(identical(other.dayOfWeek, dayOfWeek) || other.dayOfWeek == dayOfWeek)&&const DeepCollectionEquality().equals(other.slots, slots));
+  final _this = this as PrePrimaryTimetableDayDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrePrimaryTimetableDayDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.templateId, _this.templateId) || other.templateId == _this.templateId)&&(identical(other.dayOfWeek, _this.dayOfWeek) || other.dayOfWeek == _this.dayOfWeek)&&const DeepCollectionEquality().equals(other.slots, _this.slots));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,templateId,dayOfWeek,const DeepCollectionEquality().hash(slots));
+int get hashCode {
+  final _this = this as PrePrimaryTimetableDayDto;
+  return Object.hash(runtimeType,_this.id,_this.templateId,_this.dayOfWeek,const DeepCollectionEquality().hash(_this.slots));
+}
 
 @override
 String toString() {
-  return 'PrePrimaryTimetableDayDto(id: $id, templateId: $templateId, dayOfWeek: $dayOfWeek, slots: $slots)';
+  final _this = this as PrePrimaryTimetableDayDto;
+  return 'PrePrimaryTimetableDayDto(id: ${_this.id}, templateId: ${_this.templateId}, dayOfWeek: ${_this.dayOfWeek}, slots: ${_this.slots})';
 }
 
 
@@ -7699,7 +7887,7 @@ class _$PrePrimaryTimetableDayDtoCopyWithImpl<$Res>
 /// Create a copy of PrePrimaryTimetableDayDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? templateId = freezed,Object? dayOfWeek = freezed,Object? slots = null,}) {
-  return _then(_self.copyWith(
+  return _then(PrePrimaryTimetableDayDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,templateId: freezed == templateId ? _self.templateId : templateId // ignore: cast_nullable_to_non_nullable
 as String?,dayOfWeek: freezed == dayOfWeek ? _self.dayOfWeek : dayOfWeek // ignore: cast_nullable_to_non_nullable
@@ -7845,7 +8033,7 @@ return $default(_that.id,_that.templateId,_that.dayOfWeek,_that.slots);case _:
 @JsonSerializable()
 
 class _PrePrimaryTimetableDayDto implements PrePrimaryTimetableDayDto {
-  const _PrePrimaryTimetableDayDto({this.id, @JsonKey(name: 'template_id') this.templateId, @JsonKey(name: 'day_of_week') this.dayOfWeek, final  List<PrePrimaryTimetableSlotDto> slots = const <PrePrimaryTimetableSlotDto>[]}): _slots = slots;
+  const _PrePrimaryTimetableDayDto({this.id, @JsonKey(name: 'template_id') this.templateId, @JsonKey(name: 'day_of_week') this.dayOfWeek,  List<PrePrimaryTimetableSlotDto> slots = const <PrePrimaryTimetableSlotDto>[]}): _slots = slots;
   factory _PrePrimaryTimetableDayDto.fromJson(Map<String, dynamic> json) => _$PrePrimaryTimetableDayDtoFromJson(json);
 
 @override final  String? id;
@@ -7872,16 +8060,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrePrimaryTimetableDayDto&&(identical(other.id, id) || other.id == id)&&(identical(other.templateId, templateId) || other.templateId == templateId)&&(identical(other.dayOfWeek, dayOfWeek) || other.dayOfWeek == dayOfWeek)&&const DeepCollectionEquality().equals(other._slots, _slots));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrePrimaryTimetableDayDto&&(identical(other.id, id) || other.id == id)&&(identical(other.templateId, templateId) || other.templateId == templateId)&&(identical(other.dayOfWeek, dayOfWeek) || other.dayOfWeek == dayOfWeek)&&const DeepCollectionEquality().equals(other.slots, _slots));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,templateId,dayOfWeek,const DeepCollectionEquality().hash(_slots));
+int get hashCode {
+    return Object.hash(runtimeType,id,templateId,dayOfWeek,const DeepCollectionEquality().hash(_slots));
+}
 
 @override
 String toString() {
-  return 'PrePrimaryTimetableDayDto(id: $id, templateId: $templateId, dayOfWeek: $dayOfWeek, slots: $slots)';
+    return 'PrePrimaryTimetableDayDto(id: $id, templateId: $templateId, dayOfWeek: $dayOfWeek, slots: $slots)';
 }
 
 
@@ -7939,16 +8129,21 @@ $PrePrimaryTimetableSlotDtoCopyWith<PrePrimaryTimetableSlotDto> get copyWith => 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrePrimaryTimetableSlotDto&&(identical(other.id, id) || other.id == id)&&(identical(other.dayId, dayId) || other.dayId == dayId)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.activityName, activityName) || other.activityName == activityName)&&(identical(other.isBreak, isBreak) || other.isBreak == isBreak));
+  final _this = this as PrePrimaryTimetableSlotDto;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrePrimaryTimetableSlotDto&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.dayId, _this.dayId) || other.dayId == _this.dayId)&&(identical(other.startTime, _this.startTime) || other.startTime == _this.startTime)&&(identical(other.endTime, _this.endTime) || other.endTime == _this.endTime)&&(identical(other.activityName, _this.activityName) || other.activityName == _this.activityName)&&(identical(other.isBreak, _this.isBreak) || other.isBreak == _this.isBreak));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,dayId,startTime,endTime,activityName,isBreak);
+int get hashCode {
+  final _this = this as PrePrimaryTimetableSlotDto;
+  return Object.hash(runtimeType,_this.id,_this.dayId,_this.startTime,_this.endTime,_this.activityName,_this.isBreak);
+}
 
 @override
 String toString() {
-  return 'PrePrimaryTimetableSlotDto(id: $id, dayId: $dayId, startTime: $startTime, endTime: $endTime, activityName: $activityName, isBreak: $isBreak)';
+  final _this = this as PrePrimaryTimetableSlotDto;
+  return 'PrePrimaryTimetableSlotDto(id: ${_this.id}, dayId: ${_this.dayId}, startTime: ${_this.startTime}, endTime: ${_this.endTime}, activityName: ${_this.activityName}, isBreak: ${_this.isBreak})';
 }
 
 
@@ -7977,7 +8172,7 @@ class _$PrePrimaryTimetableSlotDtoCopyWithImpl<$Res>
 /// Create a copy of PrePrimaryTimetableSlotDto
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? dayId = freezed,Object? startTime = freezed,Object? endTime = freezed,Object? activityName = freezed,Object? isBreak = freezed,}) {
-  return _then(_self.copyWith(
+  return _then(PrePrimaryTimetableSlotDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,dayId: freezed == dayId ? _self.dayId : dayId // ignore: cast_nullable_to_non_nullable
 as String?,startTime: freezed == startTime ? _self.startTime : startTime // ignore: cast_nullable_to_non_nullable
@@ -8148,16 +8343,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrePrimaryTimetableSlotDto&&(identical(other.id, id) || other.id == id)&&(identical(other.dayId, dayId) || other.dayId == dayId)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.activityName, activityName) || other.activityName == activityName)&&(identical(other.isBreak, isBreak) || other.isBreak == isBreak));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrePrimaryTimetableSlotDto&&(identical(other.id, id) || other.id == id)&&(identical(other.dayId, dayId) || other.dayId == dayId)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.activityName, activityName) || other.activityName == activityName)&&(identical(other.isBreak, isBreak) || other.isBreak == isBreak));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,dayId,startTime,endTime,activityName,isBreak);
+int get hashCode {
+    return Object.hash(runtimeType,id,dayId,startTime,endTime,activityName,isBreak);
+}
 
 @override
 String toString() {
-  return 'PrePrimaryTimetableSlotDto(id: $id, dayId: $dayId, startTime: $startTime, endTime: $endTime, activityName: $activityName, isBreak: $isBreak)';
+    return 'PrePrimaryTimetableSlotDto(id: $id, dayId: $dayId, startTime: $startTime, endTime: $endTime, activityName: $activityName, isBreak: $isBreak)';
 }
 
 

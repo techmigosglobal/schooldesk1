@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:schooldesk1/features/shared/data/models/backend_models.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 
 const _defaultPageSize = 20;
 const _maxPageSize = 100;

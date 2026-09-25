@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/generated/schooldesk_api_client.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
 
@@ -23,7 +22,6 @@ class SchoolDeskApi {
       ),
     );
     dio.interceptors.addAll([
-      _SchoolDeskDemoInterceptor(),
       _SchoolDeskAuthInterceptor(),
       OfflineDioInterceptor(),
       _SchoolDeskRefreshInterceptor(this),
@@ -70,21 +68,6 @@ class SchoolDeskApi {
     } finally {
       _refreshCompleter = null;
     }
-  }
-}
-
-/// Keeps Retrofit-backed legacy modules inside the fictional demo sandbox.
-/// Those modules use [SchoolDeskApi.dio], which is separate from the primary
-/// BackendApiClient Dio pipeline.
-class _SchoolDeskDemoInterceptor extends Interceptor {
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    final demo = DemoLocalApiService.instance;
-    if (!demo.isActive || options.path.startsWith('/demo/')) {
-      handler.next(options);
-      return;
-    }
-    handler.resolve(demo.responseFor(options));
   }
 }
 

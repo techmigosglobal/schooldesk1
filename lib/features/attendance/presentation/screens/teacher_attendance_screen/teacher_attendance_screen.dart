@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_attendance_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_attendance_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class TeacherAttendanceScreen extends StatefulWidget {
-  const TeacherAttendanceScreen({super.key});
+  final TeacherAttendanceRepository? repository;
+
+  const TeacherAttendanceScreen({super.key, this.repository});
 
   @override
   State<TeacherAttendanceScreen> createState() =>
@@ -18,9 +26,11 @@ class TeacherAttendanceScreen extends StatefulWidget {
 }
 
 class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
-  bool _loading = true;
+  TeacherAttendanceRepository get _repository =>
+      widget.repository ?? ApiTeacherAttendanceRepository.legacyDefault;
+
   bool _saving = false;
-  String? _error;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   String _classLabel = 'Assigned class';
   String _subjectLabel = 'Daily attendance';
   String _timeLabel = 'Whole day';
@@ -56,13 +66,19 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }
 
   Future<void> _loadFlow() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
       await RoleAccessService.initialize();
-      final api = BackendApiClient.instance;
       final staffId = RoleAccessService.teacherStaffId;
       if (staffId.isEmpty) {
         throw Exception('Teacher staff profile is not linked to this login.');
@@ -91,7 +107,14 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
       try {
         if (effectiveAcademicYearId.isEmpty) {
-          final years = await api.getAcademicYears();
+          final yearsResult = await _repository.loadAcademicYears();
+          if (yearsResult.isFailure) {
+            throw StateError(
+              yearsResult.failureOrNull?.message ??
+                  'Unable to load academic years',
+            );
+          }
+          final years = yearsResult.dataOrNull!;
           final active = years.where((y) => y.isCurrent);
           if (active.isNotEmpty) {
             effectiveAcademicYearId = active.first.id;
@@ -104,15 +127,21 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       }
 
       // Load students for the class-teacher's section.
-      final studentsPage = await api.getStudents(
+      final studentsResult = await _repository.loadStudents(
         sectionId: sectionId,
         page: 1,
         pageSize: 120,
       );
+      if (studentsResult.isFailure) {
+        throw StateError(
+          studentsResult.failureOrNull?.message ?? 'Unable to load students',
+        );
+      }
+      final studentsPage = studentsResult.dataOrNull!;
       final students = <_AttendanceStudent>[];
       for (final s in studentsPage.data) {
         final enrollmentId = await _resolveEnrollmentId(
-          api,
+          _repository,
           s,
           sectionId: sectionId,
           academicYearId: effectiveAcademicYearId,
@@ -131,10 +160,17 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       }
 
       final date = teacherFlowDate(_selectedDate);
-      final sessions = await api.getAttendanceSessions(
+      final sessionsResult = await _repository.loadHistory(
         sectionId: sectionId,
         date: date,
       );
+      if (sessionsResult.isFailure) {
+        throw StateError(
+          sessionsResult.failureOrNull?.message ??
+              'Unable to load attendance sessions',
+        );
+      }
+      final sessions = sessionsResult.dataOrNull!;
 
       final matching = sessions.where((session) => session.periodNumber == 1);
 
@@ -156,13 +192,24 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         _timeLabel = 'Whole day';
         _session = session;
         _students = attendanceRows;
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = error.toString();
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -173,7 +220,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     if (_sectionId.isEmpty || _staffId.isEmpty || _academicYearId.isEmpty) {
       throw Exception('Assigned class or academic year is not ready.');
     }
-    final session = await BackendApiClient.instance.createAttendanceSession(
+    final result = await _repository.createSession(
       sectionId: _sectionId,
       subjectId: _subjectId,
       academicYearId: _academicYearId,
@@ -182,6 +229,12 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       timetableSlotId: _timetableSlotId.isNotEmpty ? _timetableSlotId : null,
       periodNumber: _periodNumber,
     );
+    if (result.isFailure) {
+      throw StateError(
+        result.failureOrNull?.message ?? 'Unable to create attendance session',
+      );
+    }
+    final session = result.dataOrNull!;
     if (mounted) setState(() => _session = session);
     return session;
   }
@@ -233,11 +286,16 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
           'enrollment_missing': enrollmentId.isEmpty,
         };
       }).toList();
-      await BackendApiClient.instance.markAttendance(
+      final result = await _repository.markAttendance(
         session.id,
         attendances,
         finalize: finalize,
       );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to save attendance',
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -295,10 +353,16 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     if (reason == null || reason.trim().isEmpty) return;
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.requestAttendanceCorrection(
+      final result = await _repository.requestCorrection(
         session.id,
         reason: reason.trim(),
       );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ??
+              'Unable to request attendance correction',
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -383,187 +447,194 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       title: 'Student Attendance',
       subtitle: 'Assigned class attendance',
       selectedIndex: TeacherNav.attendance,
-      loading: _loading,
-      error: _error,
+      loading: _state.isLoading && !_state.hasData,
+      error: _state.hasData ? null : _state.error?.toString(),
       onRefresh: _loadFlow,
-      child: TeacherFlowScrollView(
-        children: [
-          TeacherCurrentClassCard(
-            greeting: 'Attendance window',
-            classLabel: _classLabel,
-            subject: _subjectLabel,
-            timeLabel: _timeLabel,
-            actions: [
-              TeacherFlowAction(
-                label: 'History',
-                icon: Icons.history_rounded,
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.teacherAttendanceHistory,
-                ),
-              ),
-              TeacherFlowAction(
-                label: 'All Present',
-                icon: Icons.done_all_rounded,
-                filled: true,
-                onTap: locked ? null : () => _markAll('present'),
-              ),
-              TeacherFlowAction(
-                label: 'Refresh',
-                icon: Icons.refresh_rounded,
-                onTap: _loadFlow,
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          _selectionPanel(),
-          const SizedBox(height: 18),
-          TeacherFlowMetricGrid(
-            metrics: [
-              TeacherFlowMetric(
-                label: 'Marked',
-                value: '${_markedStudents.length}/${_students.length}',
-                icon: Icons.how_to_reg_rounded,
-                color: Colors.indigo,
-                tone: const Color(0xFFEAF0FF),
-              ),
-              TeacherFlowMetric(
-                label: 'Present',
-                value:
-                    '${_students.where((s) => s.status == 'present').length}',
-                icon: Icons.check_circle_rounded,
-                color: Colors.green,
-                tone: const Color(0xFFEAFBF0),
-              ),
-              TeacherFlowMetric(
-                label: 'Not Marked',
-                value: '$unmarkedCount',
-                icon: Icons.radio_button_unchecked_rounded,
-                color: Colors.blueGrey,
-                tone: const Color(0xFFF1F5F9),
-              ),
-              TeacherFlowMetric(
-                label: 'Absent',
-                value: '${_students.where((s) => s.status == 'absent').length}',
-                icon: Icons.cancel_rounded,
-                color: context.appTheme.error,
-                tone: const Color(0xFFFFEEEE),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          if (locked) ...[
-            TeacherFlowCard(
-              icon: Icons.lock_rounded,
-              title: 'Attendance locked',
-              subtitle:
-                  'This session has been submitted. The principal must reopen it before edits are allowed.',
-              status: _statusLabel(_session?.status ?? 'submitted'),
-              statusColor: Colors.green,
-              body: Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : _requestCorrection,
-                  icon: const Icon(Icons.report_problem_rounded, size: 18),
-                  label: const Text('Request Correction'),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          const TeacherFlowSectionHeader(title: 'Swipe-free Quick Marking'),
-          if (unmarkedCount > 0 && !locked) ...[
-            const SizedBox(height: 8),
-            TeacherInfoPill(
-              icon: Icons.info_outline_rounded,
-              label:
-                  '$unmarkedCount student${unmarkedCount == 1 ? '' : 's'} not marked yet',
-            ),
-          ],
-          const SizedBox(height: 10),
-          ..._students.map(
-            (student) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: TeacherFlowCard(
-                icon: Icons.person_rounded,
-                title: student.name,
-                subtitle: student.roll.isEmpty
-                    ? 'Roll not assigned'
-                    : student.roll,
-                status: _statusLabel(student.status),
-                statusColor: student.statusColor,
-                body: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
+      child: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadFlow,
+        emptyTitle: 'No attendance data',
+        emptyMessage: 'Assigned students are not available offline.',
+        data: (_) => TeacherFlowScrollView(
+          children: [
+            TeacherCurrentClassCard(
+              greeting: 'Attendance window',
+              classLabel: _classLabel,
+              subject: _subjectLabel,
+              timeLabel: _timeLabel,
+              actions: [
+                TeacherFlowAction(
+                  label: 'History',
+                  icon: Icons.history_rounded,
+                  onTap: () => SchoolDeskNavigation.push(
+                    context,
+                    AppRoutes.teacherAttendanceHistory,
                   ),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final option in _attendanceStatusOptions)
-                        _buildAttendanceButton(
-                          student: student,
-                          status: option['status']!,
-                          label: option['label']!,
-                          color: _statusColor(option['status']!),
-                        ),
-                    ],
+                ),
+                TeacherFlowAction(
+                  label: 'All Present',
+                  icon: Icons.done_all_rounded,
+                  filled: true,
+                  onTap: locked ? null : () => _markAll('present'),
+                ),
+                TeacherFlowAction(
+                  label: 'Refresh',
+                  icon: Icons.refresh_rounded,
+                  onTap: _loadFlow,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _selectionPanel(),
+            const SizedBox(height: 18),
+            TeacherFlowMetricGrid(
+              metrics: [
+                TeacherFlowMetric(
+                  label: 'Marked',
+                  value: '${_markedStudents.length}/${_students.length}',
+                  icon: Icons.how_to_reg_rounded,
+                  color: Colors.indigo,
+                  tone: const Color(0xFFEAF0FF),
+                ),
+                TeacherFlowMetric(
+                  label: 'Present',
+                  value:
+                      '${_students.where((s) => s.status == 'present').length}',
+                  icon: Icons.check_circle_rounded,
+                  color: Colors.green,
+                  tone: const Color(0xFFEAFBF0),
+                ),
+                TeacherFlowMetric(
+                  label: 'Not Marked',
+                  value: '$unmarkedCount',
+                  icon: Icons.radio_button_unchecked_rounded,
+                  color: Colors.blueGrey,
+                  tone: const Color(0xFFF1F5F9),
+                ),
+                TeacherFlowMetric(
+                  label: 'Absent',
+                  value:
+                      '${_students.where((s) => s.status == 'absent').length}',
+                  icon: Icons.cancel_rounded,
+                  color: context.appTheme.error,
+                  tone: const Color(0xFFFFEEEE),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            if (locked) ...[
+              TeacherFlowCard(
+                icon: Icons.lock_rounded,
+                title: 'Attendance locked',
+                subtitle:
+                    'This session has been submitted. The principal must reopen it before edits are allowed.',
+                status: _statusLabel(_session?.status ?? 'submitted'),
+                statusColor: Colors.green,
+                body: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: _saving ? null : _requestCorrection,
+                    icon: const Icon(Icons.report_problem_rounded, size: 18),
+                    label: const Text('Request Correction'),
                   ),
                 ),
               ),
-            ),
-          ),
-          if (_students.any((s) => s.enrollmentMissing))
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: TeacherInfoPill(
-                icon: Icons.warning_amber_rounded,
-                label: 'Some students are missing enrollments',
-              ),
-            ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed:
-                      _saving ||
-                          _students.isEmpty ||
-                          locked ||
-                          _markedStudents.isEmpty
-                      ? null
-                      : () => _saveAttendance(finalize: false),
-                  icon: const Icon(Icons.save_rounded),
-                  label: const Text('Save Draft'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed:
-                      _saving ||
-                          _students.isEmpty ||
-                          locked ||
-                          _unmarkedStudents.isNotEmpty
-                      ? null
-                      : () => _saveAttendance(finalize: true),
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.lock_rounded),
-                  label: Text(_saving ? 'Saving...' : 'Submit Final'),
-                ),
+              const SizedBox(height: 12),
+            ],
+            const TeacherFlowSectionHeader(title: 'Swipe-free Quick Marking'),
+            if (unmarkedCount > 0 && !locked) ...[
+              const SizedBox(height: 8),
+              TeacherInfoPill(
+                icon: Icons.info_outline_rounded,
+                label:
+                    '$unmarkedCount student${unmarkedCount == 1 ? '' : 's'} not marked yet',
               ),
             ],
-          ),
-        ],
+            const SizedBox(height: 10),
+            ..._students.map(
+              (student) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TeacherFlowCard(
+                  icon: Icons.person_rounded,
+                  title: student.name,
+                  subtitle: student.roll.isEmpty
+                      ? 'Roll not assigned'
+                      : student.roll,
+                  status: _statusLabel(student.status),
+                  statusColor: student.statusColor,
+                  body: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final option in _attendanceStatusOptions)
+                          _buildAttendanceButton(
+                            student: student,
+                            status: option['status']!,
+                            label: option['label']!,
+                            color: _statusColor(option['status']!),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (_students.any((s) => s.enrollmentMissing))
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: TeacherInfoPill(
+                  icon: Icons.warning_amber_rounded,
+                  label: 'Some students are missing enrollments',
+                ),
+              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        _saving ||
+                            _students.isEmpty ||
+                            locked ||
+                            _markedStudents.isEmpty
+                        ? null
+                        : () => _saveAttendance(finalize: false),
+                    icon: const Icon(Icons.save_rounded),
+                    label: const Text('Save Draft'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed:
+                        _saving ||
+                            _students.isEmpty ||
+                            locked ||
+                            _unmarkedStudents.isNotEmpty
+                        ? null
+                        : () => _saveAttendance(finalize: true),
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.lock_rounded),
+                    label: Text(_saving ? 'Saving...' : 'Submit Final'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -636,12 +707,16 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }
 
   Future<String> _resolveEnrollmentId(
-    BackendApiClient api,
+    TeacherAttendanceRepository repository,
     StudentModel s, {
     required String sectionId,
     required String academicYearId,
   }) async {
-    final enrollments = await api.getStudentEnrollments(s.id);
+    final result = await repository.loadStudentEnrollments(s.id);
+    if (result.isFailure) {
+      return s.activeEnrollmentId;
+    }
+    final enrollments = result.dataOrNull!;
     return _attendanceEnrollmentId(
       enrollments,
       sectionId: sectionId,

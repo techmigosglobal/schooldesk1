@@ -6,8 +6,8 @@ import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
-import 'package:schooldesk1/core/services/demo_sandbox_service.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class LogoutService {
   LogoutService._();
@@ -53,26 +53,6 @@ class LogoutService {
 
     final navigator = Navigator.of(context, rootNavigator: true);
 
-    // A demo logout is a role change, not a production logout. Preserve the
-    // encrypted fictional snapshot and return directly to role selection.
-    if (DemoLocalApiService.instance.isActive) {
-      RoleAccessService.clear();
-      RoleAccessService.resetSignOutGuard();
-      await DemoLocalApiService.instance.reset();
-      DemoLocalApiService.instance.awaitRoleSelection();
-      BackendApiClient.instance.clearAuthToken();
-      NotificationService.resetInstance();
-      await DemoSandboxService.instance.clearSelectedRole();
-      if (navigator.mounted) {
-        navigator.pushNamedAndRemoveUntil(
-          AppRoutes.demoRoleSelector,
-          (route) => false,
-        );
-      }
-      _signingOut = false;
-      return;
-    }
-
     // 1. Save the refresh token before clearing so the backend can be
     //    notified of the logout in the background.
     final refreshToken = await TokenStorageService.getRefreshToken();
@@ -96,9 +76,10 @@ class LogoutService {
 
     // 4. Navigate to landing page right away — do not await any network call.
     if (navigator.mounted) {
-      navigator.pushNamedAndRemoveUntil(
+      SchoolDeskNavigation.goFromNavigator(
+        navigator,
         AppRoutes.landingPage,
-        (route) => false,
+        legacyPredicate: (route) => false,
       );
     }
 

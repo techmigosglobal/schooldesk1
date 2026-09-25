@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -11,9 +11,29 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
+import 'package:schooldesk1/modules/documents/data/api_admin_documents_repository.dart';
+import 'package:schooldesk1/modules/documents/domain/admin_documents_repository.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+@immutable
+class _AdminDocumentsSnapshot {
+  const _AdminDocumentsSnapshot({
+    required this.requests,
+    required this.templates,
+    required this.requestsPage,
+    required this.requestsHasMore,
+  });
+
+  final List<Map<String, dynamic>> requests;
+  final List<Map<String, dynamic>> templates;
+  final int requestsPage;
+  final bool requestsHasMore;
+}
 
 class AdminDocumentsScreen extends StatefulWidget {
-  const AdminDocumentsScreen({super.key});
+  const AdminDocumentsScreen({super.key, this.repository});
+
+  final AdminDocumentsRepository? repository;
 
   @override
   State<AdminDocumentsScreen> createState() => _AdminDocumentsScreenState();
@@ -21,15 +41,22 @@ class AdminDocumentsScreen extends StatefulWidget {
 
 class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     with SingleTickerProviderStateMixin {
+  AdminDocumentsRepository get _repository =>
+      widget.repository ?? ApiAdminDocumentsRepository.legacyDefault;
+
+  Future<T> _repositoryCall<T>(Future<T> operation) => operation;
+
   late TabController _tabController;
 
-  List<Map<String, dynamic>> _requests = [];
-  List<Map<String, dynamic>> _templates = [];
-  int _requestsPage = 1;
-  bool _requestsHasMore = false;
   bool _loadingMoreRequests = false;
-  bool _loading = true;
-  String? _error;
+  RepositoryState<_AdminDocumentsSnapshot> _state =
+      const RepositoryState.loading();
+
+  _AdminDocumentsSnapshot? get _snapshot => _state.data;
+  List<Map<String, dynamic>> get _requests => _snapshot?.requests ?? const [];
+  List<Map<String, dynamic>> get _templates => _snapshot?.templates ?? const [];
+  int get _requestsPage => _snapshot?.requestsPage ?? 1;
+  bool get _requestsHasMore => _snapshot?.requestsHasMore ?? false;
 
   String? _selectedClass;
   final Map<String, List<Map<String, dynamic>>> _studentDocs = {};
@@ -90,19 +117,35 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
 
   Future<void> _loadRequests({bool reset = true}) async {
     if (!reset && (_loadingMoreRequests || !_requestsHasMore)) return;
+    final previous = _state.data;
+    if (reset) {
+      setState(() {
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
+      });
+    }
     if (!reset) {
       setState(() => _loadingMoreRequests = true);
     }
     try {
-      final requestPage = await BackendApiClient.instance
-          .getDocumentRequestsPage(
-            page: reset ? 1 : _requestsPage + 1,
-            pageSize: 20,
-          );
+      final requestPage = await _repositoryCall(
+        _repository.loadRequests(
+          page: reset ? 1 : _requestsPage + 1,
+          pageSize: 20,
+        ),
+      );
       final templatePage = reset
-          ? await BackendApiClient.instance.getDocumentTemplatesPage(
-              page: 1,
-              pageSize: 20,
+          ? await _repositoryCall(
+              _repository.loadTemplates(
+                page: 1,
+                pageSize: 20,
+              ),
             )
           : null;
       if (!mounted) return;
@@ -112,26 +155,36 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
           .where((row) => existingIds.add('${row['id']}'))
           .toList();
       setState(() {
-        if (reset) {
-          _requests = requestRows;
-        } else {
-          _requests = [..._requests, ...requestRows];
-        }
-        if (templatePage != null) {
-          _templates = templatePage.data.map(_mapTemplate).toList();
-        }
-        _requestsPage = requestPage.page;
-        _requestsHasMore = requestPage.hasMore && requestPage.data.isNotEmpty;
+        final requests = reset ? requestRows : [..._requests, ...requestRows];
+        final templates = templatePage != null
+            ? templatePage.data.map(_mapTemplate).toList()
+            : _templates;
+        _state = RepositoryState(
+          data: _AdminDocumentsSnapshot(
+            requests: requests,
+            templates: templates,
+            requestsPage: requestPage.page,
+            requestsHasMore: requestPage.hasMore && requestPage.data.isNotEmpty,
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
         _loadingMoreRequests = false;
-        _loading = false;
-        _error = null;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loadingMoreRequests = false;
-        _loading = false;
-        _error = e.toString();
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -172,9 +225,8 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       _loadingStudentDocs[studentId] = true;
     });
     try {
-      final docs = await BackendApiClient.instance.getRawList(
-        '/student-documents',
-        queryParameters: {'student_id': studentId},
+      final docs = await _repositoryCall(
+        _repository.loadStudentDocuments(studentId),
       );
       setState(() {
         _studentDocs[studentId] = docs;
@@ -197,9 +249,8 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       _loadingTeacherDocs[staffId] = true;
     });
     try {
-      final docs = await BackendApiClient.instance.getRawList(
-        '/staff-documents',
-        queryParameters: {'staff_id': staffId},
+      final docs = await _repositoryCall(
+        _repository.loadTeacherDocuments(staffId),
       );
       setState(() {
         _teacherDocs[staffId] = docs;
@@ -238,7 +289,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     );
     if (confirm != true) return;
     try {
-      await BackendApiClient.instance.deleteRaw('/student-documents/$docId');
+      await _repositoryCall(_repository.deleteStudentDocument(docId));
       _fetchStudentDocs(studentId);
     } on Object catch (e) {
       if (mounted) {
@@ -316,9 +367,9 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                           type: FileType.custom,
                           allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
                         );
-                        if (result != null && result.files.isNotEmpty) {
+                        if (result.isNotEmpty) {
                           setDialogState(() {
-                            selectedFile = result.files.first;
+                            selectedFile = result.first;
                           });
                         }
                       },
@@ -340,24 +391,23 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                         uploading = true;
                       });
                       try {
-                        final fileUrl = await BackendApiClient.instance
-                            .uploadFile(
-                              selectedFile!.path!,
-                              filename: selectedFile!.name,
-                              folder: 'student-documents',
-                              entityType: 'student_document',
-                              entityId: studentId,
-                              private: true,
-                            );
-                        await BackendApiClient.instance
-                            .createRaw('/student-documents', {
-                              'student_id': studentId,
-                              'doc_type': docType,
-                              'title': titleCtrl.text.trim().isEmpty
-                                  ? docType
-                                  : titleCtrl.text.trim(),
-                              'file_url': fileUrl,
-                            });
+                        final fileUrl = await _repositoryCall(
+                          _repository.uploadStudentDocument(
+                            selectedFile!.path!,
+                            filename: selectedFile!.name,
+                            studentId: studentId,
+                          ),
+                        );
+                        await _repositoryCall(
+                          _repository.createStudentDocument(
+                            studentId: studentId,
+                            type: docType,
+                            title: titleCtrl.text.trim().isEmpty
+                                ? docType
+                                : titleCtrl.text.trim(),
+                            fileUrl: fileUrl,
+                          ),
+                        );
                         Navigator.pop(context);
                         _fetchStudentDocs(studentId);
                       } on Object catch (e) {
@@ -394,45 +444,6 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       selectedIndex: PrincipalNav.documents,
       onDestinationSelected: (_) {},
     );
-    if (_loading) {
-      return SchoolDeskModuleScaffold(
-        title: 'Documents & Certificates',
-        subtitle: 'Approve requests, generate certificates, and track records',
-        drawer: drawer,
-        floatingActionButton: const DashboardFabWidget(
-          role: DashboardRole.principal,
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_error != null) {
-      return SchoolDeskModuleScaffold(
-        title: 'Documents & Certificates',
-        subtitle: 'Approve requests, generate certificates, and track records',
-        drawer: drawer,
-        floatingActionButton: const DashboardFabWidget(
-          role: DashboardRole.principal,
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Unable to load document requests: $_error'),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: _loadRequests,
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
     return SchoolDeskModuleScaffold(
       title: 'Documents & Certificates',
       subtitle: 'Approve requests, generate certificates, and track records',
@@ -456,13 +467,19 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
           Tab(text: 'Certificates'),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildStudentDocsTab(),
-          _buildTeacherDocsTab(),
-          _buildCertificatesTab(),
-        ],
+      body: SchoolDeskRepositoryStateView<_AdminDocumentsSnapshot>(
+        state: _state,
+        onRetry: _loadRequests,
+        emptyTitle: 'No document requests',
+        emptyMessage: 'Documents are not available for this scope.',
+        data: (_) => TabBarView(
+          controller: _tabController,
+          children: [
+            _buildStudentDocsTab(),
+            _buildTeacherDocsTab(),
+            _buildCertificatesTab(),
+          ],
+        ),
       ),
     );
   }
@@ -1158,6 +1175,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
           title: 'Generate $docType',
           initialDocType: docType,
           docTypes: _docTypes,
+          repository: _repository,
           issueImmediately: true,
           submitLabel: 'Generate & Print',
         ),
@@ -1176,6 +1194,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
           title: 'New Document Request',
           initialDocType: 'Bonafide Certificate',
           docTypes: _docTypes,
+          repository: _repository,
           submitLabel: 'Submit Request',
         ),
       ),
@@ -1191,9 +1210,11 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     String status,
   ) async {
     try {
-      await BackendApiClient.instance.updateRaw(
-        '/${request['resource'] ?? 'documents/requests'}/${request['id']}',
-        {'status': status.toLowerCase()},
+      await _repositoryCall(
+        _repository.updateRequest(
+          requestId: '${request['id']}',
+          status: status,
+        ),
       );
       await _loadRequests();
       if (!mounted) return;
@@ -1262,22 +1283,22 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       ),
     );
     if (saved != true) return;
-    await BackendApiClient.instance.createRaw('/documents/templates', {
-      'name': nameController.text.trim().isEmpty
-          ? selectedType
-          : nameController.text.trim(),
-      'document_type': selectedType,
-      'body': bodyController.text.trim(),
-      'status': 'active',
-    });
+    await _repositoryCall(
+      _repository.createTemplate(
+        name: nameController.text.trim().isEmpty
+            ? selectedType
+            : nameController.text.trim(),
+        documentType: selectedType,
+        body: bodyController.text.trim(),
+      ),
+    );
     await _loadRequests();
   }
 
   Future<void> _requestReprint(Map<String, dynamic> request) async {
     try {
-      await BackendApiClient.instance.createRaw(
-        '/documents/requests/${request['id']}/prints',
-        {'action': 'reprint'},
+      await _repositoryCall(
+        _repository.requestReprint('${request['id']}'),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1308,6 +1329,7 @@ class _DocumentRequestPage extends StatefulWidget {
   final String title;
   final String initialDocType;
   final List<Map<String, dynamic>> docTypes;
+  final AdminDocumentsRepository repository;
   final bool issueImmediately;
   final String submitLabel;
 
@@ -1315,6 +1337,7 @@ class _DocumentRequestPage extends StatefulWidget {
     required this.title,
     required this.initialDocType,
     required this.docTypes,
+    required this.repository,
     required this.submitLabel,
     this.issueImmediately = false,
   });
@@ -1328,7 +1351,7 @@ class _DocumentRequestPageState extends State<_DocumentRequestPage> {
   final _studentCtrl = TextEditingController();
   late String _docType;
   bool _saving = false;
-  String? _error;
+  RepositoryState<void> _submitState = const RepositoryState.empty();
 
   @override
   void initState() {
@@ -1346,21 +1369,23 @@ class _DocumentRequestPageState extends State<_DocumentRequestPage> {
     if (!_formKey.currentState!.validate() || _saving) return;
     setState(() {
       _saving = true;
-      _error = null;
+      _submitState = const RepositoryState.loading();
     });
     try {
-      await BackendApiClient.instance.createRaw('/documents/requests', {
-        'student_name': _studentCtrl.text.trim(),
-        'type': _docType,
-        'status': widget.issueImmediately ? 'issued' : 'pending',
-      });
+      await widget.repository.createRequest(
+        studentName: _studentCtrl.text.trim(),
+        documentType: _docType,
+        status: widget.issueImmediately ? 'issued' : 'pending',
+      );
       if (!mounted) return;
       Navigator.pop(context, true);
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Document request failed: $e';
+        _submitState = RepositoryState.error(
+          error: StateError('Document request failed: $e'),
+        );
       });
     }
   }
@@ -1375,8 +1400,8 @@ class _DocumentRequestPageState extends State<_DocumentRequestPage> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              if (_error != null) ...[
-                _InputErrorBanner(message: _error!),
+              if (_submitState.isError) ...[
+                _InputErrorBanner(message: '${_submitState.error}'),
                 const SizedBox(height: 16),
               ],
               TextFormField(

@@ -15,7 +15,8 @@ extension BackendFeePaymentsApi on BackendApiClient {
           'page_size': pageSize,
           if (studentId != null && studentId.trim().isNotEmpty)
             'student_id': studentId.trim(),
-          if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
+          if (status != null && status.trim().isNotEmpty)
+            'status': status.trim(),
         },
       );
       final data = response.data as Map<String, dynamic>;

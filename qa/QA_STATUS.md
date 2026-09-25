@@ -1,4 +1,160 @@
-# QA Status — 2026-09-21 follow-up
+# QA Status — 2026-09-25 frontend role follow-up
+
+## Frontend role matrix — 2026-09-23
+
+Estimated frontend rewrite completion: **97%**. This estimate is for the
+frontend-only scope in the current goal; device/browser/live-iOS walkthroughs
+remain intentionally excluded.
+
+## Current frontend rewrite pass — 2026-09-23
+
+- All registered locations now enter GoRouter through
+  `TypedAppRouteRegistry`; feature code no longer calls Flutter's legacy named
+  navigation APIs directly. `SchoolDeskNavigation` is the only compatibility
+  fallback for isolated hosts and tests.
+- Legacy parent/principal fee deep-link aliases now have explicit typed route
+  contracts instead of entering through a generic screen-factory fallback.
+  Every remaining no-argument path is also present in an explicit typed screen
+  inventory; missing entries fail during route-registry construction.
+- Parent and Teacher navigation now renders the tenant school name from the
+  current-school API response instead of overwriting it with a fixed demo
+  school label; a runtime-truth contract test protects this boundary.
+- Teacher dashboard title now uses `TeacherDashboardSnapshot.schoolName`,
+  populated by the current-school API read, and no longer contains the fixed
+  `Arish Ville Preschool` runtime label.
+- Shared Help and School Gallery screens now use injected capability
+  repositories plus typed repository-state rendering; direct widget-level API
+  calls are removed and cached/stale/error/retry states remain visible.
+- Principal Analytics now loads invoices, notifications, and staff through a
+  dedicated capability repository with paged reads; its legacy
+  `BackendDataService` screen dependency is removed.
+- Academic Information, Academic Management, Admin Dashboard, ID Card
+  Generation, and Reports Analytics now use typed capability repositories; the
+  remaining `BackendDataService` references are confined to repository adapters
+  and are not reachable from feature widgets.
+- Coordinator is now treated as a distinct portal home for back handling and
+  role-home fallback, so its dashboard cannot fall through to Principal or an
+  undefined shared destination.
+- Coordinator deep links into Principal-owned leadership screens now return to
+  the Coordinator dashboard because the active session role overrides shared
+  screen metadata when resolving the back destination.
+- The same active-role precedence now covers Super Admin and any other role
+  entering a cross-portal protected deep link.
+  The role workflow contract test covers all six role shells, required
+  capability surfaces, coordinator finance exclusion, and kiosk isolation.
+- Every registered route has a `FeatureManifest` declaring cached-read support,
+  online-only mutation behavior, and loading/stale/offline/error/empty/retry
+  state requirements. `SchoolDeskRouteFrame` renders the online-required
+  state for blocked mutations, while migrated role surfaces preserve cache data
+  during stale refreshes through `RepositoryState<T>`. The final source scan
+  found typed repository-state contracts in all 82 feature screen files; 78
+  use the shared renderer directly and four dashboards retain specialized
+  repository-state shells. Zero feature, role, or module files declare the
+  retired local loading/error flag pattern.
+- Principal and Parent dashboard surfaces now expose repository stale/offline
+  state while retaining cached content and a retry action across responsive
+  layouts.
+- Drift schema version 5 now enforces account-scoped idempotency uniqueness and
+  exposes conflict work items. Focused offline coverage passed **19/19** for
+  cached reads, duplicate keys, scope isolation, ordering, retry/backoff,
+  permanent failures, conflicts, and restart recovery.
+- The final local API-only role pass passed for **7/7** role identities and the
+  feature matrix returned the expected 200/403 boundaries. No emulator,
+  browser, physical device, or live iOS walkthrough was used.
+- Package upgrade ledger was rerun after the final compatible upgrades. Drift,
+  Riverpod, GoRouter, Freezed, generators, Firebase, media, PDF, sharing,
+  file-picker, and desktop dependencies are at their newest resolvable set.
+  Freezed 4.0.2 is not resolvable with the current Flutter SDK pins, so 4.0.1
+  remains intentionally selected.
+- Artifact validation produced the debug APK, release APK, and release AAB.
+  The release APK signature and AAB ZIP integrity were verified. iOS
+  project/plist configuration is valid on this Linux host; an iOS binary is not
+  claimed because Xcode/CocoaPods are not installed and this Flutter SDK exposes
+  no iOS build subcommand here.
+
+The current Flutter role/API smoke passed for **7/7 roles**. Principal,
+Admin, Coordinator, Teacher, Parent, and Super Admin dashboard endpoints
+returned HTTP 200. Kiosk returned HTTP 200 from its real QR token, attendance
+log, and QR export endpoints; `/dashboard/kiosk` is intentionally forbidden.
+The read-only feature API matrix also passed with expected HTTP 200/403
+boundaries across people, attendance, homework, leave, finance, documents,
+calendar, chat, notifications, reports, monitoring, and kiosk surfaces.
+Mutation probes against the same loopback API also passed: authorized profile
+PATCH, notification-preferences PUT, private document POST upload, and guarded
+Storage DELETE behavior. The API currently rejects an otherwise documented
+`language` profile field with HTTP 400 because the local `users` schema has no
+such column; the frontend profile screen does not send that field. This is a
+backend contract defect, not an emulator issue.
+These checks are repeatable through `scripts/local_mutation_smoke.sh`, with
+`scripts/local_security_smoke.sh` and `scripts/local_storage_security_smoke.sh`
+covering the broader authorization and private-file mutation boundaries.
+The full host Flutter suite passed **839 tests with one skip** after running
+Drift with a temporary user-owned `libsqlite3.so` compatibility link. The
+unwrapped host run produced five infrastructure-only SQLite loader failures;
+the compatibility rerun had **0 failures**. Flutter analyze,
+dependency validation, generated-code validation, and responsive/accessibility
+layout checks passed. The detailed matrix is in
+[the frontend role report](reports/2026-09-23-frontend-role-matrix.md).
+The post-dependency-migration artifacts are current. Debug APK SHA-256 is
+`db93e474f84b0157d9ee53ba981f7a1e224f5f6c7aafccd1c77f0e532c4e3fd8`. The
+current release APK SHA-256 is
+`6e94790ecab64ed174b9869c2d8dfc8b6c9955b1463060c2bfe5367a5c97cd36`; APK
+ZIP integrity and v2 signature verification passed. The current release AAB
+SHA-256 is
+`9bde70db3222e4a000ec62e0a9db22717110df840781cd849de13e2807774582`; AAB
+ZIP integrity and JAR verification passed. The three exact-version local
+compatibility copies under `third_party/flutter_plugins/` remove Flutter's
+legacy KGP detector input without patching the pub cache. Verbose debug and
+release builds completed without the Flutter KGP compatibility warning.
+
+The final post-migration regression remained green after the typed-router,
+role-boundary, package, and dashboard-state changes: **839 passed, 1 skipped,
+0 failed**. The skipped case is the existing environment-dependent media URL
+case; it is not a product failure.
+The follow-up runtime-boundary regression suite passed **8/8** after removing
+the fixed Parent/Teacher/Teacher-dashboard school labels and shared-screen API
+bypasses, and migrating Principal Analytics. The route, manifest, modular
+architecture, typed-router, and repository-boundary focused suite passed
+**28/28**.
+
+The final Docker-local validation replayed all checked-in migrations, ran the
+26 Edge Function contract tests, and then passed the API-only role, feature,
+mutation, authorization, and private-Storage smokes: 7/7 role identities,
+the expected 200/403 feature boundaries, 25/25 security checks, and 21/21
+private-Storage checks. No emulator or physical device was used for this
+validation pass.
+
+This is not a release-complete claim. Device, browser, iOS, notification-tap,
+reconnect, media handoff, and live visual gates are intentionally excluded from
+the current validation scope. The app now boots through the typed GoRouter
+composition root and direct legacy named-route calls have been removed from
+feature code. Android built-in
+Kotlin is enabled, the app module no longer applies external KGP, and the
+Flutter KGP compatibility warning is closed for the current resolved plugin
+graph through the documented local compatibility copies.
+The typed router now refreshes immediately when the authenticated session,
+role, or active branch changes, and the shared status panel exposes an
+accessible stale-data state with a refresh action.
+All active routes now have feature manifests. Offline mutation routes expose an
+accessible online-required banner while cached reads remain visible.
+Notification taps now use a GoRouter-aware navigation adapter, preserving typed
+route extras with legacy Navigator fallback for isolated hosts and tests.
+Notification fallback classification is now role-safe after classification as
+well: Super Admin approval payloads fall back to the shared notification center,
+while Kiosk payloads fall back to the isolated QR attendance route instead of
+briefly targeting a Principal or shared notification screen.
+The capability-repository migration now has no direct
+`BackendApiClient.instance` references in `lib/features`. Kiosk QR data, all six role dashboard entry points, Teacher and
+Parent Leave, Parent Attendance, Teacher Attendance, complete Teacher Homework,
+Teacher Communication, Parent Homework, Teacher and Parent Documents, Parent
+Teacher Chat, Parent/Teacher Complaints, Teacher Timetable, Teacher Lesson
+Planner, Parent Timetable, Parent Health Updates, Principal Reports, Principal
+Attendance, Admin Attendance, Principal Event Approval, Principal Chat Communications, School Posts, Profile Management, Admin
+Students, Admin Teachers, Guardian Directory, Admission Inquiries, Principal Classes Hub, Principal Timetable, Principal Subjects, Student Oversight, Approval Center, Admin Documents, Principal Lesson Planner, Principal Academic Years, Finance Operations, Fee Forms, Fee Ledger, Fee Home, Parent Fee Hub, Payment Configuration, Parent Fee Payment, Staff Management, User Access, Payment Requests, Parent Calendar, Parent Lesson Planner, the active Events Calendar, and Issue Management
+now use repository boundaries. Authentication, system monitoring, global
+search, landing posts, academic-year management, settings password changes,
+  and notification diagnostics now also use explicit capability boundaries and
+  typed repository-state rendering.
 
 ## Migration parity follow-up — 2026-09-21
 

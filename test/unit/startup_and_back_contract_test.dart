@@ -3,10 +3,25 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('composition root owns typed navigation and global UI services', () {
+    final app = File('lib/app/app.dart').readAsStringSync();
+    final main = File('lib/main.dart').readAsStringSync();
+
+    expect(app, contains('MaterialApp.router('));
+    expect(app, contains('routerConfig: router'));
+    expect(app, contains('themeMode: themeMode'));
+    expect(app, contains('DesktopLayoutWrapper('));
+    expect(app, contains('OfflineStatusBanner('));
+    expect(app, contains('AnimatedStartupSplash('));
+    expect(main, contains('SchoolDeskApp('));
+    expect(main, isNot(contains('onGenerateRoute:')));
+  });
+
   test(
     'app keeps only the Flutter animated logo as visible startup splash',
     () {
       final main = File('lib/main.dart').readAsStringSync();
+      final app = File('lib/app/app.dart').readAsStringSync();
       final launch = File(
         'android/app/src/main/res/drawable/launch_background.xml',
       ).readAsStringSync();
@@ -21,11 +36,11 @@ void main() {
       );
 
       expect(
-        RegExp('AnimatedStartupSplash\\(').allMatches(main).length,
+        RegExp('AnimatedStartupSplash\\(').allMatches(app).length,
         1,
         reason: 'Only the Flutter overlay should show the animated logo.',
       );
-      expect(main, contains('child: AnimatedStartupSplash(child: child!)'));
+      expect(app, contains('child: AnimatedStartupSplash('));
       expect(launch, isNot(contains('@mipmap/launch_image')));
       expect(launchV21, isNot(contains('@mipmap/launch_image')));
       expect(launchV31, isNot(contains('@mipmap/launch_image')));
@@ -81,6 +96,15 @@ void main() {
     expect(routeFrame, contains('_isPortalHomeRoute'));
     expect(routeFrame, contains('_returnToPortalHome'));
     expect(routeFrame, contains("case '/teacher-dashboard-screen':"));
+    expect(routeFrame, contains("case '/coordinator-dashboard-screen':"));
+    expect(routeFrame, contains("case 'coordinator':"));
+    expect(
+      routeFrame,
+      contains(
+        'final roleHome = RouteAccessGuard.dashboardForRole(activeRole)',
+      ),
+    );
+    expect(routeFrame, contains('if (roleHome != null)'));
     expect(routeFrame, contains("case 'teacher':"));
     expect(dashboard, isNot(contains('LogoutService')));
     expect(dashboard, isNot(contains('BackendApiClient.instance.logout')));

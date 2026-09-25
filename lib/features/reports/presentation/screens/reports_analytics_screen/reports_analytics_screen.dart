@@ -4,16 +4,21 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/backend_data_service.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_reports_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_reports_repository.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
-  const ReportsAnalyticsScreen({super.key});
+  final PrincipalReportsRepository? repository;
+
+  const ReportsAnalyticsScreen({super.key, this.repository});
 
   @override
   State<ReportsAnalyticsScreen> createState() => _ReportsAnalyticsScreenState();
@@ -39,9 +44,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   List<Map<String, dynamic>> _complaintRows = [];
   List<StaffAttendanceModel> _staffAttendance = [];
   Set<String> _staffOnLeaveIds = const {};
-  bool _isLoading = true;
-  String? _loadError;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   String? _exportingReport;
+
+  PrincipalReportsRepository get _repository =>
+      widget.repository ?? ApiPrincipalReportsRepository.legacyDefault;
 
   @override
   void initState() {
@@ -51,32 +58,34 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   }
 
   Future<void> _loadData() async {
+    final previous = _state;
     if (mounted) {
       setState(() {
-        _isLoading = true;
-        _loadError = null;
+        _state = RepositoryState<Object>.loading(
+          data: previous.data,
+          source: previous.hasData
+              ? RepositorySource.cache
+              : RepositorySource.empty,
+          isStale: previous.hasData,
+          isRefreshing: previous.hasData,
+          lastUpdated: previous.lastUpdated,
+        );
       });
     }
     try {
-      final storage = await BackendDataService.getInstance();
-      final invoices = await _safeList(
-        storage.getList(BackendDataService.kStudentFees),
-      );
-      final students = await _safeList(
-        storage.getList(BackendDataService.kStudents),
-      );
-      final staffRows = await _safeList(
-        storage.getList(BackendDataService.kAdminTeachers),
-      );
-      final attendanceRows = await _safeList(
-        storage.getList(BackendDataService.kAdminAttendanceRecords),
-      );
-      final complaintRows = await _safeList(
-        storage.getList(BackendDataService.kComplaints),
-      );
-      final years = await _safeList(
-        storage.getList(BackendDataService.kAcademicYears),
-      );
+      final snapshotResult = await _repository.loadSnapshot();
+      if (snapshotResult.isFailure) {
+        throw StateError(
+          snapshotResult.failureOrNull?.message ?? 'Reports load failed',
+        );
+      }
+      final snapshot = snapshotResult.dataOrNull!;
+      final invoices = snapshot.invoices;
+      final students = snapshot.students;
+      final staffRows = snapshot.staff;
+      final attendanceRows = snapshot.attendance;
+      final complaintRows = snapshot.complaints;
+      final years = snapshot.academicYears;
       final school = await _safeSchool();
       final staffAttendance = await _safeStaffAttendance();
       final staffSummary = await _safeStaffSummary();
@@ -130,31 +139,30 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     ),
                   )
                   .length;
-        _loadError = null;
-        _isLoading = false;
+        _state = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loadError = 'Unable to load reports: $error';
-        _isLoading = false;
+        _state = previous.hasData
+            ? RepositoryState<Object>(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState<Object>.error(error: error);
       });
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _safeList(
-    Future<List<Map<String, dynamic>>> request,
-  ) async {
-    try {
-      return await request;
-    } on Object {
-      return const [];
     }
   }
 
   Future<Map<String, dynamic>> _safeSchool() async {
     try {
-      return await BackendApiClient.instance.getCurrentSchool();
+      return (await _repository.loadSchool()).dataOrNull ?? const {};
     } on Object {
       return const {};
     }
@@ -162,9 +170,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
 
   Future<List<StaffAttendanceModel>> _safeStaffAttendance() async {
     try {
-      return await BackendApiClient.instance.getStaffAttendanceForDate(
-        date: _dateKey(DateTime.now()),
-      );
+      return (await _repository.loadStaffAttendance(
+            date: _dateKey(DateTime.now()),
+          )).dataOrNull ??
+          const [];
     } on Object {
       return const [];
     }
@@ -172,9 +181,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
 
   Future<Map<String, dynamic>> _safeStaffSummary() async {
     try {
-      return await BackendApiClient.instance.getStaffDailyAttendanceSummary(
-        date: _dateKey(DateTime.now()),
-      );
+      return (await _repository.loadStaffDailySummary(
+            date: _dateKey(DateTime.now()),
+          )).dataOrNull ??
+          const {};
     } on Object {
       return const {};
     }
@@ -183,9 +193,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   Future<Set<String>> _safeStaffOnLeaveIds() async {
     try {
       final today = DateUtils.dateOnly(DateTime.now());
-      final applications = await BackendApiClient.instance.getLeaveApplications(
-        status: 'approved',
-      );
+      final applications =
+          (await _repository.loadApprovedLeaveApplications()).dataOrNull ??
+          const [];
       return applications
           .where((application) {
             final from = DateTime.tryParse(application.fromDate);
@@ -234,62 +244,29 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
           Tab(text: 'Staff'),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (_isLoading) {
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadData,
+        errorTitle: 'Unable to load reports — Retry loading reports',
+        data: (_) => LayoutBuilder(
+          builder: (context, constraints) {
+            final content = TabBarView(
+              controller: _tabController,
+              children: [
+                _buildOverviewTab(),
+                _buildAttendanceTab(),
+                _buildFeeTab(),
+                _buildStaffTab(),
+              ],
+            );
+            if (constraints.maxWidth < 840) return content;
             return Center(
-              child: Semantics(
-                label: 'Loading reports',
-                child: const CircularProgressIndicator(),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1180),
+                child: content,
               ),
             );
-          }
-          if (_loadError != null) return _buildLoadError();
-          final content = TabBarView(
-            controller: _tabController,
-            children: [
-              _buildOverviewTab(),
-              _buildAttendanceTab(),
-              _buildFeeTab(),
-              _buildStaffTab(),
-            ],
-          );
-          if (constraints.maxWidth < 840) return content;
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1180),
-              child: content,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildLoadError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_off_rounded,
-              size: 44,
-              color: context.appTheme.error,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _loadError ?? 'Reports are unavailable.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry loading reports'),
-            ),
-          ],
+          },
         ),
       ),
     );
@@ -1102,23 +1079,33 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     final lower = reportTitle.toLowerCase();
     if (lower.contains('staff')) return;
     if (lower.contains('attendance')) {
-      await BackendApiClient.instance.createReportExport(
-        '/attendance/reports/exports',
+      final result = await _repository.createReportExport(
+        path: '/attendance/reports/exports',
         reportTitle: reportTitle,
         reportType: 'attendance',
         format: 'pdf',
         scope: 'principal_reports',
         parameters: {'month': _dateKey(DateTime.now())},
       );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to record export',
+        );
+      }
     } else if (lower.contains('fee')) {
-      await BackendApiClient.instance.createReportExport(
-        '/fees/reports/exports',
+      final result = await _repository.createReportExport(
+        path: '/fees/reports/exports',
         reportTitle: reportTitle,
         reportType: 'complete_fees_report',
         format: 'pdf',
         scope: 'principal_reports',
         parameters: {'academic_year': _academicYearLabel},
       );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to record export',
+        );
+      }
     }
   }
 

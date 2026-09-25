@@ -12,22 +12,30 @@ void main() {
       final handler = File(
         'supabase/functions/api/handlers/uploads.ts',
       ).readAsStringSync();
-      final teacher = File(
-        'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
+      final teacherRepository = File(
+        'lib/roles/teacher/data/api_teacher_dashboard_repository.dart',
       ).readAsStringSync();
-      final parent = File(
-        'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
+      final parentRepository = File(
+        'lib/roles/parent/data/api_parent_dashboard_repository.dart',
       ).readAsStringSync();
 
       expect(api, contains('getHomeFeedEventPostsPage'));
       expect(api, contains('getTeacherSchoolFeedPage'));
-      expect(api, contains("payload['data'] ?? payload['items']"));
+      expect(api, contains('response.data'));
+      expect(api, contains('response.total'));
+      expect(api, contains('response.pageSize'));
       expect(handler, contains('path === "/event-posts/teacher-feed"'));
       expect(handler, contains('TEACHERS_HOME'));
-      expect(teacher, contains('getTeacherSchoolFeedPage'));
-      expect(parent, contains('getHomeFeedEventPostsPage'));
-      expect(teacher, isNot(contains('getHomeFeedEventPosts().catchError')));
-      expect(parent, isNot(contains('getHomeFeedEventPosts().catchError')));
+      expect(teacherRepository, contains('getTeacherSchoolFeedPage'));
+      expect(parentRepository, contains('getHomeFeedEventPostsPage'));
+      expect(
+        teacherRepository,
+        isNot(contains('getHomeFeedEventPosts().catchError')),
+      );
+      expect(
+        parentRepository,
+        isNot(contains('getHomeFeedEventPosts().catchError')),
+      );
     },
   );
 

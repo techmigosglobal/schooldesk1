@@ -56,8 +56,10 @@ class _DesktopSplitViewState extends State<DesktopSplitView> {
         final total = widget.axis == Axis.horizontal
             ? constraints.maxWidth
             : constraints.maxHeight;
-        final firstSize = (total * _split)
-            .clamp(widget.minLeftWidth, total - widget.minRightWidth);
+        final firstSize = (total * _split).clamp(
+          widget.minLeftWidth,
+          total - widget.minRightWidth,
+        );
 
         if (widget.axis == Axis.vertical) {
           return Column(

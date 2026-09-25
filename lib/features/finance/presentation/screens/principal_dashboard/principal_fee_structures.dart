@@ -1,13 +1,19 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
+import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
+import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
 
 // Fee-type color/icon metadata used for badges on each structure card.
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
 const _feeCategoryColors = {
   'tuition': (
     color: Color(0xFF1A6B4A),
@@ -43,15 +49,19 @@ const _feeCategoryColors = {
 }
 
 class PrincipalFeeStructures extends StatefulWidget {
-  const PrincipalFeeStructures({super.key});
+  final AdminFeesRepository? repository;
+
+  const PrincipalFeeStructures({super.key, this.repository});
 
   @override
   State<PrincipalFeeStructures> createState() => _PrincipalFeeStructuresState();
 }
 
 class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
-  bool _loading = true;
-  String? _error;
+  AdminFeesRepository get _repository =>
+      widget.repository ?? ApiAdminFeesRepository.legacyDefault;
+
+  RepositoryState<Object> _state = const RepositoryState.loading();
   String _query = '';
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _structures = const [];
@@ -75,18 +85,24 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
   }
 
   Future<void> _loadData() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getFeeStructures(),
-        api.getAcademicYears(),
-        api.getGrades(),
-        api.getSections(),
-        api.getFeeCategories(),
+        _repository.loadFeeStructures(),
+        _repository.loadAcademicYears(),
+        _repository.loadGrades(),
+        _repository.loadSections(),
+        _repository.loadFeeCategories(),
       ]);
       if (!mounted) return;
       final years = results[1] as List<AcademicYearModel>;
@@ -104,13 +120,22 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
             ? (years.firstWhereOrNull((y) => y.isCurrent)?.id ??
                   (years.isEmpty ? '' : years.first.id))
             : _selectedAcademicYearId;
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+              );
       });
     }
   }
@@ -212,220 +237,204 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadData,
+        data: (_) => RefreshIndicator(
+          onRefresh: _loadData,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Filters section
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Error: $_error'),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: _loadData,
-                      child: const Text('Retry'),
+                    Text(
+                      'Filter Structures',
+                      style: GoogleFonts.ibmPlexSans(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: context.appTheme.muted,
+                      ),
                     ),
+                    const SizedBox(height: 10),
+                    if (_academicYears.isNotEmpty) ...[
+                      DropdownButtonFormField<String>(
+                        value: _selectedAcademicYearId.isEmpty
+                            ? null
+                            : _selectedAcademicYearId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          labelText: 'Academic Year',
+                          prefixIcon: Icon(
+                            Icons.calendar_today_rounded,
+                            size: 18,
+                          ),
+                        ),
+                        items: _academicYears
+                            .map(
+                              (y) => DropdownMenuItem(
+                                value: y.id,
+                                child: Text(y.yearLabel),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) {
+                          final yearId = v ?? '';
+                          final availableGradeIds = _sections
+                              .where(
+                                (section) => section.academicYearId == yearId,
+                              )
+                              .map((section) => section.gradeId)
+                              .toSet();
+                          setState(() {
+                            _selectedAcademicYearId = yearId;
+                            if (!availableGradeIds.contains(
+                              _selectedGradeId,
+                            )) {
+                              _selectedGradeId = '';
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    // Class / Grade dropdown (NEW)
+                    if (_gradeOptions.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        value: _selectedGradeId.isEmpty
+                            ? null
+                            : _selectedGradeId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          labelText: 'Class / Grade',
+                          prefixIcon: Icon(Icons.class_rounded, size: 18),
+                        ),
+                        hint: const Text('Select a class to enable add'),
+                        items: _gradeOptions
+                            .map(
+                              (g) => DropdownMenuItem(
+                                value: g.id,
+                                child: Text(g.gradeName),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) {
+                          setState(() => _selectedGradeId = v ?? '');
+                        },
+                      ),
                   ],
                 ),
               ),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  // Filters section
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Filter Structures',
+
+              const SizedBox(height: 12),
+
+              // Search
+              TextFormField(
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Search fee structures...',
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: Color(0xFF2563EB),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  ),
+                ),
+                onChanged: (v) => setState(() => _query = v),
+              ),
+
+              const SizedBox(height: 16),
+
+              if (_filtered.isNotEmpty) ...[
+                _buildAssignmentSummary(),
+                const SizedBox(height: 14),
+              ],
+
+              // Hint when no class selected
+              if (_selectedGradeId.isEmpty && _gradeOptions.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        color: Color(0xFF2563EB),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Select a class above to enable the + add button and view class-specific structures.',
                           style: GoogleFonts.ibmPlexSans(
-                            fontWeight: FontWeight.bold,
                             fontSize: 12,
+                            color: const Color(0xFF1D4ED8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Grouped structures
+              if (_filtered.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.schema_rounded,
+                          size: 48,
+                          color: context.appTheme.muted,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No structures found.',
+                          style: GoogleFonts.ibmPlexSans(
                             color: context.appTheme.muted,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        if (_academicYears.isNotEmpty) ...[
-                          DropdownButtonFormField<String>(
-                            value: _selectedAcademicYearId.isEmpty
-                                ? null
-                                : _selectedAcademicYearId,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: OutlineInputBorder(),
-                              labelText: 'Academic Year',
-                              prefixIcon: Icon(
-                                Icons.calendar_today_rounded,
-                                size: 18,
-                              ),
-                            ),
-                            items: _academicYears
-                                .map(
-                                  (y) => DropdownMenuItem(
-                                    value: y.id,
-                                    child: Text(y.yearLabel),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) {
-                              final yearId = v ?? '';
-                              final availableGradeIds = _sections
-                                  .where(
-                                    (section) =>
-                                        section.academicYearId == yearId,
-                                  )
-                                  .map((section) => section.gradeId)
-                                  .toSet();
-                              setState(() {
-                                _selectedAcademicYearId = yearId;
-                                if (!availableGradeIds.contains(
-                                  _selectedGradeId,
-                                )) {
-                                  _selectedGradeId = '';
-                                }
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                        // Class / Grade dropdown (NEW)
-                        if (_gradeOptions.isNotEmpty)
-                          DropdownButtonFormField<String>(
-                            value: _selectedGradeId.isEmpty
-                                ? null
-                                : _selectedGradeId,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: OutlineInputBorder(),
-                              labelText: 'Class / Grade',
-                              prefixIcon: Icon(Icons.class_rounded, size: 18),
-                            ),
-                            hint: const Text('Select a class to enable add'),
-                            items: _gradeOptions
-                                .map(
-                                  (g) => DropdownMenuItem(
-                                    value: g.id,
-                                    child: Text(g.gradeName),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) {
-                              setState(() => _selectedGradeId = v ?? '');
-                            },
-                          ),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 12),
-
-                  // Search
-                  TextFormField(
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'Search fee structures...',
-                      prefixIcon: const Icon(
-                        Icons.search_rounded,
-                        color: Color(0xFF2563EB),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                      ),
-                    ),
-                    onChanged: (v) => setState(() => _query = v),
-                  ),
-
+                )
+              else
+                for (final entry in _groupedByCategory.entries) ...[
+                  _categoryHeader(entry.key),
+                  const SizedBox(height: 8),
+                  for (final s in entry.value) _buildStructureCard(s),
                   const SizedBox(height: 16),
-
-                  if (_filtered.isNotEmpty) ...[
-                    _buildAssignmentSummary(),
-                    const SizedBox(height: 14),
-                  ],
-
-                  // Hint when no class selected
-                  if (_selectedGradeId.isEmpty && _gradeOptions.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFBFDBFE)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.info_outline_rounded,
-                            color: Color(0xFF2563EB),
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Select a class above to enable the + add button and view class-specific structures.',
-                              style: GoogleFonts.ibmPlexSans(
-                                fontSize: 12,
-                                color: const Color(0xFF1D4ED8),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // Grouped structures
-                  if (_filtered.isEmpty)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(40),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.schema_rounded,
-                              size: 48,
-                              color: context.appTheme.muted,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No structures found.',
-                              style: GoogleFonts.ibmPlexSans(
-                                color: context.appTheme.muted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    for (final entry in _groupedByCategory.entries) ...[
-                      _categoryHeader(entry.key),
-                      const SizedBox(height: 8),
-                      for (final s in entry.value) _buildStructureCard(s),
-                      const SizedBox(height: 16),
-                    ],
                 ],
-              ),
-            ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -710,7 +719,7 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
           }
         : null;
 
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.principalFeeStructureForm,
       arguments: AdminFeeStructureFormArgs(
@@ -730,7 +739,7 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
   }
 
   Future<void> _openEditForm(Map<String, dynamic> structure) async {
-    final result = await Navigator.pushNamed(
+    final result = await SchoolDeskNavigation.push(
       context,
       AppRoutes.principalFeeStructureForm,
       arguments: AdminFeeStructureFormArgs(
@@ -775,7 +784,7 @@ class _PrincipalFeeStructuresState extends State<PrincipalFeeStructures> {
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.deleteFeeStructure(
+      await _repository.deleteFeeStructure(
         id,
         removePending: true,
       );

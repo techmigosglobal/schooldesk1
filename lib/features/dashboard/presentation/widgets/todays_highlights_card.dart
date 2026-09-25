@@ -648,7 +648,7 @@ class _AcknowledgeButton extends StatefulWidget {
 
 class _AcknowledgeButtonState extends State<_AcknowledgeButton>
     with SingleTickerProviderStateMixin {
-  bool _loading = false;
+  bool _busy = false;
   late AnimationController _controller;
   late Animation<double> _scaleAnim;
 
@@ -678,7 +678,7 @@ class _AcknowledgeButtonState extends State<_AcknowledgeButton>
       builder: (context, child) =>
           Transform.scale(scale: _scaleAnim.value, child: child),
       child: InkWell(
-        onTap: _loading ? null : _handleTap,
+        onTap: _busy ? null : _handleTap,
         onTapDown: (_) => _controller.forward(),
         onTapUp: (_) => _controller.reverse(),
         onTapCancel: () => _controller.reverse(),
@@ -687,12 +687,12 @@ class _AcknowledgeButtonState extends State<_AcknowledgeButton>
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: _loading
+            color: _busy
                 ? const Color(0xFFFF9800).withAlpha(60)
                 : const Color(0xFFFF9800).withAlpha(25),
             borderRadius: BorderRadius.circular(6),
           ),
-          child: _loading
+          child: _busy
               ? const SizedBox(
                   width: 14,
                   height: 14,
@@ -726,12 +726,12 @@ class _AcknowledgeButtonState extends State<_AcknowledgeButton>
   }
 
   Future<void> _handleTap() async {
-    if (_loading) return;
-    setState(() => _loading = true);
+    if (_busy) return;
+    setState(() => _busy = true);
     try {
       await widget.onPressed();
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 }

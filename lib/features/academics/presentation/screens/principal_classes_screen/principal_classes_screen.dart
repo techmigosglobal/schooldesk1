@@ -4,17 +4,26 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/app/router/route_arguments.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/widgets/desktop_master_detail_layout.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_classes_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_classes_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
 class PrincipalClassesScreen extends StatefulWidget {
-  const PrincipalClassesScreen({super.key});
+  const PrincipalClassesScreen({super.key, this.repository});
+
+  final PrincipalClassesRepository? repository;
 
   @override
   State<PrincipalClassesScreen> createState() => _PrincipalClassesScreenState();
@@ -31,9 +40,8 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     'getPrincipalClassesOverview()',
   ];
 
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _saving = false;
-  String? _error;
   String _search = '';
   String _capacityFilter = 'All';
   String _selectedSectionId = '';
@@ -53,6 +61,13 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   int _unreadNotifications = 0;
   NotificationService? _notificationService;
   String _lastNotificationSignal = '';
+
+  bool get _isLoading => _state.isLoading && !_state.hasData;
+  String? get _loadError =>
+      _state.isError && !_state.hasData ? '${_state.error}' : null;
+
+  PrincipalClassesRepository get _repository =>
+      widget.repository ?? ApiPrincipalClassesRepository.legacyDefault;
 
   @override
   void initState() {
@@ -95,7 +110,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     super.didChangeDependencies();
     if (_routeArgsRead) return;
     _routeArgsRead = true;
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = SchoolDeskRouteArguments.maybeOf<Object?>(context);
     if (args is! Map) return;
     _pendingHubAction = _text(
       args['class_hub_action'] ??
@@ -110,29 +125,29 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   }
 
   Future<void> _load() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState<Object>.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getPrincipalClassesOverview(forceRefresh: true),
-        api.getAcademicYears(forceRefresh: true),
-        api.getStaff(page: 1, pageSize: 100, status: 'active'),
-        api.getRawList('/subjects', queryParameters: const {'page_size': 100}),
-        api.getRawList(
-          '/grade-subjects',
-          queryParameters: const {'page_size': 100},
-        ),
-        api.getRawList(
-          '/staff-subjects',
-          queryParameters: const {'page_size': 100},
-        ),
+        _repository.loadOverview(forceRefresh: true),
+        _repository.loadAcademicYears(forceRefresh: true),
+        _repository.loadStaff(page: 1, pageSize: 100, status: 'active'),
+        _repository.loadSubjects(),
+        _repository.loadGradeSubjects(),
+        _repository.loadStaffSubjects(),
       ]);
       final optionalRows = await Future.wait<List<Map<String, dynamic>>>([
-        _loadOptionalRows(api.getEvents()),
-        _loadOptionalRows(api.getNotifications()),
+        _loadOptionalRows(_repository.loadEvents()),
+        _loadOptionalRows(_repository.loadNotifications()),
       ]);
       final payload = Map<String, dynamic>.from(results[0] as Map);
       final classes = _listMap(payload['classes']);
@@ -157,14 +172,25 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                 )
             ? _selectedSectionId
             : (classes.isEmpty ? '' : _text(classes.first['section_id']));
-        _loading = false;
+        _state = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
       _openPendingHubAction();
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load Classes Hub from backend. $error';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState<Object>.error(
+                error: 'Unable to load Classes Hub from backend. $error',
+              )
+            : RepositoryState<Object>(
+                data: Object(),
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
       });
     }
   }
@@ -243,15 +269,17 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     final isDesktop = DesktopBreakpoints.isDesktopWidth(
       MediaQuery.sizeOf(context).width,
     );
-    if (isDesktop) {
-      return _buildDesktopLayout();
-    }
-    return _buildBody();
+    return SchoolDeskRepositoryStateView<Object>(
+      state: _state,
+      onRetry: _load,
+      errorTitle: 'Unable to load Classes Hub',
+      data: (_) => isDesktop ? _buildDesktopLayout() : _buildBody(),
+    );
   }
 
   Widget _buildBody() {
     final rows = _filteredClasses;
-    final showAddFab = !_loading && _error == null && rows.isNotEmpty;
+    final showAddFab = !_isLoading && _loadError == null && rows.isNotEmpty;
     return Scaffold(
       backgroundColor: context.appTheme.background,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -300,7 +328,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                         unreadNotifications: _unreadNotifications,
                         onMenu: _showDirectoryMenu,
                         onUpload: _importClassesCsv,
-                        onNotifications: () => Navigator.pushNamed(
+                        onNotifications: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.notificationCenter,
                           arguments: 'principal',
@@ -328,7 +356,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                       const SizedBox(height: 16),
                       _ClassesTodayCard(
                         eventsToday: _eventsForToday.length,
-                        onCalendar: () => Navigator.pushNamed(
+                        onCalendar: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.eventsCalendar,
                         ),
@@ -343,11 +371,11 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                         }),
                       ),
                       const SizedBox(height: 12),
-                      if (_loading)
+                      if (_isLoading)
                         const _ClassesDirectoryLoadingCard()
-                      else if (_error != null)
+                      else if (_loadError != null)
                         _ClassesDirectoryErrorCard(
-                          message: _error!,
+                          message: _loadError!,
                           onRetry: _load,
                         )
                       else if (rows.isEmpty)
@@ -369,16 +397,16 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                       const SizedBox(height: 10),
                       _ClassesQuickActions(
                         onAddClass: _openClassForm,
-                        onAddSubject: () => Navigator.pushNamed(
+                        onAddSubject: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.principalSubjects,
                         ),
-                        onAddTeacher: () => Navigator.pushNamed(
+                        onAddTeacher: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.staffManagement,
                         ),
                         onAttendance: () => rows.isEmpty
-                            ? Navigator.pushNamed(
+                            ? SchoolDeskNavigation.push(
                                 context,
                                 AppRoutes.principalAttendance,
                               )
@@ -387,7 +415,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                                 rows.first,
                               ),
                         onFees: () => rows.isEmpty
-                            ? Navigator.pushNamed(
+                            ? SchoolDeskNavigation.push(
                                 context,
                                 AppRoutes.feeMonitoring,
                               )
@@ -440,7 +468,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
             label: 'Open calendar',
             onTap: () {
               Navigator.pop(context);
-              Navigator.pushNamed(context, AppRoutes.eventsCalendar);
+              SchoolDeskNavigation.push(context, AppRoutes.eventsCalendar);
             },
           ),
         ],
@@ -478,7 +506,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   Future<void> _openClassForm() async {
     setState(() => _saving = true);
     try {
-      final academicYears = await BackendApiClient.instance.getAcademicYears(
+      final academicYears = await _repository.loadAcademicYears(
         forceRefresh: true,
       );
       if (!mounted) return;
@@ -499,6 +527,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => _CreateClassSetupPage(
+          repository: _repository,
           academicYears: _academicYears,
           staff: _staff,
           subjects: _subjects,
@@ -554,7 +583,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   }) async {
     setState(() => _saving = true);
     try {
-      final created = await BackendApiClient.instance.createPrincipalClass(
+      final created = await _repository.createClass(
         academicYearId: academicYearId,
         sectionName: sectionName,
         capacity: capacity,
@@ -607,7 +636,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     required int roomCapacity,
   }) async {
     try {
-      await BackendApiClient.instance.updatePrincipalClassSetup(
+      await _repository.updateClass(
         sectionId: sectionId,
         gradeId: gradeId,
         gradeName: gradeName,
@@ -671,7 +700,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.deletePrincipalClass(
+      await _repository.deleteClass(
         sectionId: sectionId,
       );
       if (!mounted) return;
@@ -742,6 +771,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => _AssignSubjectsSetupPage(
+          repository: _repository,
           classRow: row,
           setupPayload: const {},
           academicYears: _academicYears,
@@ -756,7 +786,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
 
   Future<void> _openFeesModule(Map<String, dynamic> row) async {
     setState(() => _selectedSectionId = _text(row['section_id']));
-    await Navigator.pushNamed(
+    await SchoolDeskNavigation.push(
       context,
       AppRoutes.feeMonitoring,
       arguments: {
@@ -770,7 +800,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   }
 
   void _openRoute(String route, Map<String, dynamic> row) {
-    Navigator.pushNamed(
+    SchoolDeskNavigation.push(
       context,
       route,
       arguments: {
@@ -945,7 +975,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                   classCount: rows.length,
                   onAddClass: _saving ? null : _openClassForm,
                   onUpload: _importClassesCsv,
-                  onNotifications: () => Navigator.pushNamed(
+                  onNotifications: () => SchoolDeskNavigation.push(
                     context,
                     AppRoutes.notificationCenter,
                     arguments: 'principal',
@@ -1003,18 +1033,18 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                       const Spacer(),
                       IconButton(
                         tooltip: 'Refresh classes',
-                        onPressed: _loading ? null : _load,
+                        onPressed: _isLoading ? null : _load,
                         icon: const Icon(Icons.refresh_rounded, size: 20),
                       ),
                     ],
                   ),
                 ),
                 Expanded(
-                  child: _loading
+                  child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
-                      : _error != null
+                      : _loadError != null
                       ? _ClassesDirectoryErrorCard(
-                          message: _error!,
+                          message: _loadError!,
                           onRetry: _load,
                         )
                       : rows.isEmpty
@@ -4006,6 +4036,7 @@ String _staffDisplayName(List<StaffModel> staff, String staffId) {
 }
 
 class _CreateClassSetupPage extends StatefulWidget {
+  final PrincipalClassesRepository repository;
   final List<AcademicYearModel> academicYears;
   final List<StaffModel> staff;
   final List<Map<String, dynamic>> subjects;
@@ -4029,6 +4060,7 @@ class _CreateClassSetupPage extends StatefulWidget {
   onSubmit;
 
   const _CreateClassSetupPage({
+    required this.repository,
     required this.academicYears,
     required this.staff,
     required this.subjects,
@@ -4383,6 +4415,7 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
         Navigator.of(context).pushReplacement<bool, bool>(
           MaterialPageRoute(
             builder: (_) => _AssignSubjectsSetupPage(
+              repository: widget.repository,
               classRow: _createdClassRow(created),
               setupPayload: created,
               academicYears: widget.academicYears,
@@ -5012,6 +5045,7 @@ InputDecoration _fieldDecoration({
 }
 
 class _AssignSubjectsSetupPage extends StatefulWidget {
+  final PrincipalClassesRepository repository;
   final Map<String, dynamic> classRow;
   final Map<String, dynamic> setupPayload;
   final List<AcademicYearModel> academicYears;
@@ -5020,6 +5054,7 @@ class _AssignSubjectsSetupPage extends StatefulWidget {
   final List<Map<String, dynamic>> initialStaffSubjects;
 
   const _AssignSubjectsSetupPage({
+    required this.repository,
     required this.classRow,
     required this.setupPayload,
     required this.academicYears,
@@ -5037,9 +5072,37 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
   static const _classHubSetupTruth =
       'Class Hub setup is the source of truth for per-class subjects and fees';
 
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _saving = false;
-  String? _error;
+  bool get _loading => _state.isLoading;
+  set _loading(bool value) {
+    _state = value
+        ? RepositoryState<Object>.loading(
+            data: _state.data,
+            source: _state.data == null
+                ? RepositorySource.empty
+                : RepositorySource.cache,
+            isStale: _state.data != null,
+          )
+        : RepositoryState<Object>(
+            data: Object(),
+            source: RepositorySource.remote,
+            error: _state.error,
+          );
+  }
+
+  String? get _error => _state.error?.toString();
+  set _error(String? value) {
+    _state = value == null
+        ? _state.copyWith(error: null)
+        : RepositoryState<Object>(
+            data: _state.data ?? Object(),
+            source: RepositorySource.cache,
+            isStale: true,
+            error: value,
+          );
+  }
+
   List<Map<String, dynamic>> _subjects = [];
   List<Map<String, dynamic>> _gradeSubjects = [];
   List<Map<String, dynamic>> _staffSubjects = [];
@@ -5081,25 +5144,14 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
     });
     try {
       final results = await Future.wait<List<Map<String, dynamic>>>([
-        BackendApiClient.instance.getRawList(
-          '/subjects',
-          queryParameters: const {'page_size': 100},
+        widget.repository.loadSubjects(),
+        widget.repository.loadGradeSubjects(
+          gradeId: _gradeId,
+          sectionId: _sectionId,
         ),
-        BackendApiClient.instance.getRawList(
-          '/grade-subjects',
-          queryParameters: {
-            'grade_id': _gradeId,
-            'section_id': _sectionId,
-            'page_size': 100,
-          },
-        ),
-        BackendApiClient.instance.getRawList(
-          '/staff-subjects',
-          queryParameters: {
-            'grade_id': _gradeId,
-            'section_id': _sectionId,
-            'page_size': 100,
-          },
+        widget.repository.loadStaffSubjects(
+          gradeId: _gradeId,
+          sectionId: _sectionId,
         ),
       ]);
       if (!mounted) return;
@@ -5178,6 +5230,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => _AddSelectSubjectSetupPage(
+          repository: widget.repository,
           classRow: widget.classRow,
           mappedSubjectIds: _mappedSubjects.map(_subjectId).toSet(),
         ),
@@ -5196,7 +5249,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
     if (gradeSubjectId.isEmpty && staffSubjectId.isEmpty) return;
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.updatePrincipalClassSetup(
+      await widget.repository.updateClass(
         sectionId: _sectionId,
         gradeId: _gradeId,
         academicYearId: _academicYearId,
@@ -5238,10 +5291,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
     setState(() => _saving = true);
     try {
       final subjectId = _subjectId(subject);
-      await BackendApiClient.instance.updateRaw(
-        '/subjects/$subjectId',
-        updated,
-      );
+      await widget.repository.updateSubject(subjectId, updated);
       await _load();
     } on Object catch (error) {
       if (!mounted) return;
@@ -5283,7 +5333,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
     if (!mounted) return;
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.deleteRaw('/subjects/$subjectId');
+      await widget.repository.deleteSubject(subjectId);
       await _load();
     } on Object catch (error) {
       if (!mounted) return;
@@ -5423,10 +5473,15 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
 }
 
 class _FeesSetupPage extends StatefulWidget {
+  final PrincipalClassesRepository repository;
   final Map<String, dynamic> classRow;
   final List<AcademicYearModel> academicYears;
 
-  const _FeesSetupPage({required this.classRow, required this.academicYears});
+  const _FeesSetupPage({
+    required this.repository,
+    required this.classRow,
+    required this.academicYears,
+  });
 
   @override
   State<_FeesSetupPage> createState() => _FeesSetupPageState();
@@ -5440,12 +5495,40 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
   final List<_FeeComponentDraft> _components = [];
   final List<String> _deletedStructureIds = [];
 
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _saving = false;
   bool _useExisting = false;
   bool _reviewingExisting = false;
   int _stage = 0;
-  String? _error;
+  bool get _loading => _state.isLoading;
+  set _loading(bool value) {
+    _state = value
+        ? RepositoryState<Object>.loading(
+            data: _state.data,
+            source: _state.data == null
+                ? RepositorySource.empty
+                : RepositorySource.cache,
+            isStale: _state.data != null,
+          )
+        : RepositoryState<Object>(
+            data: Object(),
+            source: RepositorySource.remote,
+            error: _state.error,
+          );
+  }
+
+  String? get _error => _state.error?.toString();
+  set _error(String? value) {
+    _state = value == null
+        ? _state.copyWith(error: null)
+        : RepositoryState<Object>(
+            data: _state.data ?? Object(),
+            source: RepositorySource.cache,
+            isStale: true,
+            error: value,
+          );
+  }
+
   List<Map<String, dynamic>> _existingStructures = [];
   List<Map<String, dynamic>> _feeCategories = [];
 
@@ -5488,12 +5571,12 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
       final results = await Future.wait<List<Map<String, dynamic>>>([
         _academicYearId.isEmpty || _gradeId.isEmpty
             ? Future.value(<Map<String, dynamic>>[])
-            : BackendApiClient.instance.getFeeStructures(
+            : widget.repository.loadFeeStructures(
                 academicYearId: _academicYearId,
                 gradeId: _gradeId,
                 sectionId: _sectionId,
               ),
-        BackendApiClient.instance.getFeeCategories(),
+        widget.repository.loadFeeCategories(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -5587,7 +5670,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
     try {
       final structureIdsToSync = <String>{};
       for (final structureId in _deletedStructureIds) {
-        await BackendApiClient.instance.deleteFeeStructure(
+        await widget.repository.deleteFeeStructure(
           structureId,
           removePending: true,
         );
@@ -5595,7 +5678,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
       for (final component in _components) {
         final categoryId = await _ensureFeeCategory(component);
         if (component.structureId.isEmpty) {
-          final created = await BackendApiClient.instance.createFeeStructure(
+          final created = await widget.repository.createFeeStructure(
             academicYearId: _academicYearId,
             gradeId: _gradeId,
             sectionId: _sectionId,
@@ -5607,7 +5690,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
           final createdId = _classText(created['id']);
           if (createdId.isNotEmpty) structureIdsToSync.add(createdId);
         } else {
-          await BackendApiClient.instance.updateFeeStructure(
+          await widget.repository.updateFeeStructure(
             component.structureId,
             academicYearId: _academicYearId,
             gradeId: _gradeId,
@@ -5621,7 +5704,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
         }
       }
       for (final structureId in structureIdsToSync) {
-        await BackendApiClient.instance.applyFeeInvoiceSync(
+        await widget.repository.applyFeeInvoiceSync(
           structureId,
           includePartiallyPaid: true,
         );
@@ -5656,7 +5739,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
         return _classText(category['id']);
       }
     }
-    final created = await BackendApiClient.instance.createFeeCategory(
+    final created = await widget.repository.createFeeCategory(
       categoryName: name,
       frequency: frequency,
     );
@@ -5986,10 +6069,12 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
 }
 
 class _AddSelectSubjectSetupPage extends StatefulWidget {
+  final PrincipalClassesRepository repository;
   final Map<String, dynamic> classRow;
   final Set<String> mappedSubjectIds;
 
   const _AddSelectSubjectSetupPage({
+    required this.repository,
     required this.classRow,
     required this.mappedSubjectIds,
   });
@@ -6001,8 +6086,36 @@ class _AddSelectSubjectSetupPage extends StatefulWidget {
 
 class _AddSelectSubjectSetupPageState
     extends State<_AddSelectSubjectSetupPage> {
-  bool _loading = true;
-  String? _error;
+  RepositoryState<Object> _state = const RepositoryState.loading();
+  bool get _loading => _state.isLoading;
+  set _loading(bool value) {
+    _state = value
+        ? RepositoryState<Object>.loading(
+            data: _state.data,
+            source: _state.data == null
+                ? RepositorySource.empty
+                : RepositorySource.cache,
+            isStale: _state.data != null,
+          )
+        : RepositoryState<Object>(
+            data: Object(),
+            source: RepositorySource.remote,
+            error: _state.error,
+          );
+  }
+
+  String? get _error => _state.error?.toString();
+  set _error(String? value) {
+    _state = value == null
+        ? _state.copyWith(error: null)
+        : RepositoryState<Object>(
+            data: _state.data ?? Object(),
+            source: RepositorySource.cache,
+            isStale: true,
+            error: value,
+          );
+  }
+
   String _query = '';
   String _addingSubjectId = '';
   List<Map<String, dynamic>> _subjects = [];
@@ -6023,10 +6136,7 @@ class _AddSelectSubjectSetupPageState
       _error = null;
     });
     try {
-      final subjects = await BackendApiClient.instance.getRawList(
-        '/subjects',
-        queryParameters: const {'page_size': 100},
-      );
+      final subjects = await widget.repository.loadSubjects();
       if (!mounted) return;
       setState(() {
         _subjects = subjects;
@@ -6064,7 +6174,7 @@ class _AddSelectSubjectSetupPageState
     if (subjectId.isEmpty || _addingSubjectId.isNotEmpty) return;
     setState(() => _addingSubjectId = subjectId);
     try {
-      await BackendApiClient.instance.savePrincipalSubjectMapping(
+      await widget.repository.saveSubjectMapping(
         subjectId: subjectId,
         academicYearId: _academicYearId,
         gradeId: _gradeId,
@@ -6089,7 +6199,10 @@ class _AddSelectSubjectSetupPageState
   Future<void> _openCreateSubject() async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => _CreateSubjectSetupPage(classRow: widget.classRow),
+        builder: (_) => _CreateSubjectSetupPage(
+          repository: widget.repository,
+          classRow: widget.classRow,
+        ),
       ),
     );
     if (changed == true && mounted) Navigator.pop(context, true);
@@ -6179,9 +6292,13 @@ class _AddSelectSubjectSetupPageState
 }
 
 class _CreateSubjectSetupPage extends StatefulWidget {
+  final PrincipalClassesRepository repository;
   final Map<String, dynamic> classRow;
 
-  const _CreateSubjectSetupPage({required this.classRow});
+  const _CreateSubjectSetupPage({
+    required this.repository,
+    required this.classRow,
+  });
 
   @override
   State<_CreateSubjectSetupPage> createState() =>
@@ -6194,7 +6311,17 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
   final _codeController = TextEditingController();
   String _subjectColor = '#1E63F3';
   bool _saving = false;
-  String? _error;
+  RepositoryState<Object> _state = const RepositoryState.loading();
+  String? get _error => _state.error?.toString();
+  set _error(String? value) {
+    _state = value == null
+        ? _state.copyWith(error: null)
+        : RepositoryState<Object>(
+            data: Object(),
+            source: RepositorySource.localMutation,
+            error: value,
+          );
+  }
 
   static const _colors = [
     '#1E63F3',
@@ -6225,7 +6352,7 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
       _error = null;
     });
     try {
-      final subject = await BackendApiClient.instance.createRaw('/subjects', {
+      final subject = await widget.repository.createSubject({
         'subject_name': _nameController.text.trim(),
         'subject_code': _codeController.text.trim(),
         'subject_color': _subjectColor,
@@ -6234,7 +6361,7 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
       if (subjectId.isEmpty) {
         throw Exception('Subject was created but no subject id was returned.');
       }
-      await BackendApiClient.instance.savePrincipalSubjectMapping(
+      await widget.repository.saveSubjectMapping(
         subjectId: subjectId,
         academicYearId: _academicYearId,
         gradeId: _gradeId,

@@ -3,24 +3,36 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_fee_payment_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_fee_payment_repository.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class ParentPaymentFlow extends StatefulWidget {
   final ParentPaymentSelectionArgs args;
 
-  const ParentPaymentFlow({super.key, required this.args});
+  const ParentPaymentFlow({super.key, required this.args, this.repository});
+
+  final ParentFeePaymentRepository? repository;
 
   @override
   State<ParentPaymentFlow> createState() => _ParentPaymentFlowState();
 }
 
 class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
+  ParentFeePaymentRepository get _repository =>
+      widget.repository ?? ApiParentFeePaymentRepository.legacyDefault;
+
   int _currentStep = 1; // 1: Confirm, 2: Pay, 3: Done
-  bool _loadingConfig = true;
-  bool _submitting = false;
+  RepositoryState<Object> _configState = const RepositoryState.loading();
+  RepositoryState<Object> _submitState = const RepositoryState.empty();
+
+  bool get _submitting => _submitState.isRefreshing;
 
   Map<String, dynamic> _paymentConfig = const {};
   Map<String, dynamic>? _paymentIntent;
@@ -33,7 +45,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   String? _proofPath;
   Uint8List? _proofBytes;
   String? _proofMimeType;
-  String? _configError;
+  String? _configNotice;
 
   List<Map<String, dynamic>> get _fees => widget.args.fees
       .where((fee) {
@@ -110,13 +122,22 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   }
 
   Future<void> _loadPaymentConfig({bool forceRefresh = false}) async {
+    final previous = _configState;
     setState(() {
-      _loadingConfig = true;
-      _configError = null;
+      _configState = RepositoryState<Object>.loading(
+        data: previous.data,
+        source: previous.hasData
+            ? RepositorySource.cache
+            : RepositorySource.empty,
+        isStale: previous.hasData,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
+      _configNotice = null;
     });
     try {
       final invoiceId = _text(_selectedFee['id']);
-      final config = await BackendApiClient.instance.getPaymentConfig(
+      final config = await _repository.loadPaymentConfig(
         invoiceId: invoiceId,
         refreshNonce: forceRefresh
             ? DateTime.now().millisecondsSinceEpoch
@@ -129,16 +150,26 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       setState(() {
         _paymentConfig = config;
         if (!isEnabled || (upiId.isEmpty && qrImageUrl.isEmpty)) {
-          _configError =
+          _configNotice =
               'The principal has not configured an active UPI ID or QR code.';
         }
-        _loadingConfig = false;
+        _configState = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _configError = e.toString();
-        _loadingConfig = false;
+        _configState = previous.hasData
+            ? RepositoryState<Object>(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState<Object>.error(error: e);
       });
     }
   }
@@ -222,12 +253,17 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       return;
     }
 
-    setState(() => _submitting = true);
+    setState(() {
+      _submitState = const RepositoryState<Object>.loading(
+        data: Object(),
+        source: RepositorySource.localMutation,
+        isRefreshing: true,
+      );
+    });
     try {
-      final api = BackendApiClient.instance;
       Map<String, dynamic> submittedRequest;
       if (_isClarificationResubmit) {
-        submittedRequest = await api.resubmitFeePaymentProof(
+        submittedRequest = await _repository.resubmitPaymentProof(
           id: _text(_resubmissionRequest['id']),
           transactionRef: _utrController.text.trim(),
           screenshotPath: _proofPath!,
@@ -237,7 +273,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           remarks: _remarksController.text.trim(),
         );
       } else {
-        submittedRequest = await api.submitParentPaymentRequestProof(
+        submittedRequest = await _repository.submitPaymentProof(
           invoiceId: _text(_selectedFee['id']),
           amount: _totalAmount,
           transactionRef: _utrController.text.trim(),
@@ -251,12 +287,17 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       if (!mounted) return;
       setState(() {
         _paymentIntent = submittedRequest;
-        _submitting = false;
+        _submitState = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
         _currentStep = 3;
       });
     } on Object catch (e) {
       if (mounted) {
-        setState(() => _submitting = false);
+        setState(() {
+          _submitState = RepositoryState<Object>.error(error: e);
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Submission failed: $e'),
@@ -290,14 +331,17 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
             _buildStepIndicator(),
             const Divider(height: 1),
             Expanded(
-              child: _loadingConfig
-                  ? const Center(child: CircularProgressIndicator())
-                  : _configError != null
-                  ? _buildConfigError()
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(20),
-                      child: _buildCurrentStepView(),
-                    ),
+              child: SchoolDeskRepositoryStateView<Object>(
+                state: _configState,
+                onRetry: () => _loadPaymentConfig(forceRefresh: true),
+                errorTitle: 'Unable to load payment configuration',
+                data: (_) => _configNotice != null
+                    ? _buildConfigError()
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: _buildCurrentStepView(),
+                      ),
+              ),
             ),
           ],
         ),
@@ -953,7 +997,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               child: OutlinedButton(
                 onPressed: () {
                   Navigator.pop(context, true);
-                  Navigator.pushNamed(context, '/parent/payment-history');
+                  SchoolDeskNavigation.push(context, '/parent/payment-history');
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF1A6B4A),

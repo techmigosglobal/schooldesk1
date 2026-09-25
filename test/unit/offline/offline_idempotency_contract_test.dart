@@ -86,29 +86,35 @@ void main() {
     expect(main, contains('Do not\n    // invalidate the only local snapshot'));
   });
 
-  test('parent payment history remains cacheable while proof requests do not', () {
-    final interceptor = File(
-      'lib/core/network/api_modules/client_interceptors.dart',
-    ).readAsStringSync();
-    expect(interceptor, contains("/fees/payments reads are safe to cache"));
-    expect(interceptor, contains("clean.contains('/payment-requests')"));
-    expect(interceptor, isNot(contains("clean.contains('/payments') ||")));
-  });
+  test(
+    'parent payment history remains cacheable while proof requests do not',
+    () {
+      final interceptor = File(
+        'lib/core/offline/offline_sync_engine.dart',
+      ).readAsStringSync();
+      expect(interceptor, contains('Payment-request reads can contain'));
+      expect(interceptor, contains("clean.contains('/payment-requests')"));
+      expect(interceptor, contains("clean.contains('/health')"));
+    },
+  );
 
   test('authenticated reads are network-first with Drift as fallback', () {
     final interceptor = File(
       'lib/core/network/api_modules/client_interceptors.dart',
     ).readAsStringSync();
-    expect(interceptor, contains('CachePolicy.refresh'));
-    expect(
-      interceptor,
-      contains('hitCacheOnErrorExcept: const Nullable<List<int>>(null)'),
-    );
-    expect(interceptor, contains('Drift owns offline fallback'));
+    final engine = File(
+      'lib/core/offline/offline_sync_engine.dart',
+    ).readAsStringSync();
+    expect(interceptor, contains('cacheKeyForRequest'));
+    expect(engine, contains('cacheResponse'));
+    expect(engine, contains('readCachedResponse'));
+    expect(interceptor, isNot(contains('CacheOptions')));
   });
 
   test('multipart uploads retain one idempotency key across queueing', () {
-    final engine = File('lib/core/offline/offline_sync_engine.dart').readAsStringSync();
+    final engine = File(
+      'lib/core/offline/offline_sync_engine.dart',
+    ).readAsStringSync();
     expect(engine, contains('_isIdempotentUpload(options)'));
     expect(engine, contains('String? idempotencyKey'));
     expect(engine, contains("idempotencyKey!.trim()"));

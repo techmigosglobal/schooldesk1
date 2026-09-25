@@ -8,6 +8,8 @@ import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart';
 import 'package:schooldesk1/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart';
 import 'package:schooldesk1/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart';
+import 'package:schooldesk1/features/attendance/presentation/screens/kiosk_qr_attendance_screen/kiosk_qr_attendance_screen.dart';
+import 'package:schooldesk1/features/dashboard/presentation/screens/super_admin_dashboard_screen/super_admin_dashboard_screen.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +45,18 @@ void main() {
       username: String.fromEnvironment('QA_PARENT_USERNAME'),
       password: String.fromEnvironment('QA_PARENT_PASSWORD'),
       dashboardType: ParentDashboardScreen,
+    ),
+    const _RoleCredentials(
+      role: 'Kiosk',
+      username: String.fromEnvironment('QA_KIOSK_USERNAME'),
+      password: String.fromEnvironment('QA_KIOSK_PASSWORD'),
+      dashboardType: KioskQrAttendanceScreen,
+    ),
+    const _RoleCredentials(
+      role: 'super_admin',
+      username: String.fromEnvironment('QA_SUPER_ADMIN_USERNAME'),
+      password: String.fromEnvironment('QA_SUPER_ADMIN_PASSWORD'),
+      dashboardType: SuperAdminDashboardScreen,
     ),
   ];
 

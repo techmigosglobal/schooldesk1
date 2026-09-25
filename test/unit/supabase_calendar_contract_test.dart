@@ -7,7 +7,6 @@ void main() {
     final source = File(
       'lib/features/calendar/presentation/screens/events_calendar_screen/events_calendar_screen.dart',
     ).readAsStringSync();
-
     expect(source, isNot(contains('Load 2026–27 school calendar')));
     expect(source, isNot(contains('_SchoolCalendarData')));
     expect(source, isNot(contains("'/parent-teacher-meetings'")));
@@ -42,15 +41,20 @@ void main() {
     final source = File(
       'lib/features/calendar/presentation/screens/events_calendar_screen/events_calendar_screen.dart',
     ).readAsStringSync();
+    final repository = File(
+      'lib/modules/calendar/data/api_calendar_repository.dart',
+    ).readAsStringSync();
 
     expect(source, contains('_buildSharedCalendar()'));
     expect(source, contains('SchoolDeskModuleScaffold('));
     expect(source, contains('floatingActionButton: _canManageEvents'));
     expect(source, contains("label: const Text('Create event')"));
     expect(source, contains('_buildCalendarSummary()'));
-    expect(source, contains('getHolidays('));
+    expect(source, contains('loadHolidays('));
+    expect(repository, contains('getHolidays('));
     expect(source, contains('_CalendarRecordKind.holiday'));
-    expect(source, contains("label: const Text('Retry')"));
+    expect(source, contains('SchoolDeskRepositoryStateView<Object>'));
+    expect(source, contains('onRetry: _loadData'));
     expect(source, isNot(contains("'holiday',\n    'sports'")));
   });
 }

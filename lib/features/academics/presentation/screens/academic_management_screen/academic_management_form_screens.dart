@@ -3,15 +3,18 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/services/backend_data_service.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/widgets/desktop_screen_wrapper.dart';
+import 'package:schooldesk1/roles/principal/data/api_principal_academic_year_repository.dart';
+import 'package:schooldesk1/roles/principal/domain/principal_academic_year_repository.dart';
+import 'package:schooldesk1/modules/academics/data/api_academic_management_repository.dart';
 
 @immutable
 class AcademicYearFormArgs {
@@ -75,8 +78,13 @@ class AcademicFormResult {
 
 class AcademicYearFormScreen extends StatefulWidget {
   final AcademicYearFormArgs args;
+  final PrincipalAcademicYearRepository? repository;
 
-  const AcademicYearFormScreen({super.key, required this.args});
+  const AcademicYearFormScreen({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<AcademicYearFormScreen> createState() => _AcademicYearFormScreenState();
@@ -99,10 +107,10 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
       text: _textValue(year['name'] ?? year['year_label']),
     );
     _startController = TextEditingController(
-      text: _dateText(year['start_date'] ?? year['start'], '2026-06-01'),
+      text: _dateText(year['start_date'] ?? year['start'], ''),
     );
     _endController = TextEditingController(
-      text: _dateText(year['end_date'] ?? year['end'], '2027-04-30'),
+      text: _dateText(year['end_date'] ?? year['end'], ''),
     );
     _isCurrent = year['is_current'] == true || year['status'] == 'active';
     _status = _textValue(
@@ -495,10 +503,11 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
     }
     setState(() => _saving = true);
     try {
-      final api = BackendApiClient.instance;
+      final repository =
+          widget.repository ?? ApiPrincipalAcademicYearRepository.legacyDefault;
       final yearId = _textValue(widget.args.year?['id']);
       if (widget.args.isEditing && yearId.isNotEmpty) {
-        await api.updateAcademicYear(
+        await repository.updateAcademicYear(
           yearId,
           yearLabel: _nameController.text.trim(),
           startDate: _startController.text.trim(),
@@ -506,7 +515,7 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
           isCurrent: _isCurrent || _status == 'active',
         );
       } else {
-        await api.createAcademicYear(
+        await repository.createAcademicYear(
           yearLabel: _nameController.text.trim(),
           startDate: _startController.text.trim(),
           endDate: _endController.text.trim(),
@@ -822,7 +831,7 @@ class _AcademicSubjectFormScreenState extends State<AcademicSubjectFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      final storage = await BackendDataService.getInstance();
+      final storage = ApiAcademicManagementRepository.legacyDefault;
       await storage.saveAcademicSubjectRecord({
         ...?widget.args.subject,
         'id':
@@ -1023,7 +1032,7 @@ class _AcademicClassFormScreenState extends State<AcademicClassFormScreen> {
     setState(() => _saving = true);
     try {
       final selectedTeacher = _teacherById(_teacherId);
-      final storage = await BackendDataService.getInstance();
+      final storage = ApiAcademicManagementRepository.legacyDefault;
       await storage.saveAcademicClassRecord({
         ...?widget.args.classData,
         'id':
@@ -1251,7 +1260,7 @@ class _AcademicCurriculumFormScreenState
     }
     setState(() => _saving = true);
     try {
-      final storage = await BackendDataService.getInstance();
+      final storage = ApiAcademicManagementRepository.legacyDefault;
       await storage.saveAcademicCurriculumRecord({
         ...?widget.args.item,
         'id':
@@ -1319,31 +1328,38 @@ class _AcademicFormScaffold extends StatelessWidget {
         role: _isAdminOwner ? DashboardRole.principal : DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: context.appTheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: context.appTheme.outlineVariant),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        ),
+        onRetry: () {},
+        data: (_) => ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: context.appTheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.appTheme.outlineVariant),
+              ),
+              child: child,
             ),
-            child: child,
-          ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: saving ? null : onSave,
-            icon: saving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save_rounded, size: 18),
-            label: Text(saving ? 'Saving...' : saveLabel),
-          ),
-        ],
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: saving ? null : onSave,
+              icon: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_rounded, size: 18),
+              label: Text(saving ? 'Saving...' : saveLabel),
+            ),
+          ],
+        ),
       ),
     );
   }

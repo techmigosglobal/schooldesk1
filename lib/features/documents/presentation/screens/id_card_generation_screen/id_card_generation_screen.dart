@@ -2,54 +2,63 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:printing/printing.dart';
 
-import 'package:schooldesk1/core/services/backend_data_service.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/modules/documents/data/api_id_card_repository.dart';
+import 'package:schooldesk1/modules/documents/domain/id_card_repository.dart';
+
+final class _IdCardSnapshot {
+  const _IdCardSnapshot({
+    required this.students,
+    required this.academicYear,
+    required this.school,
+  });
+
+  final List<Map<String, dynamic>> students;
+  final String academicYear;
+  final Map<String, dynamic> school;
+}
 
 class IdCardGenerationScreen extends StatefulWidget {
-  const IdCardGenerationScreen({super.key});
+  const IdCardGenerationScreen({super.key, this.repository});
+
+  final IdCardRepository? repository;
 
   @override
   State<IdCardGenerationScreen> createState() => _IdCardGenerationScreenState();
 }
 
 class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
-  BackendDataService? _storage;
+  late final IdCardRepository _repository =
+      widget.repository ?? ApiIdCardRepository.legacyDefault;
   List<Map<String, dynamic>> _students = [];
   List<Map<String, dynamic>> _filteredStudents = [];
   final TextEditingController _searchCtrl = TextEditingController();
   String _selectedClass = 'All';
-  bool _loading = true;
+  RepositoryState<_IdCardSnapshot> _repositoryState =
+      const RepositoryState.loading();
   final Set<String> _selectedIds = {};
   bool _generating = false;
 
-  final List<String> _classes = [
-    'All',
-    '1A',
-    '1B',
-    '2A',
-    '2B',
-    '3A',
-    '3B',
-    '4A',
-    '4B',
-    '5A',
-    '5B',
-    '6A',
-    '6B',
-    '7A',
-    '7B',
-    '8A',
-    '8B',
-    '9A',
-    '9B',
-    '10A',
-    '10B',
-  ];
+  String _academicYear = '';
+  Map<String, dynamic> _school = const {};
+
+  List<String> get _classes {
+    final classes =
+        _students
+            .map((student) => '${student['className'] ?? ''}'.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return ['All', ...classes];
+  }
 
   @override
   void initState() {
@@ -58,11 +67,58 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
   }
 
   Future<void> _init() async {
-    _storage = await BackendDataService.getInstance();
-    _students =
-        await _storage?.getList(BackendDataService.kAdminStudents) ?? [];
-    _filteredStudents = List.from(_students);
-    if (mounted) setState(() => _loading = false);
+    final previous = _repositoryState;
+    setState(() {
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
+    });
+    try {
+      final result = await _repository.load();
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'ID card data unavailable',
+        );
+      }
+      final data = result.dataOrNull!;
+      _students = data.students;
+      _academicYear = data.academicYear;
+      _school = data.school;
+      _filteredStudents = List.from(_students);
+      if (mounted) {
+        setState(() {
+          _repositoryState = RepositoryState(
+            data: _IdCardSnapshot(
+              students: List.unmodifiable(_students),
+              academicYear: _academicYear,
+              school: Map.unmodifiable(_school),
+            ),
+            source: RepositorySource.remote,
+            phase: _students.isEmpty
+                ? RepositoryPhase.empty
+                : RepositoryPhase.ready,
+            lastUpdated: DateTime.now().toUtc(),
+          );
+        });
+      }
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
+      });
+    }
   }
 
   void _filterStudents() {
@@ -83,6 +139,12 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
   }
 
   Future<void> _generateIdCard(Map<String, dynamic> student) async {
+    if (_academicYear.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Active academic year is unavailable.')),
+      );
+      return;
+    }
     setState(() => _generating = true);
     try {
       final pdfService = PdfService.getInstance();
@@ -94,7 +156,10 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
         parentName: student['parentName'] as String? ?? '',
         contactNo: student['contact'] as String? ?? '',
         bloodGroup: student['bloodGroup'] as String? ?? '',
-        academicYear: '2024-25',
+        academicYear: _academicYear,
+        schoolName: _schoolText('name'),
+        schoolAddress: _schoolText('address'),
+        schoolContact: _schoolText('phone'),
       );
       if (mounted) {
         setState(() => _generating = false);
@@ -123,6 +188,12 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
 
   Future<void> _generateBulkIdCards() async {
     if (_selectedIds.isEmpty) return;
+    if (_academicYear.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Active academic year is unavailable.')),
+      );
+      return;
+    }
     setState(() => _generating = true);
     try {
       final selected = _students
@@ -138,7 +209,10 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
           parentName: student['parentName'] as String? ?? '',
           contactNo: student['contact'] as String? ?? '',
           bloodGroup: student['bloodGroup'] as String? ?? '',
-          academicYear: '2024-25',
+          academicYear: _academicYear,
+          schoolName: _schoolText('name'),
+          schoolAddress: _schoolText('address'),
+          schoolContact: _schoolText('phone'),
         );
         await Printing.layoutPdf(
           onLayout: (_) async => pdfBytes,
@@ -167,6 +241,16 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
         setState(() => _generating = false);
       }
     }
+  }
+
+  String _schoolText(String key) {
+    final fallbackKey = key == 'name'
+        ? 'school_name'
+        : key == 'phone'
+        ? 'contact'
+        : 'school_address';
+    final value = _school[key] ?? _school[fallbackKey];
+    return value?.toString().trim() ?? '';
   }
 
   @override
@@ -213,158 +297,159 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
             ),
           ),
       ],
-      body: Container(
-        color: bgColor,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
-                  Container(
-                    color: surfaceColor,
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        TextField(
-                          controller: _searchCtrl,
-                          onChanged: (_) => _filterStudents(),
-                          style: GoogleFonts.dmSans(color: onSurfaceColor),
-                          decoration: InputDecoration(
-                            hintText: 'Search by name, admission no...',
-                            hintStyle: GoogleFonts.dmSans(color: mutedColor),
-                            prefixIcon: Icon(
-                              Icons.search_rounded,
-                              size: 20,
-                              color: mutedColor,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: outlineColor),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                          ),
+      body: SchoolDeskRepositoryStateView<_IdCardSnapshot>(
+        state: _repositoryState,
+        onRetry: _init,
+        emptyTitle: 'No students found',
+        emptyMessage: 'No students exist for this principal scope.',
+        errorTitle: 'ID card data unavailable',
+        data: (_) => Container(
+          color: bgColor,
+          child: Column(
+            children: [
+              Container(
+                color: surfaceColor,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _searchCtrl,
+                      onChanged: (_) => _filterStudents(),
+                      style: GoogleFonts.dmSans(color: onSurfaceColor),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name, admission no...',
+                        hintStyle: GoogleFonts.dmSans(color: mutedColor),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          size: 20,
+                          color: mutedColor,
                         ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          height: 36,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _classes.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(width: 6),
-                            itemBuilder: (_, i) {
-                              final cls = _classes[i];
-                              final isSelected = _selectedClass == cls;
-                              return GestureDetector(
-                                onTap: () {
-                                  setState(() => _selectedClass = cls);
-                                  _filterStudents();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? context.appTheme.primary
-                                        : surfaceVariantColor,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    cls,
-                                    style: GoogleFonts.dmSans(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : mutedColor,
-                                    ),
-                                  ),
-                                ),
-                              );
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: outlineColor),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 36,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _classes.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 6),
+                        itemBuilder: (_, i) {
+                          final cls = _classes[i];
+                          final isSelected = _selectedClass == cls;
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() => _selectedClass = cls);
+                              _filterStudents();
                             },
-                          ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? context.appTheme.primary
+                                    : surfaceVariantColor,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                cls,
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: isSelected ? Colors.white : mutedColor,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                color: isDark
+                    ? const Color(0xFF1A3A5C)
+                    : context.appTheme.primaryContainer,
+                child: Row(
+                  children: [
+                    Text(
+                      '${_filteredStudents.length} students',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: context.appTheme.primary,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (_selectedIds.isNotEmpty)
+                      Text(
+                        '${_selectedIds.length} selected',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: context.appTheme.primary,
                         ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    color: isDark
-                        ? const Color(0xFF1A3A5C)
-                        : context.appTheme.primaryContainer,
-                    child: Row(
-                      children: [
-                        Text(
-                          '${_filteredStudents.length} students',
+                      ),
+                    if (_selectedIds.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => setState(() => _selectedIds.clear()),
+                        child: Text(
+                          'Clear',
                           style: GoogleFonts.dmSans(
                             fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: context.appTheme.primary,
+                            color: context.appTheme.error,
                           ),
                         ),
-                        const Spacer(),
-                        if (_selectedIds.isNotEmpty)
-                          Text(
-                            '${_selectedIds.length} selected',
-                            style: GoogleFonts.dmSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: context.appTheme.primary,
-                            ),
-                          ),
-                        if (_selectedIds.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: () => setState(() => _selectedIds.clear()),
-                            child: Text(
-                              'Clear',
-                              style: GoogleFonts.dmSans(
-                                fontSize: 12,
-                                color: context.appTheme.error,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: _filteredStudents.isEmpty
-                        ? Center(
-                            child: Text(
-                              'No students found',
-                              style: GoogleFonts.dmSans(
-                                fontSize: 14,
-                                color: mutedColor,
-                              ),
-                            ),
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _filteredStudents.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (_, i) => _buildStudentCard(
-                              _filteredStudents[i],
-                              surfaceColor,
-                              onSurfaceColor,
-                              mutedColor,
-                              outlineColor,
-                            ),
-                          ),
-                  ),
-                ],
+                      ),
+                    ],
+                  ],
+                ),
               ),
+              Expanded(
+                child: _filteredStudents.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No students found',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            color: mutedColor,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _filteredStudents.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) => _buildStudentCard(
+                          _filteredStudents[i],
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                          outlineColor,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/modules/communication/data/repositories/api_complaint_repository.dart';
+import 'package:schooldesk1/modules/communication/domain/repositories/complaint_repository.dart';
 
 class TeacherComplaintScreen extends StatefulWidget {
-  const TeacherComplaintScreen({super.key});
+  final ComplaintRepository? repository;
+
+  const TeacherComplaintScreen({super.key, this.repository});
 
   @override
   State<TeacherComplaintScreen> createState() => _TeacherComplaintScreenState();
@@ -15,12 +20,14 @@ class TeacherComplaintScreen extends StatefulWidget {
 
 class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
     with SingleTickerProviderStateMixin {
+  ComplaintRepository get _repository =>
+      widget.repository ?? ApiComplaintRepository.legacyDefault;
+
   late TabController _tabController;
   String _selectedCategory = 'All';
   List<Map<String, dynamic>> _complaints = [];
-  BackendDataService? _storage;
-  bool _loading = true;
-  String? _error;
+  RepositoryState<List<Map<String, dynamic>>> _repositoryState =
+      const RepositoryState.loading();
 
   @override
   void initState() {
@@ -30,25 +37,42 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
   }
 
   Future<void> _loadData() async {
+    final previous = _repositoryState;
+    setState(() {
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
+    });
     try {
-      _storage = await BackendDataService.getInstance();
-      final data = await _storage!.getList(BackendDataService.kComplaints);
+      final result = await _repository.loadForRole('teacher');
+      _throwIfFailed(result, 'Unable to load complaints');
+      final data = result.dataOrNull!;
       if (!mounted) return;
       setState(() {
-        _complaints = data
-            .where(
-              (c) =>
-                  c['role'] == 'teacher' || c['reported_by_role'] == 'teacher',
-            )
-            .toList();
-        _loading = false;
-        _error = null;
+        _complaints = data;
+        _repositoryState = RepositoryState(
+          data: List<Map<String, dynamic>>.unmodifiable(data),
+          source: RepositorySource.remote,
+          phase: data.isEmpty ? RepositoryPhase.empty : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = '$e';
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: e);
       });
     }
   }
@@ -62,10 +86,9 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
           complaint.containsKey('created_at');
       if (id.isEmpty ||
           (!persisted && (id.startsWith('cp') || id.startsWith('disc_')))) {
-        final saved = await BackendApiClient.instance.createRaw(
-          '/complaints',
-          complaint,
-        );
+        final result = await _repository.save(complaint, role: 'teacher');
+        _throwIfFailed(result, 'Unable to save complaint');
+        final saved = result.dataOrNull!;
         if (!mounted || '${saved['id'] ?? ''}'.isEmpty) return false;
 
         // Report to super admin if it's an error
@@ -75,18 +98,29 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
 
         final localIndex = _complaints.indexWhere((c) => c['id'] == id);
         if (localIndex != -1) {
-          setState(() => _complaints[localIndex] = saved);
+          setState(() {
+            _complaints[localIndex] = saved;
+            _repositoryState = RepositoryState(
+              data: List<Map<String, dynamic>>.unmodifiable(_complaints),
+              source: RepositorySource.localMutation,
+            );
+          });
         }
         return true;
       }
-      final saved = await BackendApiClient.instance.updateRaw(
-        '/complaints/$id',
-        complaint,
-      );
+      final result = await _repository.save(complaint, role: 'teacher');
+      _throwIfFailed(result, 'Unable to save complaint');
+      final saved = result.dataOrNull!;
       if (!mounted || '${saved['id'] ?? ''}'.isEmpty) return false;
       final localIndex = _complaints.indexWhere((c) => c['id'] == id);
       if (localIndex != -1) {
-        setState(() => _complaints[localIndex] = saved);
+        setState(() {
+          _complaints[localIndex] = saved;
+          _repositoryState = RepositoryState(
+            data: List<Map<String, dynamic>>.unmodifiable(_complaints),
+            source: RepositorySource.localMutation,
+          );
+        });
       }
       return true;
     } on Object catch (e) {
@@ -105,13 +139,11 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
 
   Future<void> _reportToSuperAdmin(Map<String, dynamic> complaint) async {
     try {
-      await BackendApiClient.instance.createRaw('/error-reports', {
-        'complaint_id': complaint['id'],
-        'type': complaint['type'],
-        'message': complaint['message'],
-        'reported_by_role': 'teacher',
-        'severity': 'high',
-      });
+      final result = await _repository.reportToSuperAdmin(
+        complaint: complaint,
+        role: 'teacher',
+      );
+      _throwIfFailed(result, 'Unable to report complaint');
     } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -121,6 +153,12 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
           ),
         );
       }
+    }
+  }
+
+  void _throwIfFailed<T>(Result<T> result, String fallback) {
+    if (result.isFailure) {
+      throw StateError(result.failureOrNull?.message ?? fallback);
     }
   }
 
@@ -139,38 +177,6 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const SchoolDeskModuleScaffold(
-        title: 'Complaints',
-        subtitle: 'Submit support tickets and track resolution',
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_error != null) {
-      return SchoolDeskModuleScaffold(
-        title: 'Complaints',
-        subtitle: 'Submit support tickets and track resolution',
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_error!, textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: () {
-                    setState(() => _loading = true);
-                    _loadData();
-                  },
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
     return SchoolDeskModuleScaffold(
       title: 'Complaints',
       subtitle: 'Submit support tickets and track resolution',
@@ -188,9 +194,20 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
           Tab(text: 'Resolved'),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [_buildAllTab(), _buildInProgressTab(), _buildResolvedTab()],
+      body: SchoolDeskRepositoryStateView<List<Map<String, dynamic>>>(
+        state: _repositoryState,
+        onRetry: _loadData,
+        emptyTitle: 'No complaints found',
+        emptyMessage: 'No support tickets exist for this teacher scope.',
+        errorTitle: 'Complaints unavailable',
+        data: (_) => TabBarView(
+          controller: _tabController,
+          children: [
+            _buildAllTab(),
+            _buildInProgressTab(),
+            _buildResolvedTab(),
+          ],
+        ),
       ),
     );
   }

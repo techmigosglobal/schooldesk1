@@ -32,7 +32,7 @@ void main() {
       'supabase/functions/api/handlers/timetable.ts',
     ).readAsStringSync();
 
-    expect(source, contains('getTimetableSlots('));
+    expect(source, contains('_repository.loadSlots('));
     expect(source, contains("child['current_section_id']"));
     expect(source, isNot(contains('/me/timetable?student_id=')));
     expect(timetable, contains('url.searchParams.get("section_id")'));

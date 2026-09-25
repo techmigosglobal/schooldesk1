@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/features/shared/domain/entities/principal_dashboard.dart';
-import 'package:schooldesk1/features/shared/domain/entities/setup_step.dart';
+import 'package:schooldesk1/modules/principal/domain/entities/principal_dashboard.dart';
+import 'package:schooldesk1/modules/principal/domain/entities/setup_step.dart';
 
 void main() {
   PrincipalDashboard dashboard({int totalStudents = 10}) {

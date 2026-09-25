@@ -32,7 +32,9 @@ class _DesktopMasterDetailLayoutState extends State<DesktopMasterDetailLayout> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isDesktop = DesktopBreakpoints.isDesktopWidth(constraints.maxWidth);
+        final isDesktop = DesktopBreakpoints.isDesktopWidth(
+          constraints.maxWidth,
+        );
 
         if (!isDesktop) {
           return widget.detail ?? widget.master;
@@ -54,9 +56,11 @@ class _DesktopMasterDetailLayoutState extends State<DesktopMasterDetailLayout> {
             if (widget.showDivider)
               VerticalDivider(width: 1, color: tokens.panelBorder),
             Expanded(
-              child: widget.detail ??
+              child:
+                  widget.detail ??
                   _EmptyDetailPlaceholder(
-                    message: widget.emptyDetailMessage ??
+                    message:
+                        widget.emptyDetailMessage ??
                         'Select an item to view details',
                     icon: widget.emptyDetailIcon,
                   ),

@@ -7,7 +7,6 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 
 class ErrorReportingService {
   ErrorReportingService._();
@@ -145,7 +144,6 @@ class ErrorReportingService {
   }
 
   Future<void> _submit(Map<String, dynamic> payload) async {
-    if (DemoLocalApiService.instance.isActive) return Future.value();
     // Reporting must not become an unbounded in-memory queue during an outage.
     // Prefer retaining fatal/error reports over older warning-level noise.
     if (_pendingReports.length >= _maxQueuedReports) {

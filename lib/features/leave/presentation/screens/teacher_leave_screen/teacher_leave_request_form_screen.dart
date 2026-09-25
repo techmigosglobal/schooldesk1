@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_leave_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_leave_context.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_leave_repository.dart';
 
 @immutable
 class TeacherLeaveRequestFormArgs {
@@ -12,12 +17,14 @@ class TeacherLeaveRequestFormArgs {
   final String staffName;
   final List<Map<String, dynamic>> leaveTypes;
   final List<Map<String, dynamic>> balances;
+  final TeacherLeaveRepository? repository;
 
   const TeacherLeaveRequestFormArgs({
     required this.staffId,
     required this.staffName,
     required this.leaveTypes,
     required this.balances,
+    this.repository,
   });
 }
 
@@ -49,10 +56,12 @@ class _TeacherLeaveRequestFormScreenState
   String _staffName = '';
   List<Map<String, dynamic>> _leaveTypes = const [];
   List<Map<String, dynamic>> _balances = const [];
-  bool _loadingContext = true;
+  RepositoryState<Object> _contextState = const RepositoryState.loading();
+  RepositoryState<Object> _submitState = const RepositoryState.empty();
   bool _halfDay = false;
-  bool _saving = false;
-  String? _error;
+  String? _formError;
+
+  bool get _saving => _submitState.isRefreshing;
 
   // Backing ISO dates for API submission
   DateTime _fromDate = DateTime.now().add(const Duration(days: 1));
@@ -108,31 +117,43 @@ class _TeacherLeaveRequestFormScreenState
     if (!_formKey.currentState!.validate()) return;
     final validationError = _validateLeaveRequest();
     if (validationError != null) {
-      setState(() => _error = validationError);
+      setState(() => _formError = validationError);
       return;
     }
     if (_staffId.trim().isEmpty) {
       setState(
-        () =>
-            _error = 'Teacher profile is still syncing. Refresh and try again.',
+        () => _formError =
+            'Teacher profile is still syncing. Refresh and try again.',
       );
       return;
     }
     setState(() {
-      _saving = true;
-      _error = null;
+      _submitState = const RepositoryState<Object>.loading(
+        data: Object(),
+        source: RepositorySource.localMutation,
+        isRefreshing: true,
+      );
+      _formError = null;
     });
     try {
-      await BackendApiClient.instance.submitLeaveApplication(
-        LeaveApplicationRequest(
-          staffId: _staffId,
-          leaveTypeId: _leaveTypeId,
-          fromDate: teacherFlowDate(_fromDate),
-          toDate: teacherFlowDate(_toDate),
-          halfDay: _halfDay,
-          reason: _reasonController.text.trim(),
-        ),
-      );
+      final result =
+          await (widget.args.repository ??
+                  ApiTeacherLeaveRepository.legacyDefault)
+              .submit(
+                LeaveApplicationRequest(
+                  staffId: _staffId,
+                  leaveTypeId: _leaveTypeId,
+                  fromDate: teacherFlowDate(_fromDate),
+                  toDate: teacherFlowDate(_toDate),
+                  halfDay: _halfDay,
+                  reason: _reasonController.text.trim(),
+                ),
+              );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to submit leave request',
+        );
+      }
       if (mounted) {
         Navigator.pop(
           context,
@@ -142,23 +163,14 @@ class _TeacherLeaveRequestFormScreenState
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _saving = false;
-        _error = error.toString();
+        _submitState = RepositoryState<Object>.error(error: error);
+        _formError = error.toString();
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loadingContext) {
-      return const TeacherFlowScaffold(
-        title: 'Apply Leave',
-        subtitle: 'Loading teacher leave context',
-        selectedIndex: TeacherNav.leave,
-        loading: true,
-        child: SizedBox.shrink(),
-      );
-    }
     final leaveTypeOptions = _selectableLeaveTypes();
     final selectedLeaveTypeId =
         leaveTypeOptions.any((type) => _leaveTypeIdFrom(type) == _leaveTypeId)
@@ -169,174 +181,181 @@ class _TeacherLeaveRequestFormScreenState
       title: 'Apply Leave',
       subtitle: 'Submit leave for principal approval',
       selectedIndex: TeacherNav.leave,
-      child: TeacherFlowScrollView(
-        children: [
-          TeacherCurrentClassCard(
-            greeting: 'Leave application',
-            classLabel: _staffName.isEmpty
-                ? RoleAccessService.teacherName
-                : _staffName,
-            subject: 'Approval required',
-            timeLabel: _halfDay ? 'Half day' : 'Full day',
-          ),
-          const SizedBox(height: 18),
-          Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                if (hasLeaveTypes) ...[
-                  DropdownButtonFormField<String>(
-                    value: selectedLeaveTypeId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Leave type',
-                      prefixIcon: Icon(Icons.category_rounded),
+      child: SchoolDeskRepositoryStateView<Object>(
+        state: _contextState,
+        onRetry: _loadMissingContext,
+        errorTitle: 'Unable to load teacher leave context',
+        loadingMessage: 'Loading teacher leave context',
+        data: (_) => TeacherFlowScrollView(
+          children: [
+            TeacherCurrentClassCard(
+              greeting: 'Leave application',
+              classLabel: _staffName.isEmpty
+                  ? RoleAccessService.teacherName
+                  : _staffName,
+              subject: 'Approval required',
+              timeLabel: _halfDay ? 'Half day' : 'Full day',
+            ),
+            const SizedBox(height: 18),
+            Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  if (hasLeaveTypes) ...[
+                    DropdownButtonFormField<String>(
+                      value: selectedLeaveTypeId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Leave type',
+                        prefixIcon: Icon(Icons.category_rounded),
+                      ),
+                      items: leaveTypeOptions
+                          .map(
+                            (type) => DropdownMenuItem(
+                              value: _leaveTypeIdFrom(type),
+                              child: Text(_leaveTypeName(type)),
+                            ),
+                          )
+                          .toList(),
+                      validator: (value) =>
+                          (value ?? '').isEmpty ? 'Select leave type.' : null,
+                      onChanged: _saving
+                          ? null
+                          : (value) =>
+                                setState(() => _leaveTypeId = value ?? ''),
                     ),
-                    items: leaveTypeOptions
-                        .map(
-                          (type) => DropdownMenuItem(
-                            value: _leaveTypeIdFrom(type),
-                            child: Text(_leaveTypeName(type)),
+                    const SizedBox(height: 12),
+                  ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compactDates = constraints.maxWidth < 380;
+                      final fields = [
+                        TextFormField(
+                          controller: _fromDateController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: 'From date',
+                            hintText: 'DD MMM YYYY',
+                            prefixIcon: Icon(Icons.event_rounded),
+                            suffixIcon: Icon(Icons.calendar_today_outlined),
+                            isDense: true,
+                            floatingLabelBehavior: FloatingLabelBehavior.always,
+                            prefixIconConstraints: BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 40,
+                            ),
+                            suffixIconConstraints: BoxConstraints(
+                              minWidth: 36,
+                              minHeight: 36,
+                            ),
                           ),
-                        )
-                        .toList(),
-                    validator: (value) =>
-                        (value ?? '').isEmpty ? 'Select leave type.' : null,
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _leaveTypeId = value ?? ''),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compactDates = constraints.maxWidth < 380;
-                    final fields = [
-                      TextFormField(
-                        controller: _fromDateController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: 'From date',
-                          hintText: 'DD MMM YYYY',
-                          prefixIcon: Icon(Icons.event_rounded),
-                          suffixIcon: Icon(Icons.calendar_today_outlined),
-                          isDense: true,
-                          floatingLabelBehavior: FloatingLabelBehavior.always,
-                          prefixIconConstraints: BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
-                          ),
-                          suffixIconConstraints: BoxConstraints(
-                            minWidth: 36,
-                            minHeight: 36,
-                          ),
+                          validator: (value) =>
+                              (value ?? '').trim().isEmpty ? 'Required' : null,
+                          onTap: _saving
+                              ? null
+                              : () => _pickDateField(isFrom: true),
                         ),
-                        validator: (value) =>
-                            (value ?? '').trim().isEmpty ? 'Required' : null,
-                        onTap: _saving
-                            ? null
-                            : () => _pickDateField(isFrom: true),
-                      ),
-                      TextFormField(
-                        controller: _toDateController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: 'To date',
-                          hintText: 'DD MMM YYYY',
-                          prefixIcon: Icon(Icons.event_available_rounded),
-                          suffixIcon: Icon(Icons.calendar_today_outlined),
-                          isDense: true,
-                          floatingLabelBehavior: FloatingLabelBehavior.always,
-                          prefixIconConstraints: BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
+                        TextFormField(
+                          controller: _toDateController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: 'To date',
+                            hintText: 'DD MMM YYYY',
+                            prefixIcon: Icon(Icons.event_available_rounded),
+                            suffixIcon: Icon(Icons.calendar_today_outlined),
+                            isDense: true,
+                            floatingLabelBehavior: FloatingLabelBehavior.always,
+                            prefixIconConstraints: BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 40,
+                            ),
+                            suffixIconConstraints: BoxConstraints(
+                              minWidth: 36,
+                              minHeight: 36,
+                            ),
                           ),
-                          suffixIconConstraints: BoxConstraints(
-                            minWidth: 36,
-                            minHeight: 36,
-                          ),
+                          validator: (value) =>
+                              (value ?? '').trim().isEmpty ? 'Required' : null,
+                          onTap: _saving
+                              ? null
+                              : () => _pickDateField(isFrom: false),
                         ),
-                        validator: (value) =>
-                            (value ?? '').trim().isEmpty ? 'Required' : null,
-                        onTap: _saving
-                            ? null
-                            : () => _pickDateField(isFrom: false),
-                      ),
-                    ];
-                    if (compactDates) {
-                      return Column(
+                      ];
+                      if (compactDates) {
+                        return Column(
+                          children: [
+                            fields[0],
+                            const SizedBox(height: 10),
+                            fields[1],
+                          ],
+                        );
+                      }
+                      return Row(
                         children: [
-                          fields[0],
-                          const SizedBox(height: 10),
-                          fields[1],
+                          Expanded(child: fields[0]),
+                          const SizedBox(width: 10),
+                          Expanded(child: fields[1]),
                         ],
                       );
-                    }
-                    return Row(
-                      children: [
-                        Expanded(child: fields[0]),
-                        const SizedBox(width: 10),
-                        Expanded(child: fields[1]),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-                Material(
-                  color: Colors.transparent,
-                  child: SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _halfDay,
-                    title: const Text('Permission hours / half day'),
-                    subtitle: const Text('Use for short leave requests'),
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _halfDay = value),
+                    },
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _reasonController,
-                  minLines: 4,
-                  maxLines: 6,
-                  decoration: const InputDecoration(
-                    labelText: 'Reason',
-                    alignLabelWithHint: true,
-                    prefixIcon: Icon(Icons.notes_rounded),
+                  const SizedBox(height: 8),
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _halfDay,
+                      title: const Text('Permission hours / half day'),
+                      subtitle: const Text('Use for short leave requests'),
+                      onChanged: _saving
+                          ? null
+                          : (value) => setState(() => _halfDay = value),
+                    ),
                   ),
-                  validator: (value) =>
-                      (value ?? '').trim().isEmpty ? 'Enter reason.' : null,
-                ),
-                const SizedBox(height: 12),
-                if (hasLeaveTypes)
-                  _BalancePreview(
-                    leaveTypeId: _leaveTypeId,
-                    balances: _balances,
-                  ),
-                if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: TextStyle(color: context.appTheme.error),
-                    textAlign: TextAlign.center,
+                  TextFormField(
+                    controller: _reasonController,
+                    minLines: 4,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'Reason',
+                      alignLabelWithHint: true,
+                      prefixIcon: Icon(Icons.notes_rounded),
+                    ),
+                    validator: (value) =>
+                        (value ?? '').trim().isEmpty ? 'Enter reason.' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  if (hasLeaveTypes)
+                    _BalancePreview(
+                      leaveTypeId: _leaveTypeId,
+                      balances: _balances,
+                    ),
+                  if (_formError != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _formError!,
+                      style: TextStyle(color: context.appTheme.error),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: _saving ? null : _submit,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send_rounded),
+                    label: Text(_saving ? 'Submitting...' : 'Submit Leave'),
                   ),
                 ],
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: _saving ? null : _submit,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send_rounded),
-                  label: Text(_saving ? 'Submitting...' : 'Submit Leave'),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -383,22 +402,25 @@ class _TeacherLeaveRequestFormScreenState
   Future<void> _loadMissingContext() async {
     try {
       await RoleAccessService.initialize();
-      final dashboard = _staffId.isEmpty || _staffName.isEmpty
-          ? await BackendApiClient.instance.getDashboard('teacher')
-          : const <String, dynamic>{};
-      final staffId = _staffId.isEmpty
-          ? _resolveStaffIdFromDashboard(dashboard)
-          : _staffId;
+      TeacherLeaveContext? leaveContext;
+      if (_staffId.isEmpty || _leaveTypes.isEmpty || _balances.isEmpty) {
+        final repository =
+            widget.args.repository ?? ApiTeacherLeaveRepository.legacyDefault;
+        final contextResult = await repository.load(staffId: _staffId);
+        if (contextResult.isFailure) {
+          throw StateError(
+            contextResult.failureOrNull?.message ??
+                'Unable to load teacher leave context',
+          );
+        }
+        leaveContext = contextResult.dataOrNull!;
+      }
+      final staffId = _staffId.isEmpty ? leaveContext?.staffId ?? '' : _staffId;
       final staffName = _staffName.isEmpty
-          ? teacherFlowText(
-              dashboard['staff_name'] ??
-                  dashboard['teacher_name'] ??
-                  dashboard['name'],
-              fallback: RoleAccessService.teacherName,
-            )
+          ? RoleAccessService.teacherName
           : _staffName;
       final rawTypes = _leaveTypes.isEmpty
-          ? await BackendApiClient.instance.getLeaveTypes()
+          ? leaveContext?.leaveTypes ?? const <Map<String, dynamic>>[]
           : _leaveTypes;
       final types = rawTypes
           .whereType<Map>()
@@ -406,13 +428,7 @@ class _TeacherLeaveRequestFormScreenState
           .toList();
       var balances = _balances;
       if (_balances.isEmpty && staffId.isNotEmpty) {
-        try {
-          balances = await BackendApiClient.instance.getLeaveBalances(
-            staffId: staffId,
-          );
-        } on Object catch (_) {
-          balances = const [];
-        }
+        balances = leaveContext?.balances ?? const <Map<String, dynamic>>[];
       }
       final selectableTypes = types
           .where((type) => _leaveTypeIdFrom(type).isNotEmpty)
@@ -429,30 +445,23 @@ class _TeacherLeaveRequestFormScreenState
             )
             ? _leaveTypeId
             : _firstLeaveTypeId(selectableTypes);
-        _loadingContext = false;
+        _contextState = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
         if (_staffId.isEmpty) {
-          _error = 'Teacher profile is still syncing. Refresh and try again.';
+          _formError =
+              'Teacher profile is still syncing. Refresh and try again.';
         }
       });
       return;
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loadingContext = false;
-        _error = error.toString();
+        _contextState = RepositoryState<Object>.error(error: error);
+        _formError = error.toString();
       });
     }
-  }
-
-  String _resolveStaffIdFromDashboard(Map<String, dynamic> dashboard) {
-    return teacherFlowText(
-      RoleAccessService.teacherStaffId.isNotEmpty
-          ? RoleAccessService.teacherStaffId
-          : dashboard['staff_id'] ??
-                dashboard['teacher_id'] ??
-                dashboard['id'] ??
-                dashboard['linked_id'],
-    );
   }
 
   String _leaveTypeIdFrom(Map<String, dynamic> type) {

@@ -11,7 +11,7 @@ String readBackendApiSources() {
 
   final files = [
     File('lib/core/network/backend_api_client.dart'),
-    File('lib/features/shared/data/models/backend_models.dart'),
+    File('lib/core/network/models/backend_models.dart'),
     ...moduleFiles,
   ];
 

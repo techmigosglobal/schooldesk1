@@ -60,7 +60,7 @@ void main() {
     expect(handler, contains('if (!isParent && !isAdminOrPrincipal(user))'));
     expect(handler, contains(r'feesPath.match(/^\/receipts\/([^/]+)$/)'));
     expect(api, contains('getFeeReceiptPayload'));
-    expect(parentReceipt, contains('getFeeReceiptPayload'));
+    expect(parentReceipt, contains('loadReceiptPayload'));
     expect(parentReceipt, contains('generatePaymentReceiptFromPayload'));
     expect(ledger, contains("receipt['display_receipt_number']"));
     expect(ledger, contains("return 'Not issued';"));

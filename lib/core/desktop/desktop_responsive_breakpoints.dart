@@ -34,12 +34,14 @@ abstract final class DesktopBreakpoints {
   static const double defaultWindowHeight = 800;
 
   static bool isDesktopWidth(double width) {
-    final isNativeDesktop = !kIsWeb &&
+    final isNativeDesktop =
+        !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.windows ||
             defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.linux);
     return width >= (isNativeDesktop ? 720 : desktop);
   }
+
   static bool isTwoPaneWidth(double width) => width >= twoPane;
   static bool isWideWidth(double width) => width >= wide;
   static bool isUltraWideWidth(double width) => width >= ultraWide;

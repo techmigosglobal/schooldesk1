@@ -4,16 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_lesson_planner_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_lesson_planner_repository.dart';
 
 class TeacherLessonPlannerScreen extends StatefulWidget {
-  const TeacherLessonPlannerScreen({super.key});
+  final TeacherLessonPlannerRepository? repository;
+
+  const TeacherLessonPlannerScreen({super.key, this.repository});
 
   @override
   State<TeacherLessonPlannerScreen> createState() =>
@@ -22,13 +27,16 @@ class TeacherLessonPlannerScreen extends StatefulWidget {
 
 class _TeacherLessonPlannerScreenState
     extends State<TeacherLessonPlannerScreen> {
+  TeacherLessonPlannerRepository get _repository =>
+      widget.repository ?? ApiTeacherLessonPlannerRepository.legacyDefault;
   final _startDateController = TextEditingController();
   final _endDateController = TextEditingController();
   final _noteController = TextEditingController();
 
-  bool _loading = false;
+  RepositoryState<Object> _state = const RepositoryState.loading();
+  bool _mutationBusy = false;
   bool _uploading = false;
-  String? _error;
+  String? _formError;
   List<Map<String, dynamic>> _planners = const [];
   List<Map<String, dynamic>> _classes = const [];
   List<_LessonPlannerAttachment> _attachments = const [];
@@ -49,30 +57,52 @@ class _TeacherLessonPlannerScreenState
   }
 
   Future<void> _loadPlanners() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState<Object>.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
+      _formError = null;
     });
     try {
       await RoleAccessService.initialize();
-      final results = await Future.wait([
-        BackendApiClient.instance.getTeacherLessonPlanners(),
-        _loadAssignedClasses(),
-      ]);
+      final plannerResult = await _repository.loadLessonPlanners();
+      final planners = plannerResult.dataOrNull;
+      if (planners == null) {
+        throw StateError(
+          plannerResult.failureOrNull?.message ??
+              'Unable to load lesson planners',
+        );
+      }
+      final classes = await _loadAssignedClasses();
       if (!mounted) return;
-      final planners = results[0];
-      final classes = results[1];
       setState(() {
         _classes = classes;
         _selectedSectionId = _resolveSelectedSectionId(classes);
         _planners = planners;
-        _loading = false;
+        _state = const RepositoryState<Object>(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = 'Failed to load lesson planners: $error';
+        _state = previous == null
+            ? RepositoryState<Object>.error(
+                error: 'Failed to load lesson planners: $error',
+              )
+            : RepositoryState<Object>(
+                data: Object(),
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+              );
       });
     }
   }
@@ -88,18 +118,23 @@ class _TeacherLessonPlannerScreenState
     if (!needsGradeId) return assigned;
 
     try {
-      final sections = await BackendApiClient.instance.getSections();
-      final bySectionId = {for (final section in sections) section.id: section};
+      final result = await _repository.loadSections();
+      final sections = result.dataOrNull;
+      if (sections == null) return assigned;
+      final bySectionId = {
+        for (final section in sections) section['id']: section,
+      };
       return assigned.map((row) {
         final sectionId = _sectionId(row);
         final section = bySectionId[sectionId];
         if (section == null) return row;
         return {
           ...row,
-          if (_gradeId(row).isEmpty) 'grade_id': section.gradeId,
-          if (_text(row['grade_name']).isEmpty) 'grade_name': section.gradeName,
+          if (_gradeId(row).isEmpty) 'grade_id': section['grade_id'],
+          if (_text(row['grade_name']).isEmpty)
+            'grade_name': section['grade_name'],
           if (_text(row['section_name']).isEmpty)
-            'section_name': section.sectionName,
+            'section_name': section['section_name'],
         };
       }).toList();
     } on Object catch (_) {
@@ -120,20 +155,19 @@ class _TeacherLessonPlannerScreenState
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-      allowMultiple: true,
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return;
-    for (final file in result.files) {
+    if (result.isEmpty) return;
+    for (final file in result) {
       final path = file.path ?? '';
+      final fileBytes = await file.readAsBytes();
       final isImage = ImageUploadOptimizer.isImage(
         file.name,
         _mimeTypeForName(file.name),
       );
       final optimized = isImage
-          ? (file.bytes != null
+          ? (fileBytes.isNotEmpty
                 ? ImageUploadOptimizer.fromBytes(
-                    file.bytes!,
+                    fileBytes,
                     filename: file.name,
                     mimeType: _mimeTypeForName(file.name),
                     preset: ImageUploadPreset.content,
@@ -145,13 +179,13 @@ class _TeacherLessonPlannerScreenState
                     preset: ImageUploadPreset.content,
                   ))
           : null;
-      if (path.isEmpty && file.bytes == null) continue;
+      if (path.isEmpty && fileBytes.isEmpty) continue;
       await _uploadFile(
         path,
         optimized?.filename ?? file.name,
-        size: optimized?.optimizedSize ?? file.size,
+        size: optimized?.optimizedSize ?? fileBytes.length,
         mimeType: optimized?.mimeType ?? _mimeTypeForName(file.name),
-        fileBytes: optimized?.bytes ?? file.bytes,
+        fileBytes: optimized?.bytes ?? fileBytes,
       );
     }
   }
@@ -187,12 +221,16 @@ class _TeacherLessonPlannerScreenState
   }) async {
     setState(() => _uploading = true);
     try {
-      final url = await BackendApiClient.instance.uploadFile(
+      final result = await _repository.uploadFile(
         path,
         filename: name,
         fileBytes: fileBytes,
         mimeType: mimeType,
       );
+      final url = result.dataOrNull;
+      if (url == null) {
+        throw StateError(result.failureOrNull?.message ?? 'Upload failed');
+      }
       if (!mounted || url.isEmpty) return;
       setState(() {
         _attachments = [
@@ -221,21 +259,26 @@ class _TeacherLessonPlannerScreenState
     final gradeId = _gradeId(selectedClass);
     if (sectionId.isEmpty || gradeId.isEmpty) {
       setState(
-        () => _error = 'No class assigned. Please contact Admin/Principal.',
+        () => _formError = 'No class assigned. Please contact Admin/Principal.',
       );
       return;
     }
     if (_attachments.isEmpty) {
-      setState(() => _error = 'At least one lesson plan file is required.');
+      setState(() => _formError = 'At least one lesson plan file is required.');
       return;
     }
 
     setState(() {
-      _loading = true;
-      _error = null;
+      _mutationBusy = true;
+      _formError = null;
+      _state = RepositoryState<Object>.loading(
+        data: Object(),
+        source: RepositorySource.remote,
+        isRefreshing: true,
+      );
     });
     try {
-      await BackendApiClient.instance.createLessonPlanner(
+      final result = await _repository.createLessonPlanner(
         gradeId: gradeId,
         sectionId: sectionId,
         weekStartDate: _startDateController.text.trim().isEmpty
@@ -248,6 +291,11 @@ class _TeacherLessonPlannerScreenState
         attachments: _attachments.map((item) => item.toJson()).toList(),
         note: _noteController.text.trim(),
       );
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to upload lesson plan',
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -256,12 +304,13 @@ class _TeacherLessonPlannerScreenState
       _endDateController.clear();
       _noteController.clear();
       setState(() => _attachments = const []);
+      setState(() => _mutationBusy = false);
       await _loadPlanners();
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = 'Failed to upload: $error';
+        _mutationBusy = false;
+        _formError = 'Failed to upload: $error';
       });
     }
   }
@@ -284,42 +333,47 @@ class _TeacherLessonPlannerScreenState
       title: 'Lesson Planner',
       subtitle: 'Weekly class plans',
       selectedIndex: TeacherNav.lessonPlanner,
-      loading: _loading && _planners.isEmpty,
-      error: _error != null && _planners.isEmpty ? _error : null,
+      loading: _state.isLoading && !_state.hasData,
+      error: _state.isError && !_state.hasData ? '${_state.error}' : null,
       onRefresh: _loadPlanners,
-      child: TeacherFlowScrollView(
-        children: [
-          _uploadCard(context),
-          const SizedBox(height: 28),
-          Text(
-            'Uploaded Plans',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 14),
-          if (selectedClassPlanners.isEmpty)
-            const TeacherFlowCard(
-              icon: Icons.auto_stories_outlined,
-              title: 'No lesson plans yet',
-              subtitle: 'Waiting for weekly uploads',
-              body: Text('Upload next week plans for your assigned class.'),
-            )
-          else ...[
-            ...uploaded.map(_plannerCard),
-            if (completed.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Text(
-                'Completed Plans',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 14),
-              ...completed.map(_plannerCard),
+      child: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadPlanners,
+        errorTitle: 'Unable to load lesson planners',
+        data: (_) => TeacherFlowScrollView(
+          children: [
+            _uploadCard(context),
+            const SizedBox(height: 28),
+            Text(
+              'Uploaded Plans',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 14),
+            if (selectedClassPlanners.isEmpty)
+              const TeacherFlowCard(
+                icon: Icons.auto_stories_outlined,
+                title: 'No lesson plans yet',
+                subtitle: 'Waiting for weekly uploads',
+                body: Text('Upload next week plans for your assigned class.'),
+              )
+            else ...[
+              ...uploaded.map(_plannerCard),
+              if (completed.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Completed Plans',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 14),
+                ...completed.map(_plannerCard),
+              ],
             ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -332,9 +386,9 @@ class _TeacherLessonPlannerScreenState
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_error != null && _planners.isNotEmpty) ...[
+          if (_formError != null && _planners.isNotEmpty) ...[
             Text(
-              _error!,
+              _formError!,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.error,
                 fontWeight: FontWeight.w700,
@@ -459,7 +513,7 @@ class _TeacherLessonPlannerScreenState
           ),
           const SizedBox(height: 24),
           FilledButton(
-            onPressed: _loading || _uploading ? null : _submit,
+            onPressed: _mutationBusy || _uploading ? null : _submit,
             child: const Text('Save Lesson Plan'),
           ),
         ],

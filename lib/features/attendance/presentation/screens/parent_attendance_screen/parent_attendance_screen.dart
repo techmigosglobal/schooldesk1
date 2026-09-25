@@ -4,18 +4,42 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_attendance_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_attendance_repository.dart';
+
+@immutable
+class _ParentAttendanceSnapshot {
+  final List<Map<String, dynamic>> childRows;
+  final List<Map<String, dynamic>> attendanceHistory;
+  final Map<String, dynamic> attendanceSummary;
+  final Map<int, String> attendanceDayStatus;
+  final Map<int, List<Map<String, dynamic>>> periodRowsByDay;
+  final String? partialError;
+
+  const _ParentAttendanceSnapshot({
+    required this.childRows,
+    required this.attendanceHistory,
+    required this.attendanceSummary,
+    required this.attendanceDayStatus,
+    required this.periodRowsByDay,
+    this.partialError,
+  });
+}
 
 class ParentAttendanceScreen extends StatefulWidget {
-  const ParentAttendanceScreen({super.key});
+  final ParentAttendanceRepository? repository;
+
+  const ParentAttendanceScreen({super.key, this.repository});
 
   @override
   State<ParentAttendanceScreen> createState() => _ParentAttendanceScreenState();
@@ -26,16 +50,22 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   int _selectedNavIndex = ParentNav.attendance;
   int _activeChildIndex = 0;
 
-  // Scoped to only this parent's children
-  List<Map<String, dynamic>> _childRows = [];
-
-  List<Map<String, dynamic>> _attendanceHistory = [];
-  Map<String, dynamic> _attendanceSummary = {};
-  Map<int, String> _attendanceDayStatus = {};
-  Map<int, List<Map<String, dynamic>>> _periodRowsByDay = {};
-  bool _loading = true;
+  RepositoryState<_ParentAttendanceSnapshot> _state =
+      const RepositoryState.loading();
   int _attendanceRequestToken = 0;
   RealtimeRefreshSubscription? _realtimeSubscription;
+
+  _ParentAttendanceSnapshot? get _snapshot => _state.data;
+  List<Map<String, dynamic>> get _childRows => _snapshot?.childRows ?? const [];
+  List<Map<String, dynamic>> get _attendanceHistory =>
+      _snapshot?.attendanceHistory ?? const [];
+  Map<String, dynamic> get _attendanceSummary =>
+      _snapshot?.attendanceSummary ?? const {};
+  Map<int, String> get _attendanceDayStatus =>
+      _snapshot?.attendanceDayStatus ?? const {};
+  Map<int, List<Map<String, dynamic>>> get _periodRowsByDay =>
+      _snapshot?.periodRowsByDay ?? const {};
+  String? get _partialError => _snapshot?.partialError;
 
   @override
   void initState() {
@@ -58,11 +88,32 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _loading = true);
+  Future<void> _loadData({bool forceRefresh = false}) async {
+    final previous = _state.data;
+    setState(() {
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
+    });
 
     try {
-      final childrenResponse = await BackendApiClient.instance.getMyStudents();
+      final repository =
+          widget.repository ?? ApiParentAttendanceRepository.legacyDefault;
+      final childrenResult = await repository.getChildren(
+        forceRefresh: forceRefresh,
+      );
+      if (childrenResult.isFailure) {
+        throw StateError(
+          childrenResult.failureOrNull?.message ??
+              'Unable to load linked students',
+        );
+      }
+      final childrenResponse = childrenResult.dataOrNull!;
       final childRows = childrenResponse
           .map((child) => Map<String, dynamic>.from(child))
           .where((child) => _childId(child).isNotEmpty)
@@ -74,34 +125,52 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
 
       if (!mounted) return;
       setState(() {
-        _childRows = childRows;
         _activeChildIndex = selectedIndex;
+        _state = RepositoryState.loading(
+          data: _ParentAttendanceSnapshot(
+            childRows: childRows,
+            attendanceHistory: previous?.attendanceHistory ?? const [],
+            attendanceSummary: previous?.attendanceSummary ?? const {},
+            attendanceDayStatus: previous?.attendanceDayStatus ?? const {},
+            periodRowsByDay: previous?.periodRowsByDay ?? const {},
+          ),
+          source: RepositorySource.cache,
+          isStale: true,
+          isRefreshing: true,
+        );
       });
       if (_childRows.isNotEmpty) {
-        await _loadChildAttendance(selectedIndex);
+        await _loadChildAttendance(selectedIndex, forceRefresh: forceRefresh);
       } else {
-        setState(() {
-          _attendanceHistory = [];
-          _attendanceSummary = {};
-          _attendanceDayStatus = {};
-          _periodRowsByDay = {};
-          _loading = false;
-        });
+        setState(() => _state = const RepositoryState.empty());
       }
     } on Object catch (e) {
-      setState(() => _loading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to load data: $e')));
-      }
+      if (!mounted) return;
+      setState(() {
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+                lastUpdated: _state.lastUpdated,
+              );
+      });
     }
   }
 
-  Future<void> _loadChildAttendance(int childIndex) async {
+  Future<void> _loadChildAttendance(
+    int childIndex, {
+    bool forceRefresh = false,
+  }) async {
     if (childIndex < 0 || childIndex >= _childRows.length) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(
+          () => _state = RepositoryState.error(
+            error: StateError('Child is not available'),
+          ),
+        );
       }
       return;
     }
@@ -109,22 +178,29 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     final studentId = _childId(_childRows[childIndex]);
     if (studentId.isEmpty) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(
+          () => _state = RepositoryState.error(
+            error: StateError('Student is not available'),
+          ),
+        );
       }
       return;
     }
 
     try {
-      // These three requests are independent of one another, so fetch them
-      // concurrently instead of one-at-a-time to cut this screen's load time.
-      final results = await Future.wait([
-        _safeAttendanceSummary(studentId),
-        _safeAttendanceRecords(studentId),
-        _safeLeaveRequests(studentId),
-      ]);
-      final attendanceSummary = results[0] as Map<String, dynamic>;
-      final attendanceRecords = results[1] as List<Map<String, dynamic>>;
-      final leaveRequests = results[2] as List<Map<String, dynamic>>;
+      final snapshot =
+          await (widget.repository ??
+                  ApiParentAttendanceRepository.legacyDefault)
+              .loadChild(studentId: studentId, forceRefresh: forceRefresh);
+      if (snapshot.isFailure) {
+        throw StateError(
+          snapshot.failureOrNull?.message ?? 'Unable to load attendance',
+        );
+      }
+      final attendanceSnapshot = snapshot.dataOrNull!;
+      final attendanceSummary = attendanceSnapshot.summary;
+      final attendanceRecords = attendanceSnapshot.records;
+      final leaveRequests = attendanceSnapshot.leaveRequests;
       final periodRows = _periodRowsFromSources(
         summary: attendanceSummary,
         records: attendanceRecords,
@@ -139,65 +215,36 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         return;
       }
       setState(() {
-        _attendanceHistory = periodRows.take(20).toList();
-        _attendanceSummary = attendanceSummary;
-        _attendanceDayStatus = attendanceDayStatus;
-        _periodRowsByDay = _groupPeriodRowsByDay(periodRows);
-        _loading = false;
+        _state = RepositoryState(
+          data: _ParentAttendanceSnapshot(
+            childRows: _childRows,
+            attendanceHistory: periodRows.take(20).toList(),
+            attendanceSummary: attendanceSummary,
+            attendanceDayStatus: attendanceDayStatus,
+            periodRowsByDay: _groupPeriodRowsByDay(periodRows),
+            partialError: attendanceSnapshot.partialError,
+          ),
+          source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (e) {
       if (mounted &&
           requestToken == _attendanceRequestToken &&
           childIndex == _activeChildIndex) {
-        setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load attendance: $e')),
-        );
+        final previous = _state.data;
+        setState(() {
+          _state = previous == null
+              ? RepositoryState.error(error: e)
+              : RepositoryState(
+                  data: previous,
+                  source: RepositorySource.cache,
+                  isStale: true,
+                  error: e,
+                  lastUpdated: _state.lastUpdated,
+                );
+        });
       }
-    }
-  }
-
-  Future<Map<String, dynamic>> _safeAttendanceSummary(String studentId) async {
-    try {
-      return await BackendApiClient.instance.getStudentAttendanceSummary(
-        studentId: studentId,
-      );
-    } on Object catch (_) {
-      return <String, dynamic>{
-        'student_id': studentId,
-        'present_days': 0,
-        'absent_days': 0,
-        'late_count': 0,
-        'leave_days': 0,
-        'half_day_count': 0,
-        'attendance_pct': 0,
-      };
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _safeAttendanceRecords(
-    String studentId,
-  ) async {
-    try {
-      return await BackendApiClient.instance.getStudentAttendanceRecords(
-        studentId,
-        month: DateTime.now().month,
-        year: DateTime.now().year,
-      );
-    } on Object catch (_) {
-      return const <Map<String, dynamic>>[];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _safeLeaveRequests(
-    String studentId,
-  ) async {
-    try {
-      return await BackendApiClient.instance.getStudentLeaveApplications(
-        studentId: studentId,
-      );
-    } on Object catch (_) {
-      return const <Map<String, dynamic>>[];
     }
   }
 
@@ -225,23 +272,59 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
 
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildChildSelector(),
-                  const SizedBox(height: 16),
-                  _buildAttendanceSummary(),
-                  const SizedBox(height: 16),
-                  _buildMonthlyCalendar(),
-                  const SizedBox(height: 16),
-                  _buildHistoryList(),
-                ],
-              ),
-            ),
+      body: SchoolDeskRepositoryStateView<_ParentAttendanceSnapshot>(
+        state: _state,
+        onRetry: () => _loadData(forceRefresh: true),
+        emptyTitle: 'No linked students',
+        emptyMessage: 'No linked students found for this parent account.',
+        loadingMessage: 'Loading child attendance…',
+        data: (_) => SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_partialError != null) _buildPartialBanner(),
+              _buildChildSelector(),
+              const SizedBox(height: 16),
+              _buildAttendanceSummary(),
+              const SizedBox(height: 16),
+              _buildMonthlyCalendar(),
+              const SizedBox(height: 16),
+              _buildHistoryList(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPartialBanner() {
+    return _statusBanner(
+      icon: Icons.cloud_off_rounded,
+      message: 'Some attendance data is unavailable. Showing available data.',
+      action: () => _loadChildAttendance(
+        _activeChildIndex,
+        forceRefresh: true,
+      ),
+    );
+  }
+
+  Widget _statusBanner({
+    required IconData icon,
+    required String message,
+    required VoidCallback action,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: context.appTheme.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+        child: ListTile(
+          leading: Icon(icon, color: context.appTheme.error),
+          title: Text(message),
+          trailing: TextButton(onPressed: action, child: const Text('Retry')),
+        ),
+      ),
     );
   }
 
@@ -275,11 +358,16 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     return ParentChildSelector(
       children: _childRows,
       selectedIndex: _activeChildIndex,
-      isLoading: _loading,
+      isLoading: _state.isLoading || _state.isRefreshing,
       onSelected: (index) {
         setState(() {
           _activeChildIndex = index;
-          _loading = true;
+          _state = RepositoryState.loading(
+            data: _state.data,
+            source: RepositorySource.cache,
+            isStale: true,
+            isRefreshing: true,
+          );
         });
         ParentChildSelectionService.saveIndex(_childRows, index);
         _loadChildAttendance(index);

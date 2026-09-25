@@ -2,28 +2,35 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/auth/api_auth_repository.dart';
+import 'package:schooldesk1/core/auth/auth_repository.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 
 /// Authentication controller — manages login state for all 4 roles.
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 class AuthController extends ChangeNotifier {
-  AuthController();
+  AuthController([AuthRepository? repository])
+    : _repository = repository ?? ApiAuthRepository.legacyDefault;
+
+  final AuthRepository _repository;
 
   // ─── State ────────────────────────────────────────────────────────────────
 
   bool _isLoading = false;
-  String? _error;
+  String? _authError;
   String? _currentRole;
   bool _isLoggedIn = false;
 
   // ─── Getters ──────────────────────────────────────────────────────────────
 
   bool get isLoading => _isLoading;
-  String? get error => _error;
+  String? get error => _authError;
   String? get currentRole => _currentRole;
   bool get isLoggedIn => _isLoggedIn;
-  bool get hasError => _error != null;
+  bool get hasError => _authError != null;
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
@@ -39,7 +46,7 @@ class AuthController extends ChangeNotifier {
 
     try {
       RoleAccessService.resetSignOutGuard();
-      final response = await BackendApiClient.instance.login(
+      final response = await _repository.login(
         LoginRequest(username: username.trim(), password: password),
       );
       final actualRole = response.user.roleName.toLowerCase();
@@ -47,7 +54,7 @@ class AuthController extends ChangeNotifier {
         // The backend has already issued and persisted a valid session at this
         // point. Revoke it before showing the role mismatch so a parent token,
         // for example, cannot remain active behind the teacher login screen.
-        await BackendApiClient.instance.logout();
+        await _repository.logout();
         RoleAccessService.clear();
         _currentRole = null;
         _isLoggedIn = false;
@@ -79,13 +86,17 @@ class AuthController extends ChangeNotifier {
     } on Object catch (_) {
       // Sign-out must still complete if token revocation cannot reach backend.
     }
-    await BackendApiClient.instance.logout();
+    await _repository.logout();
     RoleAccessService.clear();
     _currentRole = null;
     _isLoggedIn = false;
     notifyListeners();
     if (!navigator.mounted) return;
-    navigator.pushNamedAndRemoveUntil(AppRoutes.landingPage, (route) => false);
+    SchoolDeskNavigation.goFromNavigator(
+      navigator,
+      AppRoutes.landingPage,
+      legacyPredicate: (route) => false,
+    );
   }
 
   void clearError() => _clearError();
@@ -96,12 +107,12 @@ class AuthController extends ChangeNotifier {
   }
 
   void _setError(String message) {
-    _error = message;
+    _authError = message;
     notifyListeners();
   }
 
   void _clearError() {
-    _error = null;
+    _authError = null;
     notifyListeners();
   }
 }

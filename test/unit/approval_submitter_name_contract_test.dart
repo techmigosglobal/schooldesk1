@@ -10,6 +10,6 @@ void main() {
 
     expect(source, contains('requesterName'));
     expect(source, contains('requesterRole'));
-    expect(source, contains('getApprovalFeed'));
+    expect(source, contains('_repository.loadFeed'));
   });
 }

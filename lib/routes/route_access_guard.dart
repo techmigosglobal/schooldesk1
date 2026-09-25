@@ -15,11 +15,11 @@ class RouteAccessGuard {
   static const Set<String> publicRoutes = {
     AppRoutes.initial,
     AppRoutes.landingPage,
+    AppRoutes.loginLoading,
     AppRoutes.principalLogin,
     AppRoutes.teacherLogin,
     AppRoutes.parentLogin,
     AppRoutes.kioskLogin,
-    AppRoutes.demoRoleSelector,
   };
 
   static const Set<String> sharedProtectedRoutes = {
@@ -76,7 +76,9 @@ class RouteAccessGuard {
     AppRoutes.principalAccountCreate: {'principal'},
     AppRoutes.principalAccountEdit: {'principal'},
     AppRoutes.principalParentChildAssignment: {'principal'},
-    AppRoutes.principalSchoolProfile: {'principal'},
+    // Super Admin can manage tenant/branch profile. Other principal
+    // operations remain isolated to school leadership.
+    AppRoutes.principalSchoolProfile: {'principal', 'super_admin'},
     AppRoutes.admissionInquiries: {'principal', 'coordinator'},
     AppRoutes.systemMonitor: {'principal'},
     // Super Admin routes
@@ -149,12 +151,11 @@ class RouteAccessGuard {
       return AppRoutes.landingPage;
     }
 
-    if (sharedProtectedRoutes.contains(routeName)) {
-      return null;
-    }
-
     final normalizedRole = _normalizeRole(currentRole);
-    if (normalizedRole == 'super_admin') {
+    if (normalizedRole == 'kiosk' && routeName != AppRoutes.kioskQrAttendance) {
+      return dashboardForRole(normalizedRole);
+    }
+    if (sharedProtectedRoutes.contains(routeName)) {
       return null;
     }
     final allowedRoles = allowedRolesFor(routeName);
@@ -181,7 +182,9 @@ class RouteAccessGuard {
       return authenticatedRoles;
     }
     final configured = _routeRoles[routeName] ?? const <String>{};
-    if (configured.contains('principal') && !_isFinanceRoute(routeName)) {
+    if (configured.contains('principal') &&
+        !_isFinanceRoute(routeName) &&
+        !configured.contains('super_admin')) {
       return {...configured, 'coordinator'};
     }
     return configured;
@@ -199,10 +202,9 @@ class RouteAccessGuard {
     if (normalizedRole.isEmpty) {
       return false;
     }
-    if (normalizedRole == 'super_admin') {
-      return true;
+    if (normalizedRole == 'kiosk' && routeName != AppRoutes.kioskQrAttendance) {
+      return false;
     }
-
     return allowedRolesFor(routeName).contains(normalizedRole);
   }
 

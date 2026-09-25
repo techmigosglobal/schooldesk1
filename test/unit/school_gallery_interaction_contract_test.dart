@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('gallery cover taps open the post detail screen', () {
     final source = File(
-      'lib/features/shared/presentation/screens/school_gallery_screen.dart',
+      'lib/shared/screens/school_gallery_screen.dart',
     ).readAsStringSync();
 
     expect(source, contains('onTap: () => _showDetails(context)'));

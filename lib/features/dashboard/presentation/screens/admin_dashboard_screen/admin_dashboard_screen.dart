@@ -2,35 +2,80 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/modules/people/data/repositories/api_approval_repository.dart';
+import 'package:schooldesk1/modules/people/domain/repositories/approval_repository.dart';
+import 'package:schooldesk1/modules/dashboard/data/api_admin_dashboard_repository.dart';
+import 'package:schooldesk1/modules/dashboard/domain/admin_dashboard_repository.dart';
+
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+@immutable
+class _AdminDashboardSnapshot {
+  const _AdminDashboardSnapshot({
+    required this.students,
+    required this.staff,
+    required this.classes,
+    required this.pendingInvoices,
+    required this.approvalPendingSubmissions,
+    required this.approvalChangesRequested,
+    required this.approvalResolved,
+    required this.collected,
+    required this.pending,
+    required this.alerts,
+  });
+
+  final int students;
+  final int staff;
+  final int classes;
+  final int pendingInvoices;
+  final int approvalPendingSubmissions;
+  final int approvalChangesRequested;
+  final int approvalResolved;
+  final double collected;
+  final double pending;
+  final List<Map<String, dynamic>> alerts;
+}
 
 class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key});
+  const AdminDashboardScreen({
+    super.key,
+    this.approvalRepository,
+    this.dashboardRepository,
+  });
+
+  final ApprovalRepository? approvalRepository;
+  final AdminDashboardRepository? dashboardRepository;
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  bool _loading = true;
-  String? _error;
-  int _students = 0;
-  int _staff = 0;
-  int _classes = 0;
-  int _pendingInvoices = 0;
-  int _approvalPendingSubmissions = 0;
-  int _approvalChangesRequested = 0;
-  int _approvalResolved = 0;
-  double _collected = 0;
-  double _pending = 0;
-  List<Map<String, dynamic>> _alerts = const [];
+  RepositoryState<_AdminDashboardSnapshot> _state =
+      const RepositoryState.loading();
+  late final AdminDashboardRepository _dashboardRepository =
+      widget.dashboardRepository ?? ApiAdminDashboardRepository.legacyDefault;
+
+  _AdminDashboardSnapshot? get _snapshot => _state.data;
+  int get _students => _snapshot?.students ?? 0;
+  int get _staff => _snapshot?.staff ?? 0;
+  int get _classes => _snapshot?.classes ?? 0;
+  int get _pendingInvoices => _snapshot?.pendingInvoices ?? 0;
+  int get _approvalPendingSubmissions =>
+      _snapshot?.approvalPendingSubmissions ?? 0;
+  int get _approvalChangesRequested => _snapshot?.approvalChangesRequested ?? 0;
+  int get _approvalResolved => _snapshot?.approvalResolved ?? 0;
+  double get _collected => _snapshot?.collected ?? 0;
+  double get _pending => _snapshot?.pending ?? 0;
+  List<Map<String, dynamic>> get _alerts => _snapshot?.alerts ?? const [];
   RealtimeRefreshSubscription? _realtimeSubscription;
 
   @override
@@ -53,24 +98,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _loadDashboardData() async {
+    final previous = _state.data;
     setState(() {
-      _loading = true;
-      _error = null;
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
     });
 
     try {
-      final storage = await BackendDataService.getInstance();
-      final results = await Future.wait([
-        storage.getList(BackendDataService.kAdminStudents),
-        storage.getList(BackendDataService.kAdminTeachers),
-        storage.getList(BackendDataService.kAcademicClasses),
-        storage.getList(BackendDataService.kRuntimeNotifications),
-        storage.getList(BackendDataService.kStudentFees),
-        BackendApiClient.instance.getApprovalRequests(),
-      ]);
-
-      final invoices = results[4];
-      final approvals = results[5];
+      final dashboardResult = await _dashboardRepository.load();
+      if (dashboardResult.isFailure) {
+        throw StateError(
+          dashboardResult.failureOrNull?.message ?? 'Dashboard load failed',
+        );
+      }
+      final dashboard = dashboardResult.dataOrNull!;
+      final invoices = dashboard.invoices;
+      final students = dashboard.students;
+      final staff = dashboard.staff;
+      final classes = dashboard.classes;
+      final alerts = dashboard.alerts;
+      final approvalResult =
+          await (widget.approvalRepository ??
+                  ApiApprovalRepository.legacyDefault)
+              .getApprovalRequests();
+      if (approvalResult.isFailure) {
+        throw StateError(
+          approvalResult.failureOrNull?.message ?? 'Approval load failed',
+        );
+      }
+      final approvals = approvalResult.dataOrNull!;
       var collected = 0.0;
       var pending = 0.0;
       var pendingInvoices = 0;
@@ -106,23 +168,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
       if (!mounted) return;
       setState(() {
-        _students = results[0].length;
-        _staff = results[1].length;
-        _classes = results[2].length;
-        _alerts = results[3];
-        _approvalPendingSubmissions = approvalPendingSubmissions;
-        _approvalChangesRequested = approvalChangesRequested;
-        _approvalResolved = approvalResolved;
-        _collected = collected;
-        _pending = pending;
-        _pendingInvoices = pendingInvoices;
-        _loading = false;
+        _state = RepositoryState(
+          data: _AdminDashboardSnapshot(
+            students: students.length,
+            staff: staff.length,
+            classes: classes.length,
+            pendingInvoices: pendingInvoices,
+            approvalPendingSubmissions: approvalPendingSubmissions,
+            approvalChangesRequested: approvalChangesRequested,
+            approvalResolved: approvalResolved,
+            collected: collected,
+            pending: pending,
+            alerts: alerts,
+          ),
+          source: RepositorySource.remote,
+          phase: RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
-    } on Object {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load admin dashboard from backend.';
-        _loading = false;
+        _state = previous == null
+            ? RepositoryState.error(error: error)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: _state.lastUpdated,
+              );
       });
     }
   }
@@ -169,7 +244,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ),
       ],
       bodyIsScrollable: true,
-      body: _buildBody(),
+      body: SchoolDeskRepositoryStateView<_AdminDashboardSnapshot>(
+        state: _state,
+        onRetry: _loadDashboardData,
+        emptyTitle: 'No dashboard data',
+        emptyMessage: 'Operational dashboard data is not available offline.',
+        data: (_) => _buildBody(),
+      ),
     );
   }
 
@@ -190,29 +271,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       child: AnimatedSwitcher(
         duration: tokens.motion.normal,
-        child: _loading
-            ? const SchoolDeskStatusPanel.loading(
-                message: 'Loading operational dashboard',
-              )
-            : _error != null
-            ? SchoolDeskStatusPanel.error(
-                title: 'Dashboard unavailable',
-                message: _error!,
-                onAction: _loadDashboardData,
-              )
-            : _DashboardContent(
-                students: _students,
-                staff: _staff,
-                classes: _classes,
-                approvalPendingSubmissions: _approvalPendingSubmissions,
-                approvalChangesRequested: _approvalChangesRequested,
-                approvalResolved: _approvalResolved,
-                collected: _collected,
-                pending: _pending,
-                pendingInvoices: _pendingInvoices,
-                alerts: _alerts,
-                money: _money,
-              ),
+        child: _DashboardContent(
+          students: _students,
+          staff: _staff,
+          classes: _classes,
+          approvalPendingSubmissions: _approvalPendingSubmissions,
+          approvalChangesRequested: _approvalChangesRequested,
+          approvalResolved: _approvalResolved,
+          collected: _collected,
+          pending: _pending,
+          pendingInvoices: _pendingInvoices,
+          alerts: _alerts,
+          money: _money,
+        ),
       ),
     );
   }
@@ -301,14 +372,18 @@ class _DashboardContent extends StatelessWidget {
               'Live school operations, finance, access, and communication health.',
           actions: [
             FilledButton.icon(
-              onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.studentOversight),
+              onPressed: () => SchoolDeskNavigation.push(
+                context,
+                AppRoutes.studentOversight,
+              ),
               icon: const Icon(Icons.person_add_rounded, size: 18),
               label: const Text('Prepare Student Request'),
             ),
             OutlinedButton.icon(
-              onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.communicationCenter),
+              onPressed: () => SchoolDeskNavigation.push(
+                context,
+                AppRoutes.communicationCenter,
+              ),
               icon: const Icon(Icons.campaign_rounded, size: 18),
               label: const Text('Submit Notice for Approval'),
             ),
@@ -324,8 +399,10 @@ class _DashboardContent extends StatelessWidget {
               subtitle: 'Active records',
               icon: Icons.school_rounded,
               color: adminColor,
-              onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.studentOversight),
+              onTap: () => SchoolDeskNavigation.push(
+                context,
+                AppRoutes.studentOversight,
+              ),
             ),
             SchoolDeskKpiCard(
               title: 'Staff',
@@ -334,7 +411,7 @@ class _DashboardContent extends StatelessWidget {
               icon: Icons.people_rounded,
               color: theme.colorScheme.secondary,
               onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.staffManagement),
+                  SchoolDeskNavigation.push(context, AppRoutes.staffManagement),
             ),
             SchoolDeskKpiCard(
               title: 'Classes',
@@ -342,8 +419,10 @@ class _DashboardContent extends StatelessWidget {
               subtitle: 'Configured sections',
               icon: Icons.badge_rounded,
               color: theme.colorScheme.tertiary,
-              onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.academicManagement),
+              onTap: () => SchoolDeskNavigation.push(
+                context,
+                AppRoutes.academicManagement,
+              ),
             ),
             SchoolDeskKpiCard(
               title: 'Fee collected',
@@ -352,7 +431,7 @@ class _DashboardContent extends StatelessWidget {
               icon: Icons.account_balance_wallet_rounded,
               color: theme.colorScheme.secondary,
               onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.feeMonitoring),
+                  SchoolDeskNavigation.push(context, AppRoutes.feeMonitoring),
             ),
             SchoolDeskKpiCard(
               title: 'Pending dues',
@@ -361,7 +440,7 @@ class _DashboardContent extends StatelessWidget {
               icon: Icons.warning_rounded,
               color: theme.colorScheme.error,
               onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.feeMonitoring),
+                  SchoolDeskNavigation.push(context, AppRoutes.feeMonitoring),
             ),
             SchoolDeskKpiCard(
               title: 'Alerts',
@@ -369,7 +448,7 @@ class _DashboardContent extends StatelessWidget {
               subtitle: 'Notification center',
               icon: Icons.notifications_active_rounded,
               color: theme.colorScheme.primary,
-              onTap: () => Navigator.pushNamed(
+              onTap: () => SchoolDeskNavigation.push(
                 context,
                 AppRoutes.notificationCenter,
                 arguments: 'admin',
@@ -653,7 +732,7 @@ class _AdminSummaryRecord extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(tokens.radius.card),
-          onTap: () => Navigator.pushNamed(context, route),
+          onTap: () => SchoolDeskNavigation.push(context, route),
           child: Container(
             constraints: const BoxConstraints(minHeight: 104),
             padding: EdgeInsets.all(tokens.spacing.md),
@@ -742,7 +821,7 @@ class _AdminFeatureTile extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(tokens.radius.card),
-          onTap: () => Navigator.pushNamed(context, feature.route),
+          onTap: () => SchoolDeskNavigation.push(context, feature.route),
           child: Container(
             padding: EdgeInsets.all(tokens.spacing.sm),
             decoration: BoxDecoration(
@@ -869,7 +948,7 @@ class _QuickActionsCard extends StatelessWidget {
               color: action.route == AppRoutes.feeMonitoring
                   ? theme.colorScheme.secondary
                   : adminColor,
-              onTap: () => Navigator.pushNamed(context, action.route),
+              onTap: () => SchoolDeskNavigation.push(context, action.route),
             ),
         ],
       ),
@@ -901,7 +980,7 @@ class _AlertsCard extends StatelessWidget {
       title: 'Alerts',
       subtitle: 'Backend notifications and urgent school events.',
       action: TextButton(
-        onPressed: () => Navigator.pushNamed(
+        onPressed: () => SchoolDeskNavigation.push(
           context,
           AppRoutes.notificationCenter,
           arguments: 'admin',

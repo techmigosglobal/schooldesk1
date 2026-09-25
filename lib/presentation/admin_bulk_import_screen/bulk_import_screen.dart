@@ -64,12 +64,11 @@ class _BulkImportScreenState extends State<BulkImportScreen>
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
-        allowMultiple: false,
       );
 
-      if (result != null && result.files.isNotEmpty) {
+      if (result.isNotEmpty) {
         setState(() {
-          _selectedFile = result.files.first;
+          _selectedFile = result.first;
         });
       }
     } on Object catch (e) {

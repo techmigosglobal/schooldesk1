@@ -2,13 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/modules/communication/data/repositories/api_complaint_repository.dart';
+import 'package:schooldesk1/modules/communication/domain/repositories/complaint_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class ComplaintManagementScreen extends StatefulWidget {
-  const ComplaintManagementScreen({super.key});
+  final String role;
+  final ComplaintRepository? repository;
+
+  const ComplaintManagementScreen({
+    super.key,
+    this.role = 'principal',
+    this.repository,
+  });
 
   @override
   State<ComplaintManagementScreen> createState() =>
@@ -17,13 +26,14 @@ class ComplaintManagementScreen extends StatefulWidget {
 
 class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
     with SingleTickerProviderStateMixin {
+  ComplaintRepository get _repository =>
+      widget.repository ?? ApiComplaintRepository.legacyDefault;
+
   int _selectedDrawerIndex = 9;
   late TabController _tabController;
   String _selectedCategory = 'All';
   List<Map<String, dynamic>> _complaints = [];
-  BackendDataService? _storage;
-  bool _loading = true;
-  String? _error;
+  RepositoryState<Object> _state = const RepositoryState.loading();
 
   @override
   void initState() {
@@ -33,20 +43,43 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
   }
 
   Future<void> _loadData() async {
+    final previous = _state.data;
+    setState(() {
+      _state = RepositoryState.loading(
+        data: previous,
+        source: previous == null
+            ? RepositorySource.empty
+            : RepositorySource.cache,
+        isStale: previous != null,
+        isRefreshing: previous != null,
+      );
+    });
     try {
-      _storage = await BackendDataService.getInstance();
-      final data = await _storage!.getList(BackendDataService.kComplaints);
+      final result = await _repository.loadForRole(widget.role);
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to load complaints',
+        );
+      }
       if (!mounted) return;
       setState(() {
-        _complaints = data;
-        _loading = false;
-        _error = null;
+        _complaints = result.dataOrNull ?? const [];
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = '$e';
+        _state = previous == null
+            ? RepositoryState.error(error: e)
+            : RepositoryState(
+                data: previous,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: e,
+              );
       });
     }
   }
@@ -59,22 +92,28 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
           complaint.containsKey('created_at');
       if (id.isEmpty ||
           (!persisted && (id.startsWith('cp') || id.startsWith('disc_')))) {
-        final saved = await BackendApiClient.instance.createRaw(
-          '/complaints',
+        final result = await _repository.save(
           complaint,
+          role: widget.role,
         );
-        if (!mounted || '${saved['id'] ?? ''}'.isEmpty) return false;
+        final saved = result.dataOrNull;
+        if (!mounted || saved == null || '${saved['id'] ?? ''}'.isEmpty) {
+          return false;
+        }
         final localIndex = _complaints.indexWhere((c) => c['id'] == id);
         if (localIndex != -1) {
           setState(() => _complaints[localIndex] = saved);
         }
         return true;
       }
-      final saved = await BackendApiClient.instance.updateRaw(
-        '/complaints/$id',
+      final result = await _repository.save(
         complaint,
+        role: widget.role,
       );
-      if (!mounted || '${saved['id'] ?? ''}'.isEmpty) return false;
+      final saved = result.dataOrNull;
+      if (!mounted || saved == null || '${saved['id'] ?? ''}'.isEmpty) {
+        return false;
+      }
       final localIndex = _complaints.indexWhere((c) => c['id'] == id);
       if (localIndex != -1) {
         setState(() => _complaints[localIndex] = saved);
@@ -113,40 +152,6 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
       selectedIndex: _selectedDrawerIndex,
       onDestinationSelected: (i) => setState(() => _selectedDrawerIndex = i),
     );
-    if (_loading) {
-      return SchoolDeskModuleScaffold(
-        title: 'Complaints',
-        subtitle: 'Monitor support tickets, escalations, and resolution status',
-        drawer: drawer,
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_error != null) {
-      return SchoolDeskModuleScaffold(
-        title: 'Complaints',
-        subtitle: 'Monitor support tickets, escalations, and resolution status',
-        drawer: drawer,
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_error!, textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: () {
-                    setState(() => _loading = true);
-                    _loadData();
-                  },
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
     return SchoolDeskModuleScaffold(
       title: 'Complaints',
       subtitle: 'Monitor support tickets, escalations, and resolution status',
@@ -165,9 +170,13 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
           Tab(text: 'Resolved'),
         ],
       ),
-      body: MediaQuery.of(context).size.width >= 840
-          ? _buildTabletLayout(context)
-          : _buildPhoneLayout(context),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _loadData,
+        data: (_) => MediaQuery.of(context).size.width >= 840
+            ? _buildTabletLayout(context)
+            : _buildPhoneLayout(context),
+      ),
     );
   }
 
@@ -610,7 +619,7 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
   final _formKey = GlobalKey<FormState>();
   final _resolutionCtrl = TextEditingController();
   bool _saving = false;
-  String? _error;
+  String? _resolutionError;
 
   @override
   void dispose() {
@@ -622,7 +631,7 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _saving = true;
-      _error = null;
+      _resolutionError = null;
     });
     final saved = await widget.onSubmit(_resolutionCtrl.text);
     if (!mounted) return;
@@ -639,7 +648,7 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
     }
     setState(() {
       _saving = false;
-      _error = 'Ticket was not resolved because backend save failed.';
+      _resolutionError = 'Ticket was not resolved because backend save failed.';
     });
   }
 
@@ -673,9 +682,12 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
                     ? 'Resolution must be under 500 characters'
                     : null,
               ),
-              if (_error != null) ...[
+              if (_resolutionError != null) ...[
                 const SizedBox(height: 16),
-                Text(_error!, style: TextStyle(color: context.appTheme.error)),
+                Text(
+                  _resolutionError!,
+                  style: TextStyle(color: context.appTheme.error),
+                ),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -716,7 +728,7 @@ class _UpdateComplaintPageState extends State<_UpdateComplaintPage> {
   late final TextEditingController _assignCtrl;
   late String _status;
   bool _saving = false;
-  String? _error;
+  String? _updateError;
 
   static const _statuses = ['open', 'in_progress', 'resolved'];
 
@@ -740,7 +752,7 @@ class _UpdateComplaintPageState extends State<_UpdateComplaintPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _saving = true;
-      _error = null;
+      _updateError = null;
     });
     final saved = await widget.onSubmit(
       status: _status,
@@ -760,7 +772,7 @@ class _UpdateComplaintPageState extends State<_UpdateComplaintPage> {
     }
     setState(() {
       _saving = false;
-      _error = 'Ticket was not updated because backend save failed.';
+      _updateError = 'Ticket was not updated because backend save failed.';
     });
   }
 
@@ -798,9 +810,12 @@ class _UpdateComplaintPageState extends State<_UpdateComplaintPage> {
                     ? 'Assigned person must be under 80 characters'
                     : null,
               ),
-              if (_error != null) ...[
+              if (_updateError != null) ...[
                 const SizedBox(height: 16),
-                Text(_error!, style: TextStyle(color: context.appTheme.error)),
+                Text(
+                  _updateError!,
+                  style: TextStyle(color: context.appTheme.error),
+                ),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -845,7 +860,7 @@ class _NewComplaintPageState extends State<_NewComplaintPage> {
   String _category = 'Facilities';
   String _priority = 'medium';
   bool _saving = false;
-  String? _error;
+  String? _createError;
 
   static const _categories = [
     'Facilities',
@@ -869,7 +884,7 @@ class _NewComplaintPageState extends State<_NewComplaintPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _saving = true;
-      _error = null;
+      _createError = null;
     });
     final now = DateTime.now();
     final ticket = {
@@ -903,7 +918,7 @@ class _NewComplaintPageState extends State<_NewComplaintPage> {
     }
     setState(() {
       _saving = false;
-      _error = 'Ticket was not created because backend save failed.';
+      _createError = 'Ticket was not created because backend save failed.';
     });
   }
 
@@ -970,9 +985,12 @@ class _NewComplaintPageState extends State<_NewComplaintPage> {
                     ? 'Description is required'
                     : null,
               ),
-              if (_error != null) ...[
+              if (_createError != null) ...[
                 const SizedBox(height: 16),
-                Text(_error!, style: TextStyle(color: context.appTheme.error)),
+                Text(
+                  _createError!,
+                  style: TextStyle(color: context.appTheme.error),
+                ),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(

@@ -20,7 +20,14 @@ void main() {
     expect(financeQueries, greaterThan(coordinatorResponse));
     expect(handler, contains('approvalRequestsQuery.not('));
     expect(handler, contains('"fee","fees","finance","payment"'));
-    expect(handler, isNot(contains('const [invoices, paidInvoices, parentPaymentRequests] = await Promise.all')));
+    expect(
+      handler,
+      isNot(
+        contains(
+          'const [invoices, paidInvoices, parentPaymentRequests] = await Promise.all',
+        ),
+      ),
+    );
 
     final coordinatorTypeStart = dto.indexOf(
       'export type CoordinatorDashboardDto',

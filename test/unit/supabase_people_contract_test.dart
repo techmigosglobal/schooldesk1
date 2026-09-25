@@ -38,7 +38,6 @@ void main() {
       final users = File(
         'supabase/functions/api/handlers/users.ts',
       ).readAsStringSync();
-
       expect(users, contains('total: count'));
       expect(users, contains('page_size: size'));
       expect(users, contains('success: true'));
@@ -166,12 +165,15 @@ void main() {
     final screen = File(
       'lib/features/people/presentation/screens/guardian_directory_screen/guardian_directory_screen.dart',
     ).readAsStringSync();
+    final repository = File(
+      'lib/modules/people/data/api_guardian_directory_repository.dart',
+    ).readAsStringSync();
 
     expect(students, contains('path === "/guardians/directory"'));
     expect(students, contains('has_more: page * size < (count ?? 0)'));
     expect(api, contains("'/guardians/directory'"));
-    expect(screen, contains('getGuardianDirectory'));
-    expect(screen, contains('response.data'));
+    expect(screen, contains('_repository.loadGuardians'));
+    expect(repository, contains('getGuardianDirectory'));
     expect(screen, isNot(contains('while (true) {')));
     expect(screen, isNot(contains('pageSize: 100')));
     expect(screen, isNot(contains('pageSize: 500')));
@@ -234,8 +236,14 @@ void main() {
 
     expect(schoolApi, contains('bool forceRefresh = false'));
     expect(schoolApi, contains("queryParams['refresh_nonce']"));
-    expect(studentOversight, contains('getSections(forceRefresh: true)'));
-    expect(studentOversight, contains('getGrades(forceRefresh: true)'));
+    expect(
+      studentOversight,
+      contains('_repository.loadSections(forceRefresh: true)'),
+    );
+    expect(
+      studentOversight,
+      contains('_repository.loadGrades(forceRefresh: true)'),
+    );
     expect(
       adminStudents,
       contains('forceRefresh: resetPage'),
@@ -255,17 +263,24 @@ void main() {
       final users = File(
         'supabase/functions/api/handlers/users.ts',
       ).readAsStringSync();
+      final studentRepository = File(
+        'lib/modules/people/data/api_student_directory_repository.dart',
+      ).readAsStringSync();
+      final studentOversightRepository = File(
+        'lib/roles/principal/data/api_student_oversight_repository.dart',
+      ).readAsStringSync();
 
       expect(adminStudents, contains('shouldCreateParentLogin'));
       expect(adminStudents, contains('Create Parent Login with Password'));
-      expect(adminStudents, contains('BackendApiClient.instance.createUser'));
-      expect(
-        adminStudents,
-        contains('BackendApiClient.instance.setStudentParent'),
-      );
+      expect(adminStudents, contains('_repository.createParentAccount'));
+      expect(adminStudents, contains('_repository.setStudentParent'));
+      expect(studentRepository, contains('_api.createUser'));
+      expect(studentRepository, contains('_api.setStudentParent'));
       expect(studentOversight, contains('input.shouldCreateParentLogin'));
-      expect(studentOversight, contains('client.createUser('));
-      expect(studentOversight, contains('client.setStudentParent('));
+      expect(studentOversight, contains('_repository.createParentAccount('));
+      expect(studentOversight, contains('_repository.setStudentParent('));
+      expect(studentOversightRepository, contains('_api.createUser('));
+      expect(studentOversightRepository, contains('_api.setStudentParent('));
       expect(users, contains('function loginEmail('));
       expect(users, contains('@schooldesk.local'));
       expect(users, contains('syncUsernameAlias'));

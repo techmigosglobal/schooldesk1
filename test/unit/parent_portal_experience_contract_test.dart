@@ -40,11 +40,15 @@ void main() {
     final paymentFlow = source(
       'lib/features/finance/presentation/screens/parent_hub/parent_payment_flow.dart',
     );
+    final paymentRepository = source(
+      'lib/roles/parent/data/api_parent_fee_payment_repository.dart',
+    );
     final handler = source('supabase/functions/api/handlers/fees.ts');
 
     expect(paymentFlow, contains('double get _remainingBalance'));
     expect(paymentFlow, contains('amount > _remainingBalance'));
-    expect(paymentFlow, contains('submitParentPaymentRequestProof'));
+    expect(paymentFlow, contains('submitPaymentProof'));
+    expect(paymentRepository, contains('submitParentPaymentRequestProof'));
     expect(handler, contains('billing_mode'));
   });
 

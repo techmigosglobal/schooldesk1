@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/features/shared/domain/entities/notice.dart';
+import 'package:schooldesk1/modules/communication/domain/entities/notice.dart';
 
 void main() {
   group('Notice Entity', () {

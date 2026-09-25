@@ -237,7 +237,7 @@ extension BackendStudentsApi on BackendApiClient {
     String? currentSectionId,
     String? parentUserId,
     bool requireParentLink = false,
-    String admissionDate = '2026-01-01',
+    String? admissionDate,
     String status = 'active',
   }) async {
     try {
@@ -254,7 +254,8 @@ extension BackendStudentsApi on BackendApiClient {
           if ((parentUserId ?? '').trim().isNotEmpty)
             'parent_user_id': parentUserId!.trim(),
           'require_parent_link': requireParentLink,
-          'admission_date': admissionDate,
+          if (admissionDate != null && admissionDate.trim().isNotEmpty)
+            'admission_date': admissionDate.trim(),
           'status': status,
         },
       );

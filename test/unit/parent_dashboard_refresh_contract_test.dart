@@ -10,8 +10,8 @@ void main() {
 
     expect(source, contains('bool includeFeedPosts = true'));
     expect(source, contains('includeFeedPosts: false'));
-    expect(source, contains('final feedResult = includeFeedPosts'));
-    expect(source, contains('feedResult?.page == null'));
+    expect(source, contains('final feedItems = snapshot.feed == null'));
+    expect(source, contains('snapshot.feedIsStale'));
     expect(source, contains('.whereType<Map>()'));
   });
 }

@@ -35,7 +35,10 @@ void main() {
       expect(processor, contains('activeDeviceTokensForUser'));
       expect(processor, contains('deactivateInvalidToken'));
       expect(processor, contains('.limit(1)'));
-      expect(notifications, contains('path === "/notifications/device-tokens"'));
+      expect(
+        notifications,
+        contains('path === "/notifications/device-tokens"'),
+      );
       expect(notifications, contains('body.fcm_token ?? body.token'));
       expect(
         communications,

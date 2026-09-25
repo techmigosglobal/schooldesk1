@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
 
 /// Receives only invalidation rows, then lets the caller reload through its
@@ -21,9 +20,6 @@ class RealtimeRefreshService {
     required VoidCallback onRefresh,
     Duration debounce = const Duration(milliseconds: 800),
   }) {
-    if (DemoLocalApiService.instance.isActive) {
-      return const RealtimeRefreshSubscription.empty();
-    }
     final schoolId = BackendApiClient.instance.activeBranchId?.trim() ?? '';
     final userId = BackendApiClient.instance.currentUserId?.trim() ?? '';
     if (schoolId.isEmpty && userId.isEmpty) {
@@ -34,7 +30,7 @@ class RealtimeRefreshService {
     try {
       client = Supabase.instance.client;
     } on AssertionError {
-      // Widgets can be rendered before Supabase initialization (offline demo,
+      // Widgets can be rendered before Supabase initialization (offline mode,
       // tests, or failed startup initialization). Realtime is optional and
       // must not prevent the underlying screen from rendering.
       return const RealtimeRefreshSubscription.empty();

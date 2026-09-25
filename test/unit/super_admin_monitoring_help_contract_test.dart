@@ -22,14 +22,16 @@ void main() {
       'supabase/migrations/20260711104127_super_admin_monitoring_and_help_tutorials.sql',
     ).readAsStringSync();
     final screen = File(
-      'lib/features/shared/presentation/screens/help_screen/help_screen.dart',
+      'lib/shared/screens/help_screen/help_screen.dart',
     ).readAsStringSync();
     expect(handler, contains('createSignedUrl'));
     expect(handler, contains('data.role_name !== currentRole'));
     expect(handler, contains('help-tutorial-videos'));
     expect(migration, contains("'help-tutorial-videos'"));
     expect(migration, contains('false'));
-    expect(screen, contains('uploadHelpTutorialVideo'));
+    expect(screen, contains('HelpContentRepository'));
+    expect(screen, contains('uploadTutorial'));
+    expect(screen, isNot(contains('BackendApiClient')));
     expect(screen, contains('VideoPlayerController.networkUrl'));
     expect(screen, isNot(contains('Video Tutorial URL (Optional)')));
   });

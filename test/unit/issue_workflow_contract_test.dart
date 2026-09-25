@@ -35,7 +35,7 @@ void main() {
     expect(screen, contains('Issue Management'));
     expect(screen, contains('FileType.custom'));
     expect(screen, contains("'pdf'"));
-    expect(screen, contains('withData: true'));
+    expect(screen, contains('readAsBytes()'));
     expect(screen, contains('_IssueAttachmentPreviewScreen'));
     expect(screen, contains('_IssueAttachmentThumbnail'));
   });

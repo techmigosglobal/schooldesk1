@@ -4,19 +4,24 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/chat_message_merge.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide UserResponse;
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
+import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_communication_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_communication_repository.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class TeacherCommunicationScreen extends StatefulWidget {
-  const TeacherCommunicationScreen({super.key});
+  final TeacherCommunicationRepository? repository;
+
+  const TeacherCommunicationScreen({super.key, this.repository});
 
   @override
   State<TeacherCommunicationScreen> createState() =>
@@ -25,6 +30,9 @@ class TeacherCommunicationScreen extends StatefulWidget {
 
 class _TeacherCommunicationScreenState
     extends State<TeacherCommunicationScreen> {
+  TeacherCommunicationRepository get _repository =>
+      widget.repository ?? ApiTeacherCommunicationRepository.legacyDefault;
+
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -33,9 +41,8 @@ class _TeacherCommunicationScreenState
   String _realtimeConversationId = '';
   int _realtimeRequest = 0;
 
-  bool _loading = true;
+  RepositoryState<Object> _state = const RepositoryState.loading();
   bool _sending = false;
-  String? _error;
   String _teacherUserId = '';
   List<Map<String, dynamic>> _conversations = const [];
   List<Map<String, dynamic>> _messages = const [];
@@ -63,7 +70,6 @@ class _TeacherCommunicationScreenState
   // ── Realtime ──────────────────────────────────────────────────────────────
 
   Future<void> _subscribeRealtime({String conversationId = ''}) async {
-    if (DemoLocalApiService.instance.isActive) return;
     if (_realtimeConversationId == conversationId && _realtimeChannel != null) {
       await ChatRealtimeService.instance.refreshAuth();
       return; // Already subscribed to this scope.
@@ -101,30 +107,37 @@ class _TeacherCommunicationScreenState
   /// Used on first load, conversation switch, and successful send.
   Future<void> _load({bool background = false}) async {
     if (!background) {
+      final previous = _state.data;
       setState(() {
-        _loading = true;
-        _error = null;
+        _state = RepositoryState.loading(
+          data: previous,
+          source: previous == null
+              ? RepositorySource.empty
+              : RepositorySource.cache,
+          isStale: previous != null,
+          isRefreshing: previous != null,
+        );
       });
     }
     try {
       await RoleAccessService.initialize();
-      final api = BackendApiClient.instance;
-      final bootstrap = await Future.wait<Object>([
-        api.getProfile(),
-        api.getUnifiedChatConversations(
-          teacherId: RoleAccessService.teacherStaffId,
-        ),
-        api.getUnifiedChatContacts(role: 'teacher'),
-      ]);
-      final profile = bootstrap[0] as UserResponse;
-      final allConversations = bootstrap[1] as List<Map<String, dynamic>>;
+      final profileResult = await _repository.loadProfile();
+      final conversationsResult = await _repository.loadConversations(
+        teacherId: RoleAccessService.teacherStaffId,
+      );
+      final contactsResult = await _repository.loadContacts();
+      _throwIfFailed(profileResult, 'Unable to load profile');
+      _throwIfFailed(conversationsResult, 'Unable to load conversations');
+      _throwIfFailed(contactsResult, 'Unable to load contacts');
+      final profile = profileResult.dataOrNull!;
+      final allConversations = conversationsResult.dataOrNull!;
       final parentConversations = allConversations
           .where((row) => _text(row['type']) == 'parent_teacher')
           .toList();
       final principalConversations = allConversations
           .where((row) => _text(row['type']) == 'principal_teacher')
           .toList();
-      final contacts = bootstrap[2] as List<Map<String, dynamic>>;
+      final contacts = contactsResult.dataOrNull!;
       final conversations =
           _mergeConversationsWithContacts(
             parentConversations: parentConversations,
@@ -147,11 +160,13 @@ class _TeacherCommunicationScreenState
       List<Map<String, dynamic>> messages;
       DateTime? cursor;
       if (selected != null && !_isContactPlaceholder(selected)) {
+        final messagesResult = await _repository.loadMessages(
+          conversationId: _text(selected['id']),
+        );
+        _throwIfFailed(messagesResult, 'Unable to load messages');
         messages = mergeChatMessagesByIdentity(
           const [],
-          await api.getUnifiedChatMessages(
-            conversationId: _text(selected['id']),
-          ),
+          messagesResult.dataOrNull!,
         );
         cursor = messages.isNotEmpty
             ? _date(messages.last['sent_at'] ?? messages.last['created_at'])
@@ -169,18 +184,20 @@ class _TeacherCommunicationScreenState
         _messages = messages;
         _pendingMessages.clear();
         _messagesCursor = cursor;
-        _loading = false;
+        _state = const RepositoryState(
+          data: Object(),
+          source: RepositorySource.remote,
+        );
       });
       _scrollToBottom();
       unawaited(_subscribeRealtime(conversationId: newConversationId));
       if (selected != null && !_isContactPlaceholder(selected)) {
-        unawaited(api.markUnifiedChatConversationRead(newConversationId));
+        unawaited(_markConversationRead(newConversationId));
       }
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        if (!background) _error = error.toString();
+        if (!background) _state = RepositoryState.error(error: error);
       });
     }
   }
@@ -195,28 +212,28 @@ class _TeacherCommunicationScreenState
       return;
     }
     try {
-      final api = BackendApiClient.instance;
       final convId = _text(selected['id']);
       // Refresh the canonical conversation list once, contacts once, and only
       // the active conversation's new messages.
-      final refreshed = await Future.wait<Object>([
-        api.getUnifiedChatConversations(
-          teacherId: RoleAccessService.teacherStaffId,
-        ),
-        api.getUnifiedChatContacts(role: 'teacher'),
-        api.getUnifiedChatMessages(
-          conversationId: convId,
-          sentAfter: _messagesCursor,
-        ),
-      ]);
-      final allConversations = refreshed[0] as List<Map<String, dynamic>>;
+      final conversationsResult = await _repository.loadConversations(
+        teacherId: RoleAccessService.teacherStaffId,
+      );
+      final contactsResult = await _repository.loadContacts();
+      final messagesResult = await _repository.loadMessages(
+        conversationId: convId,
+        sentAfter: _messagesCursor,
+      );
+      _throwIfFailed(conversationsResult, 'Unable to refresh conversations');
+      _throwIfFailed(contactsResult, 'Unable to refresh contacts');
+      _throwIfFailed(messagesResult, 'Unable to refresh messages');
+      final allConversations = conversationsResult.dataOrNull!;
       final parentConversations = allConversations
           .where((row) => _text(row['type']) == 'parent_teacher')
           .toList();
       final principalConversations = allConversations
           .where((row) => _text(row['type']) == 'principal_teacher')
           .toList();
-      final contacts = refreshed[1] as List<Map<String, dynamic>>;
+      final contacts = contactsResult.dataOrNull!;
       final conversations =
           _mergeConversationsWithContacts(
             parentConversations: parentConversations,
@@ -232,7 +249,7 @@ class _TeacherCommunicationScreenState
             if (timeCompare != 0) return timeCompare;
             return _conversationTitle(a).compareTo(_conversationTitle(b));
           });
-      final newMessages = refreshed[2] as List<Map<String, dynamic>>;
+      final newMessages = messagesResult.dataOrNull!;
       if (!mounted) return;
       setState(() {
         _conversations = conversations;
@@ -260,7 +277,7 @@ class _TeacherCommunicationScreenState
       });
       if (newMessages.isNotEmpty) {
         _scrollToBottom();
-        unawaited(api.markUnifiedChatConversationRead(convId));
+        unawaited(_markConversationRead(convId));
       }
     } on Object catch (_) {
       // Incremental failures are silent — the next Realtime event retries.
@@ -315,24 +332,26 @@ class _TeacherCommunicationScreenState
     try {
       var conversationId = _text(conversation['id']);
       if (_isContactPlaceholder(conversation)) {
-        final created = await BackendApiClient.instance
-            .createUnifiedChatConversation(
-              // Keep the parent-teacher context explicit for contact rows.
-              // The fallback is intentionally type: 'parent_teacher'.
-              // Principal contacts retain type: 'principal_teacher'.
-              type: _text(conversation['type'], fallback: 'parent_teacher'),
-              teacherId: RoleAccessService.teacherStaffId,
-              parentId: _text(conversation['parent_id']),
-              studentId: _text(conversation['student_id']),
-              leaderId: _text(conversation['leader_id']),
-              title: _conversationTitle(conversation),
-            );
-        conversationId = _text(created['id']);
+        final createdResult = await _repository.createConversation(
+          // Keep the parent-teacher context explicit for contact rows.
+          // The fallback is intentionally type: 'parent_teacher'.
+          // Principal contacts retain type: 'principal_teacher'.
+          type: _text(conversation['type'], fallback: 'parent_teacher'),
+          teacherId: RoleAccessService.teacherStaffId,
+          parentId: _text(conversation['parent_id']),
+          studentId: _text(conversation['student_id']),
+          leaderId: _text(conversation['leader_id']),
+          title: _conversationTitle(conversation),
+        );
+        _throwIfFailed(createdResult, 'Unable to create conversation');
+        conversationId = _text(createdResult.dataOrNull!['id']);
       }
-      final sent = await BackendApiClient.instance.sendUnifiedChatMessage(
+      final sentResult = await _repository.sendMessage(
         conversationId: conversationId,
         body: body,
       );
+      _throwIfFailed(sentResult, 'Unable to send message');
+      final sent = sentResult.dataOrNull!;
       if (sent['queued'] == true) {
         if (mounted) {
           setState(() {
@@ -361,6 +380,16 @@ class _TeacherCommunicationScreenState
     }
   }
 
+  Future<void> _markConversationRead(String conversationId) async {
+    await _repository.markConversationRead(conversationId);
+  }
+
+  void _throwIfFailed<T>(Result<T> result, String fallback) {
+    if (result.isFailure) {
+      throw StateError(result.failureOrNull?.message ?? fallback);
+    }
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -369,28 +398,32 @@ class _TeacherCommunicationScreenState
       title: 'Communication',
       subtitle: 'Parent and principal chats in one place',
       selectedIndex: TeacherNav.communication,
-      loading: _loading,
-      error: _error,
+      loading: _state.isLoading && !_state.hasData,
+      error: _state.hasData ? null : _state.error?.toString(),
       onRefresh: _load,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 780;
-          final list = _conversationList();
-          final chat = _chatPane(showBackButton: !wide);
-          if (wide) {
-            return Row(
-              children: [
-                SizedBox(width: 340, child: list),
-                VerticalDivider(
-                  width: 1,
-                  color: context.appTheme.outlineVariant,
-                ),
-                Expanded(child: chat),
-              ],
-            );
-          }
-          return _selectedConversation == null ? list : chat;
-        },
+      child: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: _load,
+        data: (_) => LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 780;
+            final list = _conversationList();
+            final chat = _chatPane(showBackButton: !wide);
+            if (wide) {
+              return Row(
+                children: [
+                  SizedBox(width: 340, child: list),
+                  VerticalDivider(
+                    width: 1,
+                    color: context.appTheme.outlineVariant,
+                  ),
+                  Expanded(child: chat),
+                ],
+              );
+            }
+            return _selectedConversation == null ? list : chat;
+          },
+        ),
       ),
     );
   }

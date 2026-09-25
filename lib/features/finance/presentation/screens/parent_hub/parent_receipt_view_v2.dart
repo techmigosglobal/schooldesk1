@@ -2,24 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
+import 'package:schooldesk1/roles/parent/data/api_parent_fee_payment_repository.dart';
+import 'package:schooldesk1/roles/parent/domain/parent_fee_payment_repository.dart';
 
 class ParentReceiptViewV2 extends StatefulWidget {
   final ParentPaymentSelectionArgs args;
+  final ParentFeePaymentRepository? repository;
 
-  const ParentReceiptViewV2({super.key, required this.args});
+  const ParentReceiptViewV2({
+    super.key,
+    required this.args,
+    this.repository,
+  });
 
   @override
   State<ParentReceiptViewV2> createState() => _ParentReceiptViewV2State();
 }
 
 class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
-  bool _loading = false;
+  ParentFeePaymentRepository get _repository =>
+      widget.repository ?? ApiParentFeePaymentRepository.legacyDefault;
+
+  RepositoryState<Map<String, dynamic>> _receiptState =
+      const RepositoryState.loading();
   bool _sharing = false;
-  String? _error;
   Map<String, dynamic> _receiptData = const {};
   Map<String, dynamic> _receiptPayload = const {};
   Map<String, dynamic> _school = const {};
@@ -34,10 +46,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
 
   Future<void> _loadIdentity() async {
     try {
-      final api = BackendApiClient.instance;
       final results = await Future.wait([
-        api.getCurrentSchool(),
-        api.getProfile(),
+        _repository.loadCurrentSchool(),
+        _repository.loadProfile(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -63,17 +74,20 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
           : const <String, dynamic>{};
       final receiptNo = _text(receipt['receipt_number']);
       if (receiptNo.isEmpty) {
-        setState(() {
-          _error = 'Receipt is not available for this finalized payment yet.';
-          _loading = false;
-        });
+        setState(
+          () => _receiptState = RepositoryState.error(
+            error: StateError(
+              'Receipt is not available for this finalized payment yet.',
+            ),
+          ),
+        );
         return;
       }
 
       final receiptId = _text(receipt['id'] ?? pr['receipt_id']);
       if (receiptId.isNotEmpty) {
         try {
-          final payload = await BackendApiClient.instance.getFeeReceiptPayload(
+          final payload = await _repository.loadReceiptPayload(
             receiptId,
           );
           final canonicalReceipt = payload['receipt'] is Map
@@ -107,7 +121,11 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
               'fee_component': 'Fee payment',
               'transaction_ref': canonicalReceipt['reference_number'],
             };
-            _loading = false;
+            _receiptState = RepositoryState(
+              data: _receiptData,
+              source: RepositorySource.remote,
+              lastUpdated: DateTime.now().toUtc(),
+            );
           });
           return;
         } on Object {
@@ -166,15 +184,21 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
           'transaction_ref':
               pr['transaction_ref'] ?? pr['transaction_id'] ?? '',
         };
-        _loading = false;
+        _receiptState = RepositoryState(
+          data: _receiptData,
+          source: RepositorySource.cache,
+          isStale: true,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
       return;
     }
 
-    setState(() {
-      _error = 'Open a receipt from a finalized payment.';
-      _loading = false;
-    });
+    setState(
+      () => _receiptState = RepositoryState.error(
+        error: StateError('Open a receipt from a finalized payment.'),
+      ),
+    );
   }
 
   @override
@@ -191,44 +215,13 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         foregroundColor: context.appTheme.onSurface,
       ),
       body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? _buildError()
-            : _buildReceiptContent(),
-      ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline_rounded,
-              color: context.appTheme.error,
-              size: 48,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to Load Receipt',
-              style: GoogleFonts.ibmPlexSans(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error ?? 'Verify your internet connection and try again.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.ibmPlexSans(color: context.appTheme.muted),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(onPressed: _loadReceipt, child: const Text('Retry')),
-          ],
+        child: SchoolDeskRepositoryStateView<Map<String, dynamic>>(
+          state: _receiptState,
+          onRetry: _loadReceipt,
+          emptyTitle: 'Receipt unavailable',
+          emptyMessage: 'No finalized receipt is available for this payment.',
+          loadingMessage: 'Loading receipt…',
+          data: (_) => _buildReceiptContent(),
         ),
       ),
     );
@@ -456,7 +449,7 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
       var school = _school;
       if (school.isEmpty) {
         try {
-          school = await BackendApiClient.instance.getCurrentSchool();
+          school = await _repository.loadCurrentSchool();
         } on Object {
           // Keep the embedded receipt metadata as a last-resort fallback.
         }

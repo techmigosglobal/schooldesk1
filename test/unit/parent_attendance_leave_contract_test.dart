@@ -20,19 +20,16 @@ void main() {
     final screen = read(
       'lib/features/attendance/presentation/screens/parent_attendance_screen/parent_attendance_screen.dart',
     );
+    final repository = read(
+      'lib/roles/parent/data/api_parent_attendance_repository.dart',
+    );
 
-    expect(
-      screen,
-      contains('Future<Map<String, dynamic>> _safeAttendanceSummary'),
-    );
-    expect(
-      screen,
-      contains('Future<List<Map<String, dynamic>>> _safeAttendanceRecords'),
-    );
-    expect(
-      screen,
-      contains('Future<List<Map<String, dynamic>>> _safeLeaveRequests'),
-    );
+    expect(repository, contains('getStudentAttendanceSummary'));
+    expect(repository, contains('getStudentAttendanceRecords'));
+    expect(repository, contains('getStudentLeaveApplications'));
+    expect(screen, contains('widget.repository'));
+    expect(screen, contains('Some attendance data is unavailable'));
+    expect(screen, contains("child: const Text('Retry')"));
   });
 
   test('parent attendance and leave screens accept start and end date aliases', () {
@@ -41,6 +38,9 @@ void main() {
     );
     final leaveScreen = read(
       'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_screen.dart',
+    );
+    final leaveRepository = read(
+      'lib/roles/parent/data/api_parent_leave_repository.dart',
     );
 
     expect(
@@ -56,7 +56,24 @@ void main() {
       contains("request['from_date'] ?? request['start_date']"),
     );
     expect(leaveScreen, contains("request['to_date'] ?? request['end_date']"));
-    expect(leaveScreen, contains('getStudentLeaveApplications('));
-    expect(leaveScreen, contains('studentId: studentId'));
+    expect(leaveRepository, contains('getStudentLeaveApplications('));
+    expect(leaveRepository, contains('studentId: studentId'));
   });
+
+  test(
+    'parent leave uses configured API types without fictional fallback data',
+    () {
+      final screen = read(
+        'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_screen.dart',
+      );
+      final form = read(
+        'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_request_form_screen.dart',
+      );
+
+      expect(screen, contains('widget.repository'));
+      expect(screen, contains('_leaveTypes'));
+      expect(form, contains('ApiParentLeaveRepository'));
+      expect(form, isNot(contains('_defaultParentLeaveTypes')));
+    },
+  );
 }

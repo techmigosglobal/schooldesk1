@@ -3,12 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/features/academics/academics.dart';
 import 'package:schooldesk1/features/attendance/attendance.dart';
 import 'package:schooldesk1/features/communication/communication.dart';
-import 'package:schooldesk1/features/dashboard/dashboard.dart';
 import 'package:schooldesk1/features/documents/documents.dart';
 import 'package:schooldesk1/features/finance/finance.dart';
 import 'package:schooldesk1/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart';
 import 'package:schooldesk1/features/auth/auth.dart';
-import 'package:schooldesk1/features/auth/presentation/screens/demo_role_selector_screen.dart';
 import 'package:schooldesk1/features/reports/reports.dart';
 import 'package:schooldesk1/features/people/people.dart';
 import 'package:schooldesk1/features/calendar/calendar.dart';
@@ -21,13 +19,19 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/event_post_screen.dart';
-import 'package:schooldesk1/features/shared/presentation/screens/school_gallery_screen.dart';
+import 'package:schooldesk1/shared/screens/school_gallery_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/principal_audit_logs_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
-import 'package:schooldesk1/features/dashboard/presentation/screens/super_admin_dashboard_screen/super_admin_dashboard_screen.dart';
-import 'package:schooldesk1/features/shared/presentation/screens/help_screen/help_screen.dart';
+import 'package:schooldesk1/shared/screens/help_screen/help_screen.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/issue_screen.dart';
 import 'package:schooldesk1/features/people/presentation/screens/admission_inquiries_screen.dart';
+import 'package:schooldesk1/roles/kiosk/kiosk_shell.dart';
+import 'package:schooldesk1/roles/coordinator/coordinator_shell.dart';
+import 'package:schooldesk1/roles/parent/parent_shell.dart';
+import 'package:schooldesk1/roles/principal/principal_shell.dart';
+import 'package:schooldesk1/roles/super_admin/super_admin_shell.dart';
+import 'package:schooldesk1/roles/teacher/teacher_shell.dart';
+import 'package:schooldesk1/app/router/route_arguments.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -35,7 +39,6 @@ class AppRoutes {
 
   // Loading
   static const String loginLoading = '/login-loading-screen';
-  static const String demoRoleSelector = '/demo-role-selector-screen';
 
   // Principal Module Routes
   static const String principalLogin = '/principal-login-screen';
@@ -187,19 +190,16 @@ class AppRoutes {
 
     // Principal
     loginLoading: (context) => const LoginLoadingScreen(),
-    demoRoleSelector: (context) => const DemoRoleSelectorScreen(),
     principalLogin: (context) => const AuthLoginScreen(),
-    principalDashboard: (context) => const PrincipalDashboardScreen(),
-    coordinatorDashboard: (context) => const PrincipalDashboardScreen(),
+    principalDashboard: (context) => const PrincipalShell(),
+    coordinatorDashboard: (context) => const CoordinatorShell(),
     principalSchoolProfile: (context) => const SchoolProfileScreen(),
     admissionInquiries: (context) => const AdmissionInquiriesScreen(),
     staffManagement: (context) => const StaffManagementScreen(),
     staffForm: (context) => StaffFormScreen(args: _staffFormArgs(context)),
     studentOversight: (context) => const StudentOversightScreen(),
     approvalCenter: (context) => ApprovalCenterScreen(
-      args: ApprovalCenterRouteArgs.fromRoute(
-        ModalRoute.of(context)?.settings.arguments,
-      ),
+      args: ApprovalCenterRouteArgs.fromRoute(_routeArguments(context)),
     ),
     // One operational entry point prevents the older metrics-heavy dashboard
     // and the daily collection flow from competing with each other.
@@ -211,14 +211,14 @@ class AppRoutes {
       concessionOnly: true,
     ),
     feeStructures: (context) => const PrincipalFeeStructures(),
-    '/principal/fee-structures': (context) => const PrincipalFeeStructures(),
+    legacyPrincipalFeeStructures: (context) => const PrincipalFeeStructures(),
     feeCollect: (context) => const PrincipalCollectFee(),
-    '/principal/collect-fee': (context) => const PrincipalCollectFee(),
+    legacyPrincipalCollectFee: (context) => const PrincipalCollectFee(),
     feeLedger: (context) => const FeeLedgerScreen(),
     feePaymentConfig: (context) => const PrincipalPaymentConfig(),
-    '/principal/payment-config': (context) => const PrincipalPaymentConfig(),
+    legacyPrincipalPaymentConfig: (context) => const PrincipalPaymentConfig(),
     principalPaymentRequests: (context) => const PrincipalPaymentRequests(),
-    '/principal/payment-requests': (context) =>
+    legacyPrincipalPaymentRequests: (context) =>
         const PrincipalPaymentRequests(),
     principalPaymentRequestDecision: (context) =>
         AdminPaymentRequestDecisionScreen(
@@ -283,16 +283,19 @@ class AppRoutes {
     ),
     principalTimetable: (context) => const AdminTimetableScreen(),
     principalDocuments: (context) => const AdminDocumentsScreen(),
-    principalAuditLogs: (context) => const PrincipalAuditLogsScreen(),
+    principalAuditLogs: (context) =>
+        const PrincipalAuditLogsScreen(role: 'principal'),
     principalAnalytics: (context) => const PrincipalAnalyticsScreen(),
-    systemMonitor: (context) => const SystemMonitorScreen(),
+    systemMonitor: (context) => const SystemMonitorScreen(role: 'principal'),
 
     idCardGeneration: (context) => const IdCardGenerationScreen(),
 
     // Super Admin
-    superAdminDashboard: (context) => const SuperAdminDashboardScreen(),
-    superAdminAuditLogs: (context) => const PrincipalAuditLogsScreen(),
-    superAdminSystemMonitor: (context) => const SystemMonitorScreen(),
+    superAdminDashboard: (context) => const SuperAdminShell(),
+    superAdminAuditLogs: (context) =>
+        const PrincipalAuditLogsScreen(role: 'super_admin'),
+    superAdminSystemMonitor: (context) =>
+        const SystemMonitorScreen(role: 'super_admin'),
     superAdminAccess: (context) =>
         const AdminUserAccessScreen(ownerRole: 'super_admin'),
     superAdminIssues: (context) =>
@@ -300,7 +303,7 @@ class AppRoutes {
 
     // Teacher
     teacherLogin: (context) => const AuthLoginScreen(),
-    teacherDashboard: (context) => const TeacherDashboardScreen(),
+    teacherDashboard: (context) => const TeacherShell(),
     teacherClasses: (context) => const TeacherClassesScreen(),
     teacherTimetable: (context) => const TeacherTimetableScreen(),
     teacherAttendance: (context) => const TeacherAttendanceScreen(),
@@ -328,8 +331,8 @@ class AppRoutes {
     // Parent
     parentLogin: (context) => const AuthLoginScreen(),
     kioskLogin: (context) => const AuthLoginScreen(),
-    kioskQrAttendance: (context) => const KioskQrAttendanceScreen(),
-    parentDashboard: (context) => const ParentDashboardScreen(),
+    kioskQrAttendance: (context) => const KioskShell(),
+    parentDashboard: (context) => const ParentShell(),
     parentAttendance: (context) => const ParentAttendanceScreen(),
     parentHomework: (context) => const ParentHomeworkScreen(),
     parentHomeworkSubmit: (context) => ParentHomeworkSubmissionScreen(
@@ -339,7 +342,7 @@ class AppRoutes {
     parentComplaints: (context) =>
         const IssueScreen(role: IssueScreenRole.parent),
     parentFees: (context) => const ParentFeeHub(),
-    '/parent/fees': (context) => const ParentFeeHub(),
+    legacyParentFees: (context) => const ParentFeeHub(),
     parentPaymentRequestForm: (context) =>
         ParentPaymentFlow(args: _parentPaymentSelectionArgs(context)),
     parentPaymentSelection: (context) =>
@@ -362,26 +365,23 @@ class AppRoutes {
     // Shared
     schoolGallery: (context) => const SchoolGalleryScreen(),
     notificationCenter: (context) {
-      final role =
-          ModalRoute.of(context)?.settings.arguments as String? ?? 'principal';
+      final role = _routeArguments(context) as String? ?? 'principal';
       return NotificationCenterScreen(role: role);
     },
     settingsScreen: (context) {
-      final role =
-          ModalRoute.of(context)?.settings.arguments as String? ?? 'principal';
+      final role = _routeArguments(context) as String? ?? 'principal';
       return AppSettingsScreen(role: role);
     },
     profileScreen: (context) {
-      final role =
-          ModalRoute.of(context)?.settings.arguments as String? ?? 'principal';
+      final role = _routeArguments(context) as String? ?? 'principal';
       return ProfileManagementScreen(role: role);
     },
     globalSearch: (context) => const GlobalSearchScreen(),
     help: (context) => const HelpScreen(),
     homeworkMessaging: (context) {
-      final args =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ??
-          {};
+      final args = _routeArguments(context) is Map
+          ? Map<String, dynamic>.from(_routeArguments(context) as Map)
+          : <String, dynamic>{};
       final role = (args['role'] as String? ?? 'teacher').toLowerCase();
       switch (role) {
         case 'parent':
@@ -415,6 +415,23 @@ class AppRoutes {
     return SchoolDeskRouteFrame(metadata: metadata, child: routeChild);
   }
 
+  /// Builds registered screen factory under GoRouter's typed argument scope.
+  /// Route ownership and argument parsing live in TypedAppRouteRegistry.
+  static Widget buildTypedRouteWidget(
+    BuildContext context, {
+    required String routeName,
+    required Object? arguments,
+  }) {
+    final routeBuilder = routes[routeName];
+    if (routeBuilder == null) {
+      throw StateError('Route "$routeName" has no registered screen.');
+    }
+    return SchoolDeskRouteArguments(
+      value: arguments,
+      child: Builder(builder: routeBuilder),
+    );
+  }
+
   static Widget _buildRouteChild(
     BuildContext context, {
     required String routeName,
@@ -433,7 +450,7 @@ class AppRoutes {
     BuildContext context, {
     String fallbackTab = 'auto',
   }) {
-    final raw = ModalRoute.of(context)?.settings.arguments;
+    final raw = _routeArguments(context);
     if (raw is SchoolPostsRouteArgs) {
       return raw.initialTab.trim().isEmpty
           ? SchoolPostsRouteArgs(
@@ -455,7 +472,7 @@ class AppRoutes {
     BuildContext context,
     String fallbackOwnerRole,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AccountAccessFormArgs) return args;
     return AccountAccessFormArgs(ownerRole: fallbackOwnerRole);
   }
@@ -464,7 +481,7 @@ class AppRoutes {
     BuildContext context,
     String fallbackOwnerRole,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AccountChildAssignmentArgs) return args;
     return AccountChildAssignmentArgs(
       ownerRole: fallbackOwnerRole,
@@ -475,19 +492,19 @@ class AppRoutes {
   }
 
   static StaffFormArgs _staffFormArgs(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is StaffFormArgs) return args;
     return const StaffFormArgs(ownerRole: 'principal');
   }
 
   static AcademicYearFormArgs _academicYearFormArgs(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AcademicYearFormArgs) return args;
     return const AcademicYearFormArgs(ownerRole: 'principal');
   }
 
   static AcademicYearRouteArgs _academicYearRouteArgs(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AcademicYearRouteArgs) return args;
     return const AcademicYearRouteArgs(year: <String, dynamic>{});
   }
@@ -495,13 +512,13 @@ class AppRoutes {
   static AcademicSubjectFormArgs _academicSubjectFormArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AcademicSubjectFormArgs) return args;
     return const AcademicSubjectFormArgs(ownerRole: 'principal');
   }
 
   static AcademicClassFormArgs _academicClassFormArgs(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AcademicClassFormArgs) return args;
     return const AcademicClassFormArgs(ownerRole: 'principal', staff: []);
   }
@@ -509,7 +526,7 @@ class AppRoutes {
   static AcademicCurriculumFormArgs _academicCurriculumFormArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AcademicCurriculumFormArgs) return args;
     return const AcademicCurriculumFormArgs(
       ownerRole: 'principal',
@@ -519,7 +536,7 @@ class AppRoutes {
   }
 
   static ParentLeaveRequestFormArgs _parentLeaveFormArgs(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is ParentLeaveRequestFormArgs) return args;
     return const ParentLeaveRequestFormArgs(children: [], initialStudentId: '');
   }
@@ -527,7 +544,7 @@ class AppRoutes {
   static ParentHomeworkSubmissionArgs _parentHomeworkSubmissionArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is ParentHomeworkSubmissionArgs) return args;
     // Handle Map args — e.g. when navigated from a notification
     if (args is Map) {
@@ -561,7 +578,7 @@ class AppRoutes {
   static TeacherHomeworkFormArgs _teacherHomeworkFormArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is TeacherHomeworkFormArgs) return args;
     return const TeacherHomeworkFormArgs(
       teacherStaffId: '',
@@ -575,7 +592,7 @@ class AppRoutes {
   static TeacherHomeworkSubmissionsArgs _teacherHomeworkSubmissionsArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is TeacherHomeworkSubmissionsArgs) return args;
     if (args is Map<String, dynamic>) {
       return TeacherHomeworkSubmissionsArgs(homework: args);
@@ -586,7 +603,7 @@ class AppRoutes {
   static TeacherLeaveRequestFormArgs _teacherLeaveFormArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is TeacherLeaveRequestFormArgs) return args;
     return const TeacherLeaveRequestFormArgs(
       staffId: '',
@@ -599,7 +616,7 @@ class AppRoutes {
   static ParentPaymentSelectionArgs _parentPaymentSelectionArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is ParentPaymentSelectionArgs) return args;
     if (args is Map<String, dynamic>) {
       return ParentPaymentSelectionArgs(
@@ -620,7 +637,7 @@ class AppRoutes {
   static AdminPaymentRequestDecisionArgs _principalPaymentRequestDecisionArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AdminPaymentRequestDecisionArgs) return args;
     if (args is Map<String, dynamic>) {
       return AdminPaymentRequestDecisionArgs(request: args);
@@ -631,7 +648,7 @@ class AppRoutes {
   static AdminFeeStructureFormArgs _principalFeeStructureFormArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AdminFeeStructureFormArgs) return args;
     return const AdminFeeStructureFormArgs(
       academicYears: [],
@@ -645,12 +662,16 @@ class AppRoutes {
   static AdminPaymentRecordFormArgs _principalPaymentRecordFormArgs(
     BuildContext context,
   ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final args = _routeArguments(context);
     if (args is AdminPaymentRecordFormArgs) return args;
     return const AdminPaymentRecordFormArgs(
       pendingDues: [],
       ownerRole: 'principal',
     );
+  }
+
+  static Object? _routeArguments(BuildContext context) {
+    return SchoolDeskRouteArguments.maybeOf<Object?>(context);
   }
 }
 

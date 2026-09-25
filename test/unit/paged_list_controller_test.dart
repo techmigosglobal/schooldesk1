@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:schooldesk1/core/paging/paged_list_controller.dart';
-import 'package:schooldesk1/features/shared/data/models/backend_models.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 
 void main() {
   test('pages append in order and suppress duplicate rows', () async {

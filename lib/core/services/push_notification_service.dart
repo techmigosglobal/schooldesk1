@@ -12,11 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 import 'package:schooldesk1/firebase_runtime_options.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
-import 'package:schooldesk1/core/services/demo_local_api_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
@@ -174,7 +174,6 @@ class PushNotificationService {
   }
 
   Future<void> registerDeviceTokenIfPossible() async {
-    if (DemoLocalApiService.instance.isActive) return;
     if (!_firebaseAvailable || !BackendApiClient.instance.isAuthenticated) {
       _deviceRegistrationSucceeded = false;
       _lastRegistrationError = !_firebaseAvailable
@@ -220,7 +219,6 @@ class PushNotificationService {
   }
 
   Future<void> revokeCurrentToken() async {
-    if (DemoLocalApiService.instance.isActive) return;
     final token = _currentToken;
     if (token == null ||
         token.isEmpty ||
@@ -504,9 +502,7 @@ class PushNotificationService {
   }
 
   void _openLogin() {
-    final navigator = navigatorKey.currentState;
-    if (navigator == null) return;
-    navigator.pushNamedAndRemoveUntil(AppRoutes.landingPage, (_) => false);
+    SchoolDeskNavigation.goFromRoot(navigatorKey, AppRoutes.landingPage);
   }
 
   Future<void> _openPayload(Map<String, dynamic> data) async {
@@ -523,8 +519,7 @@ class PushNotificationService {
     } on Object catch (_) {
       // Navigation should still proceed if notification refresh fails.
     }
-    final navigator = navigatorKey.currentState;
-    if (navigator == null) {
+    if (navigatorKey.currentState == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_openPayload(data));
       });
@@ -542,7 +537,11 @@ class PushNotificationService {
         (data['student_id'] ?? data['studentId'] ?? '').toString(),
       );
     }
-    navigator.pushNamed(target.route, arguments: target.arguments);
+    SchoolDeskNavigation.pushFromRoot(
+      navigatorKey,
+      target.route,
+      arguments: target.arguments,
+    );
   }
 
   String get _platformName {

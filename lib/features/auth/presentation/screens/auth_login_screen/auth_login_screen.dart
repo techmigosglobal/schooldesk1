@@ -7,14 +7,20 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
+import 'package:schooldesk1/core/auth/api_auth_repository.dart';
+import 'package:schooldesk1/core/auth/auth_repository.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
-import 'package:schooldesk1/core/services/demo_sandbox_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+
 class AuthLoginScreen extends StatefulWidget {
-  const AuthLoginScreen({super.key});
+  final AuthRepository? repository;
+
+  const AuthLoginScreen({super.key, this.repository});
 
   @override
   State<AuthLoginScreen> createState() => _AuthLoginScreenState();
@@ -26,8 +32,10 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
   final _passwordCtrl = TextEditingController();
 
   bool _obscurePassword = true;
-  bool _loading = false;
-  String? _error;
+  RepositoryState<void> _authState = const RepositoryState.empty();
+
+  AuthRepository get _repository =>
+      widget.repository ?? ApiAuthRepository.legacyDefault;
 
   @override
   void dispose() {
@@ -40,20 +48,14 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
-      _loading = true;
-      _error = null;
+      _authState = const RepositoryState.loading();
     });
 
     final username = _usernameCtrl.text.trim();
     final password = _passwordCtrl.text;
 
     try {
-      if (RegExp(r'^demo\d+$', caseSensitive: false).hasMatch(username)) {
-        await _loginDemo(username, password);
-        return;
-      }
-
-      final response = await BackendApiClient.instance.login(
+      final response = await _repository.login(
         LoginRequest(username: username, password: password),
       );
       if (EnvConfig.enableLogging) {
@@ -67,48 +69,26 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
       if (!mounted) return;
       // Navigate to the loading screen which will initialize
       // RoleAccessService and then redirect to the correct dashboard.
-      Navigator.pushNamedAndRemoveUntil(
-        context,
+      SchoolDeskNavigation.goFromNavigator(
+        Navigator.of(context),
         AppRoutes.loginLoading,
-        (_) => false,
+        legacyPredicate: (_) => false,
       );
       await PushNotificationService.instance
           .handlePendingNotificationAfterLogin();
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = switch (e) {
-          NetworkException() =>
-            'Unable to connect to the school server. Please check the backend connection.',
-          AuthException() => 'Invalid username or password.',
-          ServerException(:final message) => message,
-          _ => 'Sign in failed. Please try again.',
-        };
+        _authState = RepositoryState.error(
+          error: switch (e) {
+            NetworkException() =>
+              'Unable to connect to the school server. Please check the backend connection.',
+            AuthException() => 'Invalid username or password.',
+            ServerException(:final message) => message,
+            _ => 'Sign in failed. Please try again.',
+          },
+        );
       });
-    }
-  }
-
-  Future<void> _loginDemo(String username, String password) async {
-    try {
-      final payload = await BackendApiClient.instance.loginDemo(
-        username: username,
-        password: password,
-      );
-      if (!mounted) return;
-      await DemoSandboxService.instance.saveLogin(payload);
-      if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        AppRoutes.demoRoleSelector,
-        (_) => false,
-      );
-    } on Object catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Demo unavailable: $error')));
-      }
     }
   }
 
@@ -296,7 +276,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
                 },
               ),
             ),
-            if (_error != null) ...[
+            if (_authState.isError) ...[
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -305,7 +285,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  _error!,
+                  '${_authState.error}',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     color: context.appTheme.error,
@@ -316,13 +296,13 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
             const SizedBox(height: 22),
             Semantics(
               button: true,
-              label: _loading ? 'Signing in' : 'Sign in',
-              enabled: !_loading,
+              label: _authState.isLoading ? 'Signing in' : 'Sign in',
+              enabled: !_authState.isLoading,
               child: SizedBox(
                 height: 48,
                 child: ElevatedButton.icon(
-                  onPressed: _loading ? null : _login,
-                  icon: _loading
+                  onPressed: _authState.isLoading ? null : _login,
+                  icon: _authState.isLoading
                       ? SizedBox(
                           width: 18,
                           height: 18,
@@ -333,17 +313,17 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
                         )
                       : const Icon(Icons.login_rounded, size: 18),
                   label: Text(
-                    _loading ? 'Signing in' : 'Sign in',
+                    _authState.isLoading ? 'Signing in' : 'Sign in',
                     style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
             ),
             TextButton.icon(
-              onPressed: () => Navigator.pushNamedAndRemoveUntil(
-                context,
+              onPressed: () => SchoolDeskNavigation.goFromNavigator(
+                Navigator.of(context),
                 AppRoutes.landingPage,
-                (_) => false,
+                legacyPredicate: (_) => false,
               ),
               icon: const Icon(Icons.arrow_back_rounded, size: 16),
               label: const Text('Back to home'),

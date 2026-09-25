@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/desktop_form_wrapper.dart';
+import 'package:schooldesk1/modules/people/data/api_staff_directory_repository.dart';
+import 'package:schooldesk1/modules/people/domain/staff_directory_repository.dart';
 
 @immutable
 class StaffFormArgs {
@@ -38,6 +41,9 @@ class StaffFormScreen extends StatefulWidget {
 }
 
 class _StaffFormScreenState extends State<StaffFormScreen> {
+  StaffDirectoryRepository get _repository =>
+      ApiStaffDirectoryRepository.legacyDefault;
+
   static const _customDesignation = 'Custom';
   static const _designationChoices = <String>[
     'Teacher',
@@ -59,6 +65,10 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   bool _saving = false;
   bool _passwordVisible = false;
   String? _feedback;
+  final RepositoryState<Object> _state = const RepositoryState<Object>(
+    data: Object(),
+    source: RepositorySource.remote,
+  );
 
   bool get _isAdminOwner => widget.args.isAdminOwner;
   bool get _isEdit => widget.args.isEdit;
@@ -141,49 +151,53 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
           onPressed: _saving ? null : _save,
         ),
       ],
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 16),
-                  if (_feedback != null) ...[
-                    _buildFeedback(_feedback!),
+      body: SchoolDeskRepositoryStateView<Object>(
+        state: _state,
+        onRetry: () => setState(() {}),
+        data: (_) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 920),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildHeader(),
                     const SizedBox(height: 16),
-                  ],
-                  Container(
-                    decoration: BoxDecoration(
-                      color: context.appTheme.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: context.appTheme.outlineVariant,
+                    if (_feedback != null) ...[
+                      _buildFeedback(_feedback!),
+                      const SizedBox(height: 16),
+                    ],
+                    Container(
+                      decoration: BoxDecoration(
+                        color: context.appTheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: context.appTheme.outlineVariant,
+                        ),
+                      ),
+                      child: DesktopFormWrapper(
+                        padding: const EdgeInsets.all(16),
+                        fields: [
+                          _buildNameField(),
+                          _buildEmployeeField(),
+                          _buildDesignationField(),
+                          _buildPhoneField(),
+                          _buildEmailField(),
+                          _buildUsernameField(),
+                          _isEdit
+                              ? _buildReadOnlyRoleField()
+                              : _buildLoginRoleField(),
+                          if (!_isEdit) _buildPasswordField(),
+                        ],
                       ),
                     ),
-                    child: DesktopFormWrapper(
-                      padding: const EdgeInsets.all(16),
-                      fields: [
-                        _buildNameField(),
-                        _buildEmployeeField(),
-                        _buildDesignationField(),
-                        _buildPhoneField(),
-                        _buildEmailField(),
-                        _buildUsernameField(),
-                        _isEdit
-                            ? _buildReadOnlyRoleField()
-                            : _buildLoginRoleField(),
-                        if (!_isEdit) _buildPasswordField(),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildActionBar(),
-                ],
+                    const SizedBox(height: 16),
+                    _buildActionBar(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -497,7 +511,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
 
   Future<void> _createStaff() async {
     final name = _splitStaffName(_nameController.text.trim());
-    await api.BackendApiClient.instance.createStaff(
+    await _repository.createStaff(
       firstName: name.firstName,
       lastName: name.lastName,
       staffCode: _employeeController.text.trim(),
@@ -513,7 +527,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
 
   Future<void> _updateStaff() async {
     final name = _splitStaffName(_nameController.text.trim());
-    await api.BackendApiClient.instance.updateStaff(
+    await _repository.updateStaff(
       widget.args.existingStaff!.id,
       firstName: name.firstName,
       lastName: name.lastName,

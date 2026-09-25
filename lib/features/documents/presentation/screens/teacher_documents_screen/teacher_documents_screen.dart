@@ -3,23 +3,42 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
+import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/roles/teacher/data/api_teacher_documents_repository.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_documents_repository.dart';
+
+final class _TeacherDocumentsSnapshot {
+  const _TeacherDocumentsSnapshot({
+    required this.studentDocuments,
+    required this.myDocuments,
+  });
+
+  final List<Map<String, dynamic>> studentDocuments;
+  final List<Map<String, dynamic>> myDocuments;
+}
 
 class TeacherDocumentsScreen extends StatefulWidget {
-  const TeacherDocumentsScreen({super.key});
+  final TeacherDocumentsRepository? repository;
+
+  const TeacherDocumentsScreen({super.key, this.repository});
 
   @override
   State<TeacherDocumentsScreen> createState() => _TeacherDocumentsScreenState();
 }
 
 class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
-  bool _loading = true;
-  String? _error;
+  TeacherDocumentsRepository get _repository =>
+      widget.repository ?? ApiTeacherDocumentsRepository.legacyDefault;
+
+  RepositoryState<_TeacherDocumentsSnapshot> _repositoryState =
+      const RepositoryState.loading();
   List<Map<String, dynamic>> _documents = const [];
   List<Map<String, dynamic>> _myDocuments = const [];
 
@@ -30,19 +49,24 @@ class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
   }
 
   Future<void> _loadDocuments() async {
+    final previous = _repositoryState;
     setState(() {
-      _loading = true;
-      _error = null;
+      _repositoryState = RepositoryState.loading(
+        data: previous.data,
+        source: previous.source,
+        isStale: previous.isStale,
+        isRefreshing: previous.hasData,
+        lastUpdated: previous.lastUpdated,
+      );
     });
     try {
       await RoleAccessService.initialize();
       final seen = <String>{};
       final rows = <Map<String, dynamic>>[];
       for (final sectionId in RoleAccessService.teacherSectionIds) {
-        final sectionRows = await BackendApiClient.instance.getRawList(
-          '/student-documents',
-          queryParameters: {'section_id': sectionId, 'page_size': 100},
-        );
+        final result = await _repository.loadStudentDocuments(sectionId);
+        if (result.isFailure) continue;
+        final sectionRows = result.dataOrNull!;
         for (final row in sectionRows) {
           final id = '${row['id'] ?? ''}';
           if (id.isNotEmpty && !seen.add(id)) continue;
@@ -50,20 +74,39 @@ class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
         }
       }
 
-      final myDocs = await BackendApiClient.instance.getRawList(
-        '/staff-documents',
-      );
+      final myDocsResult = await _repository.loadMyDocuments();
+      _throwIfFailed(myDocsResult, 'Unable to load personal documents');
+      final myDocs = myDocsResult.dataOrNull!;
 
       if (!mounted) return;
       setState(() {
         _documents = rows;
         _myDocuments = myDocs;
+        _repositoryState = RepositoryState(
+          data: _TeacherDocumentsSnapshot(
+            studentDocuments: List.unmodifiable(rows),
+            myDocuments: List.unmodifiable(myDocs),
+          ),
+          source: RepositorySource.remote,
+          phase: rows.isEmpty && myDocs.isEmpty
+              ? RepositoryPhase.empty
+              : RepositoryPhase.ready,
+          lastUpdated: DateTime.now().toUtc(),
+        );
       });
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      setState(() {
+        _repositoryState = previous.hasData
+            ? RepositoryState(
+                data: previous.data,
+                source: RepositorySource.cache,
+                isStale: true,
+                error: error,
+                lastUpdated: previous.lastUpdated,
+              )
+            : RepositoryState.error(error: error);
+      });
     }
   }
 
@@ -88,7 +131,8 @@ class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
     );
     if (confirm != true) return;
     try {
-      await BackendApiClient.instance.deleteRaw('/staff-documents/$docId');
+      final result = await _repository.deleteMyDocument(docId);
+      _throwIfFailed(result, 'Unable to delete document');
       _loadDocuments();
     } on Object catch (e) {
       if (mounted) {
@@ -163,9 +207,9 @@ class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
                           type: FileType.custom,
                           allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
                         );
-                        if (result != null && result.files.isNotEmpty) {
+                        if (result.isNotEmpty) {
                           setDialogState(() {
-                            selectedFile = result.files.first;
+                            selectedFile = result.first;
                           });
                         }
                       },
@@ -187,22 +231,22 @@ class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
                         uploading = true;
                       });
                       try {
-                        final fileUrl = await BackendApiClient.instance
-                            .uploadFile(
-                              selectedFile!.path!,
-                              filename: selectedFile!.name,
-                              folder: 'staff-documents',
-                              entityType: 'staff_document',
-                              private: true,
-                            );
-                        await BackendApiClient.instance
-                            .createRaw('/staff-documents', {
-                              'doc_type': docType,
-                              'title': titleCtrl.text.trim().isEmpty
-                                  ? docType
-                                  : titleCtrl.text.trim(),
-                              'file_url': fileUrl,
-                            });
+                        final uploadResult = await _repository.uploadDocument(
+                          selectedFile!.path!,
+                          filename: selectedFile!.name,
+                        );
+                        _throwIfFailed(
+                          uploadResult,
+                          'Unable to upload document',
+                        );
+                        final createResult = await _repository.createMyDocument(
+                          type: docType,
+                          title: titleCtrl.text.trim().isEmpty
+                              ? docType
+                              : titleCtrl.text.trim(),
+                          fileUrl: uploadResult.dataOrNull!,
+                        );
+                        _throwIfFailed(createResult, 'Unable to save document');
                         Navigator.pop(context);
                         _loadDocuments();
                       } on Object catch (e) {
@@ -227,6 +271,12 @@ class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
     );
   }
 
+  void _throwIfFailed<T>(Result<T> result, String fallback) {
+    if (result.isFailure) {
+      throw StateError(result.failureOrNull?.message ?? fallback);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -235,25 +285,33 @@ class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
         title: 'Documents',
         subtitle: 'Class student documents and your own records',
         selectedIndex: TeacherNav.documents,
-        loading: _loading,
-        error: _error,
+        loading: _repositoryState.isLoading && !_repositoryState.hasData,
+        error: _repositoryState.isError && !_repositoryState.hasData
+            ? '${_repositoryState.error}'
+            : null,
         onRefresh: _loadDocuments,
-        child: Column(
-          children: [
-            TabBar(
-              labelColor: context.appTheme.primary,
-              unselectedLabelColor: Colors.grey,
-              tabs: const [
-                Tab(text: 'Student Documents'),
-                Tab(text: 'My Documents'),
-              ],
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [_buildStudentDocuments(), _buildMyDocuments()],
+        child: SchoolDeskRepositoryStateView<_TeacherDocumentsSnapshot>(
+          state: _repositoryState,
+          onRetry: _loadDocuments,
+          emptyTitle: 'No documents available',
+          emptyMessage: 'No documents exist for this teacher scope.',
+          data: (_) => Column(
+            children: [
+              TabBar(
+                labelColor: context.appTheme.primary,
+                unselectedLabelColor: Colors.grey,
+                tabs: const [
+                  Tab(text: 'Student Documents'),
+                  Tab(text: 'My Documents'),
+                ],
               ),
-            ),
-          ],
+              Expanded(
+                child: TabBarView(
+                  children: [_buildStudentDocuments(), _buildMyDocuments()],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
