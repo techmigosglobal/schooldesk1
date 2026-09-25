@@ -17,6 +17,12 @@ function isSuperAdmin(user: User): boolean {
   return user.app_metadata?.role_name === "super_admin";
 }
 
+function canReadSchoolErrorEvents(user: User): boolean {
+  return ["principal", "coordinator", "admin", "super_admin"].includes(
+    text(user.app_metadata?.role_name).toLowerCase(),
+  );
+}
+
 async function alertSuperAdminsOfNewError(
   svc: SupabaseClient,
   school: string,
@@ -723,7 +729,7 @@ export async function handleMonitoring(
   }
 
   if (path === "/monitoring/error-events" && method === "GET") {
-    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    if (!canReadSchoolErrorEvents(user)) return fail("forbidden", 403);
     const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
     const size = Math.min(Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1), 100);
 
@@ -756,7 +762,7 @@ export async function handleMonitoring(
 
   const eventId = parseEventId(path);
   if (eventId && method === "GET") {
-    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    if (!canReadSchoolErrorEvents(user)) return fail("forbidden", 403);
     const { data, error } = await svc.from("error_events").select("*").eq(
       "school_id",
       school,

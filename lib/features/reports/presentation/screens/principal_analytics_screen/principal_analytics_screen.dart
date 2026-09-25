@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/roles/principal/data/api_principal_analytics_repository.dart';
 import 'package:schooldesk1/roles/principal/domain/principal_analytics_repository.dart';
 
@@ -50,10 +51,12 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
   PrincipalAnalyticsRepository get _repository =>
       widget.repository ?? ApiPrincipalAnalyticsRepository.legacyDefault;
 
+  bool get _isCoordinator => RoleAccessService.currentRoleName == 'coordinator';
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: _isCoordinator ? 3 : 4, vsync: this);
     _loadData();
   }
 
@@ -147,7 +150,9 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'Analytics',
-      subtitle: 'Monitor attendance, fee collection, staff signals, and alerts',
+      subtitle: _isCoordinator
+          ? 'Monitor attendance, staff signals, and alerts'
+          : 'Monitor attendance, fee collection, staff signals, and alerts',
       drawer: PrincipalDrawer(
         selectedIndex: PrincipalNav.analytics,
         onDestinationSelected: (_) {},
@@ -160,11 +165,11 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
         controller: _tabController,
         isScrollable: true,
         tabAlignment: TabAlignment.start,
-        tabs: const [
-          Tab(text: 'Attendance'),
-          Tab(text: 'Fee Collection'),
-          Tab(text: 'Staff Performance'),
-          Tab(text: 'Alerts'),
+        tabs: [
+          const Tab(text: 'Attendance'),
+          if (!_isCoordinator) const Tab(text: 'Fee Collection'),
+          const Tab(text: 'Staff Performance'),
+          const Tab(text: 'Alerts'),
         ],
       ),
       body: SchoolDeskRepositoryStateView<_PrincipalAnalyticsSnapshot>(
@@ -183,7 +188,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
       controller: _tabController,
       children: [
         _buildAttendanceTab(),
-        _buildFeeTab(),
+        if (!_isCoordinator) _buildFeeTab(),
         _buildStaffTab(),
         _buildAlertsTab(),
       ],

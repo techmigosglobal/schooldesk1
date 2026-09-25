@@ -11,7 +11,10 @@ class ApiPrincipalAnalyticsRepository implements PrincipalAnalyticsRepository {
   @override
   Future<Result<PrincipalAnalyticsSnapshot>> load({bool forceRefresh = false}) {
     return guardApi(() async {
-      final invoicesFuture = _loadAllInvoices(forceRefresh: forceRefresh);
+      final invoicesFuture =
+          _api.currentRoleName?.trim().toLowerCase() == 'coordinator'
+          ? Future<List<Map<String, dynamic>>>.value(const [])
+          : _loadAllInvoices(forceRefresh: forceRefresh);
       final alertsFuture = _api.getNotifications();
       final staffFuture = _loadAllStaff();
       final values = await Future.wait<Object>([

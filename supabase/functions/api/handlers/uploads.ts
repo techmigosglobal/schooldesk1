@@ -48,6 +48,15 @@ function roleValue(user: User): string {
   return `${user.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
 }
 
+function isFinanceReport(report: Record<string, unknown>): boolean {
+  const label = [report.report_type, report.report_title, report.report]
+    .map((value) => textValue(value).toLowerCase().replace(/[_-]+/g, " "))
+    .join(" ");
+  return /\b(fee|fees|finance|payment|payments|invoice|concession|receipt)\b/.test(
+    label,
+  );
+}
+
 const feedRoles = new Set([
   "principal",
   "coordinator",
@@ -3339,6 +3348,9 @@ export async function handleReports(
     }
     try {
       const body = await req.json().catch(() => ({}));
+      if (!isFinanceLeader(user) && isFinanceReport(body)) {
+        return fail("finance access required", 403);
+      }
       const data = await queueReportExport(
         svc,
         school,
@@ -3366,7 +3378,10 @@ export async function handleReports(
       ascending: false,
     });
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row) => documentRow(row)));
+    const reports = (data ?? []).map((row) => documentRow(row));
+    return ok(isFinanceLeader(user)
+      ? reports
+      : reports.filter((report) => !isFinanceReport(report)));
   }
   if (path === "/reports/attendance" && method === "GET") {
     if (!canManageStudents(user)) {

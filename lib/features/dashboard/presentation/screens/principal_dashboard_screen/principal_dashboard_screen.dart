@@ -80,7 +80,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     _loadDashboard();
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'principal-dashboard',
-      modules: const {'announcements', 'event_posts', 'attendance', 'fees'},
+      modules: _isCoordinator
+          ? const {'announcements', 'event_posts', 'attendance'}
+          : const {'announcements', 'event_posts', 'attendance', 'fees'},
       onRefresh: () {
         if (mounted) _loadDashboard();
       },
@@ -354,7 +356,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               onAction: _loadDashboard,
             ),
           const SizedBox(height: 12),
-          BranchSwitcher(onChanged: _loadDashboard),
+          if (!_isCoordinator) BranchSwitcher(onChanged: _loadDashboard),
         ],
       ),
       searchBar: _DashboardSearchBar(
@@ -600,7 +602,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                   message: 'Showing saved dashboard data while offline.',
                   onAction: _loadDashboard,
                 ),
-              BranchSwitcher(onChanged: _loadDashboard),
+              if (!_isCoordinator) BranchSwitcher(onChanged: _loadDashboard),
               const SizedBox(height: 18),
               _DashboardSearchBar(
                 onTap: () =>
@@ -947,16 +949,17 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         routeArguments: 'event_approvals',
         badge: _data.pendingApprovals,
       ),
-      _PrincipalActionQueueItem(
-        label: 'Fee Requests',
-        detail:
-            '${_data.pendingFeeRequests} payment request${_data.pendingFeeRequests == 1 ? '' : 's'} pending',
-        icon: Icons.account_balance_wallet_rounded,
-        color: const Color(0xFF16A34A),
-        route: AppRoutes.feeMonitoring,
-        routeArguments: 'fee_requests',
-        badge: _data.pendingFeeRequests,
-      ),
+      if (!_isCoordinator)
+        _PrincipalActionQueueItem(
+          label: 'Fee Requests',
+          detail:
+              '${_data.pendingFeeRequests} payment request${_data.pendingFeeRequests == 1 ? '' : 's'} pending',
+          icon: Icons.account_balance_wallet_rounded,
+          color: const Color(0xFF16A34A),
+          route: AppRoutes.feeMonitoring,
+          routeArguments: 'fee_requests',
+          badge: _data.pendingFeeRequests,
+        ),
       _PrincipalActionQueueItem(
         label: 'Access Approvals',
         detail:
@@ -1167,7 +1170,7 @@ class _PrincipalHomeData {
       hasSubjects,
       hasTeachers,
       hasStudents,
-      hasFees,
+      if (!_isCoordinator) hasFees,
     ].every((v) => v);
 
     final metrics = Map<String, dynamic>.from(
@@ -1242,11 +1245,12 @@ class _PrincipalHomeData {
           route: AppRoutes.studentOversight,
           isComplete: hasStudents,
         ),
-        _SetupStep(
-          title: 'Fee Structure Setup',
-          route: AppRoutes.feeMonitoring,
-          isComplete: hasFees,
-        ),
+        if (!_isCoordinator)
+          _SetupStep(
+            title: 'Fee Structure Setup',
+            route: AppRoutes.feeMonitoring,
+            isComplete: hasFees,
+          ),
         _SetupStep(title: 'Go Live', isComplete: goLiveReady),
       ],
     );
@@ -1841,7 +1845,9 @@ class _DashboardSearchBar extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Search students, staff, fees…',
+                  _isCoordinator
+                      ? 'Search students and staff…'
+                      : 'Search students, staff, fees…',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(

@@ -19,6 +19,23 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+const FINANCE_APPROVAL_MODULES = new Set([
+  "fee", "fees", "finance", "payment", "payments", "concession",
+  "concessions", "invoice", "invoices", "receipt", "receipts",
+  "fee_invoice", "fee_receipt", "fee_concession", "payment_proof",
+  "fee_payment_proof",
+]);
+
+function isFinanceApproval(module: unknown, entityType: unknown): boolean {
+  const normalize = (value: unknown) =>
+    text(value).toLowerCase().replace(/[\s-]+/g, "_");
+  return [module, entityType].some((value) => {
+    const normalized = normalize(value);
+    return FINANCE_APPROVAL_MODULES.has(normalized) ||
+      normalized.split("_").some((part) => FINANCE_APPROVAL_MODULES.has(part));
+  });
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -162,7 +179,7 @@ function buildTeacherAssignments(
     const entry = ensureSection(section, "co_teacher");
     if (!entry) continue;
     entry.is_co_teacher = true;
-    if (!text(entry.teacher_role)) {
+    if (!entry.is_class_teacher) {
       entry.teacher_role = "co_teacher";
     }
     if (!text(entry.subject_name)) {
@@ -562,17 +579,9 @@ export async function handleDashboard(
       today.getDate(),
     ).toISOString();
     const financeAuthorized = isFinanceLeader(user);
-    let approvalRequestsQuery = svc.from("approval_requests").select(
-      "id, status",
+    const approvalRequestsQuery = svc.from("approval_requests").select(
+      "id, module, entity_type",
     ).eq("school_id", school).eq("status", "pending");
-    if (!financeAuthorized) {
-      // A coordinator's operations count must not disclose pending fee work.
-      approvalRequestsQuery = approvalRequestsQuery.not(
-        "module",
-        "in",
-        '("fee","fees","finance","payment")',
-      );
-    }
 
     const [
       assignedStudents,
@@ -644,8 +653,12 @@ export async function handleDashboard(
       recentAnnouncements: (announcements.data ?? []) as Array<
         Record<string, unknown>
       >,
-      pendingEventApprovals: approvalRequests.data?.length ?? 0,
-      pendingAccessApprovals: approvalRequests.data?.length ?? 0,
+      pendingEventApprovals: (approvalRequests.data ?? []).filter((row) =>
+        financeAuthorized || !isFinanceApproval(row.module, row.entity_type)
+      ).length,
+      pendingAccessApprovals: (approvalRequests.data ?? []).filter((row) =>
+        financeAuthorized || !isFinanceApproval(row.module, row.entity_type)
+      ).length,
       attendanceToday: attendanceSessions.data?.length ?? 0,
       attendancePercentage: attendancePct,
       attendancePresent: todayPresent,

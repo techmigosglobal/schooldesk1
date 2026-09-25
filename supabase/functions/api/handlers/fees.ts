@@ -1631,10 +1631,10 @@ export async function handleFees(
           );
         }
       }
-      const { data, error } = await svc.from("fee_categories").select("*").eq(
-        "school_id",
-        school,
-      );
+      const { data, error } = await svc.from("fee_categories").select("*")
+        .eq("school_id", school)
+        .eq("is_active", true)
+        .is("archived_at", null);
       if (error) return fail(error.message);
       return ok(data ?? []);
     }
@@ -1682,7 +1682,9 @@ export async function handleFees(
       let q = svc.from("fee_structures").select(
         "*, grade:grades(*), section:sections(*)",
         { count: "exact" },
-      ).eq("school_id", school);
+      ).eq("school_id", school)
+        .eq("is_active", true)
+        .is("archived_at", null);
       if (url.searchParams.get("academic_year_id")) {
         q = q.eq("academic_year_id", url.searchParams.get("academic_year_id")!);
       }
@@ -3853,6 +3855,9 @@ export async function handleFees(
   }
 
   if (feesPath === "/payment-config" && method === "GET") {
+    if (!isParent && !isAdminOrPrincipal(user)) {
+      return fail("finance access required", 403);
+    }
     try {
       const data = await resolveScopedPaymentConfig(
         svc,

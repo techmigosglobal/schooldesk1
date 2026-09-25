@@ -1,7 +1,9 @@
 import {
   canAssignAccountRole,
   canCreateParentAccount,
+  canManageAccounts,
   canReadParentAccounts,
+  hasPermission,
 } from "./authorization.ts";
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
@@ -15,13 +17,18 @@ function actor(role_name: string) {
   } as never;
 }
 
-Deno.test("Coordinator may create a parent login for student onboarding only", () => {
+Deno.test("Coordinator can manage assigned-school accounts, not platform roles", () => {
   const coordinator = actor("coordinator");
   assert(canCreateParentAccount(coordinator, "parent"));
+  assert(canManageAccounts(coordinator));
+  assert(hasPermission(coordinator, "accounts.manage"));
+  assert(!hasPermission(coordinator, "finance.manage"));
   assert(canReadParentAccounts(coordinator, "Parent"));
-  assert(!canReadParentAccounts(coordinator, null));
+  assert(canReadParentAccounts(coordinator, null));
   assert(canAssignAccountRole(coordinator, "parent"));
-  assert(!canAssignAccountRole(coordinator, "kiosk"));
+  assert(canAssignAccountRole(coordinator, "kiosk"));
+  assert(canAssignAccountRole(coordinator, "coordinator"));
+  assert(!canAssignAccountRole(coordinator, "super_admin"));
   assert(!canAssignAccountRole(coordinator, "admin"));
   assert(!canAssignAccountRole(coordinator, "principal"));
 });

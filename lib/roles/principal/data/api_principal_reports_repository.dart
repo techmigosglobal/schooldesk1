@@ -14,8 +14,12 @@ class ApiPrincipalReportsRepository implements PrincipalReportsRepository {
     bool forceRefresh = false,
   }) => guardApi(() async {
     final service = BackendDataService.instance;
+    final includeFees =
+        _api.currentRoleName?.trim().toLowerCase() != 'coordinator';
     final values = await Future.wait<Object>([
-      service.getList(BackendDataService.kStudentFees),
+      includeFees
+          ? service.getList(BackendDataService.kStudentFees)
+          : Future<List<Map<String, dynamic>>>.value(const []),
       service.getList(BackendDataService.kStudents),
       service.getList(BackendDataService.kAdminTeachers),
       service.getList(BackendDataService.kAdminAttendanceRecords),

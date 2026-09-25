@@ -78,7 +78,11 @@ class RouteAccessGuard {
     AppRoutes.principalParentChildAssignment: {'principal'},
     // Super Admin can manage tenant/branch profile. Other principal
     // operations remain isolated to school leadership.
-    AppRoutes.principalSchoolProfile: {'principal', 'super_admin'},
+    AppRoutes.principalSchoolProfile: {
+      'principal',
+      'coordinator',
+      'super_admin',
+    },
     AppRoutes.admissionInquiries: {'principal', 'coordinator'},
     AppRoutes.systemMonitor: {'principal'},
     // Super Admin routes

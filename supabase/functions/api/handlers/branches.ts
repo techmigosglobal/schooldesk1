@@ -40,7 +40,15 @@ export async function handleBranches(
       )
       .eq("organization_id", organizationId)
       .order("name");
-    if (currentRole !== "super_admin") {
+    if (currentRole === "coordinator") {
+      const { data: assignedUser, error: assignedError } = await svc.from(
+        "users",
+      ).select("school_id").eq("id", user.id).maybeSingle();
+      if (assignedError) return fail(assignedError.message);
+      const assignedBranch = text(assignedUser?.school_id);
+      if (!assignedBranch) return ok([]);
+      query = query.eq("id", assignedBranch);
+    } else if (currentRole !== "super_admin") {
       const { data: memberships, error } = await svc.from("branch_memberships")
         .select("school_id").eq("user_id", user.id).eq("is_active", true);
       if (error) return fail(error.message);

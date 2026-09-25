@@ -263,9 +263,9 @@ export async function handleActivity(
   if (actorId) {
     query = query.eq("user_id", actorId === "current" ? user.id : actorId);
   }
-  if (activityRole(user) === "principal") {
-    // A principal can audit activity in their branch, but super-admin work is
-    // organization-level administration and is intentionally kept separate.
+  if (["principal", "coordinator"].includes(activityRole(user))) {
+    // Branch leaders can audit activity in their branch, but super-admin work
+    // is organization-level administration and stays separate.
     query = query.neq("actor_role", "super_admin");
   }
   if (actor) {

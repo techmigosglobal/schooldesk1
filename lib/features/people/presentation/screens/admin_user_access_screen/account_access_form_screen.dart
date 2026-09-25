@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -72,8 +73,20 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
     source: RepositorySource.remote,
   );
 
-  bool get _isPrincipalOwner => widget.args.isPrincipalOwner;
-  bool get _isSuperAdminOwner => widget.args.isSuperAdminOwner;
+  String get _effectiveOwnerRole {
+    final sessionRole = BackendApiClient.instance.currentRoleName
+        ?.trim()
+        .toLowerCase();
+    return widget.args.ownerRole.toLowerCase() == 'principal' &&
+            sessionRole == 'coordinator'
+        ? 'coordinator'
+        : widget.args.ownerRole.toLowerCase();
+  }
+
+  bool get _isPrincipalOwner =>
+      {'principal', 'coordinator'}.contains(_effectiveOwnerRole);
+  bool get _isCoordinatorOwner => _effectiveOwnerRole == 'coordinator';
+  bool get _isSuperAdminOwner => _effectiveOwnerRole == 'super_admin';
   bool get _isEdit => widget.args.isEdit;
 
   List<String> get _manageableRoles => _isSuperAdminOwner
@@ -136,7 +149,9 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
 
     return SchoolDeskModuleScaffold(
       title: title,
-      subtitle: _isPrincipalOwner
+      subtitle: _isCoordinatorOwner
+          ? 'Create and manage parent accounts for this branch'
+          : _isPrincipalOwner
           ? 'Principal-managed account provisioning'
           : 'Teacher and parent account request',
       drawer: drawer,

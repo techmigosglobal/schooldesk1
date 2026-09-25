@@ -322,7 +322,10 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
 
   Future<void> _requestCorrection() async {
     final session = _session;
-    if (session == null || !session.isFinalized) return;
+    if (session == null || !session.isFinalized ||
+        !_canRequestCorrectionForSelectedSection) {
+      return;
+    }
     final controller = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
@@ -530,14 +533,18 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                     'This session has been submitted. The principal must reopen it before edits are allowed.',
                 status: _statusLabel(_session?.status ?? 'submitted'),
                 statusColor: Colors.green,
-                body: Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: _saving ? null : _requestCorrection,
-                    icon: const Icon(Icons.report_problem_rounded, size: 18),
-                    label: const Text('Request Correction'),
-                  ),
-                ),
+                body: _canRequestCorrectionForSelectedSection
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: _saving ? null : _requestCorrection,
+                          icon: const Icon(Icons.report_problem_rounded, size: 18),
+                          label: const Text('Request Correction'),
+                        ),
+                      )
+                    : const Text(
+                        'Only the Class Teacher can request an attendance correction.',
+                      ),
               ),
               const SizedBox(height: 12),
             ],
@@ -804,6 +811,13 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
 
   List<Map<String, dynamic>> get _attendanceClassOptions {
     return RoleAccessService.assignedTeacherClasses;
+  }
+
+  bool get _canRequestCorrectionForSelectedSection {
+    return _sectionId.isNotEmpty &&
+        RoleAccessService.teacherClassTeacherClasses.any(
+          (row) => _sectionIdFromClassRow(row) == _sectionId,
+        );
   }
 
   String _sectionIdFromClassRow(Map<String, dynamic> row) {

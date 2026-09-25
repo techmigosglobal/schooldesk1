@@ -79,9 +79,9 @@ export function hasPermission(user: User, permission: Permission): boolean {
     case "finance.manage":
       return isFinanceLeader(user);
     case "accounts.manage":
-      // Generic account provisioning can create non-staff identities. Keep it
-      // above the Coordinator role; staff provisioning has a narrower policy.
-      return ["principal", "admin", "super_admin"].includes(role);
+      return ["principal", "coordinator", "admin", "super_admin"].includes(
+        role,
+      );
     case "academics.manage":
     case "guardians.manage":
     case "staff.manage":
@@ -114,9 +114,8 @@ export function canManageGuardians(user: User): boolean {
 }
 
 /**
- * Staff creation is intentionally narrower than generic platform account
- * management: Coordinators may create teacher/staff accounts only; Principal
- * and Admin may additionally appoint Coordinators; platform roles remain a
+ * Account creation stays inside school operator roles. Principal and
+ * Coordinator can administer their assigned school; platform roles remain a
  * Super Admin responsibility.
  */
 export function canAssignStaffRole(user: User, candidate: unknown): boolean {
@@ -124,28 +123,22 @@ export function canAssignStaffRole(user: User, candidate: unknown): boolean {
   if (!role || !STAFF_ASSIGNABLE_ROLES.has(role)) return false;
   const actor = roleName(user);
   if (actor === "super_admin") return true;
-  if (actor === "principal" || actor === "admin") {
+  if (["principal", "coordinator", "admin"].includes(actor)) {
     return ["teacher", "staff", "coordinator"].includes(role);
-  }
-  if (actor === "coordinator") {
-    return ["teacher", "staff"].includes(role);
   }
   return false;
 }
 
 /**
- * Generic user-account roles; only school leaders may use this surface for
- * arbitrary account management. Coordinators get a deliberately narrow
- * parent-account exception through `canCreateParentAccount`, because the
- * student/guardian workflow creates that login before linking the student.
+ * Generic user-account roles stay limited to school operators. Coordinators
+ * cannot create Principal, Admin, or Super Admin identities.
  */
 export function canAssignAccountRole(user: User, candidate: unknown): boolean {
   const role = normalizedRole(candidate);
   if (!role) return false;
   const actor = roleName(user);
   if (actor === "super_admin") return true;
-  if (actor === "coordinator") return role === "parent";
-  if (!["principal", "admin"].includes(actor)) return false;
+  if (!["principal", "coordinator", "admin"].includes(actor)) return false;
   return ["teacher", "staff", "coordinator", "parent", "kiosk"].includes(
     role,
   );
@@ -157,7 +150,7 @@ export function canCreateParentAccount(user: User, candidate: unknown): boolean 
     normalizedRole(candidate) === "parent";
 }
 
-/** Coordinators may read only the parent directory needed for student links. */
+/** School operators can read school accounts; other users get parent-only scope. */
 export function canReadParentAccounts(user: User, candidate: unknown): boolean {
   return canManageAccounts(user) || canCreateParentAccount(user, candidate);
 }

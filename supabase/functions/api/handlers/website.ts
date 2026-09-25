@@ -11,8 +11,6 @@ import {
 const bucket = "school-public-media";
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const schoolId = (user: User) => text(user.app_metadata?.school_id);
-const isPrincipal = (user: User) =>
-  text(user.app_metadata?.role_name).toLowerCase() === "principal";
 const isLeader = (user: User) =>
   ["principal", "coordinator"].includes(text(user.app_metadata?.role_name).toLowerCase());
 const programs = ["Daycare", "Playgroup", "Nursery", "PP1", "PP2"];
@@ -248,7 +246,7 @@ export async function handleWebsite(
     }
   }
 
-  if (!isPrincipal(user)) return fail("principal access required", 403);
+  if (!isLeader(user)) return fail("leadership access required", 403);
 
   if (path === "/website/content") {
     if (method === "GET") {

@@ -108,6 +108,14 @@ function studentPatch(body: Record<string, unknown>) {
   return payload;
 }
 function guardianPayload(body: Record<string, unknown>, school: string) {
+  const annualIncomeValue = body.annual_income;
+  const annualIncomeIsBlank = typeof annualIncomeValue === "string" &&
+    annualIncomeValue.trim() === "";
+  const annualIncome = annualIncomeValue == null || annualIncomeIsBlank
+    ? null
+    : typeof annualIncomeValue === "number"
+    ? annualIncomeValue
+    : Number(annualIncomeValue);
   return {
     school_id: school,
     student_id: nullableText(body.student_id),
@@ -116,8 +124,19 @@ function guardianPayload(body: Record<string, unknown>, school: string) {
     phone: text(body.phone) || null,
     email: text(body.email) || null,
     occupation: text(body.occupation) || null,
+    annual_income: annualIncome,
+    can_pickup: body.can_pickup === true,
     is_primary: body.is_primary ?? true,
   };
+}
+
+function guardianIncomeIsValid(body: Record<string, unknown>): boolean {
+  const value = body.annual_income;
+  if (value == null || (typeof value === "string" && value.trim() === "")) {
+    return true;
+  }
+  const amount = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(amount) && amount >= 0;
 }
 
 async function validateStudentSection(
@@ -605,6 +624,9 @@ export async function handleGuardians(
 
   if (!id && method === "POST") {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (!guardianIncomeIsValid(body)) {
+      return fail("annual_income must be a non-negative number", 422);
+    }
     const studentId = text(body.student_id);
     if (!studentId) return fail("student_id required");
     const student = await svc.from("students").select("id").eq("id", studentId)
@@ -620,6 +642,9 @@ export async function handleGuardians(
 
   if (id && (method === "PATCH" || method === "PUT")) {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (!guardianIncomeIsValid(body)) {
+      return fail("annual_income must be a non-negative number", 422);
+    }
     if (text(body.student_id)) {
       const student = await svc.from("students").select("id").eq(
         "id",
@@ -633,7 +658,19 @@ export async function handleGuardians(
       updated_at: new Date().toISOString(),
     });
     delete payload.school_id;
-    if (!text(body.student_id)) delete payload.student_id;
+    for (const [payloadKey, bodyKeys] of Object.entries({
+      student_id: ["student_id"],
+      full_name: ["full_name", "name"],
+      relationship: ["relationship"],
+      phone: ["phone"],
+      email: ["email"],
+      occupation: ["occupation"],
+      annual_income: ["annual_income"],
+      can_pickup: ["can_pickup"],
+      is_primary: ["is_primary"],
+    })) {
+      if (!bodyKeys.some((key) => key in body)) delete payload[payloadKey];
+    }
     const { data, error } = await svc.from("guardians").update(payload).eq(
       "id",
       id,

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -21,10 +22,7 @@ import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 @immutable
 class _UserAccessSnapshot {
-  const _UserAccessSnapshot({
-    required this.users,
-    required this.activities,
-  });
+  const _UserAccessSnapshot({required this.users, required this.activities});
 
   final List<Map<String, dynamic>> users;
   final List<Map<String, dynamic>> activities;
@@ -68,9 +66,18 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       ? const ['Principal', 'Coordinator', 'Teacher', 'Parent']
       : const ['Coordinator', 'Teacher', 'Parent'];
 
-  bool get _isPrincipalOwner => widget.ownerRole == 'principal';
-  bool get _isCoordinatorOwner => widget.ownerRole == 'coordinator';
-  bool get _isSuperAdminOwner => widget.ownerRole == 'super_admin';
+  String get _effectiveOwnerRole {
+    final sessionRole = BackendApiClient.instance.currentRoleName
+        ?.trim()
+        .toLowerCase();
+    return widget.ownerRole == 'principal' && sessionRole == 'coordinator'
+        ? 'coordinator'
+        : widget.ownerRole;
+  }
+
+  bool get _isPrincipalOwner => _effectiveOwnerRole == 'principal';
+  bool get _isCoordinatorOwner => _effectiveOwnerRole == 'coordinator';
+  bool get _isSuperAdminOwner => _effectiveOwnerRole == 'super_admin';
 
   final Map<String, List<String>> _rolePermissions = {
     'Principal': [
@@ -317,11 +324,13 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
             ? DashboardRole.superAdmin
             : _isPrincipalOwner
             ? DashboardRole.principal
+            : _isCoordinatorOwner
+            ? DashboardRole.coordinator
             : DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
-        if (_isPrincipalOwner || _isCoordinatorOwner)
+        if (_isPrincipalOwner)
           Semantics(
             label: 'Create role login',
             button: true,
@@ -340,7 +349,9 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           )
         else
           IconButton(
-            tooltip: 'Create teacher or parent account',
+            tooltip: _isCoordinatorOwner
+                ? 'Create school account'
+                : 'Create teacher or parent account',
             icon: const Icon(Icons.person_add_rounded),
             onPressed: () => _openUserForm(),
           ),
@@ -1047,7 +1058,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       context,
       route,
       arguments: AccountAccessFormArgs(
-        ownerRole: widget.ownerRole,
+        ownerRole: _effectiveOwnerRole,
         existing: existing,
       ),
     );
@@ -1071,7 +1082,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       context,
       AppRoutes.principalParentChildAssignment,
       arguments: AccountChildAssignmentArgs(
-        ownerRole: widget.ownerRole,
+        ownerRole: _effectiveOwnerRole,
         parentUserId: (u['id'] ?? '').toString(),
         parentName: (u['name'] ?? 'Parent').toString(),
         parentEmail: (u['email'] ?? '').toString(),
@@ -1090,10 +1101,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
 
   Future<void> _setUserActive(Map<String, dynamic> u, bool active) async {
     try {
-      await _repository.updateUser(
-        u['id'].toString(),
-        isActive: active,
-      );
+      await _repository.updateUser(u['id'].toString(), isActive: active);
       await _loadUsers();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1146,10 +1154,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     try {
       final staffId = '${u['staffId'] ?? ''}';
       if (isInactive) {
-        await _repository.deleteUser(
-          u['id'].toString(),
-          permanent: true,
-        );
+        await _repository.deleteUser(u['id'].toString(), permanent: true);
       } else if ((u['linkedType'] ?? '') == 'staff' && staffId.isNotEmpty) {
         await _repository.deleteLinkedStaff(staffId);
       } else {

@@ -2567,6 +2567,7 @@ export async function handleCommunications(
       section_id: sectionId || null,
       staff_id: canManageSchoolContent(user) ? staffId : linkedStaffId(user),
       teacher_id: staffId || null,
+      attachments: Array.isArray(body.attachments) ? body.attachments : [],
       created_by: user.id,
     };
     const { data, error } = await svc.from("diary_entries").insert(payload)
@@ -2602,6 +2603,14 @@ export async function handleCommunications(
       changes = Object.fromEntries(
         Object.entries(body).filter(([key]) => allowed.includes(key)),
       );
+    }
+    if ("attachments" in changes) {
+      changes = {
+        ...changes,
+        attachments: Array.isArray(changes.attachments)
+          ? changes.attachments
+          : [],
+      };
     }
     const { data, error } = await svc.from("diary_entries").update(changes).eq(
       "id",

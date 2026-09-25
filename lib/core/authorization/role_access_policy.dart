@@ -41,7 +41,9 @@ class RoleAccessPolicy {
       SchoolDeskCapability.manageHomework,
       SchoolDeskCapability.communicate,
       SchoolDeskCapability.viewDocuments,
+      SchoolDeskCapability.viewReports,
       SchoolDeskCapability.approveRequests,
+      SchoolDeskCapability.manageAccounts,
     },
     SchoolDeskRole.teacher: {
       SchoolDeskCapability.viewDashboard,

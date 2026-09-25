@@ -2,11 +2,18 @@
 // NOTE: 'exam' module is permanently excluded — no exam approval entries
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
+import { isFinanceLeader } from "./authorization.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
 
 const REMOVED_MODULES = ["exam", "exams", "exam_schedule", "result", "results"];
+const FINANCE_APPROVAL_MODULES = new Set([
+  "fee", "fees", "finance", "payment", "payments", "concession",
+  "concessions", "invoice", "invoices", "receipt", "receipts",
+  "fee_invoice", "fee_receipt", "fee_concession", "payment_proof",
+  "fee_payment_proof",
+]);
 
 function text(value: unknown, fallback = "") {
   const result = `${value ?? ""}`.trim();
@@ -15,6 +22,16 @@ function text(value: unknown, fallback = "") {
 
 function dateOnly(value: unknown) {
   return text(value).split("T")[0];
+}
+
+function isFinanceApproval(module: unknown, entityType: unknown): boolean {
+  const normalize = (value: unknown) =>
+    text(value).toLowerCase().replace(/[\s-]+/g, "_");
+  return [module, entityType].some((value) => {
+    const normalized = normalize(value);
+    return FINANCE_APPROVAL_MODULES.has(normalized) ||
+      normalized.split("_").some((part) => FINANCE_APPROVAL_MODULES.has(part));
+  });
 }
 
 function approvalType(module: unknown, type: unknown) {
@@ -92,6 +109,7 @@ export async function handleApprovals(
   user: User,
 ): Promise<Response> {
   const school = sid(user);
+  const financeAuthorized = isFinanceLeader(user);
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
 
   if (path === "/approvals/feed" && method === "GET") {
@@ -116,12 +134,12 @@ export async function handleApprovals(
         svc.from("student_leave_applications").select(
           "id, student_id, status, start_date, end_date, reason, created_at, updated_at, student:students(first_name, last_name, current_section:sections(section_name, grade:grades(grade_name)))",
         ).eq("school_id", school).limit(100),
-        svc.from("fee_concessions").select(
+        financeAuthorized ? svc.from("fee_concessions").select(
           "id, student_id, status, amount, reason, created_at, updated_at, student:students(first_name, last_name, current_section:sections(section_name, grade:grades(grade_name)))",
-        ).eq("school_id", school).limit(100),
-        svc.from("parent_payment_requests").select(
+        ).eq("school_id", school).limit(100) : Promise.resolve({ data: [], error: null }),
+        financeAuthorized ? svc.from("parent_payment_requests").select(
           "id, student_id, parent_user_id, status, amount, payment_method, transaction_ref, remarks, admin_remarks, payment_date, created_at, updated_at, student:students(first_name, last_name), invoice:fee_invoices(invoice_number)",
-        ).eq("school_id", school).limit(100),
+        ).eq("school_id", school).limit(100) : Promise.resolve({ data: [], error: null }),
         svc.from("event_posts").select(
           "id, title, body, status, created_at, updated_at, created_by",
         ).eq("school_id", school).in("status", ["pending", "submitted"]).limit(100),
@@ -165,6 +183,7 @@ export async function handleApprovals(
       });
     }
     for (const row of generic.data ?? []) {
+      if (!financeAuthorized && isFinanceApproval(row.module, row.entity_type)) continue;
       const requestedBy = (row.requested_by ?? {}) as unknown as Record<string, unknown>;
       const type = approvalType(row.module, row.entity_type);
       items.push({
@@ -344,6 +363,10 @@ export async function handleApprovals(
   if (path.startsWith("/approvals")) {
     const seg = path.slice("/approvals".length).split("/").filter(Boolean)[0];
     if (!seg && method === "GET") {
+      const requestedModule = text(url.searchParams.get("module"));
+      if (!financeAuthorized && isFinanceApproval(requestedModule, "")) {
+        return ok([]);
+      }
       let q = svc.from("approval_requests").select(
         "*, requested_by:users!approval_requests_requested_by_fkey(name, role_name)",
       ).eq("school_id", school);
@@ -357,9 +380,14 @@ export async function handleApprovals(
       }
       const { data, error } = await q.order("created_at", { ascending: false });
       if (error) return fail(error.message);
-      return ok(data);
+      return ok(financeAuthorized ? data : (data ?? []).filter((row) =>
+        !isFinanceApproval(row.module, row.entity_type)
+      ));
     }
     if (!seg && method === "POST") {
+      if (!financeAuthorized && isFinanceApproval(body.module, body.entity_type)) {
+        return fail("finance access required", 403);
+      }
       if (
         REMOVED_MODULES.includes((body.module as string ?? "").toLowerCase())
       ) {
@@ -382,6 +410,17 @@ export async function handleApprovals(
       );
       if (actionMatch) {
         const [, id, action] = actionMatch;
+        if (!financeAuthorized) {
+          const { data: existing, error: existingError } = await svc.from(
+            "approval_requests",
+          ).select("module, entity_type").eq("id", id).eq("school_id", school)
+            .maybeSingle();
+          if (existingError) return fail(existingError.message);
+          if (!existing) return fail("Approval not found", 404);
+          if (isFinanceApproval(existing.module, existing.entity_type)) {
+            return fail("finance access required", 403);
+          }
+        }
         const status = action === "approve"
           ? "approved"
           : action === "reject"

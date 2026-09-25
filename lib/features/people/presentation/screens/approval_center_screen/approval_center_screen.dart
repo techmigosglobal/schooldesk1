@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -242,11 +243,15 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   // the widget is already unmounted.
   NotificationService? _notificationService;
 
-  final List<String> _tabLabels = [
+  bool get _isCoordinator =>
+      BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+      'coordinator';
+
+  List<String> get _tabLabels => [
     'All',
     'Student & Accounts',
     'Leave',
-    'Fees',
+    if (!_isCoordinator) 'Fees',
     'Class & Academic',
     'Content',
   ];
@@ -275,6 +280,14 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   }
 
   int _initialTabIndex(String initialTab) {
+    if (_isCoordinator) {
+      return switch (initialTab.trim().toLowerCase()) {
+        'timetable' || 'class' || 'academic_info' => 3,
+        'documents' || 'document' || 'communication' || 'event_posts' ||
+        'event' => 4,
+        _ => 0,
+      };
+    }
     return switch (initialTab.trim().toLowerCase()) {
       'leave' || 'student_leave' => 2,
       'accounts' || 'account' => 1,
@@ -431,6 +444,32 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
 
   List<ApprovalModel> _getTypeFilteredApprovals(int tabIndex) {
     if (tabIndex == 0) return _allApprovals;
+    if (_isCoordinator) {
+      const coordinatorTypeGroups = <int, Set<ApprovalType>>{
+        1: {
+          ApprovalType.account,
+          ApprovalType.admission,
+          ApprovalType.tc,
+          ApprovalType.student,
+        },
+        2: {ApprovalType.leave, ApprovalType.studentLeave},
+        3: {
+          ApprovalType.classApproval,
+          ApprovalType.timetable,
+          ApprovalType.academicInfo,
+        },
+        4: {
+          ApprovalType.document,
+          ApprovalType.communication,
+          ApprovalType.event,
+        },
+      };
+      final types = coordinatorTypeGroups[tabIndex];
+      if (types == null) return _allApprovals;
+      return _allApprovals
+          .where((approval) => types.contains(approval.type))
+          .toList();
+    }
     const typeGroups = <int, Set<ApprovalType>>{
       // Keep related operational decisions together. This replaces thirteen
       // competing tabs with six predictable queues without hiding any type.
@@ -698,6 +737,10 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     String status,
     String remarks,
   ) async {
+    if (_isCoordinator &&
+        {ApprovalType.fee, ApprovalType.feeConcession}.contains(approval.type)) {
+      throw const FormatException('Finance approvals are unavailable');
+    }
     if (approval.source == ApprovalSource.feePaymentProof) {
       if (status != 'approved' && status != 'rejected') {
         throw const FormatException(

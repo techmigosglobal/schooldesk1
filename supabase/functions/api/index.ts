@@ -550,7 +550,21 @@ export async function authedClient(req: Request) {
   if (profileError || !profile || profile.is_active !== true) {
     return { user: null, client: null, svc };
   }
-  if (!requestedBranch) return { user, client, svc };
+  if (!requestedBranch) {
+    // Coordinator school_id is the assigned branch. Do not trust a stale JWT
+    // claim as branch authority when a session has been reassigned.
+    if (currentRole === "coordinator") {
+      return {
+        user: {
+          ...user,
+          app_metadata: { ...user.app_metadata, school_id: profile.school_id },
+        },
+        client,
+        svc,
+      };
+    }
+    return { user, client, svc };
+  }
   let permitted = false;
   if (currentRole === "super_admin") {
     const { data: schools } = await svc.from("schools")
@@ -869,7 +883,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
   }
   if (path.startsWith("/schools")) {
     return auditedResponse(
-      handleSchools(req, path, method, url, client, svc),
+      handleSchools(req, path, method, url, client, svc, user),
       svc,
       user,
       path,

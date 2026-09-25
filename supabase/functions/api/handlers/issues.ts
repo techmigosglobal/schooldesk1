@@ -87,7 +87,7 @@ async function notify(
     type: "issue",
     entity_type: "issue",
     entity_id: issueId,
-    route: targetRole === "principal"
+    route: ["principal", "coordinator"].includes(targetRole)
       ? "/complaint-management-screen"
       : targetRole === "teacher"
       ? "/teacher-complaints-screen"

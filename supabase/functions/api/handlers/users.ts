@@ -121,14 +121,12 @@ export async function handleUsers(
     canCreateParentAccount(user, requestedRole);
   const isParentDirectoryRead = method === "GET" && !seg &&
     canReadParentAccounts(user, url.searchParams.get("role"));
-  // A Coordinator may update only an existing parent account. The target row
-  // is checked again in the PATCH branch before any fields are changed.
+  // Retain the parent onboarding path if future role policy narrows account
+  // management again.
   const isCoordinatorParentPatch = method === "PATCH" && Boolean(seg) &&
     roleName(user) === "coordinator";
 
-  // Generic account management is more powerful than staff provisioning.
-  // A Coordinator manages staff through /staff, but cannot use /users to mint
-  // a parent, kiosk, admin, or platform identity.
+  // School account operations remain scoped to the caller's assigned school.
   if (!canManageAccounts(user) && !isCoordinatorParentCreate &&
     !isParentDirectoryRead && !isCoordinatorParentPatch && !isOwnRead &&
     !isOwnAvatar) {
@@ -229,6 +227,9 @@ export async function handleUsers(
       .maybeSingle();
     if (targetError) return fail(targetError.message);
     if (!target) return fail("user not found", 404);
+    if (!canAssignAccountRole(user, target.role_name)) {
+      return fail("forbidden credential reset", 403);
+    }
     const password = temporaryPassword();
     const { error: authError } = await svc.auth.admin.updateUserById(seg, {
       password,
@@ -268,7 +269,8 @@ export async function handleUsers(
     ).eq("id", seg).eq("school_id", school).maybeSingle();
     if (targetError) return fail(targetError.message);
     if (!target) return fail("user not found", 404);
-    const coordinatorParentTarget = roleName(user) === "coordinator" &&
+    const coordinatorParentTarget = !canManageAccounts(user) &&
+      roleName(user) === "coordinator" &&
       normalizeRole(target.role_name) === "parent";
     if (!canManageAccounts(user) && !coordinatorParentTarget) {
       return fail("forbidden", 403);
@@ -379,15 +381,38 @@ export async function handleUsers(
   }
 
   if (seg && method === "DELETE") {
-    await svc.auth.admin.deleteUser(seg);
-    await svc.from("users").delete().eq("id", seg).eq("school_id", school);
+    if (!canManageAccounts(user)) return fail("forbidden", 403);
+    const { data: target, error: targetError } = await svc.from("users")
+      .select("id, school_id, role_name")
+      .eq("id", seg).eq("school_id", school).maybeSingle();
+    if (targetError) return fail(targetError.message);
+    if (!target) return fail("user not found", 404);
+    if (target.id === user.id || !canAssignAccountRole(user, target.role_name)) {
+      return fail("forbidden account deletion", 403);
+    }
+    const { error: authError } = await svc.auth.admin.deleteUser(seg);
+    if (authError) return fail(authError.message);
+    const { error } = await svc.from("users").delete().eq("id", seg).eq(
+      "school_id",
+      school,
+    );
+    if (error) return fail(error.message);
     return ok({ success: true });
   }
 
   // Toggle active
   if (path.endsWith("/activate") || path.endsWith("/deactivate")) {
+    if (!canManageAccounts(user)) return fail("forbidden", 403);
     const uid = path.split("/")[2];
     const activate = path.endsWith("/activate");
+    const { data: target, error: targetError } = await svc.from("users")
+      .select("id, role_name").eq("id", uid).eq("school_id", school)
+      .maybeSingle();
+    if (targetError) return fail(targetError.message);
+    if (!target) return fail("user not found", 404);
+    if (target.id === user.id || !canAssignAccountRole(user, target.role_name)) {
+      return fail("forbidden account status change", 403);
+    }
     const { data, error } = await svc.from("users").update({
       is_active: activate,
     }).eq("id", uid).eq("school_id", school).select().single();

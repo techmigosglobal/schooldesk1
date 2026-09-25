@@ -115,7 +115,7 @@ export async function handleCalendar(
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
 
   if (path === "/events/calendar-reset" && method === "POST") {
-    if (!["principal"].includes(roleName(user))) return fail("forbidden", 403);
+    if (!["principal", "coordinator"].includes(roleName(user))) return fail("forbidden", 403);
     if (`${body.confirmation ?? ""}`.trim().toUpperCase() !== "RESET") {
       return fail("type RESET to confirm calendar reset", 400);
     }

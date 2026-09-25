@@ -12,10 +12,10 @@ Deno.test("website public route is explicit and uses the website selection flag"
   assert(!source.includes("school-assets"));
 });
 
-Deno.test("only the principal can mutate website content", async () => {
+Deno.test("school leaders can manage branch website content", async () => {
   const source = await read("supabase/functions/api/handlers/website.ts");
-  assertMatch(source, /role_name\).*=== "principal"/);
-  assertMatch(source, /principal access required/);
+  assertMatch(source, /\["principal", "coordinator"\]/);
+  assertMatch(source, /if \(!isLeader\(user\)\)/);
   const migration = await read("supabase/migrations/20260720090000_school_website_content.sql");
   assertMatch(migration, /website_content_principal_write/);
   assertMatch(migration, /school_website_gallery_items/);

@@ -11,7 +11,10 @@ import {
   todayDate,
   wasDailyClaimCreatedByThisRequest,
 } from "./daily_claims.ts";
-import { teacherCanAccessStudent } from "./teacher_scope.ts";
+import {
+  resolveActiveTeacherScope,
+  teacherCanAccessStudent,
+} from "./teacher_scope.ts";
 
 /**
  * Notify parents when a student is marked absent. Each notification is stored
@@ -156,6 +159,23 @@ function canManageAttendance(roleName: string) {
   return ["admin", "principal", "coordinator", "super_admin"].includes(
     roleName,
   );
+}
+
+async function syncAttendancePresentCount(
+  svc: SupabaseClient,
+  school: string,
+  sessionId: string,
+): Promise<string | null> {
+  const { count, error: countError } = await svc.from("student_attendances")
+    .select("id", { count: "exact", head: true })
+    .eq("session_id", sessionId)
+    .in("status", ["present", "p"]);
+  if (countError) return countError.message;
+  const { error } = await svc.from("attendance_sessions").update({
+    present_count: count ?? 0,
+    updated_at: new Date().toISOString(),
+  }).eq("id", sessionId).eq("school_id", school);
+  return error?.message ?? null;
 }
 
 async function parentCanAccessStudent(
@@ -592,6 +612,11 @@ export async function handleAttendance(
       }
       return ok({ ...existingSession.data, daily_claim: existingClaim });
     }
+    const { count: totalStudents, error: studentCountError } = await svc.from(
+      "students",
+    ).select("id", { count: "exact", head: true }).eq("school_id", school)
+      .eq("current_section_id", sectionId).ilike("status", "active");
+    if (studentCountError) return fail(studentCountError.message);
     let claim: Record<string, unknown>;
     try {
       claim = await claimDailyOperation({
@@ -627,6 +652,8 @@ export async function handleAttendance(
       staff_id: canManageAttendance(roleName) ? body.staff_id : linkedStaffId,
       period_number: periodNumber,
       status: "draft",
+      total_students: totalStudents ?? 0,
+      present_count: 0,
     };
     const { data, error } = await svc.from("attendance_sessions").insert(
       payload,
@@ -758,6 +785,12 @@ export async function handleAttendance(
       { onConflict: "session_id,student_id" },
     ).select();
     if (error) return fail(error.message);
+    const countSyncError = await syncAttendancePresentCount(
+      svc,
+      school,
+      sessionId,
+    );
+    if (countSyncError) return fail(countSyncError);
     if (body.finalize != false) {
       const { error: finalizeError } = await svc.from("attendance_sessions").update({
         is_finalized: true,
@@ -843,6 +876,12 @@ export async function handleAttendance(
       { onConflict: "session_id,student_id" },
     ).select();
     if (error) return fail(error.message);
+    const countSyncError = await syncAttendancePresentCount(
+      svc,
+      school,
+      sessionId,
+    );
+    if (countSyncError) return fail(countSyncError);
     const { error: finalizeLegacyError } = await svc.from("attendance_sessions").update({
       is_finalized: true,
       status: "submitted",
@@ -883,6 +922,17 @@ export async function handleAttendance(
       ) {
         return fail("forbidden", 403);
       }
+      if (roleName === "teacher") {
+        const scope = await resolveActiveTeacherScope(
+          svc,
+          school,
+          linkedStaffId,
+        );
+        const section = scope.sections.get(`${session.section_id ?? ""}`);
+        if (!section?.isClassTeacher) {
+          return fail("only the class teacher can request attendance corrections", 403);
+        }
+      }
     } catch (error) {
       return fail(
         error instanceof Error ? error.message : "failed to load session",
@@ -896,6 +946,59 @@ export async function handleAttendance(
       updated_at: new Date().toISOString(),
     }).eq("id", correctionMatch[1]).eq("school_id", school).select().single();
     if (error) return fail(error.message);
+    try {
+      const { data: leaders, error: principalError } = await svc.from(
+        "users",
+      ).select("id, role_name").eq("school_id", school)
+        .in("role_name", ["principal", "coordinator"]).eq("is_active", true);
+      if (principalError) throw principalError;
+      const recipients = (leaders ?? []).map((row) => ({
+        id: `${row.id ?? ""}`,
+        role: `${row.role_name ?? "principal"}`.toLowerCase(),
+      })).filter((row) => row.id);
+      if (recipients.length > 0) {
+        const title = "Attendance correction requested";
+        const message = `A teacher requested a correction for attendance on ${
+          `${session.date ?? ""}`.split("T")[0]
+        }.`;
+        const { error: logError } = await svc.from("notification_logs")
+          .upsert(recipients.map((recipient) => ({
+            school_id: school,
+            user_id: recipient.id,
+            target_role: recipient.role,
+            title,
+            body: message,
+            type: "attendance",
+            entity_type: "attendance",
+            entity_id: correctionMatch[1],
+            route: "/principal-attendance-screen",
+            priority: "high",
+            is_read: false,
+          })), { onConflict: "user_id,entity_type,entity_id" });
+        if (logError) throw logError;
+        const { data: events, error: eventError } = await svc.from(
+          "notification_events",
+        ).insert(recipients.map((recipient) => ({
+          school_id: school,
+          user_id: recipient.id,
+          event_type: "attendance_correction_requested",
+          event_data: {
+            title,
+            message,
+            session_id: correctionMatch[1],
+            reference_type: "attendance",
+            reference_id: correctionMatch[1],
+            route: "/principal-attendance-screen",
+          },
+        }))).select("id");
+        if (eventError) throw eventError;
+        const eventIds = (events ?? []).map((row) => `${row.id ?? ""}`)
+          .filter(Boolean);
+        if (eventIds.length > 0) triggerPushProcessing(eventIds);
+      }
+    } catch (notificationError) {
+      console.error("Failed to notify school leaders about attendance correction", notificationError);
+    }
     return ok(data);
   }
 

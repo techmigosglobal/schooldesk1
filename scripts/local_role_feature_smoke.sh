@@ -65,6 +65,87 @@ check_paths() {
   done
 }
 
+check_coordinator_isolation() {
+  local response token assigned_school_id branches branch_count branch_id override_status
+  response="$(login QA_COORDINATOR_USERNAME QA_COORDINATOR_PASSWORD)"
+  token="$(printf '%s' "$response" | jq -er '.data.access_token // .data.token')"
+  assigned_school_id="$(curl -fsS --max-time 15 "$api_base/schools/current" \
+    -H "Authorization: Bearer $token" | jq -er '.data.id')"
+  branches="$(curl -fsS --max-time 15 "$api_base/branches" \
+    -H "Authorization: Bearer $token")"
+  branch_count="$(printf '%s' "$branches" | jq -er '.data | length')"
+  branch_id="$(printf '%s' "$branches" | jq -er '.data[0].id')"
+  if [[ "$branch_count" != 1 || "$branch_id" != "$assigned_school_id" ]]; then
+    echo "coordinator branch scope mismatch: count=$branch_count" >&2
+    return 1
+  fi
+  override_status="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+    "$api_base/principal/classes" \
+    -H "Authorization: Bearer $token" \
+    -H 'x-schooldesk-branch-id: 00000000-0000-4000-8000-000000000201')"
+  if [[ "$override_status" != 401 && "$override_status" != 403 ]]; then
+    echo "coordinator branch override expected 401/403, got $override_status" >&2
+    return 1
+  fi
+  printf 'PASS coordinator assigned branch only (%s); override=%s\n' \
+    "$branch_id" "$override_status"
+}
+
+check_coordinator_finance_writes() {
+  local response token report_status approval_status export_rows leaked_exports
+  local fee_export_status fee_approval_filter
+  local approvals leaked_approvals dashboard dashboard_finance_keys
+  local students student_finance_keys classes class_finance_keys
+  response="$(login QA_COORDINATOR_USERNAME QA_COORDINATOR_PASSWORD)"
+  token="$(printf '%s' "$response" | jq -er '.data.access_token // .data.token')"
+  report_status="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+    -X POST "$api_base/reports/exports" \
+    -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+    --data '{"report_type":"complete_fees_report"}')"
+  approval_status="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+    -X POST "$api_base/approvals" \
+    -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+    --data '{"module":"fees","entity_type":"fee_invoice"}')"
+  fee_export_status="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+    -X POST "$api_base/fees/reports/exports" \
+    -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+    --data '{"report_type":"complete_fees_report"}')"
+  fee_approval_filter="$(curl -fsS --max-time 15 "$api_base/approvals?module=fee" \
+    -H "Authorization: Bearer $token" | jq -er '.data | length')"
+  if [[ "$report_status" != 403 || "$approval_status" != 403 || \
+    "$fee_export_status" != 403 || "$fee_approval_filter" != 0 ]]; then
+    echo "coordinator finance write/approval checks failed; report=$report_status approval=$approval_status fee_export=$fee_export_status fee_approvals=$fee_approval_filter" >&2
+    return 1
+  fi
+  export_rows="$(curl -fsS --max-time 15 "$api_base/reports/exports" \
+    -H "Authorization: Bearer $token")"
+  leaked_exports="$(printf '%s' "$export_rows" | jq -er \
+    '[.data[]? | select(([.report_type, .report_title, .report] | map(tostring) | join(" ") | test("fee|finance|payment|invoice|concession|receipt"; "i")))] | length')"
+  approvals="$(curl -fsS --max-time 15 "$api_base/approvals/feed?page=1&page_size=100" \
+    -H "Authorization: Bearer $token")"
+  leaked_approvals="$(printf '%s' "$approvals" | jq -er \
+    '[.. | objects | select(([.module?, .entity_type?, .type?, .title?, .label?] | map(tostring) | join(" ") | test("fee|finance|payment|invoice|concession|receipt"; "i")))] | length')"
+  dashboard="$(curl -fsS --max-time 15 "$api_base/dashboard/coordinator" \
+    -H "Authorization: Bearer $token")"
+  dashboard_finance_keys="$(printf '%s' "$dashboard" | jq -er \
+    '[paths as $path | select(($path[-1] | type == "string") and ($path[-1] | test("fee|finance|invoice|payment"; "i")))] | length')"
+  students="$(curl -fsS --max-time 15 "$api_base/students?page=1&page_size=10" \
+    -H "Authorization: Bearer $token")"
+  student_finance_keys="$(printf '%s' "$students" | jq -er \
+    '[.data[]? | select(has("fee_summary") or has("fee_balance") or has("fee_status"))] | length')"
+  classes="$(curl -fsS --max-time 15 "$api_base/principal/classes" \
+    -H "Authorization: Bearer $token")"
+  class_finance_keys="$(printf '%s' "$classes" | jq -er \
+    '[paths as $path | select(($path[-1] | type == "string") and ($path[-1] | test("fee|finance|invoice|payment"; "i")))] | length')"
+  if [[ "$leaked_exports" != 0 || "$leaked_approvals" != 0 || \
+    "$dashboard_finance_keys" != 0 || "$student_finance_keys" != 0 || \
+    "$class_finance_keys" != 0 ]]; then
+    echo "coordinator finance read leak: exports=$leaked_exports approvals=$leaked_approvals dashboard=$dashboard_finance_keys students=$student_finance_keys classes=$class_finance_keys" >&2
+    return 1
+  fi
+  echo 'PASS coordinator fee report and approval writes denied'
+}
+
 probe() {
   local role="$1" username_key="$2" password_key="$3"
   shift 3
@@ -97,12 +178,55 @@ probe admin QA_ADMIN_USERNAME QA_ADMIN_PASSWORD \
 
 probe coordinator QA_COORDINATOR_USERNAME QA_COORDINATOR_PASSWORD \
   '/schools/current' 200 \
+  '/branches' 200 \
+  '/dashboard/coordinator' 200 \
+  '/users?page=1&page_size=1' 200 \
+  '/users?role=parent&page=1&page_size=1' 200 \
+  '/staff?page=1&page_size=1' 200 \
+  '/guardians/directory?page=1&page_size=1' 200 \
+  '/admission-inquiries?page=1&page_size=1' 200 \
   '/principal/classes' 200 \
+  '/principal/subjects' 200 \
+  '/principal/timetable' 200 \
+  '/lesson-planners/principal' 200 \
   '/students?page=1&page_size=1' 200 \
+  '/students/summary' 200 \
+  '/attendance/sessions?page=1&page_size=1' 200 \
+  '/attendance/staff?page=1&page_size=1' 200 \
+  '/attendance/staff/daily-summary?date=2026-09-23' 200 \
+  '/approvals/feed?page=1&page_size=100' 200 \
+  '/audit-logs?page_size=1' 200 \
+  '/issues?page=1&page_size=1' 200 \
+  '/events?page=1&page_size=1' 200 \
+  '/events/calendar-preferences' 200 \
+  '/event-posts/gallery?page=1&page_size=1' 200 \
+  '/student-documents?page=1&page_size=1' 200 \
+  '/staff-documents?page=1&page_size=1' 200 \
+  '/reports/exports' 200 \
+  '/reports/attendance' 200 \
+  '/reports/staff' 200 \
+  '/website/content' 200 \
+  '/website/ticker' 200 \
+  '/website/gallery' 200 \
+  '/monitoring/error-events?page=1&page_size=1' 200 \
+  '/notifications' 200 \
+  '/notifications/unread-count' 200 \
+  '/notifications/preferences' 200 \
+  '/access/permissions' 403 \
+  '/reports/fees' 403 \
+  '/fees/invoices' 403 \
+  '/fee-invoices' 403 \
+  '/fees/payment-config' 403 \
+  '/fees/payment-configs' 403 \
+  '/fees/reports/exports' 403 \
   '/student-leave/applications?page=1&page_size=1' 200 \
   '/announcements?page=1&page_size=1' 200 \
+  '/chat/monitor?page=1&page_size=1' 200 \
   '/chat/contacts?role=coordinator' 200 \
   '/fees/summary' 403
+
+check_coordinator_isolation
+check_coordinator_finance_writes
 
 probe teacher QA_TEACHER_USERNAME QA_TEACHER_PASSWORD \
   '/attendance/staff/me/today' 200 \

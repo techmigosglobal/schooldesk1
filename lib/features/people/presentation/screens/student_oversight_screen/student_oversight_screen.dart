@@ -16,6 +16,7 @@ import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/network/models/backend_models.dart' as api;
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
@@ -177,6 +178,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   StudentOversightRepository get _repository =>
       widget.repository ?? ApiStudentOversightRepository.legacyDefault;
 
+  bool get _isCoordinator => RoleAccessService.currentRoleName == 'coordinator';
   bool get _selectionMode => _selectedStudentIds.isNotEmpty;
 
   @override
@@ -521,10 +523,12 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   }
 
   Future<void> _ensureFormReferenceData() async {
-    if (_parents.isNotEmpty && _feeStructures.isNotEmpty) return;
+    if (_parents.isNotEmpty && (_isCoordinator || _feeStructures.isNotEmpty)) {
+      return;
+    }
     final results = await Future.wait<dynamic>([
       if (_parents.isEmpty) _loadParentAccounts(),
-      if (_feeStructures.isEmpty) _loadFeeStructuresSafely(),
+      if (!_isCoordinator && _feeStructures.isEmpty) _loadFeeStructuresSafely(),
     ]);
     if (!mounted) return;
     var index = 0;
@@ -1226,6 +1230,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           grades: _grades,
           academicYears: _academicYears,
           feeStructures: _feeStructures,
+          showFinanceFields: !_isCoordinator,
           parents: _parents,
           existingStudents: _allStudents,
           onSubmit: _saveStudentFromForm,
@@ -1354,7 +1359,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       );
     }
 
-    if (input.assignFees) {
+    if (!_isCoordinator && input.assignFees) {
       await _assignStudentFees(savedId, input);
     }
 
@@ -1518,6 +1523,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           grades: _grades,
           academicYears: _academicYears,
           feeStructures: _feeStructures,
+          showFinanceFields: !_isCoordinator,
           parents: _parentOptionsForStudent(student),
           existingStudents: _allStudents,
           initialStudent: student,
@@ -1550,7 +1556,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Remove Student'),
         content: Text(
-          'Move ${student.name} to inactive records? Attendance, fee, exam, and audit history will be kept.',
+          _isCoordinator
+              ? 'Move ${student.name} to inactive records? Attendance, exam, and audit history will be kept.'
+              : 'Move ${student.name} to inactive records? Attendance, fee, exam, and audit history will be kept.',
         ),
         actions: [
           TextButton(
@@ -1851,29 +1859,34 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          _FormCard(
-            title: 'Fee Position Summary',
-            children: [
-              _DetailRow(
-                label: 'Actual Fee',
-                value: _formatMoney(student.feeTotal),
-              ),
-              _DetailRow(
-                label: 'Discount',
-                value: _formatMoney(student.feeDiscount),
-              ),
-              _DetailRow(label: 'Paid', value: _formatMoney(student.feePaid)),
-              _DetailRow(
-                label: 'Balance',
-                value: _formatMoney(student.feeBalance),
-              ),
-              _DetailRow(
-                label: 'Pending Invoices',
-                value:
-                    '${student.pendingInvoices} pending, ${student.overdueInvoices} overdue',
-              ),
-            ],
-          ),
+          if (!_isCoordinator) ...[
+            _FormCard(
+              title: 'Fee Position Summary',
+              children: [
+                _DetailRow(
+                  label: 'Actual Fee',
+                  value: _formatMoney(student.feeTotal),
+                ),
+                _DetailRow(
+                  label: 'Discount',
+                  value: _formatMoney(student.feeDiscount),
+                ),
+                _DetailRow(
+                  label: 'Paid',
+                  value: _formatMoney(student.feePaid),
+                ),
+                _DetailRow(
+                  label: 'Balance',
+                  value: _formatMoney(student.feeBalance),
+                ),
+                _DetailRow(
+                  label: 'Pending Invoices',
+                  value:
+                      '${student.pendingInvoices} pending, ${student.overdueInvoices} overdue',
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           _FormCard(
             title: 'Attached Documents',
@@ -2260,6 +2273,7 @@ class _AddStudentPhotoFormPage extends StatefulWidget {
   final List<api.GradeModel> grades;
   final List<api.AcademicYearModel> academicYears;
   final List<Map<String, dynamic>> feeStructures;
+  final bool showFinanceFields;
   final List<api.UserAccountModel> parents;
   final List<StudentModel> existingStudents;
   final StudentModel? initialStudent;
@@ -2270,6 +2284,7 @@ class _AddStudentPhotoFormPage extends StatefulWidget {
     required this.grades,
     required this.academicYears,
     required this.feeStructures,
+    required this.showFinanceFields,
     required this.parents,
     this.existingStudents = const [],
     this.initialStudent,
@@ -3165,63 +3180,66 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                           }),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    _FormCard(
-                      title: 'Fee Assignment',
-                      children: [
-                        SwitchListTile(
-                          value: _assignFees,
-                          onChanged: _saving
-                              ? null
-                              : (value) => setState(() => _assignFees = value),
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            'Assign fees after activation',
-                            style: GoogleFonts.dmSans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
+                    if (widget.showFinanceFields) ...[
+                      const SizedBox(height: 14),
+                      _FormCard(
+                        title: 'Fee Assignment',
+                        children: [
+                          SwitchListTile(
+                            value: _assignFees,
+                            onChanged: _saving
+                                ? null
+                                : (value) =>
+                                      setState(() => _assignFees = value),
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              'Assign fees after activation',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            subtitle: Text(
+                              widget.feeStructures.isEmpty
+                                  ? 'No fee structures found yet. Student will still be activated.'
+                                  : 'Uses the current academic year and matching class fee structure.',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                color: context.appTheme.muted,
+                              ),
                             ),
                           ),
-                          subtitle: Text(
-                            widget.feeStructures.isEmpty
-                                ? 'No fee structures found yet. Student will still be activated.'
-                                : 'Uses the current academic year and matching class fee structure.',
-                            style: GoogleFonts.dmSans(
-                              fontSize: 11,
-                              color: context.appTheme.muted,
-                            ),
+                          const SizedBox(height: 12),
+                          _ResponsiveFieldRow(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const _FieldLabel('Concession Amount'),
+                                  _TextInput(
+                                    controller: _concessionAmountCtrl,
+                                    enabled: !_saving,
+                                    hint: '0',
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const _FieldLabel('Concession Reason'),
+                                  _TextInput(
+                                    controller: _concessionReasonCtrl,
+                                    enabled: !_saving,
+                                    hint: 'Optional',
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        _ResponsiveFieldRow(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const _FieldLabel('Concession Amount'),
-                                _TextInput(
-                                  controller: _concessionAmountCtrl,
-                                  enabled: !_saving,
-                                  hint: '0',
-                                ),
-                              ],
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const _FieldLabel('Concession Reason'),
-                                _TextInput(
-                                  controller: _concessionReasonCtrl,
-                                  enabled: !_saving,
-                                  hint: 'Optional',
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
 
                     if (_formError != null) ...[
                       const SizedBox(height: 12),
@@ -3903,31 +3921,35 @@ class _StudentDetailPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            _FormCard(
-              title: 'Fee Position',
-              children: [
-                _DetailRow(
-                  label: 'Actual Fee',
-                  value: _formatMoney(student.feeTotal),
-                ),
-                _DetailRow(
-                  label: 'Discount',
-                  value: _formatMoney(student.feeDiscount),
-                ),
-                _DetailRow(label: 'Paid', value: _formatMoney(student.feePaid)),
-                _DetailRow(
-                  label: 'Balance',
-                  value: _formatMoney(student.feeBalance),
-                ),
-                _DetailRow(
-                  label: 'Pending Invoices',
-                  value:
-                      '${student.pendingInvoices} pending, ${student.overdueInvoices} overdue',
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 14),
+            if (RoleAccessService.currentRoleName != 'coordinator') ...[
+              _FormCard(
+                title: 'Fee Position',
+                children: [
+                  _DetailRow(
+                    label: 'Actual Fee',
+                    value: _formatMoney(student.feeTotal),
+                  ),
+                  _DetailRow(
+                    label: 'Discount',
+                    value: _formatMoney(student.feeDiscount),
+                  ),
+                  _DetailRow(
+                    label: 'Paid',
+                    value: _formatMoney(student.feePaid),
+                  ),
+                  _DetailRow(
+                    label: 'Balance',
+                    value: _formatMoney(student.feeBalance),
+                  ),
+                  _DetailRow(
+                    label: 'Pending Invoices',
+                    value:
+                        '${student.pendingInvoices} pending, ${student.overdueInvoices} overdue',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+            ],
             _FormCard(
               title: 'Documents',
               children: student.documents.isEmpty

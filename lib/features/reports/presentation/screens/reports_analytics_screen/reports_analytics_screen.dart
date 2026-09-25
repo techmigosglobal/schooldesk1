@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -50,10 +51,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   PrincipalReportsRepository get _repository =>
       widget.repository ?? ApiPrincipalReportsRepository.legacyDefault;
 
+  bool get _isCoordinator =>
+      BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
+      'coordinator';
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: _isCoordinator ? 3 : 4, vsync: this);
     _loadData();
   }
 
@@ -229,19 +234,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         onDestinationSelected: (index) =>
             setState(() => _selectedDrawerIndex = index),
       ),
-      floatingActionButton: const DashboardFabWidget(
-        role: DashboardRole.principal,
+      floatingActionButton: DashboardFabWidget(
+        role: _isCoordinator
+            ? DashboardRole.coordinator
+            : DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       bottom: TabBar(
         controller: _tabController,
         isScrollable: true,
         tabAlignment: TabAlignment.start,
-        tabs: const [
-          Tab(text: 'Overview'),
-          Tab(text: 'Attendance'),
-          Tab(text: 'Fee'),
-          Tab(text: 'Staff'),
+        tabs: [
+          const Tab(text: 'Overview'),
+          const Tab(text: 'Attendance'),
+          if (!_isCoordinator) const Tab(text: 'Fee'),
+          const Tab(text: 'Staff'),
         ],
       ),
       body: SchoolDeskRepositoryStateView<Object>(
@@ -255,7 +262,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
               children: [
                 _buildOverviewTab(),
                 _buildAttendanceTab(),
-                _buildFeeTab(),
+                if (!_isCoordinator) _buildFeeTab(),
                 _buildStaffTab(),
               ],
             );
@@ -307,13 +314,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 context.appTheme.success,
                 context.appTheme.successContainer,
               ),
-              _buildKpiCard(
-                'Fee Collection',
-                _collectionRateLabel(),
-                Icons.account_balance_wallet_rounded,
-                context.appTheme.info,
-                context.appTheme.infoContainer,
-              ),
+              if (!_isCoordinator)
+                _buildKpiCard(
+                  'Fee Collection',
+                  _collectionRateLabel(),
+                  Icons.account_balance_wallet_rounded,
+                  context.appTheme.info,
+                  context.appTheme.infoContainer,
+                ),
             ];
             if (wide) {
               return GridView.count(
@@ -348,12 +356,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
           Icons.calendar_month_rounded,
           context.appTheme.primary,
         ),
-        _buildReportButton(
-          'Fee Collection Summary',
-          _academicYearLabel,
-          Icons.receipt_long_rounded,
-          context.appTheme.secondary,
-        ),
+        if (!_isCoordinator)
+          _buildReportButton(
+            'Fee Collection Summary',
+            _academicYearLabel,
+            Icons.receipt_long_rounded,
+            context.appTheme.secondary,
+          ),
         _buildReportButton(
           'Staff Attendance Report',
           DateFormat('dd MMM yyyy').format(DateTime.now()),
@@ -1053,6 +1062,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   }
 
   Future<void> _showExportDialog({required String reportTitle}) async {
+    if (_isCoordinator && reportTitle.toLowerCase().contains('fee')) return;
     if (_exportingReport != null) return;
     setState(() => _exportingReport = reportTitle);
     try {
@@ -1077,6 +1087,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
 
   Future<void> _recordSupportedBackendExport(String reportTitle) async {
     final lower = reportTitle.toLowerCase();
+    if (_isCoordinator && lower.contains('fee')) return;
     if (lower.contains('staff')) return;
     if (lower.contains('attendance')) {
       final result = await _repository.createReportExport(
@@ -1111,6 +1122,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
 
   Future<void> _generateAndPreviewReport({required String reportTitle}) async {
     final lower = reportTitle.toLowerCase();
+    if (_isCoordinator && lower.contains('fee')) return;
     final isStaffReport = lower.contains('staff');
     final isAttendanceReport = lower.contains('attendance') && !isStaffReport;
     final pdfService = PdfService.getInstance();
@@ -1243,10 +1255,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         {'label': 'Students', 'value': '$_totalStudents'},
         {'label': 'Staff', 'value': '$_totalStaff'},
         {'label': 'Attendance', 'value': _attendanceAverageLabel()},
-        {'label': 'Fee collection', 'value': _collectionRateLabel()},
+        if (!_isCoordinator)
+          {'label': 'Fee collection', 'value': _collectionRateLabel()},
       ];
       tables.add(_attendanceTable());
-      tables.add(_feePeriodTable());
+      if (!_isCoordinator) tables.add(_feePeriodTable());
     }
 
     final period = lower.contains('fee')

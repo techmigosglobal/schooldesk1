@@ -1029,7 +1029,10 @@ export async function handleHomework(
         }));
         const { error: notificationError } = await svc.from(
           "notification_logs",
-        ).insert(parentNotifs);
+        ).upsert(parentNotifs.map((notification) => ({
+          ...notification,
+          created_at: new Date().toISOString(),
+        })), { onConflict: "user_id,entity_type,entity_id" });
         if (notificationError) {
           console.error(
             "Failed to write homework feedback in-app notification",

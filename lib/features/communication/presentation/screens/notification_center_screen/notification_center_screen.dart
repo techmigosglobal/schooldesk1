@@ -623,6 +623,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     switch (role.trim().toLowerCase()) {
       case 'principal':
         return 'Principal';
+      case 'coordinator':
+        return 'Coordinator';
       case 'super_admin':
         return 'Super Admin';
       case 'teacher':

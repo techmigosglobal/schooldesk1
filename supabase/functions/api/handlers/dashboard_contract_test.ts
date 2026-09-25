@@ -13,7 +13,11 @@ Deno.test("coordinator dashboard returns its operations-only DTO before fee read
   );
   assertMatch(
     source,
-    /approvalRequestsQuery\.not\(\s+"module",\s+"in",\s+'\("fee","fees","finance","payment"\)'/,
+    /isFinanceApproval\(row\.module, row\.entity_type\)/,
+  );
+  assertMatch(
+    source,
+    /FINANCE_APPROVAL_MODULES = new Set\(\[[\s\S]*?"concession"[\s\S]*?"fee_payment_proof"/,
   );
   assertMatch(
     source,

@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
@@ -63,6 +64,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   String _lastNotificationSignal = '';
 
   bool get _isLoading => _state.isLoading && !_state.hasData;
+  bool get _isCoordinator => RoleAccessService.currentRoleName == 'coordinator';
   String? get _loadError =>
       _state.isError && !_state.hasData ? '${_state.error}' : null;
 
@@ -198,6 +200,12 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   void _openPendingHubAction() {
     final action = _pendingHubAction.trim();
     if (action.isEmpty || _classes.isEmpty) return;
+    if (_isCoordinator && (action == 'fees' || action == 'fee_setup')) {
+      _pendingHubAction = '';
+      _pendingHubSectionId = '';
+      _pendingHubGradeId = '';
+      return;
+    }
     final sectionId = _pendingHubSectionId;
     final gradeId = _pendingHubGradeId;
     _pendingHubAction = '';
@@ -331,7 +339,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                         onNotifications: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.notificationCenter,
-                          arguments: 'principal',
+                          arguments: _isCoordinator ? 'coordinator' : 'principal',
                         ),
                       ),
                       SizedBox(height: _classesCompact(context) ? 20 : 28),
@@ -387,6 +395,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                             child: _ClassesDirectoryClassCard(
                               row: row,
                               subjects: _subjectsForClass(row),
+                              showFees: !_isCoordinator,
                               healthLabel: _healthLabel(row),
                               healthColor: _healthColor(row),
                               onTap: () => _openClassDetail(row),
@@ -396,6 +405,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                           ),
                       const SizedBox(height: 10),
                       _ClassesQuickActions(
+                        showFees: !_isCoordinator,
                         onAddClass: _openClassForm,
                         onAddSubject: () => SchoolDeskNavigation.push(
                           context,
@@ -729,6 +739,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         builder: (_) => _ClassDetailPage(
           row: row,
           subjects: _subjectsForClass(row),
+          showFees: !_isCoordinator,
           healthLabel: _healthLabel(row),
           healthColor: _healthColor(row),
           teacherForSubject: (subject) => _teacherForSubject(row, subject),
@@ -785,6 +796,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   }
 
   Future<void> _openFeesModule(Map<String, dynamic> row) async {
+    if (_isCoordinator) return;
     setState(() => _selectedSectionId = _text(row['section_id']));
     await SchoolDeskNavigation.push(
       context,
@@ -978,7 +990,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                   onNotifications: () => SchoolDeskNavigation.push(
                     context,
                     AppRoutes.notificationCenter,
-                    arguments: 'principal',
+                    arguments: _isCoordinator ? 'coordinator' : 'principal',
                   ),
                 ),
                 Padding(
@@ -1329,6 +1341,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                   ),
                   const SizedBox(height: 16),
                   _DesktopClassHubActionGrid(
+                    showFees: !_isCoordinator,
                     onStudents: () =>
                         _openRoute(AppRoutes.studentOversight, row),
                     onAttendance: () =>
@@ -1354,11 +1367,13 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
 }
 
 class _DesktopClassHubActionGrid extends StatelessWidget {
+  final bool showFees;
   final VoidCallback onStudents;
   final VoidCallback onAttendance;
   final VoidCallback onFees;
 
   const _DesktopClassHubActionGrid({
+    required this.showFees,
     required this.onStudents,
     required this.onAttendance,
     required this.onFees,
@@ -1369,7 +1384,8 @@ class _DesktopClassHubActionGrid extends StatelessWidget {
     final actions = [
       (Icons.groups_rounded, 'Students', onStudents),
       (Icons.fact_check_rounded, 'Attendance', onAttendance),
-      (Icons.account_balance_wallet_rounded, 'Fees', onFees),
+      if (showFees)
+        (Icons.account_balance_wallet_rounded, 'Fees', onFees),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -2573,6 +2589,7 @@ class _SetupProgressChip extends StatelessWidget {
 class _ClassesDirectoryClassCard extends StatelessWidget {
   final Map<String, dynamic> row;
   final List<Map<String, dynamic>> subjects;
+  final bool showFees;
   final String healthLabel;
   final Color healthColor;
   final VoidCallback onTap;
@@ -2581,6 +2598,7 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
   const _ClassesDirectoryClassCard({
     required this.row,
     required this.subjects,
+    required this.showFees,
     required this.healthLabel,
     required this.healthColor,
     required this.onTap,
@@ -2591,13 +2609,13 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final students = _classInt(row['total_students']);
     final capacity = _classInt(row['capacity']);
-    final dueFees = _classNum(row['fees_due_amount']);
-    final pendingProofAmount = _classNum(
-      row['fees_pending_verification_amount'],
-    );
-    final pendingProofStudents = _classInt(
-      row['fees_pending_verification_students'],
-    );
+    final dueFees = showFees ? _classNum(row['fees_due_amount']) : 0;
+    final pendingProofAmount = showFees
+        ? _classNum(row['fees_pending_verification_amount'])
+        : 0;
+    final pendingProofStudents = showFees
+        ? _classInt(row['fees_pending_verification_students'])
+        : 0;
     final compact = _classesCompact(context);
     return Material(
       color: context.appTheme.surface,
@@ -2724,12 +2742,13 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                             : '${_classNum(row['today_attendance_pct']).toStringAsFixed(0)}%',
                         label: 'Attendance',
                       ),
-                      _ClassesClassMetric(
-                        icon: Icons.currency_rupee_rounded,
-                        color: const Color(0xFFF97316),
-                        value: _formatCurrencyCompact(dueFees),
-                        label: 'Total Dues',
-                      ),
+                      if (showFees)
+                        _ClassesClassMetric(
+                          icon: Icons.currency_rupee_rounded,
+                          color: const Color(0xFFF97316),
+                          value: _formatCurrencyCompact(dueFees),
+                          label: 'Total Dues',
+                        ),
                     ];
                     if (constraints.maxWidth < 370) {
                       final tileWidth = (constraints.maxWidth - 1) / 2;
@@ -2759,7 +2778,7 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                   },
                 ),
               ),
-              if (pendingProofAmount > 0) ...[
+              if (showFees && pendingProofAmount > 0) ...[
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -2907,6 +2926,7 @@ class _ClassesIconTile extends StatelessWidget {
 }
 
 class _ClassesQuickActions extends StatelessWidget {
+  final bool showFees;
   final VoidCallback onAddClass;
   final VoidCallback onAddSubject;
   final VoidCallback onAddTeacher;
@@ -2914,6 +2934,7 @@ class _ClassesQuickActions extends StatelessWidget {
   final VoidCallback onFees;
 
   const _ClassesQuickActions({
+    required this.showFees,
     required this.onAddClass,
     required this.onAddSubject,
     required this.onAddTeacher,
@@ -2947,7 +2968,9 @@ class _ClassesQuickActions extends StatelessWidget {
                   ? 2
                   : constraints.maxWidth < 560
                   ? 3
-                  : 6;
+                  : showFees
+                  ? 6
+                  : 4;
               final tileWidth =
                   (constraints.maxWidth - spacing * (columns - 1)) / columns;
               return Wrap(
@@ -2994,16 +3017,17 @@ class _ClassesQuickActions extends StatelessWidget {
                       onTap: onAttendance,
                     ),
                   ),
-                  SizedBox(
-                    width: tileWidth,
-                    child: _ClassesQuickActionTile(
-                      icon: Icons.currency_rupee_rounded,
-                      label: 'Fees',
-                      color: const Color(0xFF12AFC6),
-                      tone: const Color(0xFFE6F8FB),
-                      onTap: onFees,
+                  if (showFees)
+                    SizedBox(
+                      width: tileWidth,
+                      child: _ClassesQuickActionTile(
+                        icon: Icons.currency_rupee_rounded,
+                        label: 'Fees',
+                        color: const Color(0xFF12AFC6),
+                        tone: const Color(0xFFE6F8FB),
+                        onTap: onFees,
+                      ),
                     ),
-                  ),
                 ],
               );
             },
@@ -3343,6 +3367,7 @@ String _formatCurrencyCompact(num value) {
 class _ClassDetailPage extends StatelessWidget {
   final Map<String, dynamic> row;
   final List<Map<String, dynamic>> subjects;
+  final bool showFees;
   final String healthLabel;
   final Color healthColor;
   final String Function(Map<String, dynamic> subject) teacherForSubject;
@@ -3351,6 +3376,7 @@ class _ClassDetailPage extends StatelessWidget {
   const _ClassDetailPage({
     required this.row,
     required this.subjects,
+    required this.showFees,
     required this.healthLabel,
     required this.healthColor,
     required this.teacherForSubject,
@@ -3393,8 +3419,10 @@ class _ClassDetailPage extends StatelessWidget {
             _ClassDetailCard(
               title: className,
               children: [
-                _ClassMetricGrid(row: row),
-                _ClassIssueBreakdown(items: _classIssueBreakdown(row)),
+                _ClassMetricGrid(row: row, showFees: showFees),
+                _ClassIssueBreakdown(
+                  items: _classIssueBreakdown(row, showFees: showFees),
+                ),
                 const SizedBox(height: 18),
                 _ClassDetailRow(
                   label: 'Class Teacher',
@@ -3496,8 +3524,9 @@ class _ClassDetailPage extends StatelessWidget {
 
 class _ClassMetricGrid extends StatelessWidget {
   final Map<String, dynamic> row;
+  final bool showFees;
 
-  const _ClassMetricGrid({required this.row});
+  const _ClassMetricGrid({required this.row, required this.showFees});
 
   @override
   Widget build(BuildContext context) {
@@ -3538,15 +3567,16 @@ class _ClassMetricGrid extends StatelessWidget {
                 value: '${_classInt(row['pending_issues'])}',
               ),
             ),
-            SizedBox(
-              width: tileWidth,
-              child: _ClassMetricTile(
-                icon: Icons.account_balance_wallet_outlined,
-                label: 'Fee Due',
-                value:
-                    '₹${_classNum(row['fees_due_amount']).toStringAsFixed(0)}',
+            if (showFees)
+              SizedBox(
+                width: tileWidth,
+                child: _ClassMetricTile(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: 'Fee Due',
+                  value:
+                      '₹${_classNum(row['fees_due_amount']).toStringAsFixed(0)}',
+                ),
               ),
-            ),
           ],
         );
       },
@@ -3615,20 +3645,23 @@ class _ClassMetricTile extends StatelessWidget {
   }
 }
 
-List<_ClassIssueItem> _classIssueBreakdown(Map<String, dynamic> row) {
+List<_ClassIssueItem> _classIssueBreakdown(
+  Map<String, dynamic> row, {
+  required bool showFees,
+}) {
   final teacherPending = _classText(row['class_teacher_id']).isEmpty;
   final studentsCount = _classInt(
     row['student_count'] ?? row['total_students'],
   );
   final capacity = _classInt(row['capacity']);
-  final feeDueStudents = _classInt(row['fees_due_students']);
-  final feeDueAmount = _classNum(row['fees_due_amount']);
-  final pendingFeeProofStudents = _classInt(
-    row['fees_pending_verification_students'],
-  );
-  final pendingFeeProofAmount = _classNum(
-    row['fees_pending_verification_amount'],
-  );
+  final feeDueStudents = showFees ? _classInt(row['fees_due_students']) : 0;
+  final feeDueAmount = showFees ? _classNum(row['fees_due_amount']) : 0;
+  final pendingFeeProofStudents = showFees
+      ? _classInt(row['fees_pending_verification_students'])
+      : 0;
+  final pendingFeeProofAmount = showFees
+      ? _classNum(row['fees_pending_verification_amount'])
+      : 0;
 
   final practicePending = _classInt(row['homework_pending']);
   final disciplineNotes = _classInt(row['discipline_issues']);
@@ -3659,7 +3692,7 @@ List<_ClassIssueItem> _classIssueBreakdown(Map<String, dynamic> row) {
         note: 'Students exceed capacity',
         color: const Color(0xFFDC2626),
       ),
-    if (feeDueStudents > 0 || feeDueAmount > 0)
+    if (showFees && (feeDueStudents > 0 || feeDueAmount > 0))
       _ClassIssueItem(
         icon: Icons.account_balance_wallet_outlined,
         label: 'Total Dues',
@@ -3667,7 +3700,8 @@ List<_ClassIssueItem> _classIssueBreakdown(Map<String, dynamic> row) {
         note: '$feeDueStudents student${feeDueStudents == 1 ? '' : 's'}',
         color: const Color(0xFFDC2626),
       ),
-    if (pendingFeeProofStudents > 0 || pendingFeeProofAmount > 0)
+    if (showFees &&
+        (pendingFeeProofStudents > 0 || pendingFeeProofAmount > 0))
       _ClassIssueItem(
         icon: Icons.hourglass_top_rounded,
         label: 'Proof pending',

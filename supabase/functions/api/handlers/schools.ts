@@ -41,6 +41,7 @@ export async function handleSchools(
   _url: URL,
   client: SupabaseClient | null,
   svc: SupabaseClient,
+  userContext: _User,
 ): Promise<Response> {
   // School provisioning is intentionally local-seed-only. Keep this guard in
   // the handler while route removal rolls out so every direct invocation fails
@@ -61,9 +62,12 @@ export async function handleSchools(
       "id",
       user.id,
     ).single();
+    const schoolId = `${
+      userContext.app_metadata?.school_id ?? profile?.school_id ?? ""
+    }`;
     const { data: school, error } = await svc.from("schools").select("*").eq(
       "id",
-      profile?.school_id,
+      schoolId,
     ).single();
     if (error) return fail(error.message);
     const organizationId = `${school.organization_id ?? ""}`.trim();
@@ -99,6 +103,9 @@ export async function handleSchools(
       "id",
       user!.id,
     ).single();
+    const schoolId = `${
+      userContext.app_metadata?.school_id ?? profile?.school_id ?? ""
+    }`;
     const { authorized_signature_path: _ignoredSignature, ...rawUpdates } =
       body;
     // Map the legacy request key before the PostgREST update. A direct spread
@@ -113,7 +120,7 @@ export async function handleSchools(
     const { data: school, error } = await svc
       .from("schools")
       .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", profile?.school_id)
+      .eq("id", schoolId)
       .select()
       .single();
     if (error) return fail(error.message);
@@ -130,7 +137,10 @@ export async function handleSchools(
       "id",
       user!.id,
     ).single();
-    const path2 = `logos/${profile?.school_id}/${Date.now()}-${file.name}`;
+    const schoolId = `${
+      userContext.app_metadata?.school_id ?? profile?.school_id ?? ""
+    }`;
+    const path2 = `logos/${schoolId}/${Date.now()}-${file.name}`;
     const contentType = file.type || "application/octet-stream";
     const r2Upload = await uploadPublicToR2(path2, file, contentType);
     let publicUrl = r2Upload?.url ?? "";
@@ -153,7 +163,7 @@ export async function handleSchools(
     }
     await svc.from("schools").update({ logo_url: publicUrl }).eq(
       "id",
-      profile?.school_id,
+      schoolId,
     );
     return ok({ logo_url: publicUrl });
   }
@@ -178,11 +188,14 @@ export async function handleSchools(
     }
     const { data: profile, error: profileError } = await svc.from("users")
       .select("school_id").eq("id", user.id).single();
-    if (profileError || !profile?.school_id) {
+    const schoolId = `${
+      userContext.app_metadata?.school_id ?? profile?.school_id ?? ""
+    }`;
+    if (profileError || !schoolId) {
       return fail(profileError?.message ?? "school profile not found");
     }
     const { data: currentSchool } = await svc.from("schools")
-      .select("authorized_signature_path").eq("id", profile.school_id)
+      .select("authorized_signature_path").eq("id", schoolId)
       .maybeSingle();
     const previousSignaturePath = String(
       currentSchool?.authorized_signature_path ?? "",
@@ -193,7 +206,7 @@ export async function handleSchools(
       ? "webp"
       : "jpg";
     const signatureKey =
-      `private/school-signatures/${profile.school_id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+      `private/school-signatures/${schoolId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
     const signatureContentType = extension === "png"
       ? "image/png"
       : extension === "webp"
@@ -202,7 +215,7 @@ export async function handleSchools(
     const r2Upload = await uploadToR2(signatureKey, file, signatureContentType);
     const signaturePath = r2Upload
       ? r2FileReference(r2Upload.key)
-      : `signatures/${profile.school_id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+      : `signatures/${schoolId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
     if (!r2Upload) {
       if (!legacyStorageWritesEnabled()) {
         return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
@@ -217,7 +230,7 @@ export async function handleSchools(
     const { error: updateError } = await svc.from("schools").update({
       authorized_signature_path: signaturePath,
       updated_at: new Date().toISOString(),
-    }).eq("id", profile.school_id);
+    }).eq("id", schoolId);
     if (updateError) {
       if (r2Upload) await deleteR2File(signaturePath);
       else await svc.storage.from("school-signatures").remove([signaturePath]);
