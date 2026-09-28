@@ -1,4 +1,7 @@
-import { assert, assertMatch } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  assert,
+  assertMatch,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
 
 const root = new URL("../../../../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, root));
@@ -11,6 +14,8 @@ Deno.test("student list select only references columns that exist", async () => 
 
   assert(select, "studentListSelect must be declared as a string select");
   assert(!select.includes("academic_year_id"));
+  assert(select.includes("photo_url"));
+  assert(select.includes("parent_student_links(parent_user_id)"));
   assertMatch(
     source,
     /url\.searchParams\.get\("academic_year_id"\)/,

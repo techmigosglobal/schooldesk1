@@ -28,7 +28,7 @@ const studentDirectorySelect =
 // signed media, and attendance belong to the detail/summary endpoints; they
 // must not be hydrated for every row in a paged list.
 const studentListSelect =
-  "id, school_id, student_id_number, first_name, last_name, admission_number, current_section_id, status, section:sections(id, section_name, grade:grades(id, grade_name, grade_number))";
+  "id, school_id, student_id_number, first_name, last_name, admission_number, current_section_id, status, photo_url, section:sections(id, section_name, grade:grades(id, grade_name, grade_number)), parent_student_links(parent_user_id)";
 
 // Restricted readers never receive financial totals, parent account details,
 // medical records, or permanent/signed document references through the student
@@ -463,13 +463,15 @@ async function hydrateStudentDirectory(
   if (withParents.error) return withParents;
   if (withFees.error) return withFees;
   const hydratedMedia: Record<string, unknown>[] = await Promise.all(
-    (withParents.data as unknown as Record<string, unknown>[]).map(async (student) => {
-      const photoUrl = await signedPrivateFileUrl(svc, student.photo_url);
-      return {
-        ...student,
-        photo_url: photoUrl || text(student.photo_url),
-      };
-    }),
+    (withParents.data as unknown as Record<string, unknown>[]).map(
+      async (student) => {
+        const photoUrl = await signedPrivateFileUrl(svc, student.photo_url);
+        return {
+          ...student,
+          photo_url: photoUrl || text(student.photo_url),
+        };
+      },
+    ),
   );
   if (!includeFeeSummaries) return { ...withParents, data: hydratedMedia };
   const feeByStudentId = new Map<string, unknown>(
@@ -509,7 +511,10 @@ export async function handleGuardians(
 
   if (path === "/guardians/directory" && method === "GET") {
     if (!managesGuardians) return fail("forbidden", 403);
-    const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1"));
+    const page = Math.max(
+      1,
+      Number.parseInt(url.searchParams.get("page") ?? "1"),
+    );
     const size = Math.min(
       100,
       Math.max(1, Number.parseInt(url.searchParams.get("page_size") ?? "20")),
@@ -534,10 +539,11 @@ export async function handleGuardians(
         `name.ilike.%${search}%,username.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`,
       );
     }
-    const { data: parents, error: parentError, count } = await parentQuery.range(
-      (page - 1) * size,
-      page * size - 1,
-    );
+    const { data: parents, error: parentError, count } = await parentQuery
+      .range(
+        (page - 1) * size,
+        page * size - 1,
+      );
     if (parentError) return fail(parentError.message);
     const parentRows = (parents ?? []) as unknown as Record<string, unknown>[];
     const parentIds = parentRows.map((row) => text(row.id)).filter(Boolean);
@@ -548,7 +554,9 @@ export async function handleGuardians(
       ).eq("school_id", school).in("parent_user_id", parentIds);
     if (links.error) return fail(links.error.message);
     const linkRows = (links.data ?? []) as unknown as Record<string, unknown>[];
-    const studentIds = linkRows.map((row) => text(row.student_id)).filter(Boolean);
+    const studentIds = linkRows.map((row) => text(row.student_id)).filter(
+      Boolean,
+    );
     const guardians = studentIds.length === 0
       ? { data: [], error: null }
       : await svc.from("guardians").select(
@@ -559,17 +567,22 @@ export async function handleGuardians(
     for (const link of linkRows) {
       const parentId = text(link.parent_user_id);
       const rawStudent = link.student;
-      const student = (Array.isArray(rawStudent) ? rawStudent[0] : rawStudent) as
-        | Record<string, unknown>
-        | null
-        | undefined ?? {};
+      const student =
+        (Array.isArray(rawStudent) ? rawStudent[0] : rawStudent) as
+          | Record<string, unknown>
+          | null
+          | undefined ?? {};
       const rows = linksByParent.get(parentId) ?? [];
       rows.push({
         student_id: text(link.student_id),
-        admission_number: text(student.admission_number ?? student.student_id_number),
+        admission_number: text(
+          student.admission_number ?? student.student_id_number,
+        ),
         first_name: text(student.first_name),
         last_name: text(student.last_name),
-        full_name: [text(student.first_name), text(student.last_name)].filter(Boolean).join(" "),
+        full_name: [text(student.first_name), text(student.last_name)].filter(
+          Boolean,
+        ).join(" "),
       });
       linksByParent.set(parentId, rows);
     }
@@ -586,7 +599,7 @@ export async function handleGuardians(
         ...parent,
         linked_students: linkedStudents,
         guardians: linkedStudents.flatMap((student) =>
-          guardiansByStudent.get(text(student.student_id)) ?? [],
+          guardiansByStudent.get(text(student.student_id)) ?? []
         ),
       };
     });
@@ -609,15 +622,23 @@ export async function handleGuardians(
     try {
       allowedStudentIds = await visibleStudentIds(svc, school, user);
     } catch (error) {
-      return fail(error instanceof Error ? error.message : "failed to resolve guardian scope");
+      return fail(
+        error instanceof Error
+          ? error.message
+          : "failed to resolve guardian scope",
+      );
     }
     if (allowedStudentIds && allowedStudentIds.size === 0) return ok([]);
     let query = svc.from("guardians").select(guardianSelectFor(user)).eq(
       "school_id",
       school,
     );
-    if (allowedStudentIds) query = query.in("student_id", [...allowedStudentIds]);
-    const { data, error } = await query.order("created_at", { ascending: false });
+    if (allowedStudentIds) {
+      query = query.in("student_id", [...allowedStudentIds]);
+    }
+    const { data, error } = await query.order("created_at", {
+      ascending: false,
+    });
     if (error) return fail(error.message);
     return ok(data ?? []);
   }
@@ -658,17 +679,19 @@ export async function handleGuardians(
       updated_at: new Date().toISOString(),
     });
     delete payload.school_id;
-    for (const [payloadKey, bodyKeys] of Object.entries({
-      student_id: ["student_id"],
-      full_name: ["full_name", "name"],
-      relationship: ["relationship"],
-      phone: ["phone"],
-      email: ["email"],
-      occupation: ["occupation"],
-      annual_income: ["annual_income"],
-      can_pickup: ["can_pickup"],
-      is_primary: ["is_primary"],
-    })) {
+    for (
+      const [payloadKey, bodyKeys] of Object.entries({
+        student_id: ["student_id"],
+        full_name: ["full_name", "name"],
+        relationship: ["relationship"],
+        phone: ["phone"],
+        email: ["email"],
+        occupation: ["occupation"],
+        annual_income: ["annual_income"],
+        can_pickup: ["can_pickup"],
+        is_primary: ["is_primary"],
+      })
+    ) {
       if (!bodyKeys.some((key) => key in body)) delete payload[payloadKey];
     }
     const { data, error } = await svc.from("guardians").update(payload).eq(
@@ -797,7 +820,11 @@ export async function handleStudents(
     try {
       access = await studentAccess(svc, school, user, id);
     } catch (error) {
-      return fail(error instanceof Error ? error.message : "failed to resolve student scope");
+      return fail(
+        error instanceof Error
+          ? error.message
+          : "failed to resolve student scope",
+      );
     }
     if (!access) return fail("student not found", 404);
   }
@@ -821,7 +848,10 @@ export async function handleStudents(
       ? await signedPrivateFileUrl(svc, privateReference)
       : "";
     if (!photoUrl && !legacyStorageWritesEnabled()) {
-      return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+      return fail(
+        "R2 storage is unavailable; legacy storage writes are disabled",
+        503,
+      );
     }
     if (!photoUrl) {
       const { error: uploadError } = await svc.storage.from("school-assets")
@@ -857,9 +887,14 @@ export async function handleStudents(
       : privateFileReference(p);
     if (!r2Upload) {
       if (!legacyStorageWritesEnabled()) {
-        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+        return fail(
+          "R2 storage is unavailable; legacy storage writes are disabled",
+          503,
+        );
       }
-      const { error: uploadError } = await svc.storage.from(PRIVATE_FILES_BUCKET)
+      const { error: uploadError } = await svc.storage.from(
+        PRIVATE_FILES_BUCKET,
+      )
         .upload(p, file, {
           upsert: true,
           contentType,
@@ -1004,7 +1039,10 @@ export async function handleStudents(
     if (!managesStudents && !["teacher", "parent"].includes(roleName(user))) {
       return fail("forbidden", 403);
     }
-    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const page = Math.max(
+      parseInt(url.searchParams.get("page") ?? "1") || 1,
+      1,
+    );
     const requestedSize = parseInt(url.searchParams.get("page_size") ?? "20");
     const size = Math.min(
       Math.max(Number.isFinite(requestedSize) ? requestedSize : 20, 1),
@@ -1015,7 +1053,11 @@ export async function handleStudents(
     try {
       allowedStudentIds = await visibleStudentIds(svc, school, user);
     } catch (error) {
-      return fail(error instanceof Error ? error.message : "failed to resolve student scope");
+      return fail(
+        error instanceof Error
+          ? error.message
+          : "failed to resolve student scope",
+      );
     }
     if (allowedStudentIds && allowedStudentIds.size === 0) {
       return cors({
@@ -1030,10 +1072,13 @@ export async function handleStudents(
     let q = svc.from("students").select(
       managesStudents ? studentListSelect : restrictedStudentDirectorySelect,
       {
-      count: "exact",
+        count: "exact",
       },
     ).eq("school_id", school);
-    if (!managesStudents || url.searchParams.get("include_test_accounts") !== "true") {
+    if (
+      !managesStudents ||
+      url.searchParams.get("include_test_accounts") !== "true"
+    ) {
       q = q.eq("is_test_account", false);
     }
     if (allowedStudentIds) q = q.in("id", [...allowedStudentIds]);
@@ -1060,9 +1105,27 @@ export async function handleStudents(
       .order("id", { ascending: true })
       .range((page - 1) * size, page * size - 1);
     if (error) return fail(error.message);
+    const parentHydration = await attachParentAccounts(
+      svc,
+      school,
+      (data ?? []) as unknown as Record<string, unknown>[],
+    );
+    if (parentHydration.error) return fail(parentHydration.error.message);
+    const hydratedData = await Promise.all(
+      (parentHydration.data as unknown as Record<string, unknown>[]).map(
+        async (student) => {
+          const storedPhotoUrl = text(student.photo_url);
+          return {
+            ...student,
+            photo_url: await signedPrivateFileUrl(svc, storedPhotoUrl) ||
+              storedPhotoUrl,
+          };
+        },
+      ),
+    );
     return cors({
       success: true,
-      data: data ?? [],
+      data: hydratedData,
       total: count ?? 0,
       page,
       page_size: size,

@@ -3,10 +3,12 @@ import { fail, ok, triggerPushProcessing } from "../index.ts";
 import {
   deleteR2File,
   legacyStorageWritesEnabled,
-  publicR2FileUrl,
+  legacyR2Reference,
   publicR2FileReference,
+  publicR2FileUrl,
   uploadPublicToR2,
 } from "../lib/r2_storage.ts";
+import { signedPrivateFileUrl } from "../storage_helpers.ts";
 
 const bucket = "school-public-media";
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
@@ -17,8 +19,26 @@ const isLeader = (user: User) =>
   );
 const programs = ["Daycare", "Playgroup", "Nursery", "PP1", "PP2"];
 
+function migratedPublicUrl(path: unknown): string {
+  const direct = publicR2FileUrl(path);
+  if (direct) return direct;
+
+  const legacy = legacyR2Reference(path, bucket);
+  const migratedLegacy = publicR2FileUrl(legacy);
+  if (migratedLegacy) return migratedLegacy;
+
+  // The restored website rows use a bare school-public-media path. The
+  // migration maps that bucket to the public website/ prefix, so derive the
+  // same reference before falling back to Supabase Storage.
+  const raw = text(path).replace(/^\/+/, "");
+  if (!raw || /^https?:\/\//i.test(raw) || raw.startsWith("r2://")) return "";
+  const normalized = raw.replace(/^school-public-media\//i, "");
+  if (!normalized || normalized.split("/").includes("..")) return "";
+  return publicR2FileUrl(publicR2FileReference(`website/${normalized}`));
+}
+
 function publicUrl(svc: SupabaseClient, path: string) {
-  const r2Url = publicR2FileUrl(path);
+  const r2Url = migratedPublicUrl(path);
   if (r2Url) return r2Url;
   return svc.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 }
@@ -47,17 +67,20 @@ function eventMediaItems(value: unknown): unknown[] {
     .filter(Boolean);
 }
 
-function eventGalleryRows(row: Record<string, unknown>) {
+async function eventGalleryRows(
+  svc: SupabaseClient,
+  row: Record<string, unknown>,
+) {
   const media = eventMediaItems(row.media_urls);
-  return media
-    .map((item, index) => {
+  const rows = await Promise.all(media.map(async (item, index) => {
       const object = item !== null && typeof item === "object"
         ? item as Record<string, unknown>
         : {};
       const storedMedia = typeof item === "string"
         ? item.trim()
         : text(object.url ?? object.media_url ?? object.mediaUrl ?? object.secure_url);
-      const mediaUrl = publicR2FileUrl(storedMedia) ||
+      const mediaUrl = migratedPublicUrl(storedMedia) ||
+        await signedPrivateFileUrl(svc, storedMedia, 10 * 60, "school-assets") ||
         (storedMedia.startsWith("r2://") ? "" : storedMedia);
       return {
         id: `event:${text(row.id)}:${index}`,
@@ -75,8 +98,8 @@ function eventGalleryRows(row: Record<string, unknown>) {
         is_published: row.public_gallery_visible !== false,
         created_at: row.created_at,
       };
-    })
-    .filter((item) => item.media_url.length > 0);
+    }));
+  return rows.filter((item) => item.media_url.length > 0);
 }
 
 export async function handleWebsitePublic(
@@ -118,14 +141,20 @@ export async function handleWebsitePublic(
   if (sectionsError) return fail(sectionsError.message);
   if (entriesError) return fail(entriesError.message);
   const publicGallery = (gallery ?? []).map((row) => galleryRow(svc, row));
-  const mobileGallery = (eventPosts ?? []).flatMap((row) =>
-    eventGalleryRows(row as Record<string, unknown>)
-  );
+  const mobileGallery = (await Promise.all((eventPosts ?? []).map((row) =>
+    eventGalleryRows(svc, row as Record<string, unknown>)
+  ))).flat();
   return ok({
     content: content ?? {},
     gallery: [...mobileGallery, ...publicGallery],
-    sections: sections ?? [],
-    entries: entries ?? [],
+    sections: (sections ?? []).map((row) => ({
+      ...row,
+      image_url: publicUrl(svc, text(row.image_url)),
+    })),
+    entries: (entries ?? []).map((row) => ({
+      ...row,
+      image_url: publicUrl(svc, text(row.image_url)),
+    })),
   });
 }
 
@@ -294,15 +323,15 @@ export async function handleWebsite(
     const managedMedia = (galleryResult.data ?? []).map((row) =>
       galleryRow(svc, row)
     );
-    const selectedEventMedia = (eventResult.data ?? []).flatMap((row) =>
-      eventGalleryRows(row as Record<string, unknown>).map((media) => ({
+    const selectedEventMedia = (await Promise.all((eventResult.data ?? []).map(
+      async (row) => (await eventGalleryRows(svc, row as Record<string, unknown>)).map((media) => ({
         ...media,
         is_published: row.public_gallery_visible !== false,
         public_gallery_visible: row.public_gallery_visible !== false,
         status: text(row.status),
         destinations: row.destinations ?? [],
-      }))
-    );
+      })),
+    ))).flat();
     return ok([...selectedEventMedia, ...managedMedia]);
   }
   if (path === "/website/gallery/upload" && method === "POST") {

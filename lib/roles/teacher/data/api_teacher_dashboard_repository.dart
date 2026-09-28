@@ -37,7 +37,7 @@ class ApiTeacherDashboardRepository implements TeacherDashboardRepository {
       PaginatedList<Map<String, dynamic>>? feed;
       Object? feedError;
       try {
-        feed = await _api.getTeacherSchoolFeedPage(page: 1, pageSize: 20);
+        feed = await _api.getTeacherSchoolFeedPage(page: 1, pageSize: 10);
       } on Object catch (error) {
         feedError = error;
       }

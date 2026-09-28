@@ -339,7 +339,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                         onNotifications: () => SchoolDeskNavigation.push(
                           context,
                           AppRoutes.notificationCenter,
-                          arguments: _isCoordinator ? 'coordinator' : 'principal',
+                          arguments: _isCoordinator
+                              ? 'coordinator'
+                              : 'principal',
                         ),
                       ),
                       SizedBox(height: _classesCompact(context) ? 20 : 28),
@@ -646,7 +648,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     required int roomCapacity,
   }) async {
     try {
-      await _repository.updateClass(
+      final updated = await _repository.updateClass(
         sectionId: sectionId,
         gradeId: gradeId,
         gradeName: gradeName,
@@ -660,6 +662,20 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         roomType: roomType,
         roomCapacity: roomCapacity,
       );
+      final persistedSection = _classMap(updated['section']);
+      final persistedClassTeacherId = _classText(
+        persistedSection['class_teacher_id'],
+      );
+      final persistedCoTeacherId = _classText(
+        persistedSection['co_teacher_id'],
+      );
+      if (persistedClassTeacherId != classTeacherId.trim() ||
+          persistedCoTeacherId != coTeacherId.trim()) {
+        throw StateError(
+          'The backend did not persist the selected teacher assignment. '
+          'Please refresh and try again.',
+        );
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -710,9 +726,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     );
     if (confirmed != true) return;
     try {
-      await _repository.deleteClass(
-        sectionId: sectionId,
-      );
+      await _repository.deleteClass(sectionId: sectionId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1384,8 +1398,7 @@ class _DesktopClassHubActionGrid extends StatelessWidget {
     final actions = [
       (Icons.groups_rounded, 'Students', onStudents),
       (Icons.fact_check_rounded, 'Attendance', onAttendance),
-      if (showFees)
-        (Icons.account_balance_wallet_rounded, 'Fees', onFees),
+      if (showFees) (Icons.account_balance_wallet_rounded, 'Fees', onFees),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -3700,8 +3713,7 @@ List<_ClassIssueItem> _classIssueBreakdown(
         note: '$feeDueStudents student${feeDueStudents == 1 ? '' : 's'}',
         color: const Color(0xFFDC2626),
       ),
-    if (showFees &&
-        (pendingFeeProofStudents > 0 || pendingFeeProofAmount > 0))
+    if (showFees && (pendingFeeProofStudents > 0 || pendingFeeProofAmount > 0))
       _ClassIssueItem(
         icon: Icons.hourglass_top_rounded,
         label: 'Proof pending',
@@ -9200,7 +9212,8 @@ class _EditClassSheetState extends State<_EditClassSheet> {
                       ),
                     )
                     .toList(),
-                onChanged: (value) => _academicYearId = value ?? '',
+                onChanged: (value) =>
+                    setState(() => _academicYearId = value ?? ''),
                 validator: (value) =>
                     (value ?? '').isEmpty ? 'Academic year is required' : null,
               ),
@@ -9258,7 +9271,7 @@ class _EditClassSheetState extends State<_EditClassSheet> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: _teacherId.isEmpty ? null : _teacherId,
+                value: _teacherId.isEmpty ? null : _teacherId,
                 decoration: const InputDecoration(labelText: 'Class teacher'),
                 items: [
                   const DropdownMenuItem(value: '', child: Text('Unassigned')),
@@ -9269,7 +9282,7 @@ class _EditClassSheetState extends State<_EditClassSheet> {
                     ),
                   ),
                 ],
-                onChanged: (value) => _teacherId = value ?? '',
+                onChanged: (value) => setState(() => _teacherId = value ?? ''),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -9284,7 +9297,8 @@ class _EditClassSheetState extends State<_EditClassSheet> {
                     ),
                   ),
                 ],
-                onChanged: (value) => _coTeacherId = value ?? '',
+                onChanged: (value) =>
+                    setState(() => _coTeacherId = value ?? ''),
               ),
               const SizedBox(height: 12),
               LayoutBuilder(

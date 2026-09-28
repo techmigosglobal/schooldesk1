@@ -33,7 +33,10 @@ void main() {
       calendar,
       contains('Holiday records must be stored through the holiday calendar'),
     );
-    expect(calendar, contains('["principal"].includes(roleName(user))'));
+    expect(
+      calendar,
+      contains('["principal", "coordinator"].includes(roleName(user))'),
+    );
     expect(calendar, contains('return fail("forbidden", 403)'));
   });
 

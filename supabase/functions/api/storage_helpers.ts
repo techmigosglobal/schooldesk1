@@ -38,6 +38,74 @@ export function storagePathFromValue(value: unknown, bucket: string): string {
   }
 }
 
+type StorageLocation = {
+  bucket: string;
+  path: string;
+};
+
+const LEGACY_STORAGE_BUCKETS = new Set([
+  "school-assets",
+  "school-private-files",
+  "finance-documents",
+  "payment-proofs",
+  "issue-attachments",
+  "help-tutorial-videos",
+  "school-signatures",
+  "school-public-media",
+]);
+
+/**
+ * Resolve a legacy Storage URL to its bucket and object path in the current
+ * Supabase project. The hostname is deliberately ignored: restored rows can
+ * still contain the source project URL, but the bucket/path remains the
+ * durable identifier and is resolved through the target Storage API.
+ */
+function storageLocationFromValue(
+  value: unknown,
+  fallbackBucket: string,
+): StorageLocation | null {
+  const raw = `${value ?? ""}`.trim();
+  if (!raw || raw.startsWith("r2://")) return null;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      const marker = "/storage/v1/object/";
+      const markerIndex = url.pathname.indexOf(marker);
+      if (markerIndex < 0) return null;
+      const rest = decodeURIComponent(
+        url.pathname.slice(markerIndex + marker.length)
+          .replace(/^public\//, "")
+          .replace(/^sign\//, "")
+          .replace(/^authenticated\//, ""),
+      );
+      const slash = rest.indexOf("/");
+      if (slash < 1) return null;
+      const candidateBucket = rest.slice(0, slash);
+      const path = rest.slice(slash + 1).replace(/\/{2,}/g, "/").trim();
+      return LEGACY_STORAGE_BUCKETS.has(candidateBucket) && path
+        ? { bucket: candidateBucket, path }
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const normalized = raw.replace(/^\/+/, "");
+  const slash = normalized.indexOf("/");
+  if (slash > 0) {
+    const candidateBucket = normalized.slice(0, slash);
+    const path = normalized.slice(slash + 1).replace(/\/{2,}/g, "/").trim();
+    if (LEGACY_STORAGE_BUCKETS.has(candidateBucket) && path) {
+      return { bucket: candidateBucket, path };
+    }
+  }
+
+  return fallbackBucket && normalized
+    ? { bucket: fallbackBucket, path: normalized }
+    : null;
+}
+
 export function privateFileReference(path: string): string {
   return `${PRIVATE_FILES_BUCKET}/${path}`;
 }
@@ -86,13 +154,13 @@ export async function signedPrivateFileUrl(
       continue;
     }
     if (provider !== "supabase" || !legacyStorageReadsEnabled()) continue;
-    const path = storagePathFromValue(value, bucket);
-    if (!path) {
+    const location = storageLocationFromValue(value, bucket);
+    if (!location) {
       if (!r2Key) return `${value ?? ""}`.trim();
       continue;
     }
-    const { data, error } = await svc.storage.from(bucket)
-      .createSignedUrl(path, ttlSeconds);
+    const { data, error } = await svc.storage.from(location.bucket)
+      .createSignedUrl(location.path, ttlSeconds);
     if (!error && data?.signedUrl) return data.signedUrl;
   }
   return "";

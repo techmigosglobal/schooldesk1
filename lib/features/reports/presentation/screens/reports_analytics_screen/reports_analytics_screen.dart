@@ -4,9 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -51,8 +52,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
       widget.repository ?? ApiPrincipalReportsRepository.legacyDefault;
 
   bool get _isCoordinator =>
-      BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
-      'coordinator';
+      RoleAccessService.currentRoleName == 'coordinator';
 
   @override
   void initState() {

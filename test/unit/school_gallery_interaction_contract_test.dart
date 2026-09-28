@@ -11,6 +11,8 @@ void main() {
     expect(source, contains('onTap: () => _showDetails(context)'));
     expect(source, contains('final VoidCallback onTap;'));
     expect(source, contains('onImageTap: onTap'));
+    expect(source, contains('loadOnInit: true'));
+    expect(source, contains('EventPostVideoPreview('));
   });
 
   test('school-assets explicitly allows event-post video MIME types', () {

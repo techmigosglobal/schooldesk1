@@ -10,7 +10,10 @@ import {
   resolveActiveTeacherScope,
   teacherCanAccessStudent,
 } from "./teacher_scope.ts";
-import { signedPrivateFileUrl, stableStorageReference } from "../storage_helpers.ts";
+import {
+  signedPrivateFileUrl,
+  stableStorageReference,
+} from "../storage_helpers.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -487,24 +490,29 @@ async function parentChatContacts(
         const matchesYear = !text(assignment.academic_year_id) ||
           text(assignment.academic_year_id) === text(section.academic_year_id);
         if (!matchesYear || (!matchesSection && !matchesGrade)) continue;
-        const subjectTeacher = assignment.teacher as unknown as Record<
-          string,
-          unknown
-        > | null;
+        const subjectTeacher = assignment.teacher as unknown as
+          | Record<
+            string,
+            unknown
+          >
+          | null;
         const staffId = text(assignment.staff_id ?? subjectTeacher?.id);
         if (!staffId || subjectTeacher?.is_active === false) continue;
         const key = `teacher:${staffId}:${student.id}`;
         if (addedKeys.has(key)) continue;
         addedKeys.add(key);
-        const subject = assignment.subject as unknown as Record<
-          string,
-          unknown
-        > | null;
+        const subject = assignment.subject as unknown as
+          | Record<
+            string,
+            unknown
+          >
+          | null;
         contacts.push({
           id: staffId,
-          name: [text(subjectTeacher?.first_name), text(subjectTeacher?.last_name)]
-            .filter(Boolean)
-            .join(" ") || "Teacher",
+          name:
+            [text(subjectTeacher?.first_name), text(subjectTeacher?.last_name)]
+              .filter(Boolean)
+              .join(" ") || "Teacher",
           role: "teacher",
           contact_role: "subject_teacher",
           subject_name: text(subject?.subject_name),
@@ -699,9 +707,9 @@ async function principalChatContacts(
   ).eq("school_id", school);
   const parentIds = new Set((parents ?? []).map((parent) => text(parent.id)));
   const studentsBySection = new Map<string, Record<string, unknown>>();
-  const sectionIds = uniqueText((links ?? []).map((link: any) =>
-    link.student?.current_section_id
-  ));
+  const sectionIds = uniqueText(
+    (links ?? []).map((link: any) => link.student?.current_section_id),
+  );
   if (sectionIds.length > 0) {
     const { data: linkedSections } = await svc.from("sections")
       .select("id, section_name, grade:grades(grade_name)")
@@ -994,7 +1002,12 @@ async function chatConversationContext(
 ) {
   const studentId = text(conversation.student_id);
   if (!studentId) {
-    return { student_id: "", section_id: "", student_name: "", class_label: "" };
+    return {
+      student_id: "",
+      section_id: "",
+      student_name: "",
+      class_label: "",
+    };
   }
   const { data: student } = await svc.from("students")
     .select("id, first_name, last_name, current_section_id")
@@ -1002,7 +1015,12 @@ async function chatConversationContext(
     .eq("school_id", school)
     .maybeSingle();
   if (!student) {
-    return { student_id: studentId, section_id: "", student_name: "", class_label: "" };
+    return {
+      student_id: studentId,
+      section_id: "",
+      student_name: "",
+      class_label: "",
+    };
   }
   const { data: section } = await svc.from("sections")
     .select("id, section_name, grade:grades(grade_name)")
@@ -1505,15 +1523,19 @@ export async function handleCommunications(
   }
 
   if (path === "/chat/conversations" && method === "GET") {
-    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const page = Math.max(
+      parseInt(url.searchParams.get("page") ?? "1") || 1,
+      1,
+    );
     const pageSize = Math.min(
       Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
       100,
     );
-    let q = svc.from("message_conversations").select("*", { count: "exact" }).eq(
-      "school_id",
-      school,
-    );
+    let q = svc.from("message_conversations").select("*", { count: "exact" })
+      .eq(
+        "school_id",
+        school,
+      );
     const type = text(url.searchParams.get("type"));
     const teacherId = text(url.searchParams.get("teacher_id"));
     const parentId = text(url.searchParams.get("parent_id"));
@@ -1587,12 +1609,17 @@ export async function handleCommunications(
         user.id,
       );
       if (linkError) return fail(linkError.message);
-      const linkedStudents = new Set(uniqueText((links ?? []).map((link) => link.student_id)));
+      const linkedStudents = new Set(
+        uniqueText((links ?? []).map((link) => link.student_id)),
+      );
       visible = visible.filter((conversation) =>
         linkedStudents.has(text(conversation.student_id))
       );
     }
-    const rows = await enrichChatConversations(svc, school, visible) as Record<string, unknown>[];
+    const rows = await enrichChatConversations(svc, school, visible) as Record<
+      string,
+      unknown
+    >[];
     const ids = rows.map((row) => text(row["id"])).filter(Boolean);
     let unreadByConversation = new Map<string, number>();
     if (ids.length) {
@@ -1733,12 +1760,18 @@ export async function handleCommunications(
     if (!await canReadChatConversation(svc, school, conversation, user)) {
       return fail("forbidden", 403);
     }
-    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const page = Math.max(
+      parseInt(url.searchParams.get("page") ?? "1") || 1,
+      1,
+    );
     const pageSize = Math.min(
       Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
       100,
     );
-    let q = svc.from("messages").select("*", { count: "exact" }).eq("school_id", school)
+    let q = svc.from("messages").select("*", { count: "exact" }).eq(
+      "school_id",
+      school,
+    )
       .eq("conversation_id", conversationId);
     const sentAfter = text(url.searchParams.get("sent_after"));
     if (sentAfter) q = q.gt("sent_at", sentAfter);
@@ -1749,12 +1782,14 @@ export async function handleCommunications(
       page * pageSize - 1,
     );
     if (error) return fail(error.message);
-    const rows = (data ?? []).map((row) => normalizeChatMessage({
-      ...row,
-      student_id: conversation.student_id ?? "",
-      student_name: conversation.student_name ?? "",
-      class_label: conversation.class_label ?? "",
-    }, user.id));
+    const rows = (data ?? []).map((row) =>
+      normalizeChatMessage({
+        ...row,
+        student_id: conversation.student_id ?? "",
+        student_name: conversation.student_name ?? "",
+        class_label: conversation.class_label ?? "",
+      }, user.id)
+    );
     const total = count ?? rows.length;
     return ok({
       data: rows,
@@ -1853,7 +1888,10 @@ export async function handleCommunications(
       if (type == "parent_teacher" && !canManageSchoolContent(user)) {
         const principalIds = await principalUserIdsForSchool(svc, school);
         for (const principalId of principalIds) {
-          if (principalId == user.id || targets.some((target) => target.id === principalId)) continue;
+          if (
+            principalId == user.id ||
+            targets.some((target) => target.id === principalId)
+          ) continue;
           await appendNotification(
             svc,
             school,
@@ -1926,7 +1964,10 @@ export async function handleCommunications(
     const seg =
       path.slice("/announcements".length).split("/").filter(Boolean)[0];
     if (!seg && method === "GET") {
-      const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+      const page = Math.max(
+        parseInt(url.searchParams.get("page") ?? "1") || 1,
+        1,
+      );
       const pageSize = Math.min(
         Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
         100,
@@ -1952,7 +1993,9 @@ export async function handleCommunications(
       const search = text(url.searchParams.get("search"));
       if (search) {
         const escaped = search.replace(/[%(),]/g, " ").trim();
-        if (escaped) q = q.or(`title.ilike.%${escaped}%,body.ilike.%${escaped}%`);
+        if (escaped) {
+          q = q.or(`title.ilike.%${escaped}%,body.ilike.%${escaped}%`);
+        }
       }
       const { data, error, count } = await q.order("created_at", {
         ascending: false,
@@ -2012,10 +2055,11 @@ export async function handleCommunications(
     }
     if (seg && method === "DELETE") {
       if (!canManageSchoolContent(user)) return fail("forbidden", 403);
-      const { error } = await svc.from("announcements").delete().eq("id", seg).eq(
-        "school_id",
-        school,
-      );
+      const { error } = await svc.from("announcements").delete().eq("id", seg)
+        .eq(
+          "school_id",
+          school,
+        );
       if (error) return fail(error.message);
       return ok({ success: true });
     }
@@ -2025,7 +2069,10 @@ export async function handleCommunications(
   if (path.startsWith("/notices")) {
     const seg = path.slice("/notices".length).split("/").filter(Boolean)[0];
     if (!seg && method === "GET") {
-      const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+      const page = Math.max(
+        parseInt(url.searchParams.get("page") ?? "1") || 1,
+        1,
+      );
       const pageSize = Math.min(
         Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
         100,
@@ -2051,7 +2098,9 @@ export async function handleCommunications(
       const search = text(url.searchParams.get("search"));
       if (search) {
         const escaped = search.replace(/[%(),]/g, " ").trim();
-        if (escaped) q = q.or(`title.ilike.%${escaped}%,body.ilike.%${escaped}%`);
+        if (escaped) {
+          q = q.or(`title.ilike.%${escaped}%,body.ilike.%${escaped}%`);
+        }
       }
       const { data, error, count } = await q.order("created_at", {
         ascending: false,
@@ -2099,7 +2148,10 @@ export async function handleCommunications(
 
   // ── Notifications ─────────────────────────────────────────
   if (path === "/notifications" && method === "GET") {
-    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const page = Math.max(
+      parseInt(url.searchParams.get("page") ?? "1") || 1,
+      1,
+    );
     const pageSize = Math.min(
       Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
       100,
@@ -2121,7 +2173,9 @@ export async function handleCommunications(
         .eq("school_id", school)
         .eq("parent_user_id", user.id);
       if (linksError) return fail(linksError.message);
-      const linkedStudentIds = (links ?? []).map((link) => text(link.student_id))
+      const linkedStudentIds = (links ?? []).map((link) =>
+        text(link.student_id)
+      )
         .filter(Boolean);
       notificationQuery = linkedStudentIds.length === 0
         ? notificationQuery.is("student_id", null)
@@ -2132,22 +2186,29 @@ export async function handleCommunications(
     const { data, error, count } = await notificationQuery.range(from, to);
     if (error) return fail(error.message);
     const rows = (data ?? []).slice(0, pageSize);
-    const items = rows.map((row: Record<string, unknown>) => ({
-      ...row,
-      notification_type: row.type ?? "general",
-      reference_type: row.entity_type ?? "",
-      reference_id: row.entity_id ?? "",
-      target_role: row.target_role ?? "all",
-      target_user_id: row.user_id ?? "",
-      route: row.route ?? "",
-      priority: row.priority ?? "medium",
-      student_id: row.student_id ?? "",
-      section_id: row.section_id ?? "",
-      teacher_id: row.teacher_id ?? "",
-      student_photo_url: (row.student as Record<string, unknown> | null)
-        ?.photo_url ?? "",
-      sent_at: row.created_at ?? null,
-    }));
+    const items = await Promise.all(
+      rows.map(async (row: Record<string, unknown>) => {
+        const storedPhotoUrl = text(
+          (row.student as Record<string, unknown> | null)?.photo_url,
+        );
+        return {
+          ...row,
+          notification_type: row.type ?? "general",
+          reference_type: row.entity_type ?? "",
+          reference_id: row.entity_id ?? "",
+          target_role: row.target_role ?? "all",
+          target_user_id: row.user_id ?? "",
+          route: row.route ?? "",
+          priority: row.priority ?? "medium",
+          student_id: row.student_id ?? "",
+          section_id: row.section_id ?? "",
+          teacher_id: row.teacher_id ?? "",
+          student_photo_url: await signedPrivateFileUrl(svc, storedPhotoUrl) ||
+            storedPhotoUrl,
+          sent_at: row.created_at ?? null,
+        };
+      }),
+    );
     return ok({
       items,
       total: count ?? 0,
@@ -2199,14 +2260,14 @@ export async function handleCommunications(
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const requestedRole = `${body.target_role ?? ""}`.trim().toLowerCase();
     const targetRole = [
-      "principal",
-      "coordinator",
-      "teacher",
-      "parent",
-      "student",
-      "admin",
-      "super_admin",
-    ].includes(requestedRole)
+        "principal",
+        "coordinator",
+        "teacher",
+        "parent",
+        "student",
+        "admin",
+        "super_admin",
+      ].includes(requestedRole)
       ? requestedRole
       : "";
     let update = svc.from("notification_logs").update({ is_read: true })
@@ -2466,7 +2527,10 @@ export async function handleCommunications(
     const { data: conversation } = await svc.from("message_conversations")
       .select("*").eq("id", existingMessage.conversation_id)
       .eq("school_id", school).maybeSingle();
-    if (!conversation || !await canReadChatConversation(svc, school, conversation, user)) {
+    if (
+      !conversation ||
+      !await canReadChatConversation(svc, school, conversation, user)
+    ) {
       return fail("forbidden", 403);
     }
     const readBy = readByList(existingMessage.read_by);
@@ -2482,7 +2546,10 @@ export async function handleCommunications(
 
   // ── Diary ─────────────────────────────────────────────────
   if ((path === "/diary" || path === "/diary-entries") && method === "GET") {
-    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const page = Math.max(
+      parseInt(url.searchParams.get("page") ?? "1") || 1,
+      1,
+    );
     const pageSize = Math.min(
       Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
       100,
@@ -2513,7 +2580,9 @@ export async function handleCommunications(
       q = q.eq("staff_id", scope.staffId).in("section_id", sectionIds);
     } else if (userRole === "parent") {
       if (requestedStaffId) return fail("forbidden", 403);
-      const sectionIds = [...await lessonPlannerParentSectionIds(svc, school, user)];
+      const sectionIds = [
+        ...await lessonPlannerParentSectionIds(svc, school, user),
+      ];
       if (requestedSectionId && !sectionIds.includes(requestedSectionId)) {
         return fail("forbidden", 403);
       }
@@ -2597,8 +2666,10 @@ export async function handleCommunications(
         linkedStaffId(user),
       );
       const nextSectionId = text(body.section_id) || text(existing.section_id);
-      if (!scope.isActive || text(existing.staff_id) !== scope.staffId ||
-        !scope.sections.has(nextSectionId)) {
+      if (
+        !scope.isActive || text(existing.staff_id) !== scope.staffId ||
+        !scope.sections.has(nextSectionId)
+      ) {
         return fail("forbidden", 403);
       }
       const allowed = ["title", "content", "date", "section_id", "attachments"];
@@ -2637,8 +2708,10 @@ export async function handleCommunications(
         school,
         linkedStaffId(user),
       );
-      if (!scope.isActive || text(existing.staff_id) !== scope.staffId ||
-        !scope.sections.has(text(existing.section_id))) {
+      if (
+        !scope.isActive || text(existing.staff_id) !== scope.staffId ||
+        !scope.sections.has(text(existing.section_id))
+      ) {
         return fail("forbidden", 403);
       }
     }

@@ -4,7 +4,10 @@
 // Exams, exam-schedules, results, assistant → 404
 // ============================================================
 
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createClient,
+  SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2";
 import { handleAuth } from "./handlers/auth.ts";
 import { handleHealth } from "./handlers/health.ts";
 import { handleSchools } from "./handlers/schools.ts";
@@ -121,6 +124,12 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 };
 
+function maintenanceModeEnabled(): boolean {
+  return ["1", "true", "yes", "on"].includes(
+    (Deno.env.get("MAINTENANCE_MODE") ?? "").trim().toLowerCase(),
+  );
+}
+
 export function cors(
   body: unknown,
   status = 200,
@@ -166,8 +175,9 @@ function isIdempotentMutation(method: string): boolean {
 
 async function sha256Hex(input: BufferSource): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", input);
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0")
+  return Array.from(
+    new Uint8Array(digest),
+    (byte) => byte.toString(16).padStart(2, "0"),
   ).join("");
 }
 
@@ -302,9 +312,17 @@ async function withIdempotency(
         if (
           row.method !== method || row.path !== path ||
           row.request_hash !== hash
-        ) return fail("idempotency key was reused for a different request", 409);
+        ) {
+          return fail(
+            "idempotency key was reused for a different request",
+            409,
+          );
+        }
         if (row.state === "completed") return replayIdempotentResponse(row);
-        return fail("request with this idempotency key is still processing", 409);
+        return fail(
+          "request with this idempotency key is still processing",
+          409,
+        );
       }
     }
     console.error("Idempotency ledger reservation failed", inserted.error);
@@ -361,8 +379,11 @@ function requestIp(req: Request): string {
   // environment so deterministic local abuse tests can use separate buckets;
   // production ingress headers remain authoritative outside loopback.
   const hostname = new URL(req.url).hostname;
-  if (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1") {
-    return (forwarded ?? req.headers.get("x-real-ip") ?? "unknown").trim() || "unknown";
+  if (
+    hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1"
+  ) {
+    return (forwarded ?? req.headers.get("x-real-ip") ?? "unknown").trim() ||
+      "unknown";
   }
   return (req.headers.get("cf-connecting-ip") ??
     req.headers.get("x-real-ip") ?? forwarded ?? "unknown").trim() || "unknown";
@@ -570,12 +591,14 @@ export async function authedClient(req: Request) {
     const { data: schools } = await svc.from("schools")
       .select("id, organization_id")
       .in("id", [profile.school_id, requestedBranch]);
-    const home = (schools as Record<string, unknown>[] | null | undefined)?.find(
-      (school: Record<string, unknown>) => school.id === profile.school_id,
-    );
-    const requested = (schools as Record<string, unknown>[] | null | undefined)?.find(
-      (school: Record<string, unknown>) => school.id === requestedBranch,
-    );
+    const home = (schools as Record<string, unknown>[] | null | undefined)
+      ?.find(
+        (school: Record<string, unknown>) => school.id === profile.school_id,
+      );
+    const requested = (schools as Record<string, unknown>[] | null | undefined)
+      ?.find(
+        (school: Record<string, unknown>) => school.id === requestedBranch,
+      );
     permitted = Boolean(
       home?.organization_id &&
         requested?.organization_id &&
@@ -734,6 +757,21 @@ export async function handleApiRequest(req: Request): Promise<Response> {
   // ── Health (no auth required) ─────────────────────────────
   if (path === "/health" || path === "/ready") {
     return handleHealth(req, path, serviceClient());
+  }
+
+  // This is intentionally an Edge-secret gate rather than a database setting:
+  // it prevents application writes while a restore transaction is in flight,
+  // yet leaves the public health and readiness probes available to operators.
+  if (maintenanceModeEnabled()) {
+    return cors(
+      {
+        success: false,
+        error: "maintenance",
+        code: "restore_in_progress",
+      },
+      503,
+      { "Retry-After": "300" },
+    );
   }
 
   // School creation is a reset-only/local fixture concern. There is no public
@@ -1180,5 +1218,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
 // Keep imports side-effect free for contract/unit tests. Supabase/Deno runs
 // this module as the entrypoint, where import.meta.main is true.
 if (import.meta.main) {
-  Deno.serve((req: Request) => withIdempotency(req, () => handleApiRequest(req)));
+  Deno.serve((req: Request) =>
+    withIdempotency(req, () => handleApiRequest(req))
+  );
 }

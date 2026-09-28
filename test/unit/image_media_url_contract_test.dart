@@ -34,6 +34,21 @@ void main() {
   });
 
   test(
+    'restored source-project object URLs use the configured target project',
+    () {
+      const legacy =
+          'https://ouvwogguttybmpgfgctc.supabase.co/storage/v1/object/public/'
+          'school-assets/students/school/student/photo.jpg';
+      if (EnvConfig.supabaseUrl.isEmpty) return;
+      expect(
+        resolveOriginalImageUrl(legacy),
+        '${EnvConfig.supabaseUrl}/storage/v1/object/public/'
+        'school-assets/students/school/student/photo.jpg',
+      );
+    },
+  );
+
+  test(
     'relative and non-image API URLs are left for their existing resolver',
     () {
       expect(

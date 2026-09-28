@@ -5,11 +5,8 @@ import {
   coordinatorDashboardDto,
   financeDashboardDto,
 } from "../lib/dashboard_dto.ts";
-import {
-  isFinanceLeader,
-  isSchoolLeader,
-  roleName,
-} from "./authorization.ts";
+import { isFinanceLeader, isSchoolLeader, roleName } from "./authorization.ts";
+import { signedPrivateFileUrl } from "../storage_helpers.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -20,9 +17,21 @@ function text(value: unknown): string {
 }
 
 const FINANCE_APPROVAL_MODULES = new Set([
-  "fee", "fees", "finance", "payment", "payments", "concession",
-  "concessions", "invoice", "invoices", "receipt", "receipts",
-  "fee_invoice", "fee_receipt", "fee_concession", "payment_proof",
+  "fee",
+  "fees",
+  "finance",
+  "payment",
+  "payments",
+  "concession",
+  "concessions",
+  "invoice",
+  "invoices",
+  "receipt",
+  "receipts",
+  "fee_invoice",
+  "fee_receipt",
+  "fee_concession",
+  "payment_proof",
   "fee_payment_proof",
 ]);
 
@@ -128,17 +137,19 @@ function buildTeacherAssignments(
     const assignmentGradeId = text(row.grade_id);
     const assignmentYearId = text(row.academic_year_id);
     const directSection = directSectionId
-      ? schoolSections.find((candidate) => text(candidate.id) === directSectionId)
+      ? schoolSections.find((candidate) =>
+        text(candidate.id) === directSectionId
+      )
       : null;
     const matchingSections = section
       ? [section]
       : directSection
       ? [directSection]
       : schoolSections.filter((candidate) =>
-          text(candidate.grade_id) === assignmentGradeId &&
-          (!assignmentYearId ||
-            text(candidate.academic_year_id) === assignmentYearId)
-        );
+        text(candidate.grade_id) === assignmentGradeId &&
+        (!assignmentYearId ||
+          text(candidate.academic_year_id) === assignmentYearId)
+      );
     for (const matchingSection of matchingSections) {
       const entry = ensureSection(matchingSection, "subject_teacher", row);
       if (!entry) continue;
@@ -187,9 +198,9 @@ function buildTeacherAssignments(
     }
   }
 
-    // Class and co-teachers receive the class hub's subject list. A
-    // subject-only teacher retains only their explicit subject assignments.
-    for (const entry of assignments.values()) {
+  // Class and co-teachers receive the class hub's subject list. A
+  // subject-only teacher retains only their explicit subject assignments.
+  for (const entry of assignments.values()) {
     const sectionId = text(entry.section_id);
     const gradeId = text(entry.grade_id);
     const sectionYear = text(entry.academic_year_id);
@@ -347,7 +358,9 @@ async function parentDashboardResponse(
 ): Promise<Response> {
   const { data: links, error: linksError } = await svc
     .from("parent_student_links")
-    .select("student_id, student:students(*, section:sections(*, grade:grades(*)))")
+    .select(
+      "student_id, student:students(*, section:sections(*, grade:grades(*)))",
+    )
     .eq("school_id", school)
     .eq("parent_user_id", user.id);
   if (linksError) return fail(linksError.message);
@@ -356,7 +369,7 @@ async function parentDashboardResponse(
     asRecord(link.student)
   ).filter((student): student is Record<string, unknown> =>
     student !== null && text(student.school_id) === school &&
-      text(student.status).toLowerCase() === "active"
+    text(student.status).toLowerCase() === "active"
   );
   const studentIds = linkedStudents.map((student) => text(student.id)).filter(
     Boolean,
@@ -377,7 +390,9 @@ async function parentDashboardResponse(
     conversationResult,
     announcementsResult,
   ] = await Promise.all([
-    svc.from("attendance_summaries").select("student_id, percentage, updated_at")
+    svc.from("attendance_summaries").select(
+      "student_id, percentage, updated_at",
+    )
       .eq("school_id", school).in("student_id", studentIds)
       .order("updated_at", { ascending: false }),
     svc.from("fee_invoices").select(
@@ -433,7 +448,9 @@ async function parentDashboardResponse(
   }
   const feeBalanceByStudent = new Map<string, number>();
   for (const row of invoiceResult.data ?? []) {
-    if (["cancelled", "canceled", "void"].includes(text(row.status).toLowerCase())) {
+    if (
+      ["cancelled", "canceled", "void"].includes(text(row.status).toLowerCase())
+    ) {
       continue;
     }
     const studentId = text(row.student_id);
@@ -466,7 +483,8 @@ async function parentDashboardResponse(
       );
       if (
         !studentId || (targetStudentId !== studentId &&
-          (targetStudentId || !targetSectionId || targetSectionId !== sectionId))
+          (targetStudentId || !targetSectionId ||
+            targetSectionId !== sectionId))
       ) continue;
       const submissionStatus = newestSubmissionByHomeworkAndStudent.get(
         `${homeworkId}:${studentId}`,
@@ -515,28 +533,37 @@ async function parentDashboardResponse(
   });
   const base = { metrics: { total_children: linkedStudents.length } };
 
+  const children = await Promise.all(linkedStudents.map(async (student) => {
+    const section = asRecord(student.section);
+    const grade = asRecord(section?.grade);
+    const studentId = text(student.id);
+    const attendancePct = attendanceByStudent.get(studentId) ?? null;
+    const homeworkDue = homeworkDueByStudent.get(studentId) ?? 0;
+    const feeBalance = feeBalanceByStudent.get(studentId) ?? 0;
+    const storedPhotoUrl = text(
+      student.photo_url ?? student.photo ?? student.avatar,
+    );
+    const resolvedPhotoUrl = await signedPrivateFileUrl(svc, storedPhotoUrl);
+    return {
+      ...student,
+      name: studentName(student),
+      class: text(grade?.grade_name),
+      section: text(section?.section_name),
+      // Restored rows may still carry the retired Supabase hostname. Resolve
+      // the durable bucket/path through the target Storage project before it
+      // reaches the parent dashboard or mobile child picker.
+      photo_url: resolvedPhotoUrl || storedPhotoUrl,
+      ...parentChildOverview({
+        attendancePct,
+        homeworkDueByStudent: homeworkDue,
+        feeBalanceByStudent: feeBalance,
+        unreadMessages: unreadMessagesByStudent.get(studentId) ?? 0,
+      }),
+    };
+  }));
+
   return ok({
-    children: linkedStudents.map((student) => {
-      const section = asRecord(student.section);
-      const grade = asRecord(section?.grade);
-      const studentId = text(student.id);
-      const attendancePct = attendanceByStudent.get(studentId) ?? null;
-      const homeworkDue = homeworkDueByStudent.get(studentId) ?? 0;
-      const feeBalance = feeBalanceByStudent.get(studentId) ?? 0;
-      return {
-        ...student,
-        name: studentName(student),
-        class: text(grade?.grade_name),
-        section: text(section?.section_name),
-        photo_url: text(student.photo_url ?? student.photo ?? student.avatar),
-        ...parentChildOverview({
-          attendancePct,
-          homeworkDueByStudent: homeworkDue,
-          feeBalanceByStudent: feeBalance,
-          unreadMessages: unreadMessagesByStudent.get(studentId) ?? 0,
-        }),
-      };
-    }),
+    children,
     metrics: { ...base.metrics, unread_messages: unreadMessages },
     recent_announcements: announcementsResult.data ?? [],
   });
@@ -673,7 +700,9 @@ export async function handleDashboard(
       "fee_dashboard_summary",
       { p_school_id: school },
     );
-    if (feeSummaryError) return fail(feeSummaryError.message);
+    if (feeSummaryError) {
+      return fail(feeSummaryError.message);
+    }
     const summary = (feeSummary && typeof feeSummary === "object")
       ? feeSummary as Record<string, unknown>
       : {};

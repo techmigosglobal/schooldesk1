@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -244,8 +244,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   NotificationService? _notificationService;
 
   bool get _isCoordinator =>
-      BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ==
-      'coordinator';
+      RoleAccessService.currentRoleName == 'coordinator';
 
   List<String> get _tabLabels => [
     'All',

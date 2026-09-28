@@ -13,6 +13,7 @@ import 'package:schooldesk1/app/router/route_arguments.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/network/models/backend_models.dart' as api;
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -1059,7 +1060,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     if (value.startsWith('http://') ||
         value.startsWith('https://') ||
         value.startsWith('file://')) {
-      return value;
+      return resolveOriginalImageUrl(value);
     }
     if (value.startsWith('/')) return '${EnvConfig.apiOrigin}$value';
     return '${EnvConfig.apiOrigin}/$value';
@@ -1871,10 +1872,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                   label: 'Discount',
                   value: _formatMoney(student.feeDiscount),
                 ),
-                _DetailRow(
-                  label: 'Paid',
-                  value: _formatMoney(student.feePaid),
-                ),
+                _DetailRow(label: 'Paid', value: _formatMoney(student.feePaid)),
                 _DetailRow(
                   label: 'Balance',
                   value: _formatMoney(student.feeBalance),
@@ -2431,13 +2429,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
     );
     if (!mounted) return;
-    final newDocs =
-        <
-          ({
-            _StudentDocumentInput doc,
-            String label,
-          })
-        >[];
+    final newDocs = <({_StudentDocumentInput doc, String label})>[];
     for (final file in result) {
       final bytes = await file.readAsBytes();
       final path = (file.path ?? '').trim();
@@ -2445,17 +2437,15 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       final nameWithoutExt = file.name.contains('.')
           ? file.name.substring(0, file.name.lastIndexOf('.'))
           : file.name;
-      newDocs.add(
-        (
-          doc: _StudentDocumentInput(
-            filePath: path.isEmpty ? null : path,
-            fileBytes: bytes.isEmpty ? null : bytes,
-            fileName: file.name,
-            docType: 'student_document',
-          ),
-          label: nameWithoutExt,
+      newDocs.add((
+        doc: _StudentDocumentInput(
+          filePath: path.isEmpty ? null : path,
+          fileBytes: bytes.isEmpty ? null : bytes,
+          fileName: file.name,
+          docType: 'student_document',
         ),
-      );
+        label: nameWithoutExt,
+      ));
     }
     if (newDocs.isEmpty) return;
     setState(() {

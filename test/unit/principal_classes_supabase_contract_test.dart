@@ -106,6 +106,19 @@ void main() {
     );
   });
 
+  test('class hub teacher editor commits dropdown selections to form state', () {
+    final screen = File(
+      'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+    ).readAsStringSync();
+    final editor = screen.substring(
+      screen.indexOf('class _EditClassSheetState'),
+    );
+
+    expect(editor, contains('value: _teacherId.isEmpty ? null : _teacherId'));
+    expect(editor, contains('setState(() => _teacherId = value ?? \'\')'));
+    expect(editor, contains('setState(() => _coTeacherId = value ?? \'\')'));
+  });
+
   test('principal classes overview includes live class-hub fee dues', () {
     final principal = File(
       'supabase/functions/api/handlers/principal.ts',

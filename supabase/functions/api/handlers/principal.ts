@@ -1619,6 +1619,26 @@ export async function handlePrincipal(
       }).eq("id", sectionId).eq("school_id", school).select().single();
       if (error) return fail(error.message);
 
+      // Re-read the canonical row before reporting success. Classes Hub and
+      // Staff Management must observe the exact same persisted assignment;
+      // returning the write response alone can hide a trigger/schema mismatch.
+      const { data: persistedSection, error: persistedError } = await svc
+        .from("sections")
+        .select("*")
+        .eq("id", sectionId)
+        .eq("school_id", school)
+        .single();
+      if (persistedError) return fail(persistedError.message);
+      if (
+        text(persistedSection.class_teacher_id) !== classTeacherId ||
+        text(persistedSection.co_teacher_id) !== coTeacherId
+      ) {
+        return fail(
+          "teacher assignment was not persisted; refresh and try again",
+          409,
+        );
+      }
+
       await syncSubjectMappings(
         svc,
         school,
@@ -1638,10 +1658,10 @@ export async function handlePrincipal(
       );
 
       return ok({
-        section,
+        section: persistedSection,
         grade,
         room,
-        class: serializeClassRow(section, grade, room),
+        class: serializeClassRow(persistedSection, grade, room),
       });
     } catch (error) {
       return fail(

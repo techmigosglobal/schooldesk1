@@ -6,7 +6,10 @@ const read = (path: string) => Deno.readTextFile(new URL(path, root));
 Deno.test("coordinator dashboard returns its operations-only DTO before fee reads", async () => {
   const source = await read("supabase/functions/api/handlers/dashboard.ts");
 
-  assertMatch(source, /if \(!isSchoolLeader\(user\)\) \{\s+return fail\("forbidden", 403\)/);
+  assertMatch(
+    source,
+    /if \(!isSchoolLeader\(user\)\) \{\s+return fail\("forbidden", 403\)/,
+  );
   assertMatch(
     source,
     /if \(!financeAuthorized\) \{\s+return ok\(coordinatorDashboardDto\(operations\)\);\s+\}/,
@@ -23,4 +26,22 @@ Deno.test("coordinator dashboard returns its operations-only DTO before fee read
     source,
     /const \{ data: feeSummary, error: feeSummaryError \} = await svc\.rpc\(\s+"fee_dashboard_summary",/,
   );
+});
+
+Deno.test("parent dashboard resolves restored student photos through target Storage", async () => {
+  const source = await read("supabase/functions/api/handlers/dashboard.ts");
+
+  assertMatch(
+    source,
+    /import \{ signedPrivateFileUrl \} from "\.\.\/storage_helpers\.ts"/,
+  );
+  assertMatch(
+    source,
+    /const children = await Promise\.all\(linkedStudents\.map\(async \(student\)/,
+  );
+  assertMatch(
+    source,
+    /const resolvedPhotoUrl = await signedPrivateFileUrl\(svc, storedPhotoUrl\)/,
+  );
+  assertMatch(source, /photo_url: resolvedPhotoUrl \|\| storedPhotoUrl/);
 });

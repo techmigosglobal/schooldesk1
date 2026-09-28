@@ -249,7 +249,7 @@ extension BackendEventsApi on BackendApiClient {
   }
 
   Future<List<Map<String, dynamic>>> getHomeFeedEventPosts() async {
-    return (await getHomeFeedEventPostsPage(page: 1, pageSize: 100)).data;
+    return (await getHomeFeedEventPostsPage(page: 1, pageSize: 10)).data;
   }
 
   Future<PaginatedList<Map<String, dynamic>>> _getEventPostsPage(

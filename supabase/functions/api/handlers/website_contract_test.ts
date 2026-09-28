@@ -9,7 +9,7 @@ Deno.test("website public route is explicit and uses the website selection flag"
   assertMatch(source, /eq\("is_published", true\)/);
   assertMatch(source, /eq\("public_gallery_visible", true\)/);
   assertMatch(source, /school-public-media/);
-  assert(!source.includes("school-assets"));
+  assert(!source.includes('.from("school-assets")'));
 });
 
 Deno.test("school leaders can manage branch website content", async () => {

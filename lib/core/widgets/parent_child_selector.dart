@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 
 /// A consistent, photo-led child picker for parent workflows.
@@ -172,7 +173,11 @@ class _StudentAvatar extends StatelessWidget {
           : photo.startsWith('assets/')
           ? Image.asset(photo, fit: BoxFit.cover)
           : Image.network(
-              photo.startsWith('http') ? photo : '${EnvConfig.apiOrigin}$photo',
+              resolveOriginalImageUrl(
+                photo.startsWith('http')
+                    ? photo
+                    : '${EnvConfig.apiOrigin}$photo',
+              ),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => Center(
                 child: Text(

@@ -558,6 +558,22 @@ class _GalleryMediaCover extends StatelessWidget {
         ),
       );
     }
+    if (cover.isVideo) {
+      // The gallery card previously used the generic preview with
+      // loadOnInit=false, so every video stayed on the black fallback. The
+      // school feed eagerly decodes the first frame; keep the card in sync.
+      return EventPostVideoPreview(
+        url: resolveEventPostMediaUrl(cover.url),
+        height: double.infinity,
+        loadOnInit: true,
+        videoFit: BoxFit.cover,
+        showFullscreen: false,
+        thumbnailUrl: cover.thumbnailUrl.trim().isEmpty
+            ? null
+            : resolveEventPostMediaUrl(cover.thumbnailUrl),
+        onTap: onTap,
+      );
+    }
     return EventPostMediaPreview(
       item: cover,
       height: double.infinity,

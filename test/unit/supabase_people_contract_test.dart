@@ -346,7 +346,7 @@ void main() {
 
     expect(client, contains("_dio.put('/students/\$id'"));
     expect(students, contains('return cors({'));
-    expect(students, contains('data: data ?? []'));
+    expect(students, contains('data: hydratedData'));
     expect(students, contains('total: count ?? 0'));
     expect(students, contains('page_size: size'));
     expect(students, contains('method === "PATCH" || method === "PUT"'));

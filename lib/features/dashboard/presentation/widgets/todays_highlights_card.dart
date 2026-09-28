@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 
 /// A unified "Today's Highlights" card that surfaces birthday wishes and
 /// health alerts for the current role. Placed at the top of each dashboard.
@@ -426,7 +427,9 @@ class _BirthdayStudentAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     const pink = Color(0xFFE91E63);
-    final photoUrl = notification.studentPhotoUrl.trim();
+    final photoUrl = resolveOriginalImageUrl(
+      notification.studentPhotoUrl.trim(),
+    );
     final identity = notification.studentId.isNotEmpty
         ? notification.studentId
         : notification.id;

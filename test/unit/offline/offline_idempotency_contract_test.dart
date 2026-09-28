@@ -46,7 +46,8 @@ void main() {
     );
     expect(api, contains('idempotency key was reused for a different request'));
     expect(api, contains('Idempotency-Replayed'));
-    expect(api, contains('Deno.serve((req: Request) => withIdempotency'));
+    expect(api, contains('Deno.serve((req: Request) =>'));
+    expect(api, contains('withIdempotency(req, () => handleApiRequest(req))'));
 
     expect(
       migration,

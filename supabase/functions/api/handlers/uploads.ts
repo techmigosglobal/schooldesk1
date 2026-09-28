@@ -26,9 +26,9 @@ import {
   deleteR2File,
   headR2File,
   legacyR2Reference,
+  legacyStorageWritesEnabled,
   publicR2FileReference,
   publicR2FileUrl,
-  legacyStorageWritesEnabled,
   r2FileReference,
   r2ReferenceInfo,
   r2VisibilityFromValue,
@@ -52,9 +52,10 @@ function isFinanceReport(report: Record<string, unknown>): boolean {
   const label = [report.report_type, report.report_title, report.report]
     .map((value) => textValue(value).toLowerCase().replace(/[_-]+/g, " "))
     .join(" ");
-  return /\b(fee|fees|finance|payment|payments|invoice|concession|receipt)\b/.test(
-    label,
-  );
+  return /\b(fee|fees|finance|payment|payments|invoice|concession|receipt)\b/
+    .test(
+      label,
+    );
 }
 
 const feedRoles = new Set([
@@ -65,6 +66,8 @@ const feedRoles = new Set([
   "parent",
   "super_admin",
 ]);
+const PARENT_HOME_FEED_LIMIT = 10;
+const TEACHER_SCHOOL_FEED_LIMIT = 10;
 
 function canViewSchoolFeed(user: User): boolean {
   // kiosk and student accounts must never inherit communication surfaces.
@@ -77,7 +80,12 @@ function listPaging(url: URL) {
     Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
     100,
   );
-  return { page, pageSize, from: (page - 1) * pageSize, to: page * pageSize - 1 };
+  return {
+    page,
+    pageSize,
+    from: (page - 1) * pageSize,
+    to: page * pageSize - 1,
+  };
 }
 
 function listEnvelope<T>(
@@ -241,6 +249,17 @@ function validateEventMedia(
   ) {
     return "Landing page posts accept images only";
   }
+  if (destinations.includes("SCHOOL_LANDING")) {
+    const hasInvalidRatio = media.some((item) => {
+      if (!isImageEventMedia(item)) return true;
+      const raw = item.aspect_ratio ?? item.aspectRatio;
+      const ratio = typeof raw === "number" ? raw : Number(raw);
+      return !Number.isFinite(ratio) || Math.abs(ratio - (9 / 16)) > 0.002;
+    });
+    if (hasInvalidRatio) {
+      return "Landing page images must be cropped to exactly 9:16";
+    }
+  }
   return null;
 }
 
@@ -338,7 +357,8 @@ function eventMediaContentType(item: unknown): string {
   if (item && typeof item === "object") {
     const value = item as Record<string, unknown>;
     const mime = textValue(
-      value.mime_type ?? value.mimeType ?? value.content_type ?? value.media_type,
+      value.mime_type ?? value.mimeType ?? value.content_type ??
+        value.media_type,
     );
     if (mime) return mime;
   }
@@ -388,10 +408,13 @@ async function promoteEventPostMedia(
       // The post id and media index make promotion safe to retry after a
       // database update failure. CopyObject overwrites the same destination
       // key instead of leaking a new public object on every retry.
-      const destinationKey = `event-posts/${school}/${postId}/${index}-${fileName}`;
+      const destinationKey =
+        `event-posts/${school}/${postId}/${index}-${fileName}`;
       if (existing?.visibility === "private") {
         const copied = await copyR2File(stored, destinationKey, "public");
-        if (!copied) throw new Error("R2 is not configured for media promotion");
+        if (!copied) {
+          throw new Error("R2 is not configured for media promotion");
+        }
         destination = copied.reference;
       } else {
         const bytes = await downloadLegacyEventMedia(svc, stored);
@@ -444,20 +467,23 @@ async function demoteEventPostMedia(
     }
     const fileName = eventMediaFileName(item, `media-${index}.bin`)
       .replace(/[^a-zA-Z0-9._-]/g, "-");
-    const destinationKey = `event-posts-private/${school}/${postId}/${index}-${fileName}`;
+    const destinationKey =
+      `event-posts-private/${school}/${postId}/${index}-${fileName}`;
     const copied = await copyR2File(stored, destinationKey, "private");
     if (!copied) throw new Error("R2 is not configured for media demotion");
     if (!(await headR2File(copied.reference))) {
       throw new Error("R2 private media demotion verification failed");
     }
     cleanup.push(stored);
-    demoted.push(item && typeof item === "object"
-      ? {
-        ...(item as Record<string, unknown>),
-        url: copied.reference,
-        storage_ref: copied.reference,
-      }
-      : { url: copied.reference, storage_ref: copied.reference });
+    demoted.push(
+      item && typeof item === "object"
+        ? {
+          ...(item as Record<string, unknown>),
+          url: copied.reference,
+          storage_ref: copied.reference,
+        }
+        : { url: copied.reference, storage_ref: copied.reference },
+    );
   }
   return { media: demoted, cleanup };
 }
@@ -523,11 +549,13 @@ async function cleanupR2References(
 }
 
 function eventPostR2References(rawMedia: unknown): string[] {
-  return [...new Set(
-    eventMediaItems(rawMedia).map(eventMediaItemValue).filter((value) =>
-      Boolean(r2ReferenceInfo(value))
+  return [
+    ...new Set(
+      eventMediaItems(rawMedia).map(eventMediaItemValue).filter((value) =>
+        Boolean(r2ReferenceInfo(value))
+      ),
     ),
-  )];
+  ];
 }
 
 async function eventPostResponse(
@@ -824,7 +852,9 @@ async function uploadPrivateReportPdf(
     return signedUrl;
   }
   if (!legacyStorageWritesEnabled()) {
-    throw new Error("R2 storage is unavailable; legacy storage writes are disabled");
+    throw new Error(
+      "R2 storage is unavailable; legacy storage writes are disabled",
+    );
   }
   const bucket = "finance-documents";
   const { error: uploadError } = await svc.storage.from(bucket).upload(
@@ -2271,7 +2301,10 @@ export async function handleUploads(
   }
   if (!url) {
     if (!legacyStorageWritesEnabled()) {
-      return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+      return fail(
+        "R2 storage is unavailable; legacy storage writes are disabled",
+        503,
+      );
     }
     const { error: uploadErr } = await svc.storage.from(bucket).upload(
       filePath,
@@ -2375,7 +2408,19 @@ export async function handleEvents(
   }
   if (path === "/event-posts/home-feed" && method === "GET") {
     if (!canViewSchoolFeed(user)) return fail("forbidden", 403);
-    const paging = listPaging(url);
+    const isParent = roleValue(user) === "parent";
+    const requestedPaging = listPaging(url);
+    // Parents receive a deliberately bounded school feed. Ignore client page
+    // and page-size values so an old client cannot page through the complete
+    // history; staff-facing feeds retain their existing pagination behavior.
+    const paging = isParent
+      ? {
+        page: 1,
+        pageSize: PARENT_HOME_FEED_LIMIT,
+        from: 0,
+        to: PARENT_HOME_FEED_LIMIT - 1,
+      }
+      : requestedPaging;
     const { data, error, count } = await svc.from("event_posts").select("*", {
       count: "exact",
     }).eq(
@@ -2393,11 +2438,21 @@ export async function handleEvents(
       svc,
       (data ?? []) as Record<string, unknown>[],
     );
-    return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
+    const visibleCount = isParent && count != null
+      ? Math.min(count, PARENT_HOME_FEED_LIMIT)
+      : count;
+    return ok(listEnvelope(rows, visibleCount, paging.page, paging.pageSize));
   }
   if (path === "/event-posts/teacher-feed" && method === "GET") {
     if (roleValue(user) !== "teacher") return fail("forbidden", 403);
-    const paging = listPaging(url);
+    // Teachers receive the same bounded latest-post window as parents. Ignore
+    // client paging values so an older client cannot enumerate the full feed.
+    const paging = {
+      page: 1,
+      pageSize: TEACHER_SCHOOL_FEED_LIMIT,
+      from: 0,
+      to: TEACHER_SCHOOL_FEED_LIMIT - 1,
+    };
     // Teacher feed is a staff-facing surface. Existing parent-home posts are
     // school-wide updates, while TEACHERS_HOME is an explicit staff-only
     // destination. Gallery posts are included because they are approved
@@ -2423,7 +2478,12 @@ export async function handleEvents(
       svc,
       (data ?? []) as Record<string, unknown>[],
     );
-    return ok(listEnvelope(rows, count, paging.page, paging.pageSize));
+    return ok(listEnvelope(
+      rows,
+      count == null ? count : Math.min(count, TEACHER_SCHOOL_FEED_LIMIT),
+      paging.page,
+      paging.pageSize,
+    ));
   }
   if (path === "/event-posts/teacher" && method === "GET") {
     const paging = listPaging(url);
@@ -2482,7 +2542,10 @@ export async function handleEvents(
     const publicGalleryVisible = body.public_gallery_visible === true;
     const promotionSeed = textValue(req.headers.get("Idempotency-Key"))
       .replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80) || crypto.randomUUID();
-    if (directPublish && requiresPublicEventMedia(destinations, publicGalleryVisible)) {
+    if (
+      directPublish &&
+      requiresPublicEventMedia(destinations, publicGalleryVisible)
+    ) {
       try {
         media = await promoteEventPostMedia(
           svc,
@@ -2581,11 +2644,15 @@ export async function handleEvents(
     if (mediaError) return fail(mediaError, 420);
     const isPrincipal = ["principal", "coordinator"].includes(userRole);
     const directPublish = isPrincipal && body.is_submit === true;
-    const publicGalleryVisible = typeof body.public_gallery_visible === "boolean"
-      ? body.public_gallery_visible
-      : existing.public_gallery_visible === true;
+    const publicGalleryVisible =
+      typeof body.public_gallery_visible === "boolean"
+        ? body.public_gallery_visible
+        : existing.public_gallery_visible === true;
     let mediaCleanup: string[] = [];
-    if (directPublish && requiresPublicEventMedia(destinations, publicGalleryVisible)) {
+    if (
+      directPublish &&
+      requiresPublicEventMedia(destinations, publicGalleryVisible)
+    ) {
       try {
         media = await promoteEventPostMedia(svc, school, seg, media);
       } catch (error) {
@@ -2673,12 +2740,19 @@ export async function handleEvents(
       existing.visibility,
     );
     let approvedMedia = existing.media_urls;
-    if (requiresPublicEventMedia(
-      destinations,
-      existing.public_gallery_visible === true,
-    )) {
+    if (
+      requiresPublicEventMedia(
+        destinations,
+        existing.public_gallery_visible === true,
+      )
+    ) {
       try {
-        approvedMedia = await promoteEventPostMedia(svc, school, seg, approvedMedia);
+        approvedMedia = await promoteEventPostMedia(
+          svc,
+          school,
+          seg,
+          approvedMedia,
+        );
       } catch (promotionError) {
         return fail(`public media promotion failed: ${promotionError}`, 502);
       }
@@ -2750,12 +2824,19 @@ export async function handleEvents(
     if (!existing) return fail("not found", 404);
     let rejectedMedia = existing.media_urls;
     let rejectedMediaCleanup: string[] = [];
-    if (requiresPublicEventMedia(
-      approvedEventDestinations(existing.destinations, existing.visibility),
-      existing.public_gallery_visible === true,
-    )) {
+    if (
+      requiresPublicEventMedia(
+        approvedEventDestinations(existing.destinations, existing.visibility),
+        existing.public_gallery_visible === true,
+      )
+    ) {
       try {
-        const demoted = await demoteEventPostMedia(svc, school, seg, rejectedMedia);
+        const demoted = await demoteEventPostMedia(
+          svc,
+          school,
+          seg,
+          rejectedMedia,
+        );
         rejectedMedia = demoted.media;
         rejectedMediaCleanup = demoted.cleanup;
       } catch (error) {
@@ -2962,11 +3043,15 @@ export async function handleDocuments(
         school,
       ).maybeSingle();
     if (getErr) return fail(getErr.message);
-    if (!doc || !(await parentCanAccessStudent(svc, school, user, doc.student_id))) {
+    if (
+      !doc || !(await parentCanAccessStudent(svc, school, user, doc.student_id))
+    ) {
       return fail("not found", 404);
     }
-    if (textValue(doc.doc_type).toLowerCase() === "fee_receipt" &&
-      !isFinanceLeader(user)) {
+    if (
+      textValue(doc.doc_type).toLowerCase() === "fee_receipt" &&
+      !isFinanceLeader(user)
+    ) {
       // fee receipts cannot be deleted by parents; only finance leaders may
       // remove a receipt document after the ownership check above.
       return fail("finance access required", 403);
@@ -3076,9 +3161,12 @@ export async function handleDocuments(
   if (path === "/documents/requests" && method === "GET") {
     if (!canManageStudents(user)) return fail("forbidden", 403);
     const paging = listPaging(url);
-    const { data, error, count } = await svc.from("frontend_records").select("*", {
-      count: "exact",
-    }).eq(
+    const { data, error, count } = await svc.from("frontend_records").select(
+      "*",
+      {
+        count: "exact",
+      },
+    ).eq(
       "school_id",
       school,
     ).eq("table_name", "document_requests").order("updated_at", {
@@ -3138,9 +3226,12 @@ export async function handleDocuments(
   if (path === "/documents/templates" && method === "GET") {
     if (!canManageStudents(user)) return fail("forbidden", 403);
     const paging = listPaging(url);
-    const { data, error, count } = await svc.from("frontend_records").select("*", {
-      count: "exact",
-    }).eq(
+    const { data, error, count } = await svc.from("frontend_records").select(
+      "*",
+      {
+        count: "exact",
+      },
+    ).eq(
       "school_id",
       school,
     ).eq("table_name", "document_templates").order("updated_at", {
@@ -3193,7 +3284,18 @@ export async function handleParent(
       "student:students(*, section:sections(*, grade:grades(*)), enrollments(*))",
     ).eq("school_id", school).eq("parent_user_id", user.id);
     if (error) return fail(error.message);
-    return ok((data ?? []).map((l: Record<string, unknown>) => l.student));
+    const students = await Promise.all(
+      (data ?? []).map(async (link: Record<string, unknown>) => {
+        const student = (link.student ?? {}) as Record<string, unknown>;
+        const storedPhotoUrl = textValue(student.photo_url);
+        return {
+          ...student,
+          photo_url: await signedPrivateFileUrl(svc, storedPhotoUrl) ||
+            storedPhotoUrl,
+        };
+      }),
+    );
+    return ok(students);
   }
   const parentMatch = path.match(/^\/parents\/([^/]+)\/students$/);
   if (parentMatch && method === "GET") {
@@ -3317,7 +3419,8 @@ export async function handleParent(
     }));
     // A student can have only one parent login. Reassigning through this
     // endpoint replaces the old link, while the same parent may own many rows.
-    const { error: clearError } = await svc.from("parent_student_links").delete()
+    const { error: clearError } = await svc.from("parent_student_links")
+      .delete()
       .eq("school_id", school).in("student_id", resolvedStudentIds);
     if (clearError) return fail(clearError.message);
     const { data, error } = await svc.from("parent_student_links").upsert(
@@ -3380,9 +3483,11 @@ export async function handleReports(
     });
     if (error) return fail(error.message);
     const reports = (data ?? []).map((row) => documentRow(row));
-    return ok(isFinanceLeader(user)
-      ? reports
-      : reports.filter((report) => !isFinanceReport(report)));
+    return ok(
+      isFinanceLeader(user)
+        ? reports
+        : reports.filter((report) => !isFinanceReport(report)),
+    );
   }
   if (path === "/reports/attendance" && method === "GET") {
     if (!canManageStudents(user)) {
@@ -3439,9 +3544,11 @@ export async function handleLandingFeed(
 
   if (error) return fail(error.message);
 
-  const rows = await Promise.all((data ?? []).map((row) =>
-    eventPostResponse(svc, row as Record<string, unknown>, true)
-  ));
+  const rows = await Promise.all(
+    (data ?? []).map((row) =>
+      eventPostResponse(svc, row as Record<string, unknown>, true)
+    ),
+  );
 
   return ok(rows);
 }

@@ -23,15 +23,16 @@
  */
 
 import {
+  type MigrationMapEntry,
+  r2ReferenceFor,
   REFERENCE_TARGETS,
   referenceKey,
+  type ReferenceTarget,
   rewriteJson,
   rewriteString,
-  r2ReferenceFor,
-  type MigrationMapEntry,
-  type ReferenceTarget,
   type StorageLocation,
 } from "./storage_references.ts";
+import { parseCopyRow, readCopySections } from "../restore/postgres_copy.ts";
 
 type Visibility = "private" | "public";
 
@@ -58,6 +59,7 @@ type MigrationItem = {
   sourceSha256?: string;
   destinationSha256?: string;
   error?: string;
+  archiveEntry?: string;
 };
 
 type MigrationState = {
@@ -485,16 +487,20 @@ async function syncDatabaseState(state: MigrationState, mode: string) {
     `;
     await sql`
       update schooldesk_internal.storage_migration_batches
-      set status = ${failed.length > 0
+      set status = ${
+      failed.length > 0
         ? "failed"
         : verified.length === state.items.length
         ? "completed"
-        : "running"},
+        : "running"
+    },
         object_count = ${state.items.length},
         completed_count = ${verified.length},
         failed_count = ${failed.length},
         source_bytes = ${state.items.reduce((sum, item) => sum + item.size, 0)},
-        destination_bytes = ${verified.reduce((sum, item) => sum + item.size, 0)},
+        destination_bytes = ${
+      verified.reduce((sum, item) => sum + item.size, 0)
+    },
         report = ${JSON.stringify({ mode, state_path: "external" })}::jsonb,
         completed_at = case when ${verified.length === state.items.length}
           then now() else null end,
@@ -560,15 +566,20 @@ async function availableReferenceTargets(sql: DatabaseClient) {
     from information_schema.columns
     where table_schema = 'public'
   ` as Array<{ table_name: string; column_name: string }>;
-  const available = new Set(rows.map((row) => `${row.table_name}.${row.column_name}`));
+  const available = new Set(
+    rows.map((row) => `${row.table_name}.${row.column_name}`),
+  );
   const missing = REFERENCE_TARGETS.filter((target) =>
     !available.has(`${target.table}.${target.column}`) ||
     !available.has(`${target.table}.${target.rowIdColumn}`)
   );
   if (missing.length > 0) {
     throw new Error(
-      `Reference audit schema is incomplete; missing ${missing.map((target) =>
-        `${target.table}.${target.column}/${target.rowIdColumn}`).join(", ")}`,
+      `Reference audit schema is incomplete; missing ${
+        missing.map((target) =>
+          `${target.table}.${target.column}/${target.rowIdColumn}`
+        ).join(", ")
+      }`,
     );
   }
   return REFERENCE_TARGETS;
@@ -581,7 +592,8 @@ async function readReferenceRows(
   const table = quoteIdentifier(target.table);
   const column = quoteIdentifier(target.column);
   const rowId = quoteIdentifier(target.rowIdColumn);
-  const query = `select ${rowId}::text as "__row_id", ${column} as "__value"\n` +
+  const query =
+    `select ${rowId}::text as "__row_id", ${column} as "__value"\n` +
     `from public.${table}\nwhere ${column} is not null`;
   return await sql.unsafe(query) as TargetRow[];
 }
@@ -591,7 +603,10 @@ function migrationMap(
 ): ReadonlyMap<string, MigrationMapEntry> {
   const map = new Map<string, MigrationMapEntry>();
   for (const item of state.items) {
-    map.set(referenceKey({ bucket: item.sourceBucket, key: item.sourceKey }), item);
+    map.set(
+      referenceKey({ bucket: item.sourceBucket, key: item.sourceKey }),
+      item,
+    );
   }
   return map;
 }
@@ -633,7 +648,9 @@ async function rewriteReferences(statePath: string, execute: boolean) {
   await withDatabase(async (sql) => {
     const targets = await availableReferenceTargets(sql);
     const plans: PlannedRewrite[] = [];
-    const unresolved: Array<{ target: ReferenceTarget; rowId: string; location: StorageLocation }> = [];
+    const unresolved: Array<
+      { target: ReferenceTarget; rowId: string; location: StorageLocation }
+    > = [];
 
     for (const target of targets) {
       for (const row of await readReferenceRows(sql, target)) {
@@ -725,7 +742,10 @@ async function rewriteReferences(statePath: string, execute: boolean) {
           `;
         }
 
-        const updatedRows = await sql.unsafe(update, [encodedValue, plan.rowId]);
+        const updatedRows = await sql.unsafe(update, [
+          encodedValue,
+          plan.rowId,
+        ]);
         if (updatedRows.length !== 1) {
           throw new Error(
             `Rewrite update affected ${updatedRows.length} rows for ${plan.target.table}.${plan.target.column}[${plan.rowId}]`,
@@ -752,11 +772,15 @@ async function rewriteReferences(statePath: string, execute: boolean) {
             report = ${sql.json(summary)}, updated_at = now()
         where id = ${batchId}::uuid
       `;
-      console.log(JSON.stringify({ rewriteBatchId: batchId, status: "completed" }));
+      console.log(
+        JSON.stringify({ rewriteBatchId: batchId, status: "completed" }),
+      );
     } catch (error) {
       await sql`
         update schooldesk_internal.storage_migration_batches
-        set status = 'failed', report = ${sql.json({ ...summary, error: `${error}` })},
+        set status = 'failed', report = ${
+        sql.json({ ...summary, error: `${error}` })
+      },
             updated_at = now()
         where id = ${batchId}::uuid
       `;
@@ -780,7 +804,9 @@ async function collectLiveLegacyReferences(sql: DatabaseClient) {
   return references;
 }
 
-async function currentSourceInventory(source: S3Client): Promise<SourceObject[]> {
+async function currentSourceInventory(
+  source: S3Client,
+): Promise<SourceObject[]> {
   const objects: SourceObject[] = [];
   for (const bucket of parseBuckets()) {
     for (const object of await listObjects(source, bucket.name)) {
@@ -822,7 +848,9 @@ function cleanupSelection(
   return {
     sourceBytes,
     protectedBytes: objects.filter((object) =>
-      (liveReferences.get(referenceKey({ bucket: object.bucket, key: object.key })) ?? 0) > 0
+      (liveReferences.get(
+        referenceKey({ bucket: object.bucket, key: object.key }),
+      ) ?? 0) > 0
     ).reduce((sum, object) => sum + object.size, 0),
     unmappedBytes: objects.filter((object) =>
       !mapping.has(referenceKey({ bucket: object.bucket, key: object.key }))
@@ -863,17 +891,19 @@ async function cleanupDryRun(
       values
         ('dry_run', ${targetBytes}, ${selection.sourceBytes},
          ${selection.selected.reduce((sum, item) => sum + item.size, 0)},
-        ${sql.json({
-           allowReferenced,
-           policy: allowReferenced
-             ? "largest_verified_r2_backed_objects_including_live_references"
-             : "verified_r2_backed_orphans_only",
-           selected: selection.selected.length,
-           candidates: selection.candidates.length,
-           protectedBytes: selection.protectedBytes,
-           unmappedBytes: selection.unmappedBytes,
-           projectedBytes: selection.projectedBytes,
-         })})
+        ${
+      sql.json({
+        allowReferenced,
+        policy: allowReferenced
+          ? "largest_verified_r2_backed_objects_including_live_references"
+          : "verified_r2_backed_orphans_only",
+        selected: selection.selected.length,
+        candidates: selection.candidates.length,
+        protectedBytes: selection.protectedBytes,
+        unmappedBytes: selection.unmappedBytes,
+        projectedBytes: selection.projectedBytes,
+      })
+    })
       returning id
     ` as Array<{ id: string }>;
     const batchId = rows[0]?.id;
@@ -905,21 +935,28 @@ async function cleanupDryRun(
     return batchId;
   });
 
-  console.log(JSON.stringify({
-    mode: "cleanup",
-    dryRun: true,
-    batchId: batch,
-    sourceBytes: selection.sourceBytes,
-    sourceMegabytes: Number((selection.sourceBytes / 1_000_000).toFixed(2)),
-    targetBytes,
-    targetMegabytes: Number((targetBytes / 1_000_000).toFixed(2)),
-    candidateObjects: selection.candidates.length,
-    selectedObjects: selection.selected.length,
-    selectedBytes: selection.selected.reduce((sum, item) => sum + item.size, 0),
-    projectedBytes: selection.projectedBytes,
-    protectedBytes: selection.protectedBytes,
-    unmappedBytes: selection.unmappedBytes,
-  }, null, 2));
+  console.log(JSON.stringify(
+    {
+      mode: "cleanup",
+      dryRun: true,
+      batchId: batch,
+      sourceBytes: selection.sourceBytes,
+      sourceMegabytes: Number((selection.sourceBytes / 1_000_000).toFixed(2)),
+      targetBytes,
+      targetMegabytes: Number((targetBytes / 1_000_000).toFixed(2)),
+      candidateObjects: selection.candidates.length,
+      selectedObjects: selection.selected.length,
+      selectedBytes: selection.selected.reduce(
+        (sum, item) => sum + item.size,
+        0,
+      ),
+      projectedBytes: selection.projectedBytes,
+      protectedBytes: selection.protectedBytes,
+      unmappedBytes: selection.unmappedBytes,
+    },
+    null,
+    2,
+  ));
 }
 
 async function cleanupExecute(batchId: string) {
@@ -945,7 +982,9 @@ async function cleanupExecute(batchId: string) {
     const batch = batches[0];
     if (!batch) throw new Error(`Cleanup batch not found: ${batchId}`);
     if (batch.status !== "dry_run" && batch.status !== "approved") {
-      throw new Error(`Cleanup batch ${batchId} is not executable: ${batch.status}`);
+      throw new Error(
+        `Cleanup batch ${batchId} is not executable: ${batch.status}`,
+      );
     }
     const allowReferenced = batch.report?.allowReferenced === true;
     if (
@@ -1023,7 +1062,11 @@ async function cleanupExecute(batchId: string) {
         if (sourceHash !== destinationHash) {
           throw new Error("source/R2 SHA-256 mismatch; deletion blocked");
         }
-        const deleted = await source.request("DELETE", item.source_bucket, item.source_key);
+        const deleted = await source.request(
+          "DELETE",
+          item.source_bucket,
+          item.source_key,
+        );
         if (!deleted.ok && deleted.status !== 404) {
           throw new Error(`source delete failed with HTTP ${deleted.status}`);
         }
@@ -1075,16 +1118,20 @@ async function cleanupExecute(batchId: string) {
           report = ${sql.json({ deletedCount, deletedBytes, remainingBytes })}
       where id = ${batchId}::uuid
     `;
-    console.log(JSON.stringify({
-      mode: "cleanup",
-      dryRun: false,
-      batchId,
-      deletedCount,
-      deletedBytes,
-      remainingBytes,
-      targetBytes: batch.target_bytes,
-      failedCount,
-    }, null, 2));
+    console.log(JSON.stringify(
+      {
+        mode: "cleanup",
+        dryRun: false,
+        batchId,
+        deletedCount,
+        deletedBytes,
+        remainingBytes,
+        targetBytes: batch.target_bytes,
+        failedCount,
+      },
+      null,
+      2,
+    ));
     if (failedCount > 0) Deno.exitCode = 1;
   });
 }
@@ -1095,7 +1142,11 @@ async function inventory(statePath: string) {
   for (const bucket of parseBuckets()) {
     const objects = await listObjects(source, bucket.name);
     for (const object of objects) {
-      const visibility = objectVisibility(bucket.name, object.key, bucket.visibility);
+      const visibility = objectVisibility(
+        bucket.name,
+        object.key,
+        bucket.visibility,
+      );
       const metadata = await objectMetadata(source, bucket.name, object.key);
       items.push({
         sourceBucket: bucket.name,
@@ -1133,6 +1184,376 @@ async function inventory(statePath: string) {
         statePath,
         batchId: state.batchId,
         objects: items.length,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+function archiveOption(): string {
+  const index = Deno.args.indexOf("--archive");
+  const value = index >= 0 ? Deno.args[index + 1]?.trim() : "";
+  if (!value) throw new Error("ZIP commands require --archive <storage.zip>");
+  return value;
+}
+
+function sourceDumpOption(): string {
+  const index = Deno.args.indexOf("--source-dump");
+  const value = index >= 0 ? Deno.args[index + 1]?.trim() : "";
+  if (!value) {
+    throw new Error("ZIP commands require --source-dump <database.backup.gz>");
+  }
+  return value;
+}
+
+async function zipCommand(args: string[]): Promise<Uint8Array> {
+  const result = await new Deno.Command("unzip", {
+    args,
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  if (!result.success) {
+    throw new Error(
+      `unzip ${args[0]} failed: ${
+        new TextDecoder().decode(result.stderr).trim() || result.code
+      }`,
+    );
+  }
+  return result.stdout;
+}
+
+function contentTypeFor(key: string): string {
+  const extension = key.toLowerCase().split(".").pop() ?? "";
+  const values: Record<string, string> = {
+    csv: "text/csv",
+    jpeg: "image/jpeg",
+    jpg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    gif: "image/gif",
+    pdf: "application/pdf",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+  };
+  return values[extension] ?? "application/octet-stream";
+}
+
+type ArchiveMetadata = {
+  contentType: string;
+  cacheControl: string;
+  contentDisposition: string;
+  metadata: Record<string, string>;
+};
+
+async function archiveMetadata(
+  sourceDump: string,
+): Promise<Map<string, ArchiveMetadata>> {
+  const section = (await readCopySections(sourceDump)).find((entry) =>
+    entry.schema === "storage" && entry.table === "objects"
+  );
+  if (!section) {
+    throw new Error("Source dump has no storage.objects COPY section");
+  }
+  const bucketIndex = section.columns.indexOf("bucket_id");
+  const keyIndex = section.columns.indexOf("name");
+  const metadataIndex = section.columns.indexOf("metadata");
+  const userMetadataIndex = section.columns.indexOf("user_metadata");
+  if ([bucketIndex, keyIndex, metadataIndex].some((index) => index < 0)) {
+    throw new Error("Source storage.objects metadata columns are incomplete");
+  }
+  const result = new Map<string, ArchiveMetadata>();
+  for (const row of section.rows) {
+    const values = parseCopyRow(row, section.columns.length);
+    const bucket = values[bucketIndex];
+    const key = values[keyIndex];
+    if (!bucket || !key) {
+      throw new Error("Source storage.objects contains an unnamed object");
+    }
+    let metadata: Record<string, unknown> = {};
+    let userMetadata: Record<string, unknown> = {};
+    try {
+      metadata = values[metadataIndex] ? JSON.parse(values[metadataIndex]) : {};
+    } catch {
+      throw new Error(`Invalid metadata for ${bucket}/${key}`);
+    }
+    try {
+      userMetadata = userMetadataIndex >= 0 && values[userMetadataIndex]
+        ? JSON.parse(values[userMetadataIndex]!)
+        : {};
+    } catch {
+      throw new Error(`Invalid user metadata for ${bucket}/${key}`);
+    }
+    const mimeType = typeof metadata.mimetype === "string"
+      ? metadata.mimetype
+      : contentTypeFor(key);
+    const cacheControl = typeof metadata.cacheControl === "string"
+      ? metadata.cacheControl
+      : "";
+    const contentDisposition = typeof metadata.contentDisposition === "string"
+      ? metadata.contentDisposition
+      : "";
+    result.set(referenceKey({ bucket, key }), {
+      contentType: mimeType,
+      cacheControl,
+      contentDisposition,
+      metadata: Object.fromEntries(
+        Object.entries(userMetadata).filter(([, value]) =>
+          typeof value === "string"
+        ).map(([name, value]) => [`x-amz-meta-${name}`, value as string]),
+      ),
+    });
+  }
+  return result;
+}
+
+async function zipEntries(archive: string): Promise<string[]> {
+  const raw = new TextDecoder().decode(await zipCommand(["-Z1", archive]));
+  return raw.split("\n").map((entry) => entry.trim()).filter(Boolean);
+}
+
+function archiveLocation(entry: string): { bucket: string; key: string } {
+  const parts = entry.split("/");
+  if (
+    parts.length < 3 ||
+    parts.some((part) => !part || part === "." || part === "..")
+  ) {
+    throw new Error(`Unsafe archive entry: ${entry}`);
+  }
+  return { bucket: parts[1], key: parts.slice(2).join("/") };
+}
+
+async function archiveBytes(
+  archive: string,
+  entry: string,
+): Promise<Uint8Array> {
+  return await zipCommand(["-p", archive, entry]);
+}
+
+async function zipInventory(statePath: string) {
+  const archive = archiveOption();
+  const metadata = await archiveMetadata(sourceDumpOption());
+  const configuredBuckets = new Map(
+    parseBuckets().map((bucket) => [bucket.name, bucket.visibility]),
+  );
+  const items: MigrationItem[] = [];
+  for (const entry of await zipEntries(archive)) {
+    const { bucket, key } = archiveLocation(entry);
+    const fallback = configuredBuckets.get(bucket);
+    if (!fallback) {
+      throw new Error(`Archive contains unexpected bucket ${bucket}`);
+    }
+    const source = metadata.get(referenceKey({ bucket, key }));
+    if (!source) {
+      throw new Error(
+        `Archive object ${bucket}/${key} has no source storage.objects metadata`,
+      );
+    }
+    const bytes = await archiveBytes(archive, entry);
+    const visibility = objectVisibility(bucket, key, fallback);
+    items.push({
+      sourceBucket: bucket,
+      sourceKey: key,
+      destinationBucket: destinationBucket(visibility),
+      destinationKey: destinationKey(bucket, key, visibility),
+      visibility,
+      size: bytes.byteLength,
+      contentType: source.contentType,
+      cacheControl: source.cacheControl,
+      contentDisposition: source.contentDisposition,
+      metadata: source.metadata,
+      sourceSha256: await sha256Async(bytes),
+      status: "pending",
+      attempts: 0,
+      archiveEntry: entry,
+    });
+  }
+  if (items.length !== metadata.size) {
+    throw new Error(
+      `Archive/storage metadata mismatch: ${items.length} archive entries, ${metadata.size} storage rows`,
+    );
+  }
+  const state: MigrationState = {
+    version: 1,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    items: items.sort((left, right) =>
+      referenceKey({ bucket: left.sourceBucket, key: left.sourceKey })
+        .localeCompare(
+          referenceKey({ bucket: right.sourceBucket, key: right.sourceKey }),
+        )
+    ),
+  };
+  await writeState(statePath, state);
+  console.log(
+    JSON.stringify(
+      { mode: "zip-inventory", statePath, archive, objects: items.length },
+      null,
+      2,
+    ),
+  );
+}
+
+async function transferArchiveOne(
+  archive: string,
+  destination: S3Client,
+  item: MigrationItem,
+) {
+  if (!item.archiveEntry) {
+    throw new Error(
+      `Missing archive entry for ${item.sourceBucket}/${item.sourceKey}`,
+    );
+  }
+  const bytes = await archiveBytes(archive, item.archiveEntry);
+  const sourceHash = await sha256Async(bytes);
+  if (item.sourceSha256 && item.sourceSha256 !== sourceHash) {
+    throw new Error(
+      `Archive checksum changed for ${item.sourceBucket}/${item.sourceKey}`,
+    );
+  }
+  item.sourceSha256 = sourceHash;
+  const headers: Record<string, string> = { "content-type": item.contentType };
+  if (item.cacheControl) headers["cache-control"] = item.cacheControl;
+  if (item.contentDisposition) {
+    headers["content-disposition"] = item.contentDisposition;
+  }
+  for (const [name, value] of Object.entries(item.metadata)) {
+    headers[name] = value;
+  }
+  await putObject(destination, item, bytes, headers);
+  const response = await destination.request(
+    "GET",
+    item.destinationBucket,
+    item.destinationKey,
+  );
+  if (!response.ok) {
+    throw new Error(
+      `Destination verification download failed with HTTP ${response.status}`,
+    );
+  }
+  item.destinationSha256 = await sha256Async(
+    new Uint8Array(await response.arrayBuffer()),
+  );
+  if (item.sourceSha256 !== item.destinationSha256) {
+    throw new Error(
+      `SHA-256 verification failed for ${item.sourceBucket}/${item.sourceKey}`,
+    );
+  }
+  item.status = "verified";
+  item.error = undefined;
+}
+
+async function zipCopy(statePath: string) {
+  const archive = archiveOption();
+  const state = await readState(statePath);
+  const destination = new S3Client(endpointConfig("R2"));
+  const queue = state.items.filter((item) => item.status !== "verified");
+  const concurrency = numberEnv("MIGRATION_CONCURRENCY", 4);
+  const retries = numberEnv("MIGRATION_RETRIES", 3);
+  const persistState = createSerializedStateWriter();
+  let cursor = 0;
+  const wait = (milliseconds: number) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds));
+  async function worker() {
+    while (cursor < queue.length) {
+      const item = queue[cursor++];
+      for (let attempt = 1; attempt <= retries; attempt += 1) {
+        item.status = "copying";
+        item.attempts += 1;
+        try {
+          await transferArchiveOne(archive, destination, item);
+          break;
+        } catch (error) {
+          item.status = "failed";
+          item.error = `${error}`;
+          if (attempt < retries) await wait(Math.min(30_000, attempt * 1_000));
+        }
+      }
+      await persistState(statePath, state);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, queue.length) }, worker),
+  );
+  const failed = state.items.filter((item) => item.status === "failed").length;
+  console.log(
+    JSON.stringify(
+      { mode: "zip-copy", statePath, objects: state.items.length, failed },
+      null,
+      2,
+    ),
+  );
+  if (failed) Deno.exitCode = 1;
+}
+
+async function zipVerify(statePath: string) {
+  const archive = archiveOption();
+  const state = await readState(statePath);
+  const destination = new S3Client(endpointConfig("R2"));
+  for (
+    const item of state.items.filter((entry) => entry.status === "verified")
+  ) {
+    if (!item.archiveEntry) {
+      throw new Error(
+        `Missing archive entry for ${item.sourceBucket}/${item.sourceKey}`,
+      );
+    }
+    const [bytes, response] = await Promise.all([
+      archiveBytes(archive, item.archiveEntry),
+      destination.request("GET", item.destinationBucket, item.destinationKey),
+    ]);
+    if (!response.ok) {
+      item.status = "failed";
+      item.error = `Destination verify failed with HTTP ${response.status}`;
+      continue;
+    }
+    const [sourceHash, destinationHash] = await Promise.all([
+      sha256Async(bytes),
+      sha256Async(new Uint8Array(await response.arrayBuffer())),
+    ]);
+    item.sourceSha256 = sourceHash;
+    item.destinationSha256 = destinationHash;
+    if (sourceHash !== destinationHash) {
+      item.status = "failed";
+      item.error = "SHA-256 verification failed";
+    }
+  }
+  await writeState(statePath, state);
+  const failed = state.items.filter((item) => item.status === "failed").length;
+  console.log(
+    JSON.stringify(
+      { mode: "zip-verify", statePath, objects: state.items.length, failed },
+      null,
+      2,
+    ),
+  );
+  if (failed) Deno.exitCode = 1;
+}
+
+/** Rebuilds target-side R2 tracking after the database restore has committed. */
+async function zipSync(statePath: string) {
+  const state = await readState(statePath);
+  if (!state.items.every((item) => item.status === "verified")) {
+    throw new Error(
+      "ZIP tracking sync is blocked until every object is verified",
+    );
+  }
+  if (!state.batchId) {
+    state.batchId = await createDbBatch("zip-import", state);
+    if (!state.batchId) {
+      throw new Error("DATABASE_URL is required to rebuild R2 tracking");
+    }
+    await writeState(statePath, state);
+  }
+  await syncDatabaseState(state, "zip-import");
+  console.log(
+    JSON.stringify(
+      {
+        mode: "zip-sync",
+        statePath,
+        batchId: state.batchId,
+        objects: state.items.length,
       },
       null,
       2,
@@ -1410,6 +1831,18 @@ switch (command) {
   case "inventory":
     await inventory(statePath);
     break;
+  case "zip-inventory":
+    await zipInventory(statePath);
+    break;
+  case "zip-copy":
+    await zipCopy(statePath);
+    break;
+  case "zip-verify":
+    await zipVerify(statePath);
+    break;
+  case "zip-sync":
+    await zipSync(statePath);
+    break;
   case "copy":
     await copy(statePath);
     break;
@@ -1421,7 +1854,9 @@ switch (command) {
     break;
   case "cleanup":
     if (execute) {
-      if (!batchId) throw new Error("cleanup --execute requires --batch <dry-run-id>");
+      if (!batchId) {
+        throw new Error("cleanup --execute requires --batch <dry-run-id>");
+      }
       await cleanupExecute(batchId);
     } else {
       await cleanupDryRun(statePath, targetBytes, allowReferenced);
@@ -1432,6 +1867,6 @@ switch (command) {
     break;
   default:
     throw new Error(
-      `Unknown command ${command}; use inventory, copy, verify, rewrite, cleanup, or report`,
+      `Unknown command ${command}; use inventory, zip-inventory, copy, zip-copy, verify, zip-verify, zip-sync, rewrite, cleanup, or report`,
     );
 }

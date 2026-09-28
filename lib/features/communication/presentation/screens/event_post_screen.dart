@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/modules/communication/data/api_event_post_repository.dart';
@@ -82,6 +83,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   // Display URLs plus durable storage references returned by the Edge API.
   final List<String> _uploadedUrls = [];
   final List<EventPostMediaItem> _uploadedMedia = [];
+  final Set<String> _landingValidatedUrls = <String>{};
   String? _editingPostId;
   bool _editingRejectedPost = false;
   bool _uploading = false;
@@ -208,15 +210,28 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     );
     if (picked.isEmpty) return;
     for (final xfile in picked) {
+      var source = xfile;
+      var landingImage = false;
+      if (_destSchoolLanding) {
+        final croppedPath =
+            await SchoolDeskImageCropper.cropLandingPortraitImage(
+              context: context,
+              sourcePath: xfile.path,
+            );
+        if (croppedPath == null || croppedPath.trim().isEmpty) continue;
+        source = XFile(croppedPath, name: xfile.name, mimeType: xfile.mimeType);
+        landingImage = true;
+      }
       final optimized = await ImageUploadOptimizer.fromXFile(
-        xfile,
+        source,
         preset: ImageUploadPreset.content,
       );
       await _uploadFile(
-        xfile.path,
+        source.path,
         optimized.filename,
         mimeType: optimized.mimeType,
         fileBytes: optimized.bytes,
+        aspectRatio: landingImage ? 9 / 16 : null,
       );
     }
   }
@@ -232,6 +247,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     String name, {
     String? mimeType,
     Uint8List? fileBytes,
+    double? aspectRatio,
   }) async {
     setState(() => _uploading = true);
     try {
@@ -254,8 +270,10 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
               mimeType: mimeType ?? '',
               kind: item.kind,
               storageRef: storageRef,
+              aspectRatio: aspectRatio,
             ),
           );
+          if (aspectRatio != null) _landingValidatedUrls.add(url);
         });
       }
     } on Object catch (e) {
@@ -346,9 +364,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       final referenceId = widget.args.referenceId.trim();
       if (referenceId.isNotEmpty) {
         try {
-          referenced = await _repository.loadPost(
-            referenceId,
-          );
+          referenced = await _repository.loadPost(referenceId);
         } on Object catch (_) {}
       }
       final rows = pending
@@ -437,6 +453,19 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       );
       return;
     }
+    if (_destSchoolLanding &&
+        _uploadedMedia.any(
+          (item) => !_landingValidatedUrls.contains(item.url),
+        )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Landing images must be reselected and cropped to 9:16 before publishing.',
+          ),
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _busy = true;
@@ -512,6 +541,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     _dateController.clear();
     _uploadedUrls.clear();
     _uploadedMedia.clear();
+    _landingValidatedUrls.clear();
     _editingPostId = null;
     _editingRejectedPost = false;
     _destParentHome = true;
@@ -539,6 +569,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       _uploadedMedia
         ..clear()
         ..addAll(media);
+      _landingValidatedUrls.clear();
       _destParentHome =
           destinations.isEmpty ||
           destinations.contains('PARENTS_HOME') ||
@@ -1246,6 +1277,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                               child: InkWell(
                                 onTap: () => setState(() {
                                   _uploadedUrls.removeAt(idx);
+                                  _landingValidatedUrls.remove(url);
                                   // Remove the matching media item by URL so
                                   // the two lists stay in sync even if they
                                   // diverge in length (e.g. failed upload).

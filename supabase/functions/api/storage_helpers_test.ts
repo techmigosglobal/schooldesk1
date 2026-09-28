@@ -79,3 +79,35 @@ Deno.test("missing R2 copy falls back to the legacy provider", async () => {
     );
   });
 });
+
+Deno.test(
+  "legacy source-project URLs resolve through the target Storage bucket",
+  async () => {
+    await withStorageEnv(async () => {
+      Deno.env.set("STORAGE_READ_ORDER", "supabase");
+      const sourceUrl =
+        "https://ouvwogguttybmpgfgctc.supabase.co/storage/v1/object/public/" +
+        "school-assets/students/school/student/photo.jpg";
+      const targetSignedUrl =
+        "https://qzdhymlabzqjeocetqqv.supabase.co/storage/v1/sign/" +
+        "school-assets/students/school/student/photo.jpg?token=test";
+      const svc = {
+        storage: {
+          from: (bucket: string) => ({
+            createSignedUrl: async (path: string, ttl: number) => {
+              assertEquals(bucket, "school-assets");
+              assertEquals(path, "students/school/student/photo.jpg");
+              assertEquals(ttl, 60);
+              return { data: { signedUrl: targetSignedUrl }, error: null };
+            },
+          }),
+        },
+      } as unknown as SupabaseClient;
+
+      assertEquals(
+        await signedPrivateFileUrl(svc, sourceUrl, 60),
+        targetSignedUrl,
+      );
+    });
+  },
+);

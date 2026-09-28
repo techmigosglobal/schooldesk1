@@ -24,7 +24,7 @@ class ApiParentDashboardRepository implements ParentDashboardRepository {
       Object? feedError;
       if (includeFeedPosts) {
         try {
-          feed = await _api.getHomeFeedEventPostsPage(page: 1, pageSize: 20);
+          feed = await _api.getHomeFeedEventPostsPage(page: 1, pageSize: 10);
         } on Object catch (error) {
           feedError = error;
         }

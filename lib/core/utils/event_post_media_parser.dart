@@ -10,6 +10,7 @@ class EventPostMediaItem {
   final int? size;
   final String storageRef;
   final String thumbnailUrl;
+  final double? aspectRatio;
 
   const EventPostMediaItem({
     required this.url,
@@ -19,6 +20,7 @@ class EventPostMediaItem {
     this.size,
     this.storageRef = '',
     this.thumbnailUrl = '',
+    this.aspectRatio,
   });
 
   bool get isImage => kind == EventPostMediaKind.image;
@@ -40,6 +42,7 @@ class EventPostMediaItem {
     if (size != null) 'size': size,
     if (storageRef.trim().isNotEmpty) 'storage_ref': storageRef.trim(),
     if (thumbnailUrl.trim().isNotEmpty) 'thumbnail_url': thumbnailUrl.trim(),
+    if (aspectRatio != null) 'aspect_ratio': aspectRatio,
   };
 
   static List<EventPostMediaItem> parseList(dynamic raw) {
@@ -90,6 +93,9 @@ class EventPostMediaItem {
       final thumbnailUrl = _text(
         map['thumbnail_url'] ?? map['thumbnailUrl'] ?? map['poster_url'],
       );
+      final aspectRatio = _doubleValue(
+        map['aspect_ratio'] ?? map['aspectRatio'],
+      );
       return EventPostMediaItem(
         url: url,
         name: name,
@@ -98,6 +104,7 @@ class EventPostMediaItem {
         size: size is int ? size : int.tryParse(_text(size)),
         storageRef: storageRef,
         thumbnailUrl: thumbnailUrl,
+        aspectRatio: aspectRatio,
       );
     }
     return fromUrl(_text(value));
@@ -109,6 +116,7 @@ class EventPostMediaItem {
     String mimeType = '',
     int? size,
     String thumbnailUrl = '',
+    double? aspectRatio,
   }) {
     final normalizedUrl = url.trim();
     return EventPostMediaItem(
@@ -118,6 +126,7 @@ class EventPostMediaItem {
       kind: _kindFor(normalizedUrl, mimeType, ''),
       size: size,
       thumbnailUrl: thumbnailUrl,
+      aspectRatio: aspectRatio,
     );
   }
 
@@ -163,6 +172,11 @@ class EventPostMediaItem {
   }
 
   static String _text(dynamic value) => value?.toString().trim() ?? '';
+
+  static double? _doubleValue(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(_text(value));
+  }
 }
 
 List<String> parseEventPostMediaUrls(dynamic raw) {

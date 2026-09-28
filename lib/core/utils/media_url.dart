@@ -1,5 +1,7 @@
 import 'package:schooldesk1/core/config/env_config.dart';
 
+const _legacySupabaseStorageHost = 'ouvwogguttybmpgfgctc.supabase.co';
+
 /// Resolves a stored image URL to the original Storage object URL.
 ///
 /// New URLs are returned unchanged. Older app builds generated Storage
@@ -22,6 +24,18 @@ String resolveOriginalImageUrl(String value) {
       _isLocalOrigin(localOrigin) &&
       _isDockerStorageHost(uri.host)) {
     return _rewriteOrigin(uri, localOrigin).toString();
+  }
+
+  // Restored rows can still contain an object URL from the retired Supabase
+  // project. Keep the object path and query intact, but point the client at
+  // the configured target project so cached/older API payloads remain usable.
+  final targetOrigin = Uri.tryParse(EnvConfig.supabaseUrl);
+  if (targetOrigin != null &&
+      targetOrigin.host.isNotEmpty &&
+      uri.host.toLowerCase() == _legacySupabaseStorageHost &&
+      uri.path.contains('/storage/v1/object/') &&
+      targetOrigin.host.toLowerCase() != uri.host.toLowerCase()) {
+    return _rewriteOrigin(uri, targetOrigin).toString();
   }
 
   // Keep the legacy matcher separate from URL generation. The segmented

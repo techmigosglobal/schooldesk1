@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
@@ -74,9 +74,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
   );
 
   String get _effectiveOwnerRole {
-    final sessionRole = BackendApiClient.instance.currentRoleName
-        ?.trim()
-        .toLowerCase();
+    final sessionRole = RoleAccessService.currentRoleName;
     return widget.args.ownerRole.toLowerCase() == 'principal' &&
             sessionRole == 'coordinator'
         ? 'coordinator'

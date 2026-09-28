@@ -26,8 +26,14 @@ void main() {
       expect(api, contains('response.pageSize'));
       expect(handler, contains('path === "/event-posts/teacher-feed"'));
       expect(handler, contains('TEACHERS_HOME'));
+      expect(handler, contains('PARENT_HOME_FEED_LIMIT = 10'));
+      expect(handler, contains('TEACHER_SCHOOL_FEED_LIMIT = 10'));
+      expect(handler, contains('roleValue(user) === "parent"'));
       expect(teacherRepository, contains('getTeacherSchoolFeedPage'));
+      expect(teacherRepository, contains('page: 1, pageSize: 10'));
       expect(parentRepository, contains('getHomeFeedEventPostsPage'));
+      expect(parentRepository, contains('page: 1, pageSize: 10'));
+      expect(api, contains('getHomeFeedEventPostsPage(page: 1, pageSize: 10)'));
       expect(
         teacherRepository,
         isNot(contains('getHomeFeedEventPosts().catchError')),
@@ -77,4 +83,29 @@ void main() {
       expect(parent, contains('feedStale'));
     },
   );
+
+  test('landing images carry a strict 9:16 contract', () {
+    final screen = File(
+      'lib/features/communication/presentation/screens/event_post_screen.dart',
+    ).readAsStringSync();
+    final cropper = File(
+      'lib/core/utils/image_cropper_helper.dart',
+    ).readAsStringSync();
+    final parser = File(
+      'lib/core/utils/event_post_media_parser.dart',
+    ).readAsStringSync();
+    final handler = File(
+      'supabase/functions/api/handlers/uploads.ts',
+    ).readAsStringSync();
+
+    expect(screen, contains('cropLandingPortraitImage'));
+    expect(screen, contains('aspectRatio: landingImage ? 9 / 16 : null'));
+    expect(screen, contains('reselected and cropped to 9:16'));
+    expect(cropper, contains('CropAspectRatio(ratioX: 9, ratioY: 16)'));
+    expect(parser, contains("'aspect_ratio': aspectRatio"));
+    expect(
+      handler,
+      contains('Landing page images must be cropped to exactly 9:16'),
+    );
+  });
 }

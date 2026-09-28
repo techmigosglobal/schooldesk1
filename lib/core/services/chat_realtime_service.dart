@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
@@ -17,7 +20,11 @@ class ChatRealtimeService {
   /// Refresh the Realtime bearer token without rebuilding an existing channel.
   /// The API interceptor may rotate the backend JWT while a chat stays open.
   Future<bool> refreshAuth() async {
-    final token = await TokenStorageService.getAccessToken();
+    var token = await TokenStorageService.getAccessToken();
+    if (token == null || token.trim().isEmpty) {
+      await BackendApiClient.instance.refreshSession();
+      token = await TokenStorageService.getAccessToken();
+    }
     if (token == null || token.trim().isEmpty) return false;
     await Supabase.instance.client.realtime.setAuth(token.trim());
     return true;
@@ -52,51 +59,82 @@ class ChatRealtimeService {
       onUpdate();
     }
 
-    final channel = client.channel(channelName);
-    final activeBranchId =
-        BackendApiClient.instance.activeBranchId?.trim() ?? '';
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final channel = client.channel(
+        attempt == 0 ? channelName : '$channelName-retry',
+      );
+      final activeBranchId =
+          BackendApiClient.instance.activeBranchId?.trim() ?? '';
 
-    // Conversation-level changes refresh list previews and unread counts. RLS
-    // limits the rows visible to this role and branch. The explicit branch
-    // filter matters for principals who switch between permitted branches.
-    if (activeBranchId.isEmpty) {
-      channel.onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'message_conversations',
-        callback: (_) => fireDebounced(),
+      // Conversation-level changes refresh list previews and unread counts. RLS
+      // limits the rows visible to this role and branch. The explicit branch
+      // filter matters for principals who switch between permitted branches.
+      if (activeBranchId.isEmpty) {
+        channel.onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'message_conversations',
+          callback: (_) => fireDebounced(),
+        );
+      } else {
+        channel.onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'message_conversations',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'school_id',
+            value: activeBranchId,
+          ),
+          callback: (_) => fireDebounced(),
+        );
+      }
+
+      // For the messages table, filter to the active conversation when known so
+      // we don't receive every school-wide message row change.
+      if (conversationId.trim().isNotEmpty) {
+        channel.onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'conversation_id',
+            value: conversationId.trim(),
+          ),
+          callback: (_) => fireDebounced(),
+        );
+      }
+
+      final joined = Completer<bool>();
+      channel.subscribe((status, [error]) {
+        if (status == RealtimeSubscribeStatus.subscribed) {
+          if (!joined.isCompleted) joined.complete(true);
+          return;
+        }
+        if (status == RealtimeSubscribeStatus.channelError ||
+            status == RealtimeSubscribeStatus.timedOut ||
+            status == RealtimeSubscribeStatus.closed) {
+          if (!joined.isCompleted) joined.complete(false);
+          developer.log(
+            'Chat Realtime subscription failed: $status${error == null ? '' : ' ($error)'}',
+            name: 'ChatRealtimeService',
+          );
+        }
+      });
+
+      final ok = await joined.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () => false,
       );
-    } else {
-      channel.onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'message_conversations',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'school_id',
-          value: activeBranchId,
-        ),
-        callback: (_) => fireDebounced(),
-      );
+      if (ok) return channel;
+
+      await client.removeChannel(channel);
+      if (attempt == 0) {
+        final refreshed = await BackendApiClient.instance.refreshSession();
+        if (refreshed && await refreshAuth()) continue;
+      }
     }
-
-    // For the messages table, filter to the active conversation when known so
-    // we don't receive every school-wide message row change.
-    if (conversationId.trim().isNotEmpty) {
-      channel.onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'messages',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'conversation_id',
-          value: conversationId.trim(),
-        ),
-        callback: (_) => fireDebounced(),
-      );
-    }
-
-    channel.subscribe();
-    return channel;
+    return null;
   }
 }

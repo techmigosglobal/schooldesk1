@@ -18,8 +18,8 @@ void main() {
 
     expect(coordinatorResponse, greaterThanOrEqualTo(0));
     expect(financeQueries, greaterThan(coordinatorResponse));
-    expect(handler, contains('approvalRequestsQuery.not('));
-    expect(handler, contains('"fee","fees","finance","payment"'));
+    expect(handler, contains('isFinanceApproval(row.module, row.entity_type)'));
+    expect(handler, contains('const FINANCE_APPROVAL_MODULES = new Set'));
     expect(
       handler,
       isNot(
