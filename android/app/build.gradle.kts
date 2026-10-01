@@ -1,5 +1,6 @@
 import java.io.File
 import java.util.Properties
+import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -12,6 +13,9 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+// The release helper can override this for an offline artifact build when
+// Crashlytics' mapping endpoint is unavailable. Production CI should keep the
+// upload enabled so release symbols are registered automatically.
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
@@ -117,6 +121,11 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
+            extensions.configure<CrashlyticsExtension> {
+                mappingFileUploadEnabled = providers.gradleProperty("schooldesk.disableCrashlyticsMappingUpload")
+                    .map { it != "true" }
+                    .orNull ?: true
+            }
         }
     }
 }

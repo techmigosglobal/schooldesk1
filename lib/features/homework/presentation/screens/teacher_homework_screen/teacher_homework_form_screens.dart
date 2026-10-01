@@ -610,10 +610,10 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   Future<void> _loadMissingContext() async {
     try {
       await RoleAccessService.initialize();
-      final classTeacherClasses = RoleAccessService.teacherClassTeacherClasses;
-      final assignedClasses = classTeacherClasses.isNotEmpty
-          ? classTeacherClasses
-          : RoleAccessService.teacherAssignedClasses;
+      // Co-teachers have the same class-scoped homework capability as class
+      // teachers. Do not silently narrow the form to class-teacher sections
+      // when the account has both assignment types.
+      final assignedClasses = RoleAccessService.teacherAssignedClasses;
       if (!mounted) return;
       setState(() {
         _teacherStaffId = _teacherStaffId.isEmpty

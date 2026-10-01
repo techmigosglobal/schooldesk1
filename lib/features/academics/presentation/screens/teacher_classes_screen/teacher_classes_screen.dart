@@ -112,7 +112,7 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
               '${teacherFlowText(_students.first['name'], fallback: 'Student')}';
     return TeacherFlowScaffold(
       title: 'My Classes',
-      subtitle: 'Your class teacher section, students, and classroom actions',
+      subtitle: 'Your assigned sections, students, and classroom actions',
       selectedIndex: TeacherNav.classes,
       loading: _repositoryState.isLoading && !_repositoryState.hasData,
       error: _repositoryState.isError && !_repositoryState.hasData

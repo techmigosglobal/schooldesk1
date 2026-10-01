@@ -126,7 +126,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         // If we can't get academic year, proceed with empty — backend may still accept.
       }
 
-      // Load students for the class-teacher's section.
+      // Load students for the selected class-teacher or co-teacher section.
       final studentsResult = await _repository.loadStudents(
         sectionId: sectionId,
         page: 1,

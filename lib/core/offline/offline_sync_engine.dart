@@ -41,6 +41,10 @@ class OfflineDioInterceptor extends Interceptor {
     final request = response.requestOptions;
     if (sync != null && _isCacheableRead(request)) {
       unawaited(sync.cacheResponse(request: request, response: response));
+      // A successful network response is authoritative evidence that the API
+      // is reachable. Clear a stale offline state without waiting for a
+      // connectivity event or a manual retry.
+      sync.noteBackendReachable();
     }
     handler.next(response);
   }
@@ -50,7 +54,17 @@ class OfflineDioInterceptor extends Interceptor {
     final sync = _engine;
     final request = err.requestOptions;
 
+    final isTransportFailure = OfflineSyncEngine.isTransportFailure(err);
+
+    if (sync != null && isTransportFailure) {
+      sync.noteTransportFailure();
+    }
+
+    // Cached reads are a fallback for an unreachable transport only. HTTP
+    // errors such as 401, 403, 404, and 5xx must reach the caller so the UI
+    // can report the actual API failure instead of mislabelling it offline.
     if (sync != null &&
+        isTransportFailure &&
         request.method.toUpperCase() == 'GET' &&
         _isCacheableRead(request)) {
       final cached = await sync.readCachedResponse(request);
@@ -178,6 +192,22 @@ class OfflineSyncEngine extends ChangeNotifier {
   String? get lastError => _lastError;
 
   String get accountKey => api.offlineAccountKey;
+
+  /// Records that a real API response was received. This prevents an offline
+  /// banner from persisting after connectivity has already recovered.
+  void noteBackendReachable() {
+    _lastError = null;
+    if (_state == OfflineConnectionState.offline ||
+        _state == OfflineConnectionState.unknown) {
+      _setState(OfflineConnectionState.online);
+    }
+  }
+
+  /// Marks the transport unavailable without treating HTTP/API failures as a
+  /// device connectivity problem.
+  void noteTransportFailure() {
+    _setState(OfflineConnectionState.offline);
+  }
 
   /// Performs an uncached health request. Connectivity state and cached reads
   /// are only hints; callers that are about to replace role/branch scope must
