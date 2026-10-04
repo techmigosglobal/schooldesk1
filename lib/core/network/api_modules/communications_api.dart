@@ -74,14 +74,28 @@ extension BackendCommunicationsApi on BackendApiClient {
           message: envelope['error'] ?? 'Failed to load conversations',
         );
       }
-      final rows = _asListMap(
-        envelope['data'],
-      ).map(normalizeChatContextMap).toList();
+      // The unified endpoint returns a paginated payload inside the standard
+      // API envelope: {success:true,data:{data:[...],total:...}}. Older
+      // clients incorrectly treated envelope.data as the list and therefore
+      // rendered no conversations for every role.
+      final payload = envelope['data'] is Map
+          ? _asMap(envelope['data'])
+          : const <String, dynamic>{};
+      final rawRows = envelope['data'] is List
+          ? envelope['data']
+          : payload['data'] ?? payload['items'];
+      final rows = _asListMap(rawRows).map(normalizeChatContextMap).toList();
       return PaginatedList<Map<String, dynamic>>(
         data: rows,
-        total: _asInt(envelope['total'], fallback: rows.length),
-        page: _asInt(envelope['page'], fallback: page),
-        pageSize: _asInt(envelope['page_size'], fallback: pageSize),
+        total: _asInt(
+          envelope['total'] ?? payload['total'],
+          fallback: rows.length,
+        ),
+        page: _asInt(envelope['page'] ?? payload['page'], fallback: page),
+        pageSize: _asInt(
+          envelope['page_size'] ?? payload['page_size'],
+          fallback: pageSize,
+        ),
       );
     } on DioException catch (e) {
       throw _handleError(e);
@@ -143,12 +157,24 @@ extension BackendCommunicationsApi on BackendApiClient {
           message: envelope['error'] ?? 'Failed to load messages',
         );
       }
-      final rows = _asListMap(envelope['data']);
+      final payload = envelope['data'] is Map
+          ? _asMap(envelope['data'])
+          : const <String, dynamic>{};
+      final rawRows = envelope['data'] is List
+          ? envelope['data']
+          : payload['data'] ?? payload['items'];
+      final rows = _asListMap(rawRows);
       return PaginatedList<Map<String, dynamic>>(
         data: rows,
-        total: _asInt(envelope['total'], fallback: rows.length),
-        page: _asInt(envelope['page'], fallback: page),
-        pageSize: _asInt(envelope['page_size'], fallback: pageSize),
+        total: _asInt(
+          envelope['total'] ?? payload['total'],
+          fallback: rows.length,
+        ),
+        page: _asInt(envelope['page'] ?? payload['page'], fallback: page),
+        pageSize: _asInt(
+          envelope['page_size'] ?? payload['page_size'],
+          fallback: pageSize,
+        ),
       );
     } on DioException catch (e) {
       throw _handleError(e);
@@ -410,6 +436,10 @@ extension BackendCommunicationsApi on BackendApiClient {
         );
       }
     } on DioException catch (e) {
+      // Logout is idempotent. A repeated sign-out can hit the device-token
+      // rate limit, but that must not turn a completed local logout into an
+      // application error.
+      if (e.response?.statusCode == 429) return;
       throw _handleError(e);
     }
   }

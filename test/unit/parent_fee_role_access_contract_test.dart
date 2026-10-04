@@ -57,4 +57,17 @@ void main() {
       );
     },
   );
+
+  test('parent payment history keeps pending approval requests visible', () {
+    final history = File(
+      'lib/features/finance/presentation/screens/parent_hub/parent_payment_history_v2.dart',
+    ).readAsStringSync();
+
+    expect(
+      history,
+      contains('Payment history is also the parent-facing audit trail'),
+    );
+    expect(history, contains('if (requestStatus.isEmpty)'));
+    expect(history, contains("'Submitted'"));
+  });
 }

@@ -1354,7 +1354,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           maxLines: 3,
           decoration: const InputDecoration(
             labelText: 'Reason',
-            hintText: 'Required for audit trail',
+            hintText: 'Required to explain the correction',
           ),
         ),
         actions: [

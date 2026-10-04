@@ -9,6 +9,8 @@ export type StorageLocation = {
   key: string;
 };
 
+export type SelfHostedStorageMapping = ReadonlyMap<string, StorageLocation>;
+
 export type MigrationMapEntry = {
   sourceBucket: string;
   sourceKey: string;
@@ -34,40 +36,210 @@ export type RewriteChange = {
 };
 
 export const REFERENCE_TARGETS: readonly ReferenceTarget[] = [
-  { table: "announcements", column: "attachments", rowIdColumn: "id", defaultBucket: "school-assets", json: true },
-  { table: "bulk_import_jobs", column: "file_url", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
-  { table: "event_posts", column: "media_urls", rowIdColumn: "id", defaultBucket: "school-assets", json: true },
-  { table: "finance_document_snapshots", column: "storage_path", rowIdColumn: "id", defaultBucket: "finance-documents", json: false },
-  { table: "finance_document_snapshots", column: "source_snapshot", rowIdColumn: "id", defaultBucket: "finance-documents", json: true },
+  {
+    table: "announcements",
+    column: "attachments",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: true,
+  },
+  {
+    table: "bulk_import_jobs",
+    column: "file_url",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
+  {
+    table: "event_posts",
+    column: "media_urls",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: true,
+  },
+  {
+    table: "finance_document_snapshots",
+    column: "storage_path",
+    rowIdColumn: "id",
+    defaultBucket: "finance-documents",
+    json: false,
+  },
+  {
+    table: "finance_document_snapshots",
+    column: "source_snapshot",
+    rowIdColumn: "id",
+    defaultBucket: "finance-documents",
+    json: true,
+  },
   { table: "frontend_records", column: "data", rowIdColumn: "id", json: true },
-  { table: "help_contents", column: "video_url", rowIdColumn: "id", defaultBucket: "help-tutorial-videos", json: false },
-  { table: "help_contents", column: "video_path", rowIdColumn: "id", defaultBucket: "help-tutorial-videos", json: false },
-  { table: "homework_submissions", column: "file_urls", rowIdColumn: "id", defaultBucket: "school-assets", json: true },
-  { table: "issue_attachments", column: "storage_path", rowIdColumn: "id", defaultBucket: "issue-attachments", json: false },
-  { table: "leave_applications", column: "attachment_urls", rowIdColumn: "id", defaultBucket: "school-assets", json: true },
-  { table: "messages", column: "attachments", rowIdColumn: "id", defaultBucket: "school-assets", json: true },
-  { table: "messages", column: "attachment_url", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
-  { table: "parent_payment_requests", column: "proof_url", rowIdColumn: "id", defaultBucket: "payment-proofs", json: false },
-  { table: "school_finance_settings", column: "signature_path", rowIdColumn: "school_id", defaultBucket: "school-signatures", json: false },
-  { table: "school_finance_settings", column: "seal_path", rowIdColumn: "school_id", defaultBucket: "school-signatures", json: false },
-  { table: "school_website_entries", column: "image_url", rowIdColumn: "id", defaultBucket: "school-public-media", json: false },
-  { table: "school_website_entries", column: "metadata", rowIdColumn: "id", defaultBucket: "school-public-media", json: true },
-  { table: "school_website_gallery_items", column: "media_path", rowIdColumn: "id", defaultBucket: "school-public-media", json: false },
-  { table: "school_website_sections", column: "image_url", rowIdColumn: "id", defaultBucket: "school-public-media", json: false },
-  { table: "schools", column: "logo_url", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
-  { table: "schools", column: "authorized_signature_path", rowIdColumn: "id", defaultBucket: "school-signatures", json: false },
-  { table: "staff", column: "photo_url", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
-  { table: "staff_documents", column: "file_url", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
-  { table: "student_documents", column: "file_url", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
-  { table: "students", column: "photo_url", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
-  { table: "uploaded_files", column: "url", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
-  { table: "uploaded_files", column: "path", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
-  { table: "users", column: "avatar", rowIdColumn: "id", defaultBucket: "school-assets", json: false },
+  {
+    table: "help_contents",
+    column: "video_url",
+    rowIdColumn: "id",
+    defaultBucket: "help-tutorial-videos",
+    json: false,
+  },
+  {
+    table: "help_contents",
+    column: "video_path",
+    rowIdColumn: "id",
+    defaultBucket: "help-tutorial-videos",
+    json: false,
+  },
+  {
+    table: "homework_submissions",
+    column: "file_urls",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: true,
+  },
+  {
+    table: "issue_attachments",
+    column: "storage_path",
+    rowIdColumn: "id",
+    defaultBucket: "issue-attachments",
+    json: false,
+  },
+  {
+    table: "leave_applications",
+    column: "attachment_urls",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: true,
+  },
+  {
+    table: "messages",
+    column: "attachments",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: true,
+  },
+  {
+    table: "messages",
+    column: "attachment_url",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
+  {
+    table: "parent_payment_requests",
+    column: "proof_url",
+    rowIdColumn: "id",
+    defaultBucket: "payment-proofs",
+    json: false,
+  },
+  {
+    table: "school_finance_settings",
+    column: "signature_path",
+    rowIdColumn: "school_id",
+    defaultBucket: "school-signatures",
+    json: false,
+  },
+  {
+    table: "school_finance_settings",
+    column: "seal_path",
+    rowIdColumn: "school_id",
+    defaultBucket: "school-signatures",
+    json: false,
+  },
+  {
+    table: "school_website_entries",
+    column: "image_url",
+    rowIdColumn: "id",
+    defaultBucket: "school-public-media",
+    json: false,
+  },
+  {
+    table: "school_website_entries",
+    column: "metadata",
+    rowIdColumn: "id",
+    defaultBucket: "school-public-media",
+    json: true,
+  },
+  {
+    table: "school_website_gallery_items",
+    column: "media_path",
+    rowIdColumn: "id",
+    defaultBucket: "school-public-media",
+    json: false,
+  },
+  {
+    table: "school_website_sections",
+    column: "image_url",
+    rowIdColumn: "id",
+    defaultBucket: "school-public-media",
+    json: false,
+  },
+  {
+    table: "schools",
+    column: "logo_url",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
+  {
+    table: "schools",
+    column: "authorized_signature_path",
+    rowIdColumn: "id",
+    defaultBucket: "school-signatures",
+    json: false,
+  },
+  {
+    table: "staff",
+    column: "photo_url",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
+  {
+    table: "staff_documents",
+    column: "file_url",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
+  {
+    table: "student_documents",
+    column: "file_url",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
+  {
+    table: "students",
+    column: "photo_url",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
+  {
+    table: "uploaded_files",
+    column: "url",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
+  {
+    table: "uploaded_files",
+    column: "path",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
+  {
+    table: "users",
+    column: "avatar",
+    rowIdColumn: "id",
+    defaultBucket: "school-assets",
+    json: false,
+  },
 ];
 
 const KNOWN_BUCKETS = new Set([
   "school-assets",
   "school-private-files",
+  "schooldesk-private-files",
+  "schooldesk-public-media",
   "finance-documents",
   "payment-proofs",
   "issue-attachments",
@@ -229,7 +401,10 @@ export function rewriteString(
   };
 
   const direct = rewriteSingle(value, path);
-  if (direct.changes.length || (!value.includes(",") && direct.unresolved.length) || !value.includes(",")) {
+  if (
+    direct.changes.length ||
+    (!value.includes(",") && direct.unresolved.length) || !value.includes(",")
+  ) {
     return direct;
   }
 
@@ -263,7 +438,12 @@ export function rewriteJson(
     const changes: RewriteChange[] = [];
     const unresolved: StorageLocation[] = [];
     const next = value.map((item, index) => {
-      const result = rewriteJson(item, mapping, defaultBucket, `${path}[${index}]`);
+      const result = rewriteJson(
+        item,
+        mapping,
+        defaultBucket,
+        `${path}[${index}]`,
+      );
       changes.push(...result.changes);
       unresolved.push(...result.unresolved);
       return result.value;
@@ -274,7 +454,9 @@ export function rewriteJson(
     const changes: RewriteChange[] = [];
     const unresolved: StorageLocation[] = [];
     const next: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    for (
+      const [key, item] of Object.entries(value as Record<string, unknown>)
+    ) {
       const result = rewriteJson(
         item,
         mapping,
@@ -292,4 +474,179 @@ export function rewriteJson(
 
 export function referenceKey(location: StorageLocation): string {
   return `${location.bucket}\n${location.key}`;
+}
+
+function selfHostedLocation(
+  value: string,
+  defaultBucket: string,
+  publicBaseUrl: string,
+): StorageLocation | null {
+  const raw = value.trim();
+  if (raw.startsWith("r2://")) {
+    const rest = raw.slice("r2://".length);
+    const separator = rest.indexOf("/");
+    if (separator < 1) return null;
+    const visibility = rest.slice(0, separator).toLowerCase();
+    const key = cleanKey(rest.slice(separator + 1));
+    if (!key || !["private", "public"].includes(visibility)) return null;
+    return {
+      bucket: visibility === "public"
+        ? "schooldesk-public-media"
+        : "schooldesk-private-files",
+      key,
+    };
+  }
+
+  const legacy = legacyStorageLocation(raw, defaultBucket);
+  if (legacy) return legacy;
+
+  if (!/^https?:\/\//i.test(raw)) return null;
+  try {
+    const url = new URL(raw);
+    const publicBase = publicBaseUrl ? new URL(publicBaseUrl) : null;
+    if (publicBase && url.host === publicBase.host) {
+      const prefix = publicBase.pathname.replace(/\/+$/, "");
+      if (url.pathname.startsWith(`${prefix}/`)) {
+        const key = cleanKey(url.pathname.slice(prefix.length + 1));
+        return key ? { bucket: "schooldesk-public-media", key } : null;
+      }
+    }
+    if (!url.host.endsWith(".r2.cloudflarestorage.com")) return null;
+    const segments = url.pathname.split("/").filter(Boolean).map(decodePath);
+    const [bucket, ...parts] = segments;
+    const key = cleanKey(parts.join("/"));
+    return bucket === "schooldesk-public-media" ||
+        bucket === "schooldesk-private-files"
+      ? key ? { bucket, key } : null
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Converts migrated R2 and legacy Supabase URLs into durable Storage paths. */
+export function rewriteSelfHostedString(
+  value: string,
+  defaultBucket = "",
+  publicBaseUrl = "",
+  path = "$",
+  mapping?: SelfHostedStorageMapping,
+): { value: string; changes: RewriteChange[]; unresolved: StorageLocation[] } {
+  const rewriteSingle = (candidate: string, candidatePath: string) => {
+    if (!candidate.trim()) {
+      return { value: candidate, changes: [], unresolved: [] };
+    }
+    const source = candidate.trim();
+    const location = selfHostedLocation(source, defaultBucket, publicBaseUrl);
+    if (!location) {
+      const isUnmappedR2Url = /^https?:\/\//i.test(source) && (() => {
+        try {
+          return new URL(source).host.endsWith(".r2.cloudflarestorage.com");
+        } catch {
+          return false;
+        }
+      })();
+      return {
+        value: candidate,
+        changes: [],
+        unresolved: source.startsWith("r2://") || isUnmappedR2Url
+          ? [{ bucket: "unknown-r2-reference", key: source }]
+          : [],
+      };
+    }
+    const targetLocation = mapping?.get(referenceKey(location));
+    if (mapping && !targetLocation) {
+      return {
+        value: candidate,
+        changes: [],
+        unresolved: [location],
+      };
+    }
+    const target = `${(targetLocation ?? location).bucket}/${
+      (targetLocation ?? location).key
+    }`;
+    return target === source
+      ? { value: candidate, changes: [], unresolved: [] }
+      : {
+        value: target,
+        changes: [{ path: candidatePath, source, target, location }],
+        unresolved: [],
+      };
+  };
+
+  const direct = rewriteSingle(value, path);
+  if (
+    direct.changes.length ||
+    (!value.includes(",") && direct.unresolved.length) ||
+    !value.includes(",")
+  ) {
+    return direct;
+  }
+  const changes: RewriteChange[] = [];
+  const unresolved: StorageLocation[] = [];
+  const next = value.split(",").map((part, index) => {
+    const leading = part.match(/^\s*/)?.[0] ?? "";
+    const trailing = part.match(/\s*$/)?.[0] ?? "";
+    const result = rewriteSingle(part.trim(), `${path}[${index}]`);
+    changes.push(...result.changes);
+    unresolved.push(...result.unresolved);
+    return `${leading}${result.value}${trailing}`;
+  }).join(",");
+  return { value: changes.length ? next : value, changes, unresolved };
+}
+
+export function rewriteSelfHostedJson(
+  value: unknown,
+  defaultBucket = "",
+  publicBaseUrl = "",
+  path = "$",
+  mapping?: SelfHostedStorageMapping,
+): { value: unknown; changes: RewriteChange[]; unresolved: StorageLocation[] } {
+  if (typeof value === "string") {
+    return rewriteSelfHostedString(
+      value,
+      defaultBucket,
+      publicBaseUrl,
+      path,
+      mapping,
+    );
+  }
+  if (Array.isArray(value)) {
+    const changes: RewriteChange[] = [];
+    const unresolved: StorageLocation[] = [];
+    const next = value.map((item, index) => {
+      const result = rewriteSelfHostedJson(
+        item,
+        defaultBucket,
+        publicBaseUrl,
+        `${path}[${index}]`,
+        mapping,
+      );
+      changes.push(...result.changes);
+      unresolved.push(...result.unresolved);
+      return result.value;
+    });
+    return { value: next, changes, unresolved };
+  }
+  if (value && typeof value === "object") {
+    const changes: RewriteChange[] = [];
+    const unresolved: StorageLocation[] = [];
+    const next: Record<string, unknown> = {};
+    for (
+      const [key, item] of Object.entries(value as Record<string, unknown>)
+    ) {
+      const result = rewriteSelfHostedJson(
+        item,
+        inferredBucketForJsonKey(key, defaultBucket),
+        publicBaseUrl,
+        `${path}.${key}`,
+        mapping,
+      );
+      changes.push(...result.changes);
+      unresolved.push(...result.unresolved);
+      next[key] = result.value;
+    }
+    return { value: next, changes, unresolved };
+  }
+  return { value, changes: [], unresolved: [] };
 }

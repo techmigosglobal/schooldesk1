@@ -465,7 +465,7 @@ export async function handleAttendance(
   // ── Sessions ───────────────────────────────────────────────
   if (path === "/attendance/sessions" && method === "GET") {
     let q = svc.from("attendance_sessions").select(
-      "id, school_id, section_id, academic_year_id, subject_id, staff_id, timetable_slot_id, date, period_number, total_students, present_count, is_finalized, status, submitted_at, reopened_at, reopened_by, reopen_reason, correction_reason, correction_asked_at, corrected_at, section:sections(id, section_name, grade:grades(id, grade_name)), staff:staff(id, first_name, last_name, staff_code), subject:subjects(id, subject_name)",
+    "id, school_id, section_id, academic_year_id, subject_id, staff_id, timetable_slot_id, date, period_number, total_students, present_count, is_finalized, status, submitted_at, reopened_at, reopened_by, reopen_reason, correction_reason, correction_asked_at, corrected_at, student_attendances(student_id, enrollment_id, status, reason, remarks, marked_at), section:sections(id, section_name, grade:grades(id, grade_name)), staff:staff(id, first_name, last_name, staff_code), subject:subjects(id, subject_name)",
       { count: "exact" },
     ).eq("school_id", school);
     const sectionId = url.searchParams.get("section_id") ?? "";

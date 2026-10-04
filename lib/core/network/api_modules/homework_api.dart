@@ -46,6 +46,7 @@ extension BackendHomeworkApi on BackendApiClient {
       final response = await _get('/homework', queryParameters: queryParams);
       final envelope = _asMap(response.data);
       if (envelope['success'] == true) {
+        final cache = cacheMetadataFromResponse(response);
         final rawPayload = envelope['data'];
         final payload = rawPayload is Map ? _asMap(rawPayload) : null;
         final merged = await _mergeLocalHomeworkDrafts(
@@ -65,6 +66,8 @@ extension BackendHomeworkApi on BackendApiClient {
             payload?['page_size'] ?? envelope['page_size'],
             fallback: pageSize,
           ),
+          isStale: cache.isStale,
+          cacheStoredAt: cache.storedAt,
         );
       }
       throw ServerException(
@@ -82,6 +85,7 @@ extension BackendHomeworkApi on BackendApiClient {
           total: local.length,
           page: page,
           pageSize: pageSize,
+          isStale: true,
         );
       }
       throw _handleError(e);
@@ -354,18 +358,16 @@ extension BackendHomeworkApi on BackendApiClient {
     List<String> attachmentUrls = const [],
   }) async {
     try {
-      final response = await SchoolDeskApi.instance.client.submitHomework(
-        homeworkId,
-        {
-          'student_id': studentId,
-          'answer_text': answerText,
-          'attachment_url': attachmentUrl,
-          'attachment_urls': attachmentUrls
-              .map((url) => url.trim())
-              .where((url) => url.isNotEmpty)
-              .toList(),
-        },
-      );
+      final response = await SchoolDeskApi.instance.client
+          .submitHomework(homeworkId, {
+            'student_id': studentId,
+            'answer_text': answerText,
+            'attachment_url': attachmentUrl,
+            'attachment_urls': attachmentUrls
+                .map((url) => url.trim())
+                .where((url) => url.isNotEmpty)
+                .toList(),
+          });
       if (response.success == true) return _asMap(response.data);
       throw ServerException(
         message: response.error ?? 'Failed to submit homework',

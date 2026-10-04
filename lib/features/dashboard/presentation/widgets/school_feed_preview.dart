@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -12,7 +13,7 @@ import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 /// The card deliberately keeps media and copy in separate, constrained areas.
 /// That prevents a long screen or an unusually sized source image from
 /// stretching the post beyond a useful dashboard size.
-class SchoolFeedPreview extends StatelessWidget {
+class SchoolFeedPreview extends StatefulWidget {
   final List<Map<String, dynamic>> posts;
   final Color accentColor;
   final bool showParentVisibility;
@@ -37,6 +38,59 @@ class SchoolFeedPreview extends StatelessWidget {
   });
 
   @override
+  State<SchoolFeedPreview> createState() => _SchoolFeedPreviewState();
+}
+
+class _SchoolFeedPreviewState extends State<SchoolFeedPreview> {
+  late final PageController _pageController;
+  Timer? _timer;
+  int _currentPage = 0;
+  bool _paused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(viewportFraction: 0.92);
+    _scheduleNext();
+  }
+
+  @override
+  void didUpdateWidget(SchoolFeedPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_currentPage >= widget.posts.length && widget.posts.isNotEmpty) {
+      _currentPage = widget.posts.length - 1;
+      if (_pageController.hasClients) _pageController.jumpToPage(_currentPage);
+    }
+    if (oldWidget.posts.length != widget.posts.length) _scheduleNext();
+  }
+
+  void _scheduleNext() {
+    _timer?.cancel();
+    if (_paused || widget.posts.length <= 1) return;
+    _timer = Timer(const Duration(seconds: 5), () {
+      if (!mounted || _paused || widget.posts.length <= 1) return;
+      final next = (_currentPage + 1) % widget.posts.length;
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  void _togglePause() {
+    setState(() => _paused = !_paused);
+    _scheduleNext();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
@@ -59,10 +113,10 @@ class SchoolFeedPreview extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: accentColor.withAlpha(22),
+                  color: widget.accentColor.withAlpha(22),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(Icons.campaign_rounded, color: accentColor),
+                child: Icon(Icons.campaign_rounded, color: widget.accentColor),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -76,24 +130,24 @@ class SchoolFeedPreview extends StatelessWidget {
                         color: tokens.onSurface,
                       ),
                     ),
-                    if (showParentVisibility)
+                    if (widget.showParentVisibility)
                       Text(
-                        audienceLabel ?? 'Visible to parents',
+                        widget.audienceLabel ?? 'Visible to parents',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: accentColor,
+                          color: widget.accentColor,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                   ],
                 ),
               ),
-              if (onAction != null && actionLabel != null)
+              if (widget.onAction != null && widget.actionLabel != null)
                 TextButton(
-                  onPressed: onAction,
+                  onPressed: widget.onAction,
                   child: Text(
-                    actionLabel!,
+                    widget.actionLabel!,
                     style: TextStyle(
-                      color: accentColor,
+                      color: widget.accentColor,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -101,23 +155,23 @@ class SchoolFeedPreview extends StatelessWidget {
             ],
           ),
           SizedBox(height: tokens.spacing.md),
-          if (errorMessage != null && posts.isEmpty)
+          if (widget.errorMessage != null && widget.posts.isEmpty)
             SchoolFeedStatusNotice(
-              accentColor: accentColor,
-              isStale: isStale,
-              errorMessage: errorMessage,
-              onRetry: onRetry,
+              accentColor: widget.accentColor,
+              isStale: widget.isStale,
+              errorMessage: widget.errorMessage,
+              onRetry: widget.onRetry,
             )
           else ...[
-            if (isStale || errorMessage != null)
+            if (widget.isStale || widget.errorMessage != null)
               SchoolFeedStatusNotice(
-                accentColor: accentColor,
-                isStale: isStale,
-                errorMessage: errorMessage,
-                onRetry: onRetry,
+                accentColor: widget.accentColor,
+                isStale: widget.isStale,
+                errorMessage: widget.errorMessage,
+                onRetry: widget.onRetry,
               ),
-            if (posts.isEmpty)
-              _EmptySchoolFeed(accentColor: accentColor)
+            if (widget.posts.isEmpty)
+              _EmptySchoolFeed(accentColor: widget.accentColor)
             else
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -125,18 +179,68 @@ class SchoolFeedPreview extends StatelessWidget {
                     310.0,
                     math.max(258.0, constraints.maxWidth * 0.82),
                   );
-                  return SizedBox(
-                    height: 304,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: posts.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 12),
-                      itemBuilder: (context, index) => _SchoolFeedPostCard(
-                        post: posts[index],
-                        accentColor: accentColor,
-                        width: cardWidth,
+                  return Column(
+                    children: [
+                      SizedBox(
+                        height: 304,
+                        child: PageView.builder(
+                          controller: _pageController,
+                          itemCount: widget.posts.length,
+                          onPageChanged: (index) {
+                            setState(() => _currentPage = index);
+                            _scheduleNext();
+                          },
+                          itemBuilder: (context, index) => Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: _SchoolFeedPostCard(
+                              post: widget.posts[index],
+                              accentColor: widget.accentColor,
+                              width: cardWidth,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      if (widget.posts.length > 1) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ...List.generate(
+                              math.min(widget.posts.length, 8),
+                              (index) => AnimatedContainer(
+                                duration: const Duration(milliseconds: 220),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 3,
+                                ),
+                                width: index == _currentPage ? 18 : 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: index == _currentPage
+                                      ? widget.accentColor
+                                      : widget.accentColor.withAlpha(60),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            InkWell(
+                              onTap: _togglePause,
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  _paused
+                                      ? Icons.play_arrow_rounded
+                                      : Icons.pause_rounded,
+                                  size: 16,
+                                  color: widget.accentColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
                   );
                 },
               ),
@@ -167,9 +271,6 @@ class _SchoolFeedPostCard extends StatelessWidget {
     final title = _text(post['title']).isEmpty
         ? 'School Post'
         : _text(post['title']);
-    final description = _text(post['description'] ?? post['body']);
-    final category = _text(post['category']);
-    final date = _formatDate(post['date'] ?? post['created_at']);
     final media = EventPostMediaItem.parseList(
       post['media'] ??
           post['media_urls'] ??
@@ -196,81 +297,17 @@ class _SchoolFeedPostCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  height: 156,
+                  height: 260,
                   width: double.infinity,
                   child: media.isEmpty
                       ? _PostPlaceholder(title: title, accentColor: accentColor)
                       : EventPostMediaCarousel(
                           mediaItems: media,
-                          height: 156,
+                          height: 260,
                           autoAdvance: false,
                           imageFit: BoxFit.contain,
                           onOpen: () => _openMedia(context, media.first),
                         ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            if (category.isNotEmpty)
-                              Flexible(
-                                child: Text(
-                                  category.toUpperCase(),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: accentColor,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            if (date.isNotEmpty) ...[
-                              if (category.isNotEmpty) const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  date,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: tokens.textMuted,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: tokens.onSurface,
-                            fontWeight: FontWeight.w800,
-                            height: 1.2,
-                          ),
-                        ),
-                        if (description.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: tokens.textMuted,
-                              height: 1.35,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -278,14 +315,6 @@ class _SchoolFeedPostCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _formatDate(Object? raw) {
-    final value = _text(raw);
-    if (value.isEmpty) return '';
-    final parsed = DateTime.tryParse(value);
-    if (parsed == null) return value;
-    return '${parsed.day}/${parsed.month}/${parsed.year}';
   }
 
   void _openMedia(BuildContext context, EventPostMediaItem item) {

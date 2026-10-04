@@ -124,8 +124,9 @@ Use a connected, production-like QA environment with:
 
 Tests must be repeatable. Reset or namespace QA records between runs and keep a
 before/after database snapshot for destructive-looking workflows. Financial
-history, audit logs, identity records, and documents must never be physically
-deleted as part of cleanup; use an approved isolated fixture reset.
+history, identity records, and documents must never be physically deleted as
+part of cleanup; the former audit-log store is intentionally removed by the
+approved forward migration. Use an isolated fixture reset for test data.
 
 ## 4. Evidence classification
 
@@ -187,7 +188,7 @@ The following are release blockers:
 The following risks have dedicated `RISK-*` cases in the CSV and must be
 reported independently of general regression coverage:
 
-- Payment deletion must be removed or replaced by an audited atomic reversal.
+- Payment deletion must be removed or replaced by an atomic reversal recorded on the payment ledger.
 - Student/staff private records must not remain publicly listable or
   downloadable through mixed storage buckets.
 - Dashboard requests must reject lower-privileged users requesting higher-role

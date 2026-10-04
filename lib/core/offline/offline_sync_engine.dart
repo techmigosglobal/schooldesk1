@@ -217,6 +217,9 @@ class OfflineSyncEngine extends ChangeNotifier {
   Future<void> start() async {
     if (_started) return;
     _started = true;
+    // Retention runs before replay so abandoned local snapshots and completed
+    // mutations cannot accumulate indefinitely on shared devices.
+    await database.purgeExpiredData();
     _connectivitySubscription = _connectivity.onConnectivityChanged.listen((
       results,
     ) {
@@ -242,7 +245,9 @@ class OfflineSyncEngine extends ChangeNotifier {
     required RequestOptions request,
     required Response<dynamic> response,
   }) async {
+    final requestScope = request.extra['schooldeskScope']?.toString();
     if (!api.isAuthenticated || accountKey == 'anonymous') return;
+    if (requestScope != null && requestScope != accountKey) return;
     if (request.method.toUpperCase() != 'GET') return;
     if (!_isJsonValue(response.data)) return;
 
@@ -262,6 +267,16 @@ class OfflineSyncEngine extends ChangeNotifier {
       await _cacheStudentRows(response.data);
     }
   }
+
+  Future<void> invalidateCachedReads([List<String> pathPatterns = const []]) {
+    if (accountKey == 'anonymous') return Future<void>.value();
+    return database
+        .deleteCachedResponses(accountKey, pathPatterns: pathPatterns)
+        .then((_) {});
+  }
+
+  Future<void> clearAccountData(String scope) =>
+      database.clearAccountData(scope);
 
   Future<Response<dynamic>?> readCachedResponse(RequestOptions request) async {
     if (!api.isAuthenticated || accountKey == 'anonymous') return null;
@@ -345,6 +360,7 @@ class OfflineSyncEngine extends ChangeNotifier {
   }
 
   Future<void> _syncPendingMutations() async {
+    final syncAccountKey = accountKey;
     if (!api.isAuthenticated || accountKey == 'anonymous') {
       await _refreshPendingCount();
       return;
@@ -410,6 +426,12 @@ class OfflineSyncEngine extends ChangeNotifier {
     );
 
     for (final mutation in pending) {
+      // Branch/account changes invalidate the replay batch. Stop before the
+      // next mutation rather than sending a request with the new scope.
+      if (syncAccountKey != api.offlineAccountKey) {
+        _lastError = 'Session scope changed while syncing offline work.';
+        break;
+      }
       try {
         final metadata = jsonDecode(mutation.payloadJson);
         final requestData = metadata is Map && metadata['request'] != null
@@ -898,6 +920,13 @@ class OfflineSyncEngine extends ChangeNotifier {
 
   bool _isPermanentFailure(DioException error) {
     final status = error.response?.statusCode;
+    // A 409 from the idempotency ledger can mean an active reservation, not
+    // a business conflict. The API marks that case explicitly so offline
+    // replay backs off instead of permanently stranding the mutation.
+    if (status == 409 &&
+        error.response?.headers.value('Idempotency-Retryable') == 'true') {
+      return false;
+    }
     return status == 401 || status == 403 || status == 409 || status == 422;
   }
 

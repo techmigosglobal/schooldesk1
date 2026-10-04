@@ -82,26 +82,6 @@ void main() {
     );
   });
 
-  test('audit activity is presented as readable school actions', () {
-    final activity = File(
-      'supabase/functions/api/handlers/activity.ts',
-    ).readAsStringSync();
-    final screen = File(
-      'lib/features/monitoring/presentation/screens/principal_audit_logs_screen.dart',
-    ).readAsStringSync();
-    expect(activity, contains('activityTarget'));
-    expect(activity, contains('activityDescription'));
-    expect(activity, contains('actorName: actor'));
-    expect(activity, contains('url.searchParams.get("actor")'));
-    expect(
-      activity,
-      contains('query = query.neq("actor_role", "super_admin")'),
-    );
-    expect(screen, contains('_AuditLogPresentation'));
-    expect(screen, contains('Staff member or username'));
-    expect(screen, contains('performed\\s+(GET|POST|PATCH|PUT|DELETE)'));
-  });
-
   test('credential resets are one-time and never retrieve old passwords', () {
     final users = File(
       'supabase/functions/api/handlers/users.ts',
@@ -111,7 +91,7 @@ void main() {
     ).readAsStringSync();
     expect(users, contains('temporary_password'));
     expect(users, contains('must_change_password: true'));
-    expect(users, contains('credentials.reset'));
+    expect(users, isNot(contains('audit_logs')));
     expect(screen, contains('I have shared it securely'));
     final auth = File(
       'supabase/functions/api/handlers/auth.ts',

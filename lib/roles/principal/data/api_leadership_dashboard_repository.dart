@@ -62,13 +62,6 @@ class ApiLeadershipDashboardRepository
             : _try(() => _api.getFeeStructures(), <Map<String, dynamic>>[]),
         _try(() => _api.getNotifications(), <Map<String, dynamic>>[]),
         _try(() => _api.getStaffDailyAttendanceSummary(), <String, dynamic>{}),
-        _try(
-          () => _api.getRawList(
-            '/audit-logs',
-            queryParameters: const {'page': 1, 'page_size': 3},
-          ),
-          <Map<String, dynamic>>[],
-        ),
       ]).timeout(const Duration(seconds: 45));
 
       return LeadershipDashboardOptionalSnapshot(
@@ -81,7 +74,6 @@ class ApiLeadershipDashboardRepository
         feeStructures: values[6] as List<Map<String, dynamic>>,
         notifications: values[7] as List<Map<String, dynamic>>,
         staffAttendanceSummary: values[8] as Map<String, dynamic>,
-        recentSchoolActivity: values[9] as List<Map<String, dynamic>>,
       );
     });
   }

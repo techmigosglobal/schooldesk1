@@ -1,135 +1,200 @@
-# SchoolDesk self-hosted Supabase restore
+# SchoolDesk self-hosted Supabase on Hostinger
 
-Target: Supabase Docker stack deployed through Bluehost Coolify.
+This is the runbook for rehearsing and then migrating SchoolDesk from managed
+Supabase plus Cloudflare R2 to Supabase self-hosted on a Hostinger VPS. Coolify
+manages the official Supabase Docker Compose stack and SchoolDesk Edge
+Functions; PostgreSQL and Storage objects persist on separate NVMe bind mounts.
+The old Supabase project and R2 buckets remain rollback sources throughout the
+soak period. This runbook does not authorize production traffic cutover, cloud
+deletion, or VPS reimaging.
 
-SchoolDesk keeps PostgreSQL, Supabase Auth, RLS, audit, Realtime, and FCM in
-Supabase. School post media uses Cloudflare R2. Supabase Storage objects are
-not part of this migration target.
+## Sizing and access
 
-## 1. Create platform dump
+The selected KVM 2 has 2 vCPU, 8 GB RAM, and 100 GB NVMe. It is suitable for a
+restore rehearsal and a carefully load-tested low-traffic deployment, but a
+Coolify panel plus the full Supabase stack leaves little capacity for Docker
+builds, imports, and application load. Supabase recommends at least 8 GB RAM
+and 4 CPU cores for the full stack. KVM 4 (4 vCPU, 16 GB RAM, 200 GB NVMe) is
+the safer single-host production size. Do not call KVM 2 production-ready until
+concurrent role, Realtime, upload, backup, and restore tests pass while memory
+and CPU remain within agreed limits.
 
-Run from repository root. Use a protected shell variable. Do not put database
-password in repository files, Coolify build arguments, or command history.
+Before deployment, confirm the exact VPS IPv4, SSH username and port, OS,
+whether it contains data, available NVMe space, and an SSH key already
+authorized for the operator account. Keep private keys and passwords out of
+chat and source control; use `ssh-agent` or a protected local secret file.
+Coolify credentials do not need to be supplied to the migration operator:
+generate new secrets during setup and store them in Coolify's protected
+environment configuration. Choose an API subdomain and configure DNS to the
+VPS. Public ingress should be limited to HTTPS (and HTTP only for ACME
+redirect/issuance); keep PostgreSQL and Studio private behind Coolify/VPN or an
+IP allowlist.
 
-```sh
-export SUPABASE_PLATFORM_DB_URL='postgres://...'
-scripts/prepare_platform_restore.sh
-```
+If the VPS is not provisioned, use Ubuntu 24.04 LTS. Never reimage an existing
+server until its contents have been inspected and separately backed up.
 
-Script uses pinned Supabase CLI `2.116.0` and produces local, ignored files:
+## Restore sources and limitations
 
-```text
-.local/platform-restore/roles.sql
-.local/platform-restore/schema.sql
-.local/platform-restore/data.sql
-```
+The Oct 1 archive at
+`/home/vinay/Documents/SchoolDesk-Backup/schooldesk-backend-backup-20261001.tar.gz`
+is the rehearsal source. Verify its SHA-256 sidecar before extraction. Its
+manifests cover 89 Auth users, 165 Supabase Storage objects, and 953 R2 objects
+(about 3.21 GB in R2); the recorded file hashes are checked again by the
+importer. Treat those counts as rehearsal expectations, not proof of current
+production state. This archive does not establish current hosted migration
+history, active sessions, SMTP/OAuth secrets, Firebase credentials, or
+password-hash compatibility.
 
-The connection string must be percent-encoded. Use Supabase Dashboard Connect
-with session pooler or direct connection. CLI runs `pg_dump` in Docker and
-filters Supabase internal schemas.
+Before the production maintenance window, pause writes and create a fresh
+database dump plus a final Supabase Storage/R2 media delta. Keep the cloud
+project and R2 objects unchanged. Supply a protected source DB connection for
+the fresh dump, and a current R2 read-only credential or a newly verified
+complete R2 bundle for media not in the Oct 1 archive. CLI login alone does not
+provide the database password or prove Auth hash fidelity. Plan for users to
+sign in again after JWT secrets change; verify login and password reset before
+cutover.
 
-## 2. Deploy fresh self-hosted Supabase in Coolify
+## Deploy the platform
 
-Use Supabase self-hosted Docker release. Do not deploy this repository's
-`supabase/config.toml` as production Compose configuration; that file targets
-Docker-local project `schooldesk-local`.
-
-Configure Coolify secrets before first start:
-
-- `SUPABASE_PUBLIC_URL`, `API_EXTERNAL_URL`, `SITE_URL`
-- `POSTGRES_PASSWORD`, `DASHBOARD_PASSWORD`
-- generated self-hosted JWT/API secrets and encryption keys
-- SMTP settings
-- OAuth provider settings and redirect URLs, if used
-- Edge API `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`,
-  `SUPABASE_DB_URL`
-- R2 settings listed below
-
-Expose only HTTPS gateway URL. Do not expose Postgres publicly after restore;
-use Coolify private network or temporary restricted access for `psql`.
-
-Recommended minimum: 4 GB RAM, 2 CPU cores, 40 GB SSD. Use Postgres 17
-compatible self-hosted release because current SchoolDesk migrations and
-managed project target Postgres 17.
-
-## 3. Restore database
-
-Copy dump files to a protected operator machine or temporary private volume.
-Restore into a fresh database only:
-
-```sh
-psql \
-  --single-transaction \
-  --variable ON_ERROR_STOP=1 \
-  --file roles.sql \
-  --file schema.sql \
-  --command 'SET session_replication_role = replica' \
-  --file data.sql \
-  --dbname "$SELF_HOSTED_POSTGRES_URL"
-```
-
-Do not run restore against an existing production database. Take a database
-backup before any retry. Existing platform JWTs stop working because
-self-hosted JWT secrets differ. Users must authenticate again.
-
-## 4. Configure R2 for School post media
-
-Set these as Edge Function secrets. Never expose them to Flutter or browser:
+Use a pinned, mutually compatible release of the official Supabase self-hosted
+Docker Compose stack, not `supabase/config.toml` (that is the Docker-local
+SchoolDesk project). Deploy via Coolify and persist PostgreSQL and Storage on
+separate, explicit Hostinger VPS bind mounts, for example:
 
 ```text
-R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
-R2_PRIVATE_BUCKET=schooldesk-private-files
-R2_PUBLIC_BUCKET=schooldesk-public-media
-R2_ACCESS_KEY_ID=<secret>
-R2_SECRET_ACCESS_KEY=<secret>
-R2_REGION=auto
-R2_PUBLIC_BASE_URL=https://<public-r2-domain>
-STORAGE_WRITE_PROVIDER=r2
-STORAGE_READ_ORDER=r2,supabase
+/data/schooldesk/postgres
+/data/schooldesk/storage
+```
+
+Record ownership, permissions, Compose image tags, configuration, and restore
+steps. Ensure the Supabase Storage service uses the persistent storage mount;
+do not mount the same path over the entire service data directory. Keep
+Coolify's generated secrets and deployment environment protected and backed
+up separately. Set the Storage maximum object size to at least 250 MiB for the
+archive rehearsal, then re-check the fresh manifest maximum before import.
+
+Configure new PostgreSQL, JWT, dashboard, encryption, and anon/service keys;
+external HTTPS URLs; SMTP; OAuth redirect URLs if used; and required Firebase
+FCM settings. Deploy `supabase/functions/api` and
+`supabase/functions/notification-processor` in the official Functions runtime
+with the required secrets. Never ship a service-role key to Flutter. Do not
+configure R2 credentials for the target.
+
+For the target Edge API use:
+
+```text
+STORAGE_WRITE_PROVIDER=supabase
+STORAGE_READ_ORDER=supabase
 STORAGE_LEGACY_READ=true
-STORAGE_LEGACY_WRITE=false
+STORAGE_LEGACY_WRITE=true
 ```
 
-Keep `STORAGE_LEGACY_READ=true` during cutover. Do not copy or delete R2
-objects as part of Supabase database restore. Existing `r2://private/...`
-and `r2://public/...` references remain database data. School post media is
-public only after approval and configured public R2 domain.
+`STORAGE_LEGACY_READ` remains enabled for compatibility with restored paths;
+the self-hosted storage helpers resolve them against this Supabase Storage
+instance. Confirm all R2 references and object hashes have been rewritten and
+verified before turning off legacy compatibility. No `R2_*` secret should be
+present in the target environment.
 
-## 5. Copy Edge Functions
+## Database and object restore
 
-Deploy `supabase/functions/api` and
-`supabase/functions/notification-processor` into the self-hosted Functions
-runtime. Configure function secrets. Verify API code can reach restored
-Postgres and R2 before switching application URLs.
+The platform dump generated by `scripts/prepare_platform_restore.sh` contains
+database roles/schema/data only. It is not an object backup. Restore only into
+a clean staging Supabase database after checking the dump and Postgres major
+version compatibility:
 
-## 6. Verify before DNS cutover
-
-Run all checks against isolated self-hosted hostname:
-
-```sql
-select count(*) from auth.users;
-select extname from pg_extension order by extname;
-select count(*) from public.schools;
-select count(*) from public.event_posts;
+```sh
+psql --single-transaction --variable ON_ERROR_STOP=1 \
+  --file roles.sql --file schema.sql \
+  --command 'SET session_replication_role = replica' \
+  --file data.sql --dbname "$SELF_HOSTED_POSTGRES_URL"
 ```
 
-Also verify:
+The self-hosted target does not automatically contain the repository's
+`supabase_migrations` history after a platform dump restore. Record the archive
+baseline separately, compare the live catalog with the checked-in migration
+versions, and apply only reviewed forward migrations through the protected
+service connection. Do not create synthetic migration-history rows or use
+`migration repair` to make the lists appear aligned.
 
-- Auth login and refresh.
-- RLS for Principal, Teacher, Parent, and second-school isolation.
-- Edge API `/health` and authenticated API calls.
-- Realtime subscription.
-- School post list with R2 public media.
-- Parent-only media with R2 signed URL.
-- R2 upload, read, and delete using isolated test object.
-- Notification processor and SMTP.
-- Backup and restore of new self-hosted database.
+Set `STORAGE_SOURCE_DIR` to the verified extracted archive directory and use a
+protected state file. Inventory validates every source file against the
+manifest; copy recreates/verifies every source Supabase bucket plus the two
+R2-consolidation buckets through the Storage API and uploads without
+overwriting different target bytes; verify downloads each target object and
+compares SHA-256. Database reference rewrite
+is a separate dry-run and is transactionally guarded. Do not run rewrite until
+the platform database and every Storage object have been restored and checked.
 
-Keep old Supabase platform project and R2 objects unchanged until full
-production soak passes. DNS cutover is separate approval.
+```sh
+# Create a mode-0600 environment file outside the repository and source it
+# from the operator shell. It contains TARGET_SUPABASE_SERVICE_ROLE_KEY and,
+# for reference rewrite, DATABASE_URL. Do not paste secret values into shell
+# commands or commit this file.
+source /secure/path/schooldesk-migration.env
+export STORAGE_SOURCE_DIR=/home/vinay/Documents/SchoolDesk-Backup/schooldesk-backup-20261001
+export TARGET_SUPABASE_URL=https://api.example.org
+# If database rows use an R2 custom CDN domain, also set R2_PUBLIC_BASE_URL
+# in that protected environment file so the importer can resolve it.
 
-## Known limits
+npx --yes deno@2.6.1 run --allow-env --allow-net --allow-read --allow-write \
+  scripts/storage_migration/self_hosted_storage.ts inventory \
+  --source-dir "$STORAGE_SOURCE_DIR" --state .local/self-hosted-storage/state.json
 
-Supabase restore guide covers database only. It does not copy Storage objects,
-Edge Functions, SMTP, OAuth, custom domains, or DNS. This plan keeps School
-post media in R2 and requires separate function and secret deployment.
+npx --yes deno@2.6.1 run --allow-env --allow-net --allow-read --allow-write \
+  scripts/storage_migration/self_hosted_storage.ts copy \
+  --state .local/self-hosted-storage/state.json
+
+npx --yes deno@2.6.1 run --allow-env --allow-net --allow-read --allow-write \
+  scripts/storage_migration/self_hosted_storage.ts copy --execute \
+  --state .local/self-hosted-storage/state.json
+
+npx --yes deno@2.6.1 run --allow-env --allow-net --allow-read --allow-write \
+  scripts/storage_migration/self_hosted_storage.ts verify \
+  --state .local/self-hosted-storage/state.json
+
+npx --yes deno@2.6.1 run --allow-env --allow-net --allow-read --allow-write \
+  scripts/storage_migration/self_hosted_storage.ts rewrite \
+  --state .local/self-hosted-storage/state.json
+```
+
+Review the dry-run counts and sample references. Only during the approved
+maintenance window, with a fresh target DB backup and all objects verified,
+execute with both `--execute` and
+`SELF_HOSTED_STORAGE_REWRITE_CONFIRM=schooldesk-self-hosted`. The rewrite does
+not delete old Supabase or R2 objects. Preserve the protected state file and
+archive; both are needed to audit the import. Never place either in Git.
+
+## Rehearsal and cutover gates
+
+Restore into an isolated staging hostname first. Reconcile Auth, school, user,
+student, payment, approval, chat, and Storage counts. Test role/RLS isolation
+across schools; login and reset; chat send/read and Realtime; notifications;
+fees and proof preview/approval; attendance; planner, diary, and assignment
+attachments; gallery and event-post public/private media; upload/download;
+and offline/error recovery. Test all imports and backups under realistic KVM 2
+load while observing CPU, RAM, disk, and Docker health.
+
+For production cutover, schedule a short maintenance window and pause cloud
+writes. Take the final database snapshot and media delta, restore and reconcile,
+build a Flutter APK pointing only to the VPS backend, install on the wireless
+Moto, and run the role smoke tests. Switch traffic only after the mobile,
+health, data-integrity, permissions, feature, and resource gates pass. Keep
+Cloud Supabase and R2 untouched through an agreed soak period. Rollback means
+repointing the app/DNS and reopening writes on the old services. Deleting old
+services is a separate approval.
+
+## Backups and operations
+
+Schedule encrypted database and Storage backups to the user's NAS/PC, with
+retention and a tested restore drill. A second directory on the same NVMe and
+Hostinger's weekly VPS snapshot are not sufficient as the only recovery copy.
+Monitor free disk, CPU, RAM, Postgres/Storage health, upload errors, and backup
+freshness; reserve NVMe for Docker images, logs, growth, and restore staging.
+
+## Local validation
+
+Use `scripts/local_supabase.sh status` to inspect the local Docker project.
+Do not run `db reset`, prune Docker resources, or replace volumes during a
+restore rehearsal until the exact project, volume names, and backup have been
+confirmed. Keep Docker-local migration validation separate from hosted
+promotion and the Hostinger restore.

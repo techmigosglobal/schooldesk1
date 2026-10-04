@@ -1,22 +1,27 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok } from "../index.ts";
+import { requestScope, sameSchool, scopedSelect } from "../lib/request_scope.ts";
 
 function schoolId(user: User): string { return `${user.app_metadata?.school_id ?? ""}`; }
 function isSuperAdmin(user: User): boolean { return user.app_metadata?.role_name === "super_admin"; }
 
 export async function handleAccess(req: Request, path: string, method: string, _url: URL, _client: SupabaseClient, svc: SupabaseClient, user: User): Promise<Response> {
   if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
-  const school = schoolId(user);
+  const scope = requestScope(user);
+  const school = scope.schoolId;
   if (path === "/access/permissions" && method === "GET") {
-    const { data: roles, error: roleError } = await svc.from("roles").select("id, role_name, description").eq("school_id", school).order("role_name");
+    const { data: roles, error: roleError } = await scopedSelect(svc, "roles", scope, "id, role_name, description").order("role_name");
     if (roleError) return fail(roleError.message);
-    const ids = (roles ?? []).map((role: Record<string, unknown>) => role.id).filter(Boolean);
+    const ids = (roles ?? []).map((role) => (role as unknown as Record<string, unknown>).id).filter(Boolean);
     const { data: permissions, error } = ids.length ? await svc.from("permissions").select("id, role_id, module, action").in("role_id", ids).order("module") : { data: [], error: null };
     if (error) return fail(error.message);
     return ok({ roles: roles ?? [], permissions: permissions ?? [] });
   }
   if (path === "/access/permissions" && method === "PUT") {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (body.school_id != null && !sameSchool(scope, body.school_id)) {
+      return fail("school scope cannot be changed by the request", 403);
+    }
     const roleId = `${body.role_id ?? ""}`.trim();
     const permissions = Array.isArray(body.permissions) ? body.permissions : null;
     if (!roleId || permissions === null) return fail("role_id and permissions are required", 420);

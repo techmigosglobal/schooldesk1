@@ -1,5 +1,6 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
+import { requestScope } from "../lib/request_scope.ts";
 
 function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -18,8 +19,9 @@ export async function handleNotifications(
   svc: SupabaseClient,
   user: User,
 ): Promise<Response> {
-  const school = schoolId(user);
-  const uid = userId(user);
+  const scope = requestScope(user);
+  const school = scope.schoolId;
+  const uid = scope.userId;
 
   if (!school || !uid) {
     return fail("unauthorized", 401);
@@ -43,13 +45,32 @@ export async function handleNotifications(
   }
 
   if (path === "/notifications/unread-count" && method === "GET") {
-    const { count, error } = await svc
+    let unreadQuery = svc
       .from("notification_logs")
       .select("id", { count: "exact", head: true })
       .eq("school_id", school)
       .eq("user_id", uid)
       .eq("is_read", false)
       .is("deleted_at", null);
+    const userRole = `${user.app_metadata?.role_name ?? user.app_metadata?.role ?? ""}`
+      .trim()
+      .toLowerCase();
+    if (userRole === "parent") {
+      const { data: links, error: linksError } = await svc
+        .from("parent_student_links")
+        .select("student_id")
+        .eq("school_id", school)
+        .eq("parent_user_id", uid);
+      if (linksError) return fail(linksError.message);
+      const linkedStudentIds = (links ?? []).map((link) => `${link.student_id ?? ""}`.trim())
+        .filter(Boolean);
+      unreadQuery = linkedStudentIds.length === 0
+        ? unreadQuery.is("student_id", null)
+        : unreadQuery.or(
+          `student_id.is.null,student_id.in.(${linkedStudentIds.join(",")})`,
+        );
+    }
+    const { count, error } = await unreadQuery;
     if (error) return fail(`Failed to get unread notification count: ${error.message}`);
     return ok({ count: count ?? 0 });
   }

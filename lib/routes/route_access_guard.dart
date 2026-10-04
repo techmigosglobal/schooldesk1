@@ -71,7 +71,6 @@ class RouteAccessGuard {
     AppRoutes.principalEventPosts: {'principal'},
     AppRoutes.principalTimetable: {'principal', 'coordinator'},
     AppRoutes.principalDocuments: {'principal'},
-    AppRoutes.principalAuditLogs: {'principal'},
     AppRoutes.guardianDirectory: {'principal'},
     AppRoutes.principalAccountCreate: {'principal'},
     AppRoutes.principalAccountEdit: {'principal'},
@@ -87,7 +86,6 @@ class RouteAccessGuard {
     AppRoutes.systemMonitor: {'principal'},
     // Super Admin routes
     AppRoutes.superAdminDashboard: {'super_admin'},
-    AppRoutes.superAdminAuditLogs: {'super_admin'},
     AppRoutes.superAdminSystemMonitor: {'super_admin'},
     AppRoutes.superAdminAccess: {'super_admin'},
     AppRoutes.superAdminIssues: {'super_admin'},

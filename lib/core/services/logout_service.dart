@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/services/chat_unread_service.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
@@ -66,15 +67,22 @@ class LogoutService {
       // Logout must remain available when the device is offline.
     }
 
-    // 3. Clear client-side state immediately.
+    // 3. Clear every account-scoped local row and cache before another
+    //    account can sign in on this device.
+    try {
+      await BackendApiClient.instance.clearLocalSession();
+    } on Object {
+      // Even if the local database is unavailable, never retain auth state.
+      BackendApiClient.instance.clearAuthToken();
+      await TokenStorageService.clear();
+    }
     RoleAccessService.clear();
-    BackendApiClient.instance.clearAuthToken();
     // Reset the notification singleton so stale notifications from this user
     // session are not visible if another user signs in on the same device.
     NotificationService.resetInstance();
-    await TokenStorageService.clear();
+    ChatUnreadService.instance.reset();
 
-    // 4. Navigate to landing page right away — do not await any network call.
+    // 4. Navigate to landing page after local cleanup — do not await network.
     if (navigator.mounted) {
       SchoolDeskNavigation.goFromNavigator(
         navigator,

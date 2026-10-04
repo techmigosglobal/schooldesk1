@@ -22,12 +22,6 @@ class ApiUserAccessRepository implements UserAccessRepository {
   );
 
   @override
-  Future<List<Map<String, dynamic>>> loadActivities() => _api.getRawList(
-    '/audit-logs',
-    queryParameters: const {'page': 1, 'page_size': 20},
-  );
-
-  @override
   Future<Map<String, dynamic>> loadPermissions() => _api.getAccessPermissions();
 
   @override

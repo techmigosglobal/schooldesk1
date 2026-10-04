@@ -147,6 +147,15 @@ export function r2Reference(
   key: string,
   visibility: R2Visibility = "private",
 ): string {
+  if (
+    (Deno.env.get("STORAGE_WRITE_PROVIDER") ?? "").trim().toLowerCase() ===
+      "supabase"
+  ) {
+    const bucket = visibility === "public"
+      ? "schooldesk-public-media"
+      : "schooldesk-private-files";
+    return `${bucket}/${safeReferenceKey(key)}`;
+  }
   return `r2://${visibility}/${safeReferenceKey(key)}`;
 }
 
@@ -229,6 +238,13 @@ export function legacyR2Reference(
 ): string | null {
   const location = legacyStorageLocation(value, defaultBucket);
   if (!location) return null;
+
+  if (
+    (Deno.env.get("STORAGE_WRITE_PROVIDER") ?? "").trim().toLowerCase() ===
+      "supabase"
+  ) {
+    return `${location.bucket}/${location.key}`;
+  }
 
   const isPublic = location.bucket === "school-public-media" ||
     (location.bucket === "school-assets" && /^logos\//i.test(location.key));
@@ -475,8 +491,32 @@ export function r2VisibilityFromValue(value: unknown): R2Visibility | "" {
 export function publicR2FileUrl(value: unknown): string {
   const settings = r2Config();
   const reference = r2ReferenceInfo(value);
-  if (!settings || !reference || reference.visibility !== "public") return "";
-  return publicUrl(settings, reference.key);
+  if (reference?.visibility === "public") {
+    if (settings) return publicUrl(settings, reference.key);
+    if (
+      (Deno.env.get("STORAGE_WRITE_PROVIDER") ?? "").trim().toLowerCase() ===
+        "supabase"
+    ) {
+      const base = Deno.env.get("SUPABASE_URL")?.trim().replace(/\/+$/, "");
+      if (!base) return "";
+      const key = reference.key.split("/").map(encodeURIComponent).join("/");
+      return `${base}/storage/v1/object/public/schooldesk-public-media/${key}`;
+    }
+    return "";
+  }
+
+  // Self-hosted deployments store migrated public media in Supabase Storage;
+  // retain this compatibility helper at existing response boundaries.
+  const raw = `${value ?? ""}`.trim().replace(/^\/+/, "");
+  const prefix = ["schooldesk-public-media/", "school-public-media/"]
+    .find((item) => raw.startsWith(item)) ??
+    (raw.startsWith("school-assets/logos/") ? "school-assets/" : "");
+  if (!prefix) return "";
+  const base = Deno.env.get("SUPABASE_URL")?.trim().replace(/\/+$/, "");
+  if (!base) return "";
+  const key = raw.slice(prefix.length).split("/").map(encodeURIComponent)
+    .join("/");
+  return `${base}/storage/v1/object/public/${prefix}${key}`;
 }
 
 async function uploadObject(

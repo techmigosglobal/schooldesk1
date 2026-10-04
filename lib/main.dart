@@ -21,6 +21,7 @@ import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
 import 'package:schooldesk1/core/offline/offline_background_sync.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/error_reporting_service.dart';
+import 'package:schooldesk1/core/services/android_update_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/theme_provider.dart';
 import 'package:schooldesk1/core/widgets/custom_error_widget.dart';
@@ -135,8 +136,30 @@ Widget buildSchoolDeskErrorWidget(FlutterErrorDetails details) =>
 
 void _deferStartupServices() {
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_checkAndroidUpdate());
     unawaited(_initializeDeferredStartupServices());
   });
+}
+
+Future<void> _checkAndroidUpdate() async {
+  // Give MaterialApp.router time to attach the root navigator before showing
+  // the non-blocking update affordance.
+  await Future<void>.delayed(const Duration(milliseconds: 1500));
+  final info = await AndroidUpdateService.instance.checkOncePerDay();
+  if (info == null) return;
+  final navigatorState = PushNotificationService.navigatorKey.currentState;
+  if (navigatorState == null) return;
+  ScaffoldMessenger.of(navigatorState.context).showSnackBar(
+    SnackBar(
+      content: const Text('A new SchoolDesk update is available.'),
+      behavior: SnackBarBehavior.floating,
+      action: SnackBarAction(
+        label: 'Update',
+        onPressed: () =>
+            unawaited(AndroidUpdateService.instance.startUpdate(info)),
+      ),
+    ),
+  );
 }
 
 /// Retries [fn] up to [maxAttempts] times with exponential backoff.
@@ -205,6 +228,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Timer? _scopeRecoveryTimer;
+  DateTime? _backgroundedAt;
 
   @override
   void initState() {
@@ -230,13 +254,36 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed &&
-        BackendApiClient.instance.isAuthenticated) {
-      // A device can regain Wi-Fi/mobile data while the process is still
-      // alive. The probe prevents an offline resume from deleting the only
-      // persistent snapshot before the backend is reachable again.
-      unawaited(_recoverRoleScopeIfOnline());
-      unawaited(OfflineSyncEngine.instance.syncNow());
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      _backgroundedAt ??= DateTime.now();
+      if (EnvConfig.enableLogging) {
+        developer.log('App moved to $state', name: 'lifecycle');
+      }
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      final backgroundedAt = _backgroundedAt;
+      _backgroundedAt = null;
+      final wasBackgroundedLongEnough =
+          backgroundedAt != null &&
+          DateTime.now().difference(backgroundedAt) >=
+              const Duration(seconds: 45);
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          'App resumed; recovery=${wasBackgroundedLongEnough ? 'scheduled' : 'skipped'}',
+          name: 'lifecycle',
+        );
+      }
+      // Android sends short inactive/hidden transitions for the notification
+      // shade, screenshots, permission surfaces, and some media pickers. A
+      // quick resume is not a connectivity recovery event and must not reset
+      // the visible screen or delete its cached snapshot.
+      if (wasBackgroundedLongEnough &&
+          BackendApiClient.instance.isAuthenticated) {
+        unawaited(_recoverRoleScopeIfOnline());
+        unawaited(OfflineSyncEngine.instance.syncNow());
+      }
     }
     if (state == AppLifecycleState.detached) {
       unawaited(PushNotificationService.instance.dispose());
@@ -244,17 +291,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _recoverRoleScopeIfOnline() async {
-    final api = BackendApiClient.instance;
     // A cached profile is not proof that the backend is reachable. Do not
     // invalidate the only local snapshot during an offline resume.
     if (!await OfflineSyncEngine.instance.probeBackend()) return;
     try {
-      await api.getProfile(forceRefresh: true);
+      // RoleAccessService performs the authoritative role-specific refresh.
+      // Do not invalidate every cached read here: doing so caused a visible
+      // blank/reload cycle when Android briefly backgrounded the activity.
+      await RoleAccessService.refreshAfterConnectivity();
     } on Object {
       return;
     }
-    await api.invalidateCachedReads();
-    await RoleAccessService.refreshAfterConnectivity();
   }
 
   @override

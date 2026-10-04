@@ -17,6 +17,7 @@ import 'package:schooldesk1/roles/teacher/domain/teacher_homework_repository.dar
 import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/core/utils/result.dart';
 
 class TeacherHomeworkScreen extends StatefulWidget {
   final TeacherHomeworkRepository? repository;
@@ -40,6 +41,9 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
   bool _skippedToday = false;
   String _reminderStatus = 'pending';
   String _selectedSectionId = '';
+  int _homeworkPage = 1;
+  int _homeworkTotal = 0;
+  bool _loadingMore = false;
 
   @override
   void initState() {
@@ -76,8 +80,14 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
               )
             : RoleAccessService.teacherClassId;
       }
-      final homeworkResult = await _repository.loadHomework(
+      final homeworkPage = await _repository.loadHomeworkPage(
         sectionId: _selectedSectionId,
+        page: 1,
+        pageSize: 20,
+      );
+      final homeworkResult = homeworkPage.when(
+        success: (page) => Result.ok(page.data),
+        failure: (failure) => Result.err(failure),
       );
       if (homeworkResult.isFailure) {
         throw StateError(
@@ -85,27 +95,32 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
         );
       }
       final rows = homeworkResult.dataOrNull!;
+      final pageData = homeworkPage.dataOrNull;
       final reminder = await _loadReminderStatus();
       final counts = <String, int>{};
-      for (final row in rows.take(12)) {
-        final id = _homeworkId(row);
-        if (id.isEmpty) continue;
-        try {
-          final submissionsResult = await _repository.loadSubmissions(id);
-          if (submissionsResult.isFailure) continue;
-          final submissions = submissionsResult.dataOrNull!;
-          counts[id] = teacherFlowList(
-            submissions['submissions'] ?? submissions['data'],
-          ).length;
-        } on Object {
-          // Submission counts are supplementary. Keep legacy assignments
-          // visible when one submission record cannot be read.
-          counts[id] = 0;
-        }
-      }
+      await Future.wait<void>(
+        rows.take(12).map<Future<void>>((row) async {
+          final id = _homeworkId(row);
+          if (id.isEmpty) return;
+          try {
+            final submissionsResult = await _repository.loadSubmissions(id);
+            if (submissionsResult.isFailure) return;
+            final submissions = submissionsResult.dataOrNull!;
+            counts[id] = teacherFlowList(
+              submissions['submissions'] ?? submissions['data'],
+            ).length;
+          } on Object {
+            // Submission counts are supplementary. Keep assignments visible
+            // when one supplementary request cannot be read.
+            counts[id] = 0;
+          }
+        }),
+      );
       if (!mounted) return;
       setState(() {
         _homework = rows;
+        _homeworkPage = pageData?.page ?? 1;
+        _homeworkTotal = pageData?.total ?? rows.length;
         _submissionCounts = counts;
         _reminderStatus = teacherFlowText(
           reminder['status'],
@@ -114,9 +129,12 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
               : 'pending',
         ).toLowerCase();
         _skippedToday = _reminderStatus == 'skipped';
-        _state = const RepositoryState(
+        _state = RepositoryState(
           data: Object(),
-          source: RepositorySource.remote,
+          source: _repository.isOffline
+              ? RepositorySource.cache
+              : RepositorySource.remote,
+          isStale: _repository.isOffline,
         );
       });
     } on Object catch (error) {
@@ -131,6 +149,33 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
                 error: error,
               );
       });
+    }
+  }
+
+  Future<void> _loadMoreHomework() async {
+    if (_loadingMore || _homework.length >= _homeworkTotal) return;
+    setState(() => _loadingMore = true);
+    try {
+      final result = await _repository.loadHomeworkPage(
+        sectionId: _selectedSectionId,
+        page: _homeworkPage + 1,
+        pageSize: 20,
+      );
+      if (result.isFailure) throw StateError(result.failureOrNull!.message);
+      final page = result.dataOrNull!;
+      setState(() {
+        _homework = [..._homework, ...page.data];
+        _homeworkPage = page.page;
+        _homeworkTotal = page.total;
+      });
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to load older assignments: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -301,6 +346,23 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
                 ],
               ),
             ),
+            if (_homework.length < _homeworkTotal)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: OutlinedButton.icon(
+                  onPressed: _loadingMore ? null : _loadMoreHomework,
+                  icon: _loadingMore
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.history),
+                  label: Text(
+                    _loadingMore ? 'Loading…' : 'Load older assignments',
+                  ),
+                ),
+              ),
             // ── Tab Views ────────────────────────────────────────────
             Expanded(
               child: TabBarView(

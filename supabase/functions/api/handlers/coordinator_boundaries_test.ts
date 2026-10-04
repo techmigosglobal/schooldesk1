@@ -20,12 +20,7 @@ Deno.test("Coordinator cannot read school payment settings", async () => {
   );
 });
 
-Deno.test("branch activity and complaint notifications handle Coordinator as leader", async () => {
-  const activity = await read("supabase/functions/api/handlers/activity.ts");
+Deno.test("complaint notifications handle Coordinator as leader", async () => {
   const issues = await read("supabase/functions/api/handlers/issues.ts");
-  assertMatch(
-    activity,
-    /\["principal", "coordinator"\]\.includes\(activityRole\(user\)\)/,
-  );
   assertMatch(issues, /\["principal", "coordinator"\]\.includes\(targetRole\)/);
 });

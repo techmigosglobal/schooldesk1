@@ -28,22 +28,25 @@ void main() {
     expect(client, contains("'page_size': pageSize"));
   });
 
-  test('homework list scope is paged and does not materialize attachments', () {
-    final handler = File(
-      'supabase/functions/api/handlers/homework.ts',
-    ).readAsStringSync();
-    final client = File(
-      'lib/core/network/api_modules/homework_api.dart',
-    ).readAsStringSync();
+  test(
+    'homework list scope is paged and parent attachments are authorized',
+    () {
+      final handler = File(
+        'supabase/functions/api/handlers/homework.ts',
+      ).readAsStringSync();
+      final client = File(
+        'lib/core/network/api_modules/homework_api.dart',
+      ).readAsStringSync();
 
-    expect(handler, contains('const pageSize = Math.min('));
-    expect(handler, contains('data->>section_id'));
-    expect(handler, contains('const pageRows = rows.slice'));
-    expect(handler, contains('attachment_urls: _attachmentUrls'));
-    expect(handler, contains('has_more: page * pageSize < total'));
-    expect(client, contains("'page': page"));
-    expect(client, contains("'page_size': pageSize"));
-  });
+      expect(handler, contains('const pageSize = Math.min('));
+      expect(handler, contains('data->>section_id'));
+      expect(handler, contains('const pageRows = rows.slice'));
+      expect(handler, contains('materializeHomeworkAttachments(svc, row)'));
+      expect(handler, contains('has_more: page * pageSize < total'));
+      expect(client, contains("'page': page"));
+      expect(client, contains("'page_size': pageSize"));
+    },
+  );
 
   test('issues, events, and document queues use stable server pagination', () {
     final issues = File(

@@ -16,6 +16,7 @@ class SchoolDeskRepositoryStateView<T> extends StatelessWidget {
     this.emptyMessage = 'No records are available for this scope.',
     this.errorTitle = 'Unable to load data',
     this.loadingMessage = 'Loading…',
+    this.expandStaleContent = false,
     super.key,
   });
 
@@ -26,6 +27,7 @@ class SchoolDeskRepositoryStateView<T> extends StatelessWidget {
   final String emptyMessage;
   final String errorTitle;
   final String loadingMessage;
+  final bool expandStaleContent;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +65,7 @@ class SchoolDeskRepositoryStateView<T> extends StatelessWidget {
                 : 'Refresh failed. Cached data remains visible.',
             onAction: onRetry,
           ),
-        content,
+        if (expandStaleContent) Expanded(child: content) else content,
       ],
     );
   }

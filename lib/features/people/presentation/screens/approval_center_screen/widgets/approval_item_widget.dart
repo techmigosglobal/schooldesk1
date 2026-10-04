@@ -9,6 +9,7 @@ class ApprovalItemWidget extends StatefulWidget {
   final VoidCallback onApprove;
   final Function(String remarks) onReject;
   final Function(String note) onRequestChanges;
+  final VoidCallback? onOpen;
   final bool isActionLoading;
   final bool canRequestChanges;
 
@@ -18,6 +19,7 @@ class ApprovalItemWidget extends StatefulWidget {
     required this.onApprove,
     required this.onReject,
     required this.onRequestChanges,
+    this.onOpen,
     this.isActionLoading = false,
     this.canRequestChanges = true,
   });
@@ -602,6 +604,17 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
               ),
             ),
           ),
+          if (widget.onOpen != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: widget.onOpen,
+                icon: const Icon(Icons.open_in_new_rounded, size: 17),
+                label: const Text('Open in Fees'),
+              ),
+            ),
+          ],
           if (widget.approval.remarks != null) ...[
             const SizedBox(height: 12),
             Text(

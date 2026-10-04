@@ -9,8 +9,6 @@ abstract interface class UserAccessRepository {
     int pageSize = 20,
   });
 
-  Future<List<Map<String, dynamic>>> loadActivities();
-
   Future<Map<String, dynamic>> loadPermissions();
 
   Future<UserAccountModel> createUser({

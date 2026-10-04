@@ -97,6 +97,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       if (forceRefresh || _isSchoolLeader) {
         await _service?.refresh();
       }
+      // Opening the center means the current role has seen its notification
+      // inbox. Clear the unread badge immediately, including server-side
+      // unread rows that are not present in the current page.
+      await _service?.markAllAsRead(widget.role);
       await PushNotificationService.instance.syncApplicationBadge(
         count: _service?.totalUnread,
       );
@@ -1131,8 +1135,8 @@ class _NotificationSummaryPanel extends StatelessWidget {
                 : context.appTheme.success,
           ),
           _NotificationMetricPill(
-            label: 'Push',
-            value: runtimeStatus.deviceRegistrationSucceeded ? 1 : 0,
+            label: 'Push ready',
+            value: runtimeStatus.deviceRegistrationSucceeded ? 'Yes' : 'No',
             icon: runtimeStatus.deviceRegistrationSucceeded
                 ? Icons.notifications_active_rounded
                 : Icons.notifications_off_rounded,
@@ -1374,7 +1378,7 @@ class _DiagnosticSection extends StatelessWidget {
 
 class _NotificationMetricPill extends StatelessWidget {
   final String label;
-  final int value;
+  final Object value;
   final IconData icon;
   final Color color;
 

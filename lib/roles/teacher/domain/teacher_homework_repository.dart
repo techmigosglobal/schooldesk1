@@ -1,12 +1,19 @@
 import 'dart:typed_data';
 
 import 'package:schooldesk1/core/utils/result.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 
 abstract interface class TeacherHomeworkRepository {
   bool get isOffline;
 
   Future<Result<List<Map<String, dynamic>>>> loadHomework({
     required String sectionId,
+  });
+
+  Future<Result<PaginatedList<Map<String, dynamic>>>> loadHomeworkPage({
+    required String sectionId,
+    required int page,
+    int pageSize = 20,
   });
 
   Future<Result<Map<String, dynamic>>> loadSubmissions(String homeworkId);

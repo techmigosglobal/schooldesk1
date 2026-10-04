@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/repositories/api_repository_utils.dart';
 import 'package:schooldesk1/core/utils/result.dart';
 import 'package:schooldesk1/roles/teacher/domain/teacher_homework_repository.dart';
@@ -19,6 +20,21 @@ class ApiTeacherHomeworkRepository implements TeacherHomeworkRepository {
   }) {
     return guardApi(
       () => _api.getHomework(sectionId: sectionId, page: 1, pageSize: 20),
+    );
+  }
+
+  @override
+  Future<Result<PaginatedList<Map<String, dynamic>>>> loadHomeworkPage({
+    required String sectionId,
+    required int page,
+    int pageSize = 20,
+  }) {
+    return guardApi(
+      () => _api.getHomeworkPage(
+        sectionId: sectionId,
+        page: page,
+        pageSize: pageSize,
+      ),
     );
   }
 
@@ -42,10 +58,8 @@ class ApiTeacherHomeworkRepository implements TeacherHomeworkRepository {
     required String reason,
   }) {
     return guardApi(
-      () => _api.skipTodayHomeworkReminder(
-        sectionId: sectionId,
-        reason: reason,
-      ),
+      () =>
+          _api.skipTodayHomeworkReminder(sectionId: sectionId, reason: reason),
     );
   }
 

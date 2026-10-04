@@ -88,24 +88,6 @@ void main() {
       );
     });
 
-    test('super admin can access superAdminAuditLogs', () {
-      expect(
-        RouteAccessGuard.isRoleAllowedFor(
-          routeName: AppRoutes.superAdminAuditLogs,
-          role: 'super_admin',
-        ),
-        isTrue,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.superAdminAuditLogs,
-          isAuthenticated: true,
-          currentRole: 'super_admin',
-        ),
-        isNull,
-      );
-    });
-
     test('super admin can access superAdminSystemMonitor', () {
       expect(
         RouteAccessGuard.isRoleAllowedFor(
@@ -221,13 +203,6 @@ void main() {
       );
     });
 
-    test('superAdminAuditLogs is only for super_admin', () {
-      expect(
-        RouteAccessGuard.allowedRolesFor(AppRoutes.superAdminAuditLogs),
-        contains('super_admin'),
-      );
-    });
-
     test('superAdminSystemMonitor is only for super_admin', () {
       expect(
         RouteAccessGuard.allowedRolesFor(AppRoutes.superAdminSystemMonitor),
@@ -270,7 +245,6 @@ void main() {
         AppRoutes.principalSubjects,
         AppRoutes.principalLessonPlanner,
         AppRoutes.principalDocuments,
-        AppRoutes.principalAuditLogs,
         AppRoutes.principalEventApprovals,
         AppRoutes.principalTimetable,
         AppRoutes.guardianDirectory,

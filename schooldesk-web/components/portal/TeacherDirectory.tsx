@@ -41,9 +41,42 @@ function teacherInitials(row: Row) {
     .toUpperCase() || "T";
 }
 
-function teacherClassAssignments(teacherId: string, staffCode: string, classes: Row[]) {
+function teacherClassAssignments(
+  teacherId: string,
+  staffCode: string,
+  classes: Row[],
+  teacher: Row,
+) {
   if (!teacherId && !staffCode) return [];
   const assigned: Array<{ role: string; label: string }> = [];
+
+  // The staff endpoint now returns canonical assignments. Prefer them so
+  // subject-only teachers and class assignments are visible even when the
+  // separate principal/classes request is unavailable or paginated.
+  const directDetails = Array.isArray(teacher.assigned_class_details)
+    ? teacher.assigned_class_details
+        .filter((item): item is Row => Boolean(item && typeof item === "object"))
+        .map((item) => ({
+          role: stringValue(item.role || "Assigned"),
+          label: stringValue(item.label || item.class_label || item.name),
+        }))
+        .filter((item) => item.label)
+    : [];
+  const directLabels = Array.isArray(teacher.assigned_classes)
+    ? teacher.assigned_classes
+        .map((item) => ({ role: "Assigned", label: stringValue(item) }))
+        .filter((item) => item.label)
+    : [];
+  const direct = directDetails.length > 0 ? directDetails : directLabels;
+  if (direct.length > 0) {
+    const seen = new Set<string>();
+    return direct.filter((item) => {
+      const key = `${item.role}:${item.label}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
 
   for (const cls of classes) {
     const classTeacherId = stringValue(cls.class_teacher_id ?? nested(cls, "class_teacher").id);
@@ -283,7 +316,7 @@ export function TeacherDirectory({
                   const teacherId = stringValue(teacher.id);
                   const staffCode = stringValue(teacher.staff_code);
                   const designation = stringValue(teacher.designation || "Teacher");
-                  const assignments = teacherClassAssignments(teacherId, staffCode, sectionOptions);
+                  const assignments = teacherClassAssignments(teacherId, staffCode, sectionOptions, teacher);
                   const isActive = teacher.is_active !== false;
 
                   return (

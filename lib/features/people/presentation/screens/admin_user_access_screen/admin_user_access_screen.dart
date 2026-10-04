@@ -22,10 +22,9 @@ import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 @immutable
 class _UserAccessSnapshot {
-  const _UserAccessSnapshot({required this.users, required this.activities});
+  const _UserAccessSnapshot({required this.users});
 
   final List<Map<String, dynamic>> users;
-  final List<Map<String, dynamic>> activities;
 }
 
 class AdminUserAccessScreen extends StatefulWidget {
@@ -60,7 +59,6 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   final ScrollController _userScrollController = ScrollController();
 
   final List<Map<String, dynamic>> _users = [];
-  final List<Map<String, dynamic>> _activities = [];
 
   List<String> get _manageableRoles => _isSuperAdminOwner
       ? const ['Principal', 'Coordinator', 'Teacher', 'Parent']
@@ -104,7 +102,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _loadUsers();
     _userScrollController.addListener(_onUserScroll);
   }
@@ -189,24 +187,9 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           })
           .where((u) => _manageableRoles.contains(u['role']))
           .toList();
-      final activityRows = resetPage
-          ? await _repository.loadActivities()
-          : const <Map<String, dynamic>>[];
       final permissionPayload = resetPage && _isSuperAdminOwner
           ? await _repository.loadPermissions()
           : <String, dynamic>{};
-      final activities = activityRows.take(20).map((a) {
-        final createdAt = DateTime.tryParse('${a['created_at'] ?? ''}');
-        final when = createdAt == null
-            ? ''
-            : DateFormat('d MMM h:mm a').format(createdAt.toLocal());
-        return {
-          'user': '${a['role'] ?? 'User'}',
-          'action':
-              '${a['action'] ?? 'updated'} ${a['module'] ?? a['table_name'] ?? 'record'}',
-          'time': when,
-        };
-      }).toList();
 
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
@@ -220,11 +203,6 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
             ..addAll(rows);
         } else {
           _users.addAll(uniqueRows);
-        }
-        if (resetPage) {
-          _activities
-            ..clear()
-            ..addAll(activities);
         }
         _currentPage = res.page;
         _hasMore = res.hasMore && res.data.isNotEmpty;
@@ -251,10 +229,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           }
         }
         _state = RepositoryState(
-          data: _UserAccessSnapshot(
-            users: List.unmodifiable(_users),
-            activities: List.unmodifiable(_activities),
-          ),
+          data: _UserAccessSnapshot(users: List.unmodifiable(_users)),
           source: RepositorySource.remote,
           phase: RepositoryPhase.ready,
           lastUpdated: DateTime.now().toUtc(),
@@ -359,7 +334,6 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
         tabs: const [
           Tab(text: 'Users'),
           Tab(text: 'Permissions'),
-          Tab(text: 'Activity'),
         ],
       ),
       body: SchoolDeskRepositoryStateView<_UserAccessSnapshot>(
@@ -369,7 +343,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
         emptyMessage: 'No accounts are available for this school scope.',
         data: (_) => TabBarView(
           controller: _tabController,
-          children: [_buildUsers(), _buildPermissions(), _buildActivity()],
+          children: [_buildUsers(), _buildPermissions()],
         ),
       ),
     );
@@ -892,76 +866,6 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                       ),
                     )
                     .toList(),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildActivity() {
-    final activities = _activities;
-    if (activities.isEmpty) {
-      return Center(
-        child: Text(
-          'No user activity yet',
-          style: GoogleFonts.dmSans(
-            fontSize: 13,
-            color: context.appTheme.muted,
-          ),
-        ),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: activities.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final a = activities[i];
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: context.appTheme.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: context.appTheme.outlineVariant),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: context.appTheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Icon(
-                  Icons.history_rounded,
-                  size: 14,
-                  color: context.appTheme.primary,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      a['action']!,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: context.appTheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      '${a['user']} • ${a['time']}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 10,
-                        color: context.appTheme.muted,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),

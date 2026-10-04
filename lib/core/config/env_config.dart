@@ -45,6 +45,21 @@ class EnvConfig {
     defaultValue: '',
   );
 
+  /// Headers required by the Supabase gateway before a user session exists.
+  ///
+  /// The custom Edge Function API uses the same Kong gateway as the rest of
+  /// Supabase. Login and refresh requests therefore need the publishable anon
+  /// key even though they do not yet have a user access token. Authenticated
+  /// interceptors may replace only the Authorization value with the session
+  /// token; the apikey header remains the gateway credential.
+  static Map<String, String> get supabaseGatewayHeaders {
+    if (supabaseAnonKey.isEmpty) return const <String, String>{};
+    return <String, String>{
+      'apikey': supabaseAnonKey,
+      'Authorization': 'Bearer $supabaseAnonKey',
+    };
+  }
+
   // ── App environment ───────────────────────────────────────────
   static const String appEnv = String.fromEnvironment(
     'APP_ENV',

@@ -1,15 +1,16 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
-  r2FileReference,
-  r2Reference,
-  r2KeyFromValue,
-  r2ReferenceInfo,
-  r2VisibilityFromValue,
+  deleteR2File,
   headR2File,
   legacyR2Reference,
   legacyStorageReadsEnabled,
-  storageReadOrder,
+  r2FileReference,
+  r2KeyFromValue,
+  r2Reference,
+  r2ReferenceInfo,
+  r2VisibilityFromValue,
   signedR2FileUrl,
+  storageReadOrder,
 } from "./lib/r2_storage.ts";
 
 export const PRIVATE_FILES_BUCKET = "school-private-files";
@@ -46,6 +47,8 @@ type StorageLocation = {
 const LEGACY_STORAGE_BUCKETS = new Set([
   "school-assets",
   "school-private-files",
+  "schooldesk-private-files",
+  "schooldesk-public-media",
   "finance-documents",
   "payment-proofs",
   "issue-attachments",
@@ -60,12 +63,26 @@ const LEGACY_STORAGE_BUCKETS = new Set([
  * still contain the source project URL, but the bucket/path remains the
  * durable identifier and is resolved through the target Storage API.
  */
-function storageLocationFromValue(
+export function storageLocationFromValue(
   value: unknown,
   fallbackBucket: string,
 ): StorageLocation | null {
   const raw = `${value ?? ""}`.trim();
-  if (!raw || raw.startsWith("r2://")) return null;
+  if (!raw) return null;
+  if (raw.startsWith("r2://")) {
+    if (
+      (Deno.env.get("STORAGE_WRITE_PROVIDER") ?? "").trim().toLowerCase() !==
+        "supabase"
+    ) return null;
+    const reference = r2ReferenceInfo(raw);
+    if (!reference) return null;
+    return {
+      bucket: reference.visibility === "public"
+        ? "schooldesk-public-media"
+        : "schooldesk-private-files",
+      path: reference.key,
+    };
+  }
 
   if (/^https?:\/\//i.test(raw)) {
     try {
@@ -106,6 +123,23 @@ function storageLocationFromValue(
     : null;
 }
 
+/** Deletes a durable Supabase or R2 reference through its active provider. */
+export async function deleteStoredObject(
+  svc: SupabaseClient,
+  value: unknown,
+  fallbackBucket = "",
+): Promise<boolean> {
+  const location = storageLocationFromValue(value, fallbackBucket);
+  if (location) {
+    const { error } = await svc.storage.from(location.bucket).remove([
+      location.path,
+    ]);
+    if (error) throw error;
+    return true;
+  }
+  return await deleteR2File(value);
+}
+
 export function privateFileReference(path: string): string {
   return `${PRIVATE_FILES_BUCKET}/${path}`;
 }
@@ -122,7 +156,9 @@ export function privateFileReferenceFromValue(value: unknown): string {
 /** Converts an R2 URL/signature back to the durable reference for DB writes. */
 export function stableStorageReference(value: unknown): string {
   const info = r2ReferenceInfo(value);
-  return info ? r2Reference(info.key, info.visibility) : `${value ?? ""}`.trim();
+  return info
+    ? r2Reference(info.key, info.visibility)
+    : `${value ?? ""}`.trim();
 }
 
 export async function signedPrivateFileUrl(
@@ -162,6 +198,23 @@ export async function signedPrivateFileUrl(
     const { data, error } = await svc.storage.from(location.bucket)
       .createSignedUrl(location.path, ttlSeconds);
     if (!error && data?.signedUrl) return data.signedUrl;
+
+    // The rehearsal importer keeps legacy objects that originated in a
+    // Supabase bucket under the consolidated VPS-backed private bucket. This
+    // fallback lets old database URLs resolve those verified bytes without
+    // requiring a database rewrite first. Prefer the original bucket above so
+    // ordinary legacy reads keep their existing behavior.
+    if (
+      location.bucket !== "schooldesk-private-files" &&
+      location.bucket !== "schooldesk-public-media"
+    ) {
+      const consolidated = await svc.storage
+        .from("schooldesk-private-files")
+        .createSignedUrl(`legacy/${location.bucket}/${location.path}`, ttlSeconds);
+      if (!consolidated.error && consolidated.data?.signedUrl) {
+        return consolidated.data.signedUrl;
+      }
+    }
   }
   return "";
 }

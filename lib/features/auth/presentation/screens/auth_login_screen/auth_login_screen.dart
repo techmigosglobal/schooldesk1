@@ -13,6 +13,7 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
@@ -55,6 +56,10 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
     final password = _passwordCtrl.text;
 
     try {
+      // This screen uses the repository directly, so it must reopen the
+      // post-logout role-scope guard before the loading screen initializes
+      // the new user's assignments.
+      RoleAccessService.resetSignOutGuard();
       final response = await _repository.login(
         LoginRequest(username: username, password: password),
       );

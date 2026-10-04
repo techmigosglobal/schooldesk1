@@ -56,9 +56,20 @@ extension BackendStaffApi on BackendApiClient {
     return fallback;
   }
 
-  Future<StaffModel> getStaffMember(String id) async {
+  Future<StaffModel> getStaffMember(
+    String id, {
+    bool forceRefresh = false,
+  }) async {
     try {
-      final response = await _get('/staff/$id');
+      final response = await _get(
+        '/staff/$id',
+        queryParameters: forceRefresh
+            ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
+            : null,
+        options: forceRefresh
+            ? Options(headers: const {'Cache-Control': 'no-store'})
+            : null,
+      );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return StaffModel.fromJson(data['data'] as Map<String, dynamic>);

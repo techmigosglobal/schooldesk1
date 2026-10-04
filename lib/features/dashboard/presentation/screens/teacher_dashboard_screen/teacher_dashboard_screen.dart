@@ -13,6 +13,7 @@ import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/teacher_dashboard_desktop_shell.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_preview.dart';
 import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/utils/result.dart';
 import 'package:schooldesk1/roles/teacher/data/api_teacher_dashboard_repository.dart';
 import 'package:schooldesk1/roles/teacher/domain/teacher_dashboard_repository.dart';
 import 'package:schooldesk1/roles/teacher/domain/teacher_dashboard_snapshot.dart';
@@ -101,11 +102,19 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       );
     });
     try {
-      await RoleAccessService.initialize();
-      final snapshotResult =
-          await (widget.dashboardRepository ??
+      // These reads share the authenticated session but do not depend on one
+      // another. Starting them together removes an avoidable startup phase
+      // while keeping each repository's role and offline boundaries intact.
+      final snapshotFuture =
+          (widget.dashboardRepository ??
                   ApiTeacherDashboardRepository.legacyDefault)
               .load(forceRefresh: forceRefresh);
+      final results = await Future.wait<Object?>([
+        RoleAccessService.initialize(),
+        snapshotFuture,
+        _loadUnreadNotificationsCount(),
+      ]);
+      final snapshotResult = results[1] as Result<TeacherDashboardSnapshot>;
       if (snapshotResult.isFailure) {
         final state = RepositoryState.fromResult<TeacherDashboardSnapshot>(
           snapshotResult,
@@ -118,7 +127,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return;
       }
       final snapshot = snapshotResult.dataOrNull!;
-      final unreadNotifications = await _loadUnreadNotificationsCount();
+      final unreadNotifications = results[2] as int;
       if (!mounted) return;
       setState(() {
         _repositoryState = RepositoryState.fromResult<TeacherDashboardSnapshot>(
@@ -312,6 +321,21 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   const SizedBox(height: 14),
                   const TodaysHighlightsCard(role: 'teacher'),
                   const SizedBox(height: 18),
+                  SchoolFeedPreview(
+                    posts: _eventPosts,
+                    accentColor: teacherFlowAccent,
+                    showParentVisibility: true,
+                    audienceLabel: 'Staff & school updates',
+                    isStale: _feedStale,
+                    errorMessage: _feedError,
+                    onRetry: () => _loadDashboardData(forceRefresh: true),
+                    actionLabel: 'Manage',
+                    onAction: () => SchoolDeskNavigation.push(
+                      context,
+                      AppRoutes.teacherEventPosts,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   const TeacherFlowSectionHeader(title: 'Quick Actions'),
                   const SizedBox(height: 10),
                   _TeacherQuickActionGrid(),
@@ -334,21 +358,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ),
                   const SizedBox(height: 10),
                   ..._todayFeed(context),
-                  const SizedBox(height: 18),
-                  SchoolFeedPreview(
-                    posts: _eventPosts,
-                    accentColor: teacherFlowAccent,
-                    showParentVisibility: true,
-                    audienceLabel: 'Staff & school updates',
-                    isStale: _feedStale,
-                    errorMessage: _feedError,
-                    onRetry: () => _loadDashboardData(forceRefresh: true),
-                    actionLabel: 'Manage',
-                    onAction: () => SchoolDeskNavigation.push(
-                      context,
-                      AppRoutes.teacherEventPosts,
-                    ),
-                  ),
                   if (_announcements.isNotEmpty) ...[
                     const SizedBox(height: 18),
                     TeacherFlowSectionHeader(

@@ -75,7 +75,6 @@ class SuperAdminNav {
   SuperAdminNav._();
 
   static const dashboard = 0;
-  static const auditLogs = 1;
   static const systemMonitor = 2;
   static const errorReporting = 3;
   static const idCards = 4;

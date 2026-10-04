@@ -11,6 +11,7 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
+import 'package:schooldesk1/core/services/chat_unread_service.dart';
 import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 import 'package:schooldesk1/roles/principal/data/api_principal_chat_repository.dart';
@@ -51,7 +52,7 @@ class _PrincipalChatCommunicationsScreenState
   String _parentFilter = '';
   String _studentFilter = '';
   String _monitorClassFilter = '';
-  String _directRoleFilter = 'teacher';
+  String _directRoleFilter = 'all';
   String _directClassFilter = '';
   DateTime? _dateFilter;
   List<Map<String, dynamic>> _monitorConversations = const [];
@@ -193,9 +194,8 @@ class _PrincipalChatCommunicationsScreenState
         messages = mergeChatMessagesByIdentity(
           const [],
           await _safeChatRows(
-            () => _repository.loadMessages(
-              conversationId: _text(selected['id']),
-            ),
+            () =>
+                _repository.loadMessages(conversationId: _text(selected['id'])),
           ),
         );
         cursor = messages.isNotEmpty
@@ -322,9 +322,7 @@ class _PrincipalChatCommunicationsScreenState
       if (newMessages.isNotEmpty) {
         _scrollToBottom();
         if (_canSendIn(selected)) {
-          unawaited(
-            _repository.markConversationRead(convId),
-          );
+          unawaited(_repository.markConversationRead(convId));
         }
       }
     } on Object catch (_) {
@@ -418,14 +416,13 @@ class _PrincipalChatCommunicationsScreenState
     final conversationId = _text(conversation['id']);
     if (conversationId.isEmpty) return;
     try {
-      await _repository.markConversationRead(
-        conversationId,
-      );
+      await _repository.markConversationRead(conversationId);
     } on Object catch (_) {
       // Keep the UI responsive; the next refresh can retry.
     }
     if (!mounted) return;
     setState(() => _zeroUnreadFor(monitorMode, conversationId));
+    unawaited(ChatUnreadService.instance.refresh(role: _leadershipRole));
   }
 
   List<Map<String, dynamic>> _filteredMonitor([
@@ -582,34 +579,56 @@ class _PrincipalChatCommunicationsScreenState
     final hasSelection = _tabController.index == 0
         ? _selectedMonitorConversation != null
         : _selectedDirectConversation != null;
-    return SchoolDeskModuleScaffold(
-      title: 'Messages',
-      subtitle: 'Monitor parent-teacher chats and message staff or parents',
-      drawer: PrincipalDrawer(
-        selectedIndex: PrincipalNav.messages,
-        onDestinationSelected: (_) {},
+    return PopScope(
+      canPop: !hasSelection,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !mounted || !hasSelection) return;
+        final monitorMode = _tabController.index == 0;
+        setState(() {
+          _selectFor(monitorMode, null);
+          _clearMessagesFor(monitorMode);
+        });
+        unawaited(_subscribeRealtime());
+      },
+      child: SchoolDeskModuleScaffold(
+        title: 'Messages',
+        subtitle: 'Monitor parent-teacher chats and message staff or parents',
+        drawer: PrincipalDrawer(
+          selectedIndex: PrincipalNav.messages,
+          onDestinationSelected: (_) {},
+        ),
+        floatingActionButton: (!isWide && hasSelection)
+            ? null
+            : DashboardFabWidget(
+                role: _leadershipRole == 'coordinator'
+                    ? DashboardRole.coordinator
+                    : DashboardRole.principal,
+              ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+        onBackRequested: hasSelection ? _backToConversationList : null,
+        bottom: TabBar(
+          controller: _tabController,
+          onTap: (_) {
+            setState(() {});
+            _load(background: true);
+          },
+          tabs: const [
+            Tab(icon: Icon(Icons.visibility_rounded), text: 'Monitor'),
+            Tab(icon: Icon(Icons.chat_rounded), text: 'Direct'),
+          ],
+        ),
+        body: _body(),
       ),
-      floatingActionButton: (!isWide && hasSelection)
-          ? null
-          : DashboardFabWidget(
-              role: _leadershipRole == 'coordinator'
-                  ? DashboardRole.coordinator
-                  : DashboardRole.principal,
-            ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      bottom: TabBar(
-        controller: _tabController,
-        onTap: (_) {
-          setState(() {});
-          _load(background: true);
-        },
-        tabs: const [
-          Tab(icon: Icon(Icons.visibility_rounded), text: 'Monitor'),
-          Tab(icon: Icon(Icons.chat_rounded), text: 'Direct'),
-        ],
-      ),
-      body: _body(),
     );
+  }
+
+  void _backToConversationList() {
+    final monitorMode = _tabController.index == 0;
+    setState(() {
+      _selectFor(monitorMode, null);
+      _clearMessagesFor(monitorMode);
+    });
+    unawaited(_subscribeRealtime());
   }
 
   Widget _body() {
@@ -798,7 +817,10 @@ class _PrincipalChatCommunicationsScreenState
 
   List<Map<String, dynamic>> _filteredDirect() {
     return _directConversations.where((row) {
-      if (_directRoleLabel(row).toLowerCase() != _directRoleFilter) {
+      if (!chatContactMatchesRoleFilter(
+        selectedRole: _directRoleFilter,
+        roleLabel: _directRoleLabel(row),
+      )) {
         return false;
       }
       if (_directClassFilter.isEmpty) return true;
@@ -825,6 +847,14 @@ class _PrincipalChatCommunicationsScreenState
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _directRoleChip(
+              label: 'All (${_directConversations.length})',
+              icon: Icons.people_alt_rounded,
+              selected: _directRoleFilter == 'all',
+              theme: theme,
+              onSelected: () => setState(() => _directRoleFilter = 'all'),
+            ),
+            const SizedBox(width: 8),
             _directRoleChip(
               label: 'Teachers ($teacherCount)',
               icon: Icons.badge_outlined,
@@ -985,13 +1015,17 @@ class _PrincipalChatCommunicationsScreenState
         final selected =
             _text(row['id']) == _text(_selectedFor(monitorMode)?['id']);
         final title = monitorMode ? _monitorTitle(row) : _directTitle(row);
-        final subtitle = monitorMode
-            ? _studentLine(row)
-            : _isContactPlaceholder(row)
-            ? _text(row['type'], fallback: 'direct') == 'principal_teacher'
-                  ? _directContactHint(row, 'Teacher contact')
-                  : _directContactHint(row, 'Parent contact')
-            : _text(row['last_message'], fallback: 'Direct conversation');
+        final classContext = _classSectionsFor(row).join(' · ');
+        final contactContext = !_isContactPlaceholder(row)
+            ? ''
+            : _text(row['type'], fallback: 'direct') == 'principal_teacher'
+            ? _directContactHint(row, 'Teacher contact')
+            : _directContactHint(row, 'Parent contact');
+        final directPreviewLines = principalDirectChatPreviewLines(
+          classContext: classContext,
+          contactContext: contactContext,
+          latestMessage: _text(row['last_message']),
+        );
         final unread = int.tryParse('${row['unread_count'] ?? 0}') ?? 0;
         return ListTile(
           selected: selected,
@@ -1016,20 +1050,25 @@ class _PrincipalChatCommunicationsScreenState
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          subtitle: Text(
-            monitorMode
-                ? '${_studentLine(row)} - ${_text(row['last_message']).isEmpty ? 'Parent-teacher chat' : _text(row['last_message'])}'
-                : _text(row['last_message']).isEmpty
-                ? subtitle
-                : _text(row['last_message']),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          subtitle: monitorMode
+              ? Text(
+                  '${_studentLine(row)} - ${_text(row['last_message']).isEmpty ? 'Parent-teacher chat' : _text(row['last_message'])}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final line in directPreviewLines)
+                      Text(line, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                _time(_date(row['last_message_at'])),
+                chatPreviewDateTime(_date(row['last_message_at'])),
                 style: const TextStyle(fontSize: 11),
               ),
               if (unread > 0)
@@ -1165,20 +1204,38 @@ class _PrincipalChatCommunicationsScreenState
                 final mine =
                     _text(message['sender_user_id'] ?? message['sender_id']) ==
                     _principalUserId;
-                return Opacity(
-                  opacity: isPending ? 0.6 : 1.0,
-                  child: ChatBubbleWidget(
-                    messageText: _text(message['body'] ?? message['message']),
-                    time: isPending
-                        ? '...'
-                        : _time(
-                            _date(message['sent_at'] ?? message['created_at']),
-                          ),
-                    isMe: mine,
-                    isRead: message['is_read'] == true,
-                    senderLabel: senderName,
-                    senderRoleLabel: _roleTitle(senderRole),
-                  ),
+                final sentAt = _date(
+                  message['sent_at'] ?? message['created_at'],
+                );
+                final dateLabel = isPending
+                    ? null
+                    : chatDateDividerLabel(sentAt);
+                final previousAt = index == 0
+                    ? null
+                    : _date(
+                        displayed[index - 1]['sent_at'] ??
+                            displayed[index - 1]['created_at'],
+                      );
+                final previousLabel = chatDateDividerLabel(previousAt);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (dateLabel != null && dateLabel != previousLabel)
+                      ChatDateSeparator(dateText: dateLabel),
+                    Opacity(
+                      opacity: isPending ? 0.6 : 1.0,
+                      child: ChatBubbleWidget(
+                        messageText: _text(
+                          message['body'] ?? message['message'],
+                        ),
+                        time: isPending ? '...' : _time(sentAt),
+                        isMe: mine,
+                        isRead: message['is_read'] == true,
+                        senderLabel: senderName,
+                        senderRoleLabel: _roleTitle(senderRole),
+                      ),
+                    ),
+                  ],
                 );
               },
             ),

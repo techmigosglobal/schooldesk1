@@ -21,7 +21,6 @@ void main() {
     }
     expect(migration, contains('How do I mark daily student attendance'));
     expect(migration, contains('How do I submit a payment request'));
-    expect(migration, contains('How do I access school-wide audit logs'));
     expect(migration, contains('What can I do as a Coordinator?'));
     expect(migration, isNot(contains("('coordinator', 'Finance")));
   });

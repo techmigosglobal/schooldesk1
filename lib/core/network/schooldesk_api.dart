@@ -7,6 +7,7 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/generated/schooldesk_api_client.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
+import 'package:schooldesk1/core/auth/session_refresh_coordinator.dart';
 
 class SchoolDeskApi {
   SchoolDeskApi._() {
@@ -15,9 +16,10 @@ class SchoolDeskApi {
         baseUrl: EnvConfig.apiBaseUrl,
         connectTimeout: const Duration(seconds: EnvConfig.apiTimeoutSeconds),
         receiveTimeout: const Duration(seconds: EnvConfig.apiTimeoutSeconds),
-        headers: const {
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          ...EnvConfig.supabaseGatewayHeaders,
         },
       ),
     );
@@ -35,39 +37,12 @@ class SchoolDeskApi {
 
   late final Dio dio;
   late final SchoolDeskApiClient client;
-  Completer<bool>? _refreshCompleter;
-
   Future<bool> refreshToken() async {
-    if (_refreshCompleter != null) return _refreshCompleter!.future;
-    _refreshCompleter = Completer<bool>();
-    try {
-      final refreshToken = await TokenStorageService.getRefreshToken();
-      if (refreshToken == null || refreshToken.isEmpty) {
-        _refreshCompleter!.complete(false);
-        return false;
-      }
-      final response = await Dio(
-        BaseOptions(baseUrl: EnvConfig.apiBaseUrl),
-      ).post('/auth/refresh', data: {'refresh_token': refreshToken});
-      final data = response.data;
-      if (data is! Map || data['data'] is! Map) {
-        _refreshCompleter!.complete(false);
-        return false;
-      }
-      final payload = Map<String, dynamic>.from(data['data'] as Map);
-      await TokenStorageService.saveTokens(
-        accessToken: payload['token'].toString(),
-        refreshToken: payload['refresh_token'].toString(),
-      );
-      _refreshCompleter!.complete(true);
-      return true;
-    } on Object catch (_) {
-      await TokenStorageService.clear();
-      _refreshCompleter!.complete(false);
-      return false;
-    } finally {
-      _refreshCompleter = null;
-    }
+    final refreshed = await SessionRefreshCoordinator.instance.refresh(
+      EnvConfig.apiBaseUrl,
+    );
+    if (!refreshed) await TokenStorageService.clear();
+    return refreshed;
   }
 }
 
@@ -80,6 +55,15 @@ class _SchoolDeskAuthInterceptor extends Interceptor {
     final token = await TokenStorageService.getAccessToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
+    }
+    // Legacy Retrofit calls must carry the same explicit branch scope as the
+    // primary BackendApiClient. Without this, a branch switch leaves events,
+    // homework, and generic resource calls on the server's default branch.
+    final branch = await TokenStorageService.getSchoolId();
+    if (branch != null && branch.trim().isNotEmpty) {
+      options.headers['x-schooldesk-branch-id'] = branch.trim();
+    } else {
+      options.headers.remove('x-schooldesk-branch-id');
     }
     handler.next(options);
   }

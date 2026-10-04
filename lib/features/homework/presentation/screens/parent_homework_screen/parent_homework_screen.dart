@@ -59,7 +59,10 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
 
   String? get _activeStudentId => _children.isEmpty
       ? null
-      : (_children[_activeChildIndex]['id'] ?? '').toString();
+      : (_children[_activeChildIndex]['id'] ??
+                _children[_activeChildIndex]['student_id'] ??
+                '')
+            .toString();
 
   List<Map<String, dynamic>> get _pending => _homework
       .where(
@@ -101,7 +104,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       _throwIfFailed(childrenResult, 'Unable to load linked students');
       final children = childrenResult.dataOrNull!;
       final studentIds = children
-          .map((child) => (child['id'] ?? '').toString())
+          .map((child) => (child['id'] ?? child['student_id'] ?? '').toString())
           .where((studentId) => studentId.isNotEmpty)
           .toList();
       // Fetch each child's homework list in parallel instead of sequentially
@@ -394,10 +397,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   Widget _homeworkCard(Map<String, dynamic> hw) {
     final isPending = hw['status'] == 'pending';
     final isUrgent = hw['urgent'] == true;
-    final title = _text(
-      hw['title'],
-      fallback: 'Dairy details not published',
-    );
+    final title = _text(hw['title'], fallback: 'Dairy details not published');
     final subject = _text(hw['subject']);
     final deadline = _text(hw['deadline']);
     final teacher = _text(hw['teacher']);
@@ -505,11 +505,15 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                   color: context.appTheme.muted,
                 ),
                 const SizedBox(width: 4),
-                Text(
-                  'Teacher: $teacher',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: context.appTheme.muted,
+                Expanded(
+                  child: Text(
+                    'Teacher: $teacher',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: context.appTheme.muted,
+                    ),
                   ),
                 ),
               ],

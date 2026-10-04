@@ -9,8 +9,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
-import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_audit_log_widget.dart';
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_item_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/modules/people/data/repositories/api_approval_repository.dart';
@@ -220,9 +221,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   bool _loadingMore = false;
   RepositoryState<_ApprovalCenterSnapshot> _state =
       const RepositoryState.loading();
-  List<Map<String, dynamic>> _approvalAuditLogs = const [];
-  bool _approvalAuditLoading = true;
-  String? _approvalAuditError;
 
   _ApprovalCenterSnapshot? get _snapshot => _state.data;
   List<ApprovalModel> get _allApprovals => _snapshot?.approvals ?? const [];
@@ -243,8 +241,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   // the widget is already unmounted.
   NotificationService? _notificationService;
 
-  bool get _isCoordinator =>
-      RoleAccessService.currentRoleName == 'coordinator';
+  bool get _isCoordinator => RoleAccessService.currentRoleName == 'coordinator';
 
   List<String> get _tabLabels => [
     'All',
@@ -264,7 +261,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       vsync: this,
     );
     _loadData();
-    _loadApprovalAuditLogs();
     // Store the service reference synchronously so dispose() can always
     // call removeListener without a second async gap.
     NotificationService.getInstance().then((s) {
@@ -282,7 +278,10 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (_isCoordinator) {
       return switch (initialTab.trim().toLowerCase()) {
         'timetable' || 'class' || 'academic_info' => 3,
-        'documents' || 'document' || 'communication' || 'event_posts' ||
+        'documents' ||
+        'document' ||
+        'communication' ||
+        'event_posts' ||
         'event' => 4,
         _ => 0,
       };
@@ -315,6 +314,13 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   void _scheduleReload() {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 300), _loadData);
+  }
+
+  Future<void> _openPaymentRequests() async {
+    await SchoolDeskNavigation.push(
+      context,
+      AppRoutes.principalPaymentRequests,
+    );
   }
 
   Future<void> _loadData() async {
@@ -369,32 +375,8 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     }
   }
 
-  Future<void> _loadApprovalAuditLogs() async {
-    if (mounted) {
-      setState(() {
-        _approvalAuditLoading = true;
-        _approvalAuditError = null;
-      });
-    }
-    try {
-      final logs = await _repository.loadAuditLog();
-      if (!mounted) return;
-      setState(() {
-        _approvalAuditLogs = logs;
-        _approvalAuditLoading = false;
-        _approvalAuditError = null;
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _approvalAuditLoading = false;
-        _approvalAuditError = error.toString();
-      });
-    }
-  }
-
   Future<void> _reloadAfterDecision() async {
-    await Future.wait([_loadData(), _loadApprovalAuditLogs()]);
+    await _loadData();
   }
 
   Future<void> _loadMore() async {
@@ -543,10 +525,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (approval.type == ApprovalType.studentLeave) {
       setState(() => _actionLoadingIds.add(approval.id));
       try {
-        await _repository.decideStudentLeave(
-          approval.id,
-          status: 'approved',
-        );
+        await _repository.decideStudentLeave(approval.id, status: 'approved');
         setState(() {
           approval.status = 'approved';
           approval.actionDate = today;
@@ -737,7 +716,10 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     String remarks,
   ) async {
     if (_isCoordinator &&
-        {ApprovalType.fee, ApprovalType.feeConcession}.contains(approval.type)) {
+        {
+          ApprovalType.fee,
+          ApprovalType.feeConcession,
+        }.contains(approval.type)) {
       throw const FormatException('Finance approvals are unavailable');
     }
     if (approval.source == ApprovalSource.feePaymentProof) {
@@ -763,10 +745,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         await _repository.apply(approval.id);
         return;
       }
-      await _repository.reject(
-        approval.id,
-        reason: remarks,
-      );
+      await _repository.reject(approval.id, reason: remarks);
       return;
     }
     if (path.startsWith('/account-approvals/')) {
@@ -780,10 +759,10 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (path.startsWith('/event-posts/')) {
       final action = status == 'approved' ? 'approve' : 'reject';
       final eventId = path.split('/').where((part) => part.isNotEmpty).last;
-      await _repository.createRaw(
-        '/event-posts/$eventId/$action',
-        {'reason': remarks, 'expected_status': 'pending'},
-      );
+      await _repository.createRaw('/event-posts/$eventId/$action', {
+        'reason': remarks,
+        'expected_status': 'pending',
+      });
       return;
     }
     await _repository.updateRaw(path, {
@@ -813,10 +792,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (_actionLoadingIds.contains(approval.id)) return;
     setState(() => _actionLoadingIds.add(approval.id));
     try {
-      await _repository.requestChanges(
-        approval.id,
-        note: note,
-      );
+      await _repository.requestChanges(approval.id, note: note);
       if (!mounted) return;
       setState(() {
         approval.status = 'changes_requested';
@@ -890,6 +866,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         onRetry: _loadData,
         emptyTitle: 'No approval requests',
         emptyMessage: 'There are no approval requests for this scope.',
+        expandStaleContent: true,
         data: (_) => _buildContent(),
       ),
     );
@@ -956,6 +933,9 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
                   approval: a,
                   isActionLoading: _actionLoadingIds.contains(a.id),
                   canRequestChanges: _canRequestChangesFor(a),
+                  onOpen: a.source == ApprovalSource.feePaymentProof
+                      ? _openPaymentRequests
+                      : null,
                   onApprove: () => _handleApprove(a),
                   onReject: (remarks) => _handleReject(a, remarks),
                   onRequestChanges: (note) => _handleRequestChanges(a, note),
@@ -976,6 +956,9 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
                 padding: const EdgeInsets.only(bottom: 10),
                 child: ApprovalItemWidget(
                   approval: a,
+                  onOpen: a.source == ApprovalSource.feePaymentProof
+                      ? _openPaymentRequests
+                      : null,
                   onApprove: () {},
                   onReject: (_) {},
                   onRequestChanges: (_) {},
@@ -1001,15 +984,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
                       : 'Load more (${_allApprovals.length} of $_totalApprovals)',
                 ),
               ),
-            ),
-          ],
-          if (tabIndex == 0) ...[
-            const SizedBox(height: 16),
-            ApprovalAuditLogWidget(
-              logs: _approvalAuditLogs,
-              isLoading: _approvalAuditLoading,
-              error: _approvalAuditError,
-              onRetry: _loadApprovalAuditLogs,
             ),
           ],
           const SizedBox(height: 32),

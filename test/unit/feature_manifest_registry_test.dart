@@ -64,7 +64,6 @@ void main() {
         AppRoutes.reportsAnalytics,
         AppRoutes.communicationCenter,
         AppRoutes.principalDocuments,
-        AppRoutes.principalAuditLogs,
       ],
       'coordinator': [
         AppRoutes.coordinatorDashboard,

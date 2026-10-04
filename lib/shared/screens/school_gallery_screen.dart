@@ -123,35 +123,138 @@ class _SchoolGalleryScreenState extends ConsumerState<SchoolGalleryScreen> {
           );
         }
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 900
-                ? 3
-                : constraints.maxWidth >= 620
-                ? 2
-                : 1;
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: posts.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisSpacing: 14,
-                crossAxisSpacing: 14,
-                childAspectRatio: columns == 1 ? 1.35 : 0.82,
+        final grouped = _groupPosts(posts);
+        return Column(
+          children: [
+            for (final year in grouped.entries)
+              ExpansionTile(
+                initiallyExpanded: year.key == grouped.keys.first,
+                leading: const Icon(Icons.calendar_today_outlined),
+                title: Text('${year.key}'),
+                subtitle: Text('${_countPosts(year.value)} media posts'),
+                children: [
+                  for (final month in year.value.entries)
+                    ExpansionTile(
+                      initiallyExpanded:
+                          year.key == grouped.keys.first &&
+                          month.key == year.value.keys.first,
+                      tilePadding: const EdgeInsets.only(left: 28, right: 16),
+                      leading: const Icon(Icons.folder_outlined),
+                      title: Text(_monthName(month.key)),
+                      subtitle: Text(
+                        '${_countMonthPosts(month.value)} media posts',
+                      ),
+                      children: [
+                        for (final day in month.value.entries)
+                          ExpansionTile(
+                            tilePadding: const EdgeInsets.only(
+                              left: 56,
+                              right: 16,
+                            ),
+                            leading: const Icon(Icons.folder_open_outlined),
+                            title: Text('Day ${day.key}'),
+                            subtitle: Text('${day.value.length} items'),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  0,
+                                  16,
+                                  18,
+                                ),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final columns = constraints.maxWidth >= 900
+                                        ? 3
+                                        : constraints.maxWidth >= 620
+                                        ? 2
+                                        : 1;
+                                    return GridView.builder(
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      itemCount: day.value.length,
+                                      gridDelegate:
+                                          SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: columns,
+                                            mainAxisSpacing: 14,
+                                            crossAxisSpacing: 14,
+                                            childAspectRatio: columns == 1
+                                                ? 1.35
+                                                : 0.82,
+                                          ),
+                                      itemBuilder: (context, index) {
+                                        final post = day.value[index];
+                                        return _GalleryPostCard(
+                                          post: post,
+                                          canManage: _canManagePosts,
+                                          onEdit: () => _openPostManager(post),
+                                          onDelete: () => _deletePost(post),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                ],
               ),
-              itemBuilder: (context, index) => _GalleryPostCard(
-                post: posts[index],
-                canManage: _canManagePosts,
-                onEdit: () => _openPostManager(posts[index]),
-                onDelete: () => _deletePost(posts[index]),
-              ),
-            );
-          },
+          ],
         );
       },
     );
   }
+
+  Map<int, Map<int, Map<int, List<Map<String, dynamic>>>>> _groupPosts(
+    List<Map<String, dynamic>> posts,
+  ) {
+    final sorted = [...posts]
+      ..sort((a, b) => _postDate(b).compareTo(_postDate(a)));
+    final grouped = <int, Map<int, Map<int, List<Map<String, dynamic>>>>>{};
+    for (final post in sorted) {
+      final date = _postDate(post);
+      grouped
+          .putIfAbsent(
+            date.year,
+            () => <int, Map<int, List<Map<String, dynamic>>>>{},
+          )
+          .putIfAbsent(date.month, () => <int, List<Map<String, dynamic>>>{})
+          .putIfAbsent(date.day, () => <Map<String, dynamic>>[])
+          .add(post);
+    }
+    return grouped;
+  }
+
+  int _countPosts(Map<int, Map<int, List<Map<String, dynamic>>>> value) => value
+      .values
+      .expand((day) => day.values)
+      .fold(0, (sum, posts) => sum + posts.length);
+
+  int _countMonthPosts(Map<int, List<Map<String, dynamic>>> value) =>
+      value.values.fold(0, (sum, posts) => sum + posts.length);
+
+  DateTime _postDate(Map<String, dynamic> post) =>
+      DateTime.tryParse('${post['event_date'] ?? post['created_at'] ?? ''}') ??
+      DateTime(1970);
+
+  String _monthName(int month) => const [
+    '',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ][month.clamp(1, 12)];
 
   Future<void> _openPostManager([Map<String, dynamic>? post]) async {
     final id = (post?['id'] ?? '').toString().trim();

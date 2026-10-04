@@ -35,7 +35,6 @@ class BackupRestoreService {
         'staff': (await api.getStaff(page: 1, pageSize: 100)).data.length,
         'fees': await api.getInvoices(),
         'announcements': (await api.getAnnouncements()).length,
-        'audit_logs': await api.getRawList('/audit-logs'),
       },
     };
     return jsonEncode(payload);

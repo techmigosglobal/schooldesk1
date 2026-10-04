@@ -24,6 +24,27 @@ class NotificationRouteResolver {
         .toString()
         .toLowerCase()
         .trim();
+    final isPrincipalPaymentProof =
+        (role == 'principal' || role == 'admin') &&
+        (referenceType == 'fee' ||
+            referenceType == 'fees' ||
+            referenceType == 'payment_proof' ||
+            referenceType == 'fee_payment_proof' ||
+            referenceType == 'parent_payment_requests') &&
+        (action.isEmpty ||
+            action == 'payment_submitted' ||
+            action == 'payment_pending' ||
+            action == 'payment_proof');
+    if (isPrincipalPaymentProof) {
+      return NotificationRouteTarget(
+        route: AppRoutes.principalPaymentRequests,
+        arguments: _argumentsFor(
+          AppRoutes.principalPaymentRequests,
+          role,
+          data,
+        ),
+      );
+    }
     final homeworkFeedback =
         referenceType == 'homework' &&
         (action == 'feedback' ||

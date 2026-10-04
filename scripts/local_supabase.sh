@@ -46,6 +46,21 @@ ensure_cli() {
 
 ensure_docker() {
   need docker
+  if [[ -z "${DOCKER_CONTEXT:-}" && -z "${DOCKER_HOST:-}" ]]; then
+    local current_context local_database
+    local_database="supabase_db_${LOCAL_PROJECT_ID}"
+    current_context="$(docker context show 2>/dev/null || true)"
+    if [[ -n "$current_context" ]] && \
+      ! docker --context "$current_context" ps --all --format '{{.Names}}' \
+        | grep -Fqx "$local_database" && \
+      docker --context default ps --all --format '{{.Names}}' \
+        | grep -Fqx "$local_database"; then
+      # This workstation may have the project on the default engine while the
+      # selected Docker Desktop context is empty. Follow the engine that owns
+      # the exact local Supabase database instead of creating a duplicate.
+      export DOCKER_CONTEXT=default
+    fi
+  fi
   docker info >/dev/null 2>&1 || die "Docker is installed but its daemon is unavailable"
 }
 

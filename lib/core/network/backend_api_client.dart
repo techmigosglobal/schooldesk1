@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show ChangeNotifier, kIsWeb;
 import 'package:dio/dio.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/auth/session_refresh_coordinator.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
 import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/features/communication/data/chat_models.dart';
@@ -46,6 +47,16 @@ part 'api_modules/issues_api.dart';
 part 'api_modules/request_coalescing.dart';
 
 typedef ApiErrorReporter = void Function(DioException error);
+
+CacheMetadata cacheMetadataFromResponse(Response<dynamic> response) {
+  return CacheMetadata(
+    isStale: response.extra['schooldeskOfflineCache'] == true,
+    storedAt: DateTime.tryParse(
+      response.headers.value('x-schooldesk-cache-stored-at') ?? '',
+    ),
+  );
+}
+
 Future<MultipartFile> _multipartUpload({
   String? filePath,
   Uint8List? fileBytes,
@@ -77,7 +88,6 @@ class BackendApiClient extends ChangeNotifier {
   static BackendApiClient? _instance;
   static ApiErrorReporter? apiErrorReporter;
   late final Dio _dio;
-  Completer<bool>? _refreshCompleter;
 
   BackendApiClient._() {
     _dio = Dio(
@@ -88,6 +98,7 @@ class BackendApiClient extends ChangeNotifier {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          ...EnvConfig.supabaseGatewayHeaders,
         },
       ),
     );
@@ -185,7 +196,18 @@ class BackendApiClient extends ChangeNotifier {
     if (previousBranchId != _activeBranchId) notifyListeners();
   }
 
-  void clearAuthToken() {
+  /// Clears all account-scoped local state before another user can sign in.
+  /// The awaited cleanup prevents a second account from observing the first
+  /// account's offline rows, drafts, queued writes, or private media cache.
+  Future<void> clearLocalSession() async {
+    final previousScope = offlineAccountKey;
+    await offlineSync?.clearAccountData(previousScope);
+    await SecureSelectiveMediaCache.clearAccount(previousScope);
+    clearAuthToken(clearPrivateMedia: false);
+    await TokenStorageService.clear();
+  }
+
+  void clearAuthToken({bool clearPrivateMedia = true}) {
     final hadSession =
         _authToken != null ||
         _currentRoleName != null ||
@@ -201,7 +223,7 @@ class BackendApiClient extends ChangeNotifier {
     _clearCoalescedGets();
     _activeBranchId = null;
     _dio.options.headers.remove('x-schooldesk-branch-id');
-    if (previousScope != 'anonymous') {
+    if (clearPrivateMedia && previousScope != 'anonymous') {
       unawaited(SecureSelectiveMediaCache.clearAccount(previousScope));
     }
     if (hadSession) notifyListeners();
@@ -217,17 +239,16 @@ class BackendApiClient extends ChangeNotifier {
     _cachedCurrentSchool = null;
     _cachedDashboards.clear();
     _clearCoalescedGets();
+    await offlineSync?.invalidateCachedReads();
   }
 
   Future<void> _invalidateReadMemoryAndDisk(List<String> pathPatterns) async {
     _cachedDashboards.clear();
     _clearCoalescedGets();
-    await _deleteCachedPaths(pathPatterns);
+    await offlineSync?.invalidateCachedReads(pathPatterns);
   }
 
   Future<void> _deleteCachedPaths(List<String> pathPatterns) async {
-    // Drift is the only durable cache. Its scoped invalidation is handled by
-    // OfflineSyncEngine; this compatibility method remains until all legacy
-    // API modules call repository invalidation directly.
+    await offlineSync?.invalidateCachedReads(pathPatterns);
   }
 }

@@ -5,6 +5,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
+import 'package:schooldesk1/core/services/chat_unread_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -29,7 +30,9 @@ class ParentDrawer extends StatefulWidget {
 
 class _ParentDrawerState extends State<ParentDrawer> {
   NotificationService? _notifService;
+  final ChatUnreadService _chatUnreadService = ChatUnreadService.instance;
   int _unreadCount = 0;
+  int _unreadMessages = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Family access';
   String _schoolLogo = '';
@@ -41,7 +44,16 @@ class _ParentDrawerState extends State<ParentDrawer> {
   void initState() {
     super.initState();
     _loadNotifications();
+    _loadUnreadMessages();
     _loadIdentity();
+  }
+
+  Future<void> _loadUnreadMessages() async {
+    await _chatUnreadService.refresh(role: 'parent');
+    if (!mounted) return;
+    _unreadMessages = _chatUnreadService.unreadCount;
+    _chatUnreadService.addListener(_onChatUnreadChanged);
+    setState(() {});
   }
 
   Future<void> _loadNotifications() async {
@@ -99,9 +111,15 @@ class _ParentDrawerState extends State<ParentDrawer> {
     });
   }
 
+  void _onChatUnreadChanged() {
+    if (!mounted) return;
+    setState(() => _unreadMessages = _chatUnreadService.unreadCount);
+  }
+
   @override
   void dispose() {
     _notifService?.removeListener(_onNotifChanged);
+    _chatUnreadService.removeListener(_onChatUnreadChanged);
     super.dispose();
   }
 
@@ -187,7 +205,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
             ),
           ],
         ),
-        const SchoolDeskNavigationSection(
+        SchoolDeskNavigationSection(
           label: 'Communication',
           items: [
             SchoolDeskNavigationItem(
@@ -196,6 +214,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
               activeIcon: Icons.chat_rounded,
               label: 'Messages',
               route: AppRoutes.parentTeacherChat,
+              badgeCount: _unreadMessages,
             ),
             SchoolDeskNavigationItem(
               index: ParentNav.complaints,

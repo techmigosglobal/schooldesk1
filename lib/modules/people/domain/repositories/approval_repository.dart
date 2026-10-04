@@ -26,16 +26,6 @@ abstract interface class ApprovalRepository {
     int pageSize = 20,
   });
 
-  Future<List<Map<String, dynamic>>> loadAuditLog({
-    int pageSize = 10,
-    String module = 'approvals',
-    String actor = '',
-    String actorRole = '',
-    String eventType = '',
-    String search = '',
-    bool currentUserOnly = true,
-  });
-
   Future<PaginatedList<Map<String, dynamic>>> loadPaymentRequests({
     String? status,
     int page = 1,

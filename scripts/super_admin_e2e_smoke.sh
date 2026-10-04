@@ -127,9 +127,9 @@ printf "\n[branches]\n"
 check_data "branches"                "/branches"
 check_data "branches.overview"       "/branches/overview"
 
-# ----- Audit & monitoring -----
-printf "\n[audit / monitoring]\n"
-check_data "audit-logs"              "/audit-logs?page_size=1"
+# ----- Operational monitoring -----
+printf "\n[monitoring]\n"
+get_status "audit-logs removed"      "/audit-logs?page_size=1" 404
 check_data "monitoring.error-events" "/monitoring/error-events?page=1&page_size=1"
 get_status "monitoring.error-events.retention" "/monitoring/error-events/retention" 200
 post_status "monitoring.error-events.cleanup.preview" "/monitoring/error-events/cleanup" 200 '{"preview":true}'

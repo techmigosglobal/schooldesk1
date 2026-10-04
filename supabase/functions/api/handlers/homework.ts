@@ -364,6 +364,16 @@ export async function handleHomework(
         }
       }
       const listRows = await Promise.all(pageRows.map(async (row) => {
+        // Parents need the teacher's files to render the assignment context
+        // and open the submission screen. Keep the list lightweight for staff,
+        // but materialize only the parent-visible private references here so
+        // storage URLs never bypass the API authorization boundary.
+        if (role(user) === "parent") {
+          return {
+            ...await materializeHomeworkAttachments(svc, row),
+            daily_claim: await loadHomeworkDailyClaim(svc, school, row),
+          };
+        }
         const {
           attachment_url: _attachmentUrl,
           attachment_urls: _attachmentUrls,
@@ -373,7 +383,7 @@ export async function handleHomework(
         } = row;
         return {
           ...lightweight,
-        daily_claim: await loadHomeworkDailyClaim(svc, school, row),
+          daily_claim: await loadHomeworkDailyClaim(svc, school, row),
         };
       }));
       return cors({

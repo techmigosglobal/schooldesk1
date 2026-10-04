@@ -118,18 +118,12 @@ SchoolDesk is a backend-backed school ERP that manages one school across multipl
 - Assign roles, branch memberships, and class assignments
 - Assign children to parent accounts (explicit relationship, never name-based guessing)
 - View and manage access permissions per user
-- All account mutations are audited
 - **Status:** IMPLEMENTED (`/principal-user-management-screen`, `users.ts` + `access.ts` handlers)
 
 #### 4.3.3 Approval Center
 - Review and action all pending approval requests (leave, event posts, payment requests, etc.)
-- Approval history with audit trail
+- Approval decision history remains on the approval and payment records
 - **Status:** IMPLEMENTED (`/approval-center-screen`, `approvals.ts` handler)
-
-#### 4.3.4 Audit Logs
-- View all security-sensitive actions, finance operations, branch changes, imports, exports, approvals, and account changes
-- Filterable by date, user, event type, and module
-- **Status:** IMPLEMENTED (`/principal-audit-logs-screen`, `activity.ts` handler)
 
 ### 4.4 People Management
 
@@ -195,7 +189,7 @@ SchoolDesk is a backend-backed school ERP that manages one school across multipl
 ### 4.6 Attendance (Principal Oversight)
 
 - **Overview:** Branch-level attendance dashboard, session list, and daily summary
-- **Corrections:** Reopen closed sessions, apply attendance corrections with audit trail
+- **Corrections:** Reopen closed sessions and retain the correction reason on the attendance record
 - **Reminders:** Send attendance reminders to teachers who have not completed marking
 - **History & Audit:** View full attendance history per student, per class, per date
 - **Exports:** Export attendance data (CSV, PDF)
@@ -643,7 +637,6 @@ The public school website includes:
 | School Profile | `/principal-school-profile-screen` | YES | |
 | User Management | `/principal-user-management-screen` | YES | Create/Edit/Deactivate |
 | Approval Center | `/approval-center-screen` | YES | |
-| Audit Logs | `/principal-audit-logs-screen` | YES | |
 | Staff Directory | `/staff-management-screen` | YES | |
 | Student Oversight | `/student-oversight-screen` | YES | |
 | Parent Directory | `/guardian-directory-screen` | YES | |
@@ -763,9 +756,10 @@ The public school website includes:
 - The `school-assets` bucket must not list publicly; private records must be behind private storage policies
 - Do not expose password values in logs, exports, notifications, or browser storage
 
-### 10.4 Audit & Compliance
+### 10.4 Operational Diagnostics
 
-- Record security-sensitive actions, finance operations, branch changes, imports, exports, approvals, and account changes in audit logs
+- Keep operational error events and session tracking available for troubleshooting and account-session workflows
+- Keep payment and approval state on their authoritative business records; the former audit-log feature and stored history are removed
 - Enable leaked-password protection
 - Review all SECURITY DEFINER functions, execute grants, search paths, storage policies, RLS policies, and public bucket listing
 
@@ -825,7 +819,7 @@ The public school website includes:
 | 5 | Shared mobile role-access loading risks collapsing backend failures into empty data. Failure and empty states must remain distinguishable and retryable. | HIGH | All roles / Error handling |
 | 6 | Web branch-switch failure must show an actionable error instead of silently returning to the previous state. | HIGH | Web / Coordinator, Principal |
 | 7 | Integration test suites contain manual/TODO stubs. Static checks do not prove real login, branch isolation, role handoffs, CRUD, payment, import, or device workflows. | HIGH | Testing |
-| 8 | Current worktree contains a payment-delete path that physically deletes payment-related rows. Conflicts with immutable-financial-history requirement. Must become an audited atomic reversal or be removed. | CRITICAL | Finance / Principal |
+| 8 | Current worktree contains a payment-delete path that physically deletes payment-related rows. Conflicts with immutable-financial-history requirement. Must become a recorded atomic reversal or be removed. | CRITICAL | Finance / Principal |
 | 9 | A browser/device walkthrough or screenshot set is required for final responsive, accessibility, and visual QA sign-off. | MEDIUM | QA |
 | 10 | UI label inconsistency: "Dairy" is used in some screens where "Diary" is the correct product term. Must be normalized across all teacher and parent screens. | MEDIUM | Teacher / Parent |
 

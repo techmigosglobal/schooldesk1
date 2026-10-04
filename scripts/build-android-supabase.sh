@@ -73,13 +73,14 @@ command -v jq >/dev/null 2>&1 || fail "Missing required command: jq"
 command -v flutter >/dev/null 2>&1 || fail "Missing required command: flutter"
 
 jq -e '
+  def https_origin: type == "string" and test("^https://[^/?#]+$");
   type == "object"
-  and (.API_BASE_URL | type == "string" and test("^https://.+\\.supabase\\.co/functions/v1/api$"))
-  and (.SUPABASE_URL | type == "string" and test("^https://.+\\.supabase\\.co$"))
+  and (.SUPABASE_URL | https_origin)
+  and (.API_BASE_URL == (.SUPABASE_URL + "/functions/v1/api"))
   and (.SUPABASE_ANON_KEY | type == "string" and length > 0)
   and (.APP_ENV == "production")
   and ((.ENABLE_LOGGING | tostring) == "false")
-' "$env_file" >/dev/null || fail "$env_file must target the Supabase Edge API with SUPABASE_URL, SUPABASE_ANON_KEY, APP_ENV=production, and ENABLE_LOGGING=false"
+' "$env_file" >/dev/null || fail "$env_file must use an HTTPS Supabase origin, its /functions/v1/api endpoint, SUPABASE_ANON_KEY, APP_ENV=production, and ENABLE_LOGGING=false"
 
 # Validate Firebase keys — required for push notifications to work.
 # A build with empty Firebase keys produces an APK/AAB where FCM is silently broken.

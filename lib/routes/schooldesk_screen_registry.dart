@@ -85,12 +85,6 @@ class SchoolDeskScreenRegistry {
       portal: 'super_admin',
     ),
     SchoolDeskScreenMetadata(
-      route: '/super-admin-audit-logs-screen',
-      title: 'Audit Logs',
-      module: 'System Administration',
-      portal: 'super_admin',
-    ),
-    SchoolDeskScreenMetadata(
       route: '/super-admin-system-monitor-screen',
       title: 'System Monitor',
       module: 'System Administration',
@@ -678,12 +672,6 @@ class SchoolDeskScreenRegistry {
       module: 'Records',
       portal: 'principal',
       feature: SchoolDeskFeature.documents,
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/principal-audit-logs-screen',
-      title: 'Audit Logs',
-      module: 'Records',
-      portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
       route: '/notification-center-screen',

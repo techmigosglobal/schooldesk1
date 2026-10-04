@@ -16,6 +16,9 @@ extension BackendPrincipalApi on BackendApiClient {
         queryParameters: forceRefresh
             ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
             : null,
+        options: forceRefresh
+            ? Options(headers: const {'Cache-Control': 'no-store'})
+            : null,
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {

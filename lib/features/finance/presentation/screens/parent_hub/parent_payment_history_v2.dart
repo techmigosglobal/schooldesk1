@@ -171,7 +171,9 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
 
       for (final request in paymentRequests) {
         final requestStatus = _text(request['status']).toLowerCase();
-        if (!{'approved', 'completed', 'paid'}.contains(requestStatus)) {
+        // Payment history also shows manual UPI proofs awaiting Principal
+        // review, not only finalized ledger payments.
+        if (requestStatus.isEmpty) {
           continue;
         }
         final linkedPaymentId = _text(request['payment_id']);
@@ -273,7 +275,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         state: _state,
         onRetry: _loadHistory,
         emptyTitle: 'No payment history',
-        emptyMessage: 'No completed payments are available for this child.',
+        emptyMessage: 'No payment records are available for this child.',
         loadingMessage: 'Loading payment history…',
         data: (_) => RefreshIndicator(
           onRefresh: _loadHistory,
@@ -348,6 +350,9 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
     final reference = _text(item['receiptNo']);
     final method = _text(item['method'], fallback: 'UPI');
     final hasLinkedReceipt = _hasLinkedReceipt(item);
+    final isFinalized = const {'completed', 'approved', 'paid'}.contains(
+      rawStatus,
+    );
 
     Color statusColor = context.appTheme.warning;
     Color statusBg = context.appTheme.warningContainer;
@@ -404,7 +409,9 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Paid via ${method.toUpperCase()} · $dateStr',
+                      '${status.isEmpty ? 'Pending' : status} · '
+                      '${isFinalized ? 'Paid' : 'Submitted'} via '
+                      '${method.toUpperCase()} · $dateStr',
                       style: GoogleFonts.ibmPlexSans(
                         fontSize: 11,
                         color: context.appTheme.muted,

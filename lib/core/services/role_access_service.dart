@@ -83,20 +83,50 @@ class RoleAccessService {
     final previousTeacherDashboard = _teacherDashboard;
     final previousAssignedClasses = _teacherAssignedClasses;
     final teacherDashboard = effectiveRole == 'teacher'
-        ? await _try(() => api.getDashboard('teacher'))
+        // Assignment changes are an authorization boundary. Do not let a
+        // dashboard cached before a principal assigns a class keep the teacher
+        // in the unassigned state for the cache lifetime.
+        ? await _try(() => api.getDashboard('teacher', forceRefresh: true))
         : null;
     _teacherDashboard = teacherDashboard ?? previousTeacherDashboard;
-    _teacherAssignedClasses = _listMap(_teacherDashboard['assigned_classes'])
+    final rawAssignedClasses =
+        _teacherDashboard['assigned_classes'] ??
+        _teacherDashboard['assigned_class_details'] ??
+        _teacherDashboard['class_assignments'] ??
+        _teacherDashboard['assignments'] ??
+        _teacherDashboard['assigned_sections'];
+    _teacherAssignedClasses = _listMap(rawAssignedClasses)
         .map(_normalizeTeacherAssignedClass)
         .where((row) {
           return _sectionId(row).isNotEmpty;
         })
         .toList();
+    final profileStaffId = _text(profile?.linkedId);
+    final dashboardStaffId = _text(_teacherDashboard['staff_id']);
+    final teacherStaffId = dashboardStaffId.isNotEmpty
+        ? dashboardStaffId
+        : profileStaffId;
+    // Older/local API responses can expose the assignment on the staff detail
+    // row while the dashboard response is temporarily cached or unavailable.
+    // Hydrate that authoritative own-profile endpoint before showing a false
+    // "not linked" state.
+    if (effectiveRole == 'teacher' &&
+        _teacherAssignedClasses.isEmpty &&
+        teacherStaffId.isNotEmpty) {
+      final ownStaff = await _try(
+        () => api.getStaffMember(teacherStaffId, forceRefresh: true),
+      );
+      if (ownStaff != null && ownStaff.assignedClassDetails.isNotEmpty) {
+        _teacherAssignedClasses = ownStaff.assignedClassDetails
+            .map(_normalizeTeacherAssignedClass)
+            .where((row) => _sectionId(row).isNotEmpty)
+            .toList();
+      }
+    }
     if (teacherDashboard == null && previousAssignedClasses.isNotEmpty) {
       _teacherAssignedClasses = previousAssignedClasses;
     }
 
-    final teacherStaffId = _text(_teacherDashboard['staff_id']);
     final classTeacherRow = _teacherAssignedClasses.firstWhere(
       (row) => _isTrue(row['is_class_teacher']),
       orElse: () => _teacherAssignedClasses.isNotEmpty
@@ -142,7 +172,14 @@ class RoleAccessService {
         ? Future<List<Map<String, dynamic>>?>.value(<Map<String, dynamic>>[])
         : _try<List<Map<String, dynamic>>>(
             () => api.getTimetableSlots(
-              staffId: teacherStaffId.isEmpty ? null : teacherStaffId,
+              // Teacher timetable visibility is section-owned on the API.
+              // Passing staff_id here conflicts with that reader contract and
+              // returns 403 even when the teacher has assigned sections.
+              staffId: isTeacher
+                  ? null
+                  : teacherStaffId.isEmpty
+                  ? null
+                  : teacherStaffId,
             ),
           );
     // Coordinators have school-wide operations access but no finance access;
@@ -804,7 +841,14 @@ class RoleAccessService {
         : nestedGrade is Map
         ? Map<String, dynamic>.from(nestedGrade)
         : const <String, dynamic>{};
-    final sectionId = _text(row['section_id'] ?? sectionMap['id'] ?? row['id']);
+    final sectionId = _text(
+      row['section_id'] ??
+          row['sectionId'] ??
+          row['class_id'] ??
+          row['classId'] ??
+          sectionMap['id'] ??
+          row['id'],
+    );
     final assignmentId = _text(row['assignment_id']).isNotEmpty
         ? _text(row['assignment_id'])
         : (_text(row['section_id']).isNotEmpty && _text(row['id']) != sectionId
@@ -838,10 +882,13 @@ class RoleAccessService {
       if (assignmentId.isNotEmpty) 'assignment_id': assignmentId,
       'grade_name': _text(
         row['grade_name'] ??
+            row['gradeName'] ??
             nestedGradeMap['grade_name'] ??
             gradeMap['grade_name'],
       ),
-      'section_name': _text(row['section_name'] ?? sectionMap['section_name']),
+      'section_name': _text(
+        row['section_name'] ?? row['sectionName'] ?? sectionMap['section_name'],
+      ),
       'subject_id': subjectId,
       'subject_name': subjectName,
       'subject': subjectMap.isEmpty ? row['subject'] : subjectMap,

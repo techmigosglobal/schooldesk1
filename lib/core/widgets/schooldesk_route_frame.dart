@@ -280,8 +280,6 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
       switch (route) {
         case AppRoutes.superAdminDashboard:
           return SuperAdminNav.dashboard;
-        case AppRoutes.superAdminAuditLogs:
-          return SuperAdminNav.auditLogs;
         case AppRoutes.superAdminSystemMonitor:
           return SuperAdminNav.systemMonitor;
         case AppRoutes.idCardGeneration:

@@ -474,11 +474,10 @@ export async function handleTimetable(
     (path === "/timetable/slots" || path === "/timetable");
   const isTeacherWorkingDaysRequest = method === "GET" &&
     path === "/timetable/working-days" && roleName(user) === "teacher";
-  if (
-    !isSchoolLeader(user) && !isReaderSlotsRequest &&
-    !isTeacherWorkingDaysRequest
-  ) {
-    return fail("school leadership access required", 403);
+  if (!isSchoolLeader(user) && !isReaderSlotsRequest) {
+    if (!isTeacherWorkingDaysRequest) {
+      return fail("school leadership access required", 403);
+    }
   }
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
 

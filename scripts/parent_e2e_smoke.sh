@@ -205,7 +205,7 @@ get_status "student-documents"      "/student-documents?student_id=$student_id&p
 printf "\n[forbidden cross-role checks]\n"
 get_status "fees.summary"           "/fees/summary" 403
 get_status "users.list"             "/users?page=1&page_size=1" 403
-get_status "audit-logs"             "/audit-logs?page_size=1" 403
+get_status "audit-logs removed"     "/audit-logs?page_size=1" 404
 get_status "access.permissions"     "/access/permissions" 403
 post_status "approvals.create"       "/approvals" 403 '{"module":"fees","entity_type":"fee_invoice"}'
 

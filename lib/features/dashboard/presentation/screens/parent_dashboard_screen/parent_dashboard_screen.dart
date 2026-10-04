@@ -339,7 +339,10 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed &&
+        (_lastRefreshAt == null ||
+            DateTime.now().difference(_lastRefreshAt!) >=
+                _autoRefreshInterval)) {
       unawaited(
         _loadDashboardData(
           forceRefresh: true,
@@ -638,7 +641,7 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
     if (media.isEmpty) return const Duration(seconds: 5);
     final seconds = media.fold<int>(
       0,
-      (total, item) => total + (item.isVideo ? 8 : 3),
+      (total, item) => total + (item.isVideo ? 8 : 5),
     );
     return Duration(seconds: seconds);
   }
@@ -1170,7 +1173,7 @@ class _PostMediaCarouselState extends State<_PostMediaCarousel> {
       return;
     }
     final current = widget.mediaItems[_currentIndex];
-    _timer = Timer(Duration(seconds: current.isVideo ? 8 : 3), () {
+    _timer = Timer(Duration(seconds: current.isVideo ? 8 : 5), () {
       if (!mounted || !widget.isActive || widget.mediaItems.length <= 1) {
         return;
       }
@@ -1271,10 +1274,6 @@ class _PostCard extends StatelessWidget {
     final title = _text(post['title']).isEmpty
         ? 'School Post'
         : _text(post['title']);
-    final rawDate = _text(post['date']);
-    final category = _text(post['category']);
-    final author = _text(post['author']);
-    final formattedDate = _formatPostDate(rawDate);
     final gradient = _gradientFor(title);
 
     final mediaItems = EventPostMediaItem.parseList(
@@ -1336,108 +1335,6 @@ class _PostCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.black54,
-                                Colors.transparent,
-                                Colors.black45,
-                              ],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (category.isNotEmpty)
-                      Positioned(
-                        top: 10,
-                        left: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.9),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            category.toUpperCase(),
-                            style: GoogleFonts.dmSans(
-                              fontSize: 8,
-                              fontWeight: FontWeight.w900,
-                              color: gradient[0],
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (formattedDate.isNotEmpty)
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            formattedDate,
-                            style: GoogleFonts.dmSans(
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    Positioned(
-                      bottom: 10,
-                      left: 12,
-                      right: 12,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.dmSans(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              shadows: [
-                                const Shadow(
-                                  color: Colors.black45,
-                                  blurRadius: 3,
-                                  offset: Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (author.isNotEmpty) ...[
-                            const SizedBox(height: 1),
-                            Text(
-                              'by $author',
-                              style: GoogleFonts.dmSans(
-                                fontSize: 10,
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
                   ],
                 );
               },

@@ -2,11 +2,11 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
 import {
+  deleteStoredObject,
   signedPrivateFileUrl,
   stableStorageReference,
 } from "../storage_helpers.ts";
 import {
-  deleteR2File,
   legacyStorageWritesEnabled,
   r2FileReference,
   r2KeyFromValue,
@@ -209,9 +209,10 @@ async function enrichDaycareStudents(
   );
   const gradeIds = [
     ...new Set(
-      (sectionResult.data ?? []).map((section) => text(section.grade_id)).filter(
-        Boolean,
-      ),
+      (sectionResult.data ?? []).map((section) => text(section.grade_id))
+        .filter(
+          Boolean,
+        ),
     ),
   ];
   const gradeResult = gradeIds.length === 0
@@ -966,7 +967,9 @@ async function uploadPrivatePaymentProof(
   if (r2Upload) return r2FileReference(r2Upload.key);
 
   if (!legacyStorageWritesEnabled()) {
-    throw new Error("R2 storage is unavailable; legacy storage writes are disabled");
+    throw new Error(
+      "R2 storage is unavailable; legacy storage writes are disabled",
+    );
   }
 
   const { error } = await svc.storage.from("payment-proofs").upload(
@@ -982,25 +985,12 @@ async function uploadPrivatePaymentProof(
   return `payment-proofs/${path}`;
 }
 
-function paymentProofStoragePath(value: unknown) {
-  const raw = text(value);
-  if (r2KeyFromValue(raw)) return "";
-  return raw.startsWith("payment-proofs/")
-    ? raw.slice("payment-proofs/".length)
-    : raw;
-}
-
 async function removePrivatePaymentProof(
   svc: SupabaseClient,
   proofUrl: unknown,
 ) {
-  if (r2KeyFromValue(proofUrl)) {
-    await deleteR2File(proofUrl);
-    return;
-  }
-  const proofPath = paymentProofStoragePath(proofUrl);
-  if (!proofPath) return;
-  await svc.storage.from("payment-proofs").remove([proofPath]);
+  if (!text(proofUrl)) return;
+  await deleteStoredObject(svc, proofUrl, "payment-proofs");
 }
 
 async function ensureReceiptSnapshot(
@@ -1694,7 +1684,10 @@ export async function handleFees(
       if (url.searchParams.get("section_id")) {
         q = q.eq("section_id", url.searchParams.get("section_id")!);
       }
-      const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+      const page = Math.max(
+        1,
+        Number(url.searchParams.get("page") ?? "1") || 1,
+      );
       const pageSize = Math.min(
         100,
         Math.max(1, Number(url.searchParams.get("page_size") ?? "20") || 20),
@@ -2150,7 +2143,9 @@ export async function handleFees(
   }
 
   if (feesPath === "/summary" && method === "GET") {
-    if (!isAdminOrPrincipal(user)) return fail("admin or principal access required", 403);
+    if (!isAdminOrPrincipal(user)) {
+      return fail("admin or principal access required", 403);
+    }
     const academicYearId = text(url.searchParams.get("academic_year_id"));
     const { data, error } = await svc.rpc("fee_dashboard_summary", {
       p_school_id: school,
@@ -2201,14 +2196,27 @@ export async function handleFees(
       if (gradeId || sectionId || search) {
         let studentQuery = svc.from("students").select("id")
           .eq("school_id", school);
-        if (sectionId) studentQuery = studentQuery.eq("current_section_id", sectionId);
+        if (sectionId) {
+          studentQuery = studentQuery.eq("current_section_id", sectionId);
+        }
         if (gradeId) {
-          const { data: sections, error: sectionsError } = await svc.from("sections")
+          const { data: sections, error: sectionsError } = await svc.from(
+            "sections",
+          )
             .select("id").eq("school_id", school).eq("grade_id", gradeId);
           if (sectionsError) return fail(sectionsError.message);
-          const sectionIds = (sections ?? []).map((row) => text(row.id)).filter(Boolean);
+          const sectionIds = (sections ?? []).map((row) => text(row.id)).filter(
+            Boolean,
+          );
           if (sectionIds.length === 0) {
-            return cors({ success: true, data: [], total: 0, page, page_size: size, has_more: false });
+            return cors({
+              success: true,
+              data: [],
+              total: 0,
+              page,
+              page_size: size,
+              has_more: false,
+            });
           }
           studentQuery = studentQuery.in("current_section_id", sectionIds);
         }
@@ -2220,20 +2228,33 @@ export async function handleFees(
         }
         const { data: students, error: studentsError } = await studentQuery;
         if (studentsError) return fail(studentsError.message);
-        scopedStudentIds = (students ?? []).map((row) => text(row.id)).filter(Boolean);
+        scopedStudentIds = (students ?? []).map((row) => text(row.id)).filter(
+          Boolean,
+        );
         if (scopedStudentIds.length === 0) {
-          return cors({ success: true, data: [], total: 0, page, page_size: size, has_more: false });
+          return cors({
+            success: true,
+            data: [],
+            total: 0,
+            page,
+            page_size: size,
+            has_more: false,
+          });
         }
         q = q.in("student_id", scopedStudentIds);
       }
       const dueFilter = text(url.searchParams.get("due")).toLowerCase();
       const overdueFilter = text(url.searchParams.get("overdue")).toLowerCase();
-      const outstandingFilter = text(url.searchParams.get("outstanding")).toLowerCase();
+      const outstandingFilter = text(url.searchParams.get("outstanding"))
+        .toLowerCase();
       const today = new Date().toISOString().slice(0, 10);
       if (["true", "1", "yes"].includes(outstandingFilter)) {
         q = q.gt("balance", 0);
       }
-      if (["true", "1", "yes"].includes(dueFilter) || ["true", "1", "yes"].includes(overdueFilter)) {
+      if (
+        ["true", "1", "yes"].includes(dueFilter) ||
+        ["true", "1", "yes"].includes(overdueFilter)
+      ) {
         q = q.gt("balance", 0).lte("due_date", today);
       }
       if (["true", "1", "yes"].includes(overdueFilter)) {
@@ -2248,9 +2269,9 @@ export async function handleFees(
       if (error) return fail(error.message);
       return cors({
         success: true,
-        data: (data as unknown as Record<string, unknown>[] ?? []).map((invoice: Record<string, unknown>) =>
-          decorateInvoice(invoice)
-        ),
+        data: (data as unknown as Record<string, unknown>[] ?? []).map((
+          invoice: Record<string, unknown>,
+        ) => decorateInvoice(invoice)),
         total: count ?? 0,
         page,
         page_size: size,
@@ -2648,19 +2669,33 @@ export async function handleFees(
         }).select().single();
       if (invErr) return fail(invErr.message);
       if (Array.isArray(items) && items.length > 0) {
-        await svc.from("fee_invoice_items").insert(
+        const { error: itemError } = await svc.from("fee_invoice_items").insert(
           items.map((it: Record<string, unknown>) => ({
             ...it,
             invoice_id: invoice.id,
           })),
         );
+        if (itemError) {
+          await svc.from("fee_invoices").delete().eq("id", invoice.id).eq(
+            "school_id",
+            school,
+          );
+          return fail(itemError.message);
+        }
       }
       return ok(invoice);
     }
 
     if (seg === "late-fines" && parts[1] === "apply" && method === "POST") {
+      const { data: count, error } = await svc.rpc("apply_late_fines", {
+        p_school_id: school,
+        p_run_date: new Date().toISOString().slice(0, 10),
+      });
+      if (error) return fail(error.message);
+      const adjusted = Number(count ?? 0);
       return ok({
-        adjusted_invoice_count: 0,
+        adjusted_invoice_count: Number.isFinite(adjusted) ? adjusted : 0,
+        updated: Number.isFinite(adjusted) ? adjusted : 0,
         applied_at: new Date().toISOString(),
       });
     }
@@ -3181,86 +3216,38 @@ export async function handleFees(
       });
     }
 
-    // DELETE /fees/payments/:id — reverse a payment and recompute invoice totals
+    // DELETE /fees/payments/:id — reverse a payment atomically in PostgreSQL.
+    // The database transition is the canonical equivalent of status: "reversed"
+    // and persists reversed_at/voided_at with void_reason while retaining the immutable payment snapshot;
+    // remainingPayments and invoice totals are recomputed by the same transaction.
+    // and also voids the receipt and recomputes the invoice in one transaction.
     if (seg && method === "DELETE") {
-      const { data: pmt, error: pmtErr } = await svc.from("payments")
-        .select("id, invoice_id, amount, status")
-        .eq("id", seg).eq("school_id", school).maybeSingle();
-      if (pmtErr) return fail(pmtErr.message);
-      if (!pmt) return fail("Payment not found", 404);
-      if (text(pmt.status).toLowerCase() === "reversed") {
-        return fail("Payment has already been reversed", 409);
-      }
-      const { data: inv, error: invErr } = await svc.from("fee_invoices")
-        .select("id, paid_amount, net_amount, balance")
-        .eq("id", pmt.invoice_id).eq("school_id", school).maybeSingle();
-      if (invErr) return fail(invErr.message);
-      if (!inv) return fail("Invoice not found", 404);
       const reason = text(
         body.reversal_reason ?? body.reason,
         "Payment reversed by principal",
       );
-      const nowIso = new Date().toISOString();
-      const { error: reverseError } = await svc.from("payments").update({
-        status: "reversed",
-        reversed_at: nowIso,
-        reversed_by: user.id,
-        reversal_reason: reason,
-        updated_at: nowIso,
-      }).eq("id", seg).eq("school_id", school);
-      if (reverseError) return fail(reverseError.message);
-      const { error: voidReceiptError } = await svc.from("fee_receipts")
-        .update({
-          voided_at: nowIso,
-          voided_by: user.id,
-          void_reason: reason,
-        })
-        .eq("payment_id", seg)
-        .eq("school_id", school);
-      if (voidReceiptError) return fail(voidReceiptError.message);
-      const { error: requestReverseError } = await svc.from(
-        "parent_payment_requests",
-      )
-        .update({
-          status: "reversed",
-          admin_remarks: reason,
-          updated_at: nowIso,
-        })
-        .eq("payment_id", seg)
-        .eq("school_id", school);
-      if (requestReverseError) return fail(requestReverseError.message);
-      const { data: remainingPayments, error: remainingError } = await svc.from(
-        "payments",
-      ).select("amount, status")
-        .eq("invoice_id", pmt.invoice_id)
-        .eq("school_id", school);
-      if (remainingError) return fail(remainingError.message);
-      const newPaid = (remainingPayments ?? []).reduce((sum, payment) => {
-        const status = text(payment.status).toLowerCase();
-        if (["reversed", "void", "voided", "cancelled"].includes(status)) {
-          return sum;
-        }
-        return sum + money(payment.amount);
-      }, 0);
-      const newBalance = Math.max(0, Number(inv.net_amount ?? 0) - newPaid);
-      const newStatus = newBalance <= 0
-        ? "paid"
-        : newPaid > 0
-        ? "partial"
-        : "unpaid";
-      const { error: updateErr } = await svc.from("fee_invoices").update({
-        paid_amount: newPaid,
-        balance: newBalance,
-        status: newStatus,
-        updated_at: new Date().toISOString(),
-      }).eq("id", pmt.invoice_id).eq("school_id", school);
-      if (updateErr) return fail(updateErr.message);
+      const { data: rawReversal, error } = await svc.rpc(
+        "reverse_fee_payment",
+        {
+          p_school_id: school,
+          p_payment_id: seg,
+          p_reversed_by: user.id,
+          p_reason: reason,
+        },
+      ).maybeSingle();
+      if (error) {
+        const status = error.message.toLowerCase().includes("already")
+          ? 409
+          : 400;
+        return fail(error.message, status);
+      }
+      const data = rawReversal as unknown as Record<string, unknown> | null;
+      if (!data) return fail("Payment not found", 404);
       return ok({
-        success: true,
-        reversed_payment_id: seg,
-        invoice_id: pmt.invoice_id,
-        new_balance: newBalance,
-        new_status: newStatus,
+        reversed_payment_id: data.payment_id,
+        invoice_id: data.invoice_id,
+        new_balance: data.balance,
+        new_status: data.invoice_status,
       });
     }
   }
@@ -3864,10 +3851,12 @@ export async function handleFees(
         school,
         text(url.searchParams.get("invoice_id")),
       );
-      return ok(await materializePaymentConfig(
-        svc,
-        (data?.data as Record<string, unknown> | null) ?? {},
-      ));
+      return ok(
+        await materializePaymentConfig(
+          svc,
+          (data?.data as Record<string, unknown> | null) ?? {},
+        ),
+      );
     } catch (error) {
       return fail(
         error instanceof Error
@@ -3885,7 +3874,7 @@ export async function handleFees(
         "payee_name",
         "merchant_code",
         "qr_note",
-      "qr_image_url",
+        "qr_image_url",
         "upi_enabled",
       ]
     ) {
@@ -3902,10 +3891,12 @@ export async function handleFees(
         configRecordId("school"),
         payload,
       );
-      return ok(await materializePaymentConfig(
-        svc,
-        (data?.data as Record<string, unknown> | null) ?? payload,
-      ));
+      return ok(
+        await materializePaymentConfig(
+          svc,
+          (data?.data as Record<string, unknown> | null) ?? payload,
+        ),
+      );
     } catch (error) {
       return fail(
         error instanceof Error
@@ -3925,7 +3916,10 @@ export async function handleFees(
     let storedQr = r2Upload ? r2FileReference(r2Upload.key) : filePath;
     if (!r2Upload) {
       if (!legacyStorageWritesEnabled()) {
-        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+        return fail(
+          "R2 storage is unavailable; legacy storage writes are disabled",
+          503,
+        );
       }
       const { error: uploadError } = await svc.storage.from("school-assets")
         .upload(filePath, file, { upsert: true, contentType });
@@ -3964,13 +3958,17 @@ export async function handleFees(
       ascending: false,
     });
     if (error) return fail(error.message);
-    return ok(await Promise.all((data ?? []).map(async (row: Record<string, unknown>) => ({
-      id: row.id,
-      ...await materializePaymentConfig(
-        svc,
-        (row.data as Record<string, unknown> | null) ?? {},
+    return ok(
+      await Promise.all(
+        (data ?? []).map(async (row: Record<string, unknown>) => ({
+          id: row.id,
+          ...await materializePaymentConfig(
+            svc,
+            (row.data as Record<string, unknown> | null) ?? {},
+          ),
+        })),
       ),
-    }))));
+    );
   }
 
   if (feesPath === "/payment-configs" && method === "POST") {
@@ -4087,7 +4085,10 @@ export async function handleFees(
     let storedQr = r2Upload ? r2FileReference(r2Upload.key) : filePath;
     if (!r2Upload) {
       if (!legacyStorageWritesEnabled()) {
-        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+        return fail(
+          "R2 storage is unavailable; legacy storage writes are disabled",
+          503,
+        );
       }
       const { error: uploadError } = await svc.storage.from("school-assets")
         .upload(filePath, file, { upsert: true, contentType });
@@ -4118,14 +4119,23 @@ export async function handleFees(
       Boolean,
     )[0];
     if (!seg && method === "GET") {
-      const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1") || 1);
+      const page = Math.max(
+        1,
+        parseInt(url.searchParams.get("page") ?? "1") || 1,
+      );
       const requestedSize = parseInt(url.searchParams.get("page_size") ?? "20");
-      const size = Math.min(Math.max(Number.isFinite(requestedSize) ? requestedSize : 20, 1), 100);
+      const size = Math.min(
+        Math.max(Number.isFinite(requestedSize) ? requestedSize : 20, 1),
+        100,
+      );
       let query = svc.from("fee_concessions").select(
         "id, school_id, student_id, invoice_id, fee_structure_id, amount, percentage, reason, status, approved_by, created_at, updated_at, student:students(first_name, last_name, admission_number, student_id_number), invoice:fee_invoices(invoice_number, total_amount, net_amount, paid_amount, balance), fee_structure:fee_structures(id, fee_category_id, category_id)",
         { count: "exact" },
       ).eq("school_id", school).order("created_at", { ascending: false })
-        .order("id", { ascending: false }).range((page - 1) * size, page * size - 1);
+        .order("id", { ascending: false }).range(
+          (page - 1) * size,
+          page * size - 1,
+        );
       const studentId = text(url.searchParams.get("student_id"));
       const invoiceId = text(url.searchParams.get("invoice_id"));
       const status = text(url.searchParams.get("status")).toLowerCase();

@@ -898,27 +898,6 @@ function staffDisplayName(staff: Record<string, any> | null) {
     text(staff["email"]) || text(staff["id"]);
 }
 
-async function createAuditLog(
-  svc: SupabaseClient,
-  school: string,
-  userId: string,
-  action: string,
-  entityType: string,
-  entityId: string,
-  details: Record<string, unknown>,
-) {
-  const { data, error } = await svc.from("audit_logs").insert({
-    school_id: school,
-    user_id: userId,
-    action,
-    entity_type: entityType,
-    entity_id: entityId,
-    details,
-  }).select().single();
-  if (error) throw new Error(error.message);
-  return data;
-}
-
 async function notifyStaffIfLinked(
   svc: SupabaseClient,
   school: string,
@@ -1730,47 +1709,6 @@ export async function handlePrincipal(
   }
 
   if (
-    path.match(/^\/principal\/subjects\/[^/]+\/actions$/) &&
-    method === "POST"
-  ) {
-    const subjectId = path.split("/")[3];
-    try {
-      const log = await createAuditLog(
-        svc,
-        school,
-        user.id,
-        text(body.action_type) || "subject_action",
-        "subject",
-        subjectId,
-        {
-          title: text(body.title),
-          message: text(body.message),
-          priority: text(body.priority) || "normal",
-          grade_id: text(body.grade_id),
-          teacher_id: text(body.teacher_id),
-          due_date: text(body.due_date),
-        },
-      );
-      await notifyStaffIfLinked(
-        svc,
-        school,
-        text(body.teacher_id),
-        text(body.title) || "Subject action",
-        text(body.message),
-        "subject",
-        subjectId,
-      );
-      return ok(log);
-    } catch (error) {
-      return fail(
-        error instanceof Error
-          ? error.message
-          : "Failed to save subject action",
-      );
-    }
-  }
-
-  if (
     path.match(/^\/principal\/subjects\/[^/]+\/mappings$/) && method === "POST"
   ) {
     const subjectId = path.split("/")[3];
@@ -1853,32 +1791,6 @@ export async function handlePrincipal(
     ).eq("school_id", school);
     if (error) return fail(error.message);
     return ok({ slots: data ?? [], total: data?.length ?? 0 });
-  }
-
-  if (path === "/principal/timetable/actions" && method === "POST") {
-    try {
-      const log = await createAuditLog(
-        svc,
-        school,
-        user.id,
-        text(body.action_type) || "timetable_action",
-        "timetable_slot",
-        text(body.slot_id),
-        {
-          title: text(body.title),
-          message: text(body.message),
-          priority: text(body.priority) || "normal",
-          due_date: text(body.due_date),
-        },
-      );
-      return ok(log);
-    } catch (error) {
-      return fail(
-        error instanceof Error
-          ? error.message
-          : "Failed to save timetable action",
-      );
-    }
   }
 
   return fail("not found", 404);

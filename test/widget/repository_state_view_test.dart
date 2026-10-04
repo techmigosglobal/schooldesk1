@@ -22,9 +22,7 @@ void main() {
     expect(find.bySemanticsLabel('Loading…'), findsOneWidget);
 
     await tester.pumpWidget(
-      host(
-        const RepositoryState<List<String>>.error(error: 'request failed'),
-      ),
+      host(const RepositoryState<List<String>>.error(error: 'request failed')),
     );
     expect(find.text('Unable to load data'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
@@ -58,5 +56,46 @@ void main() {
     expect(find.text('Nothing here yet'), findsOneWidget);
     await tester.tap(find.text('Retry'));
     expect(retried, isTrue);
+  });
+
+  testWidgets('bounds tab content when a stale status panel is visible', (
+    tester,
+  ) async {
+    final errors = <FlutterErrorDetails>[];
+    final previousOnError = FlutterError.onError;
+    FlutterError.onError = errors.add;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            height: 420,
+            child: DefaultTabController(
+              length: 2,
+              child: SchoolDeskRepositoryStateView<List<String>>(
+                state: const RepositoryState<List<String>>(
+                  data: ['first', 'second'],
+                  source: RepositorySource.cache,
+                  isStale: true,
+                ),
+                onRetry: () {},
+                expandStaleContent: true,
+                data: (_) =>
+                    TabBarView(children: const [Text('first'), Text('second')]),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    } finally {
+      FlutterError.onError = previousOnError;
+    }
+
+    expect(
+      errors.where(
+        (error) => error.exceptionAsString().contains('unbounded height'),
+      ),
+      isEmpty,
+    );
   });
 }

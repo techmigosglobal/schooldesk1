@@ -18,7 +18,6 @@ void main() {
       'lib/features/communication/presentation/screens/teacher_complaint_screen/teacher_complaint_screen.dart',
       'lib/features/communication/presentation/screens/parent_complaint_screen/parent_complaint_screen.dart',
       'lib/features/finance/presentation/screens/principal_dashboard/principal_payment_config.dart',
-      'lib/features/monitoring/presentation/screens/principal_audit_logs_screen.dart',
       'lib/features/documents/presentation/screens/teacher_documents_screen/teacher_documents_screen.dart',
       'lib/features/documents/presentation/screens/parent_documents_screen/parent_documents_screen.dart',
       'lib/features/academics/presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart',

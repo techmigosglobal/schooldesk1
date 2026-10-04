@@ -4,6 +4,10 @@ export const RATE_LIMIT_POLICIES = {
   public: { limit: 10, windowSeconds: 60, subject: "ip" },
   authenticatedRead: { limit: 240, windowSeconds: 60, subject: "user" },
   authenticatedWrite: { limit: 60, windowSeconds: 60, subject: "user" },
+  // Media workflows legitimately issue one request per attachment. Keep
+  // uploads protected, but do not make a lesson plan/gallery batch compete
+  // with ordinary JSON writes for the much smaller write bucket.
+  authenticatedUpload: { limit: 120, windowSeconds: 60, subject: "user" },
   sensitiveAccount: { limit: 10, windowSeconds: 60, subject: "user" },
 } as const;
 

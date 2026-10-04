@@ -10,7 +10,7 @@ void main() {
 
     expect(source, contains('class _PostMediaCarousel'));
     expect(source, contains('_displayDurationForCurrentPost'));
-    expect(source, contains('item.isVideo ? 8 : 3'));
+    expect(source, contains('item.isVideo ? 8 : 5'));
     expect(
       source,
       contains(r"'${_currentIndex + 1}/${widget.mediaItems.length}'"),

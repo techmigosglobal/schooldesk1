@@ -33,6 +33,7 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
   final String? fallbackRoute;
   final bool showBackButton;
   final bool showGlobalToolbarActions;
+  final VoidCallback? onBackRequested;
 
   const SchoolDeskModuleScaffold({
     super.key,
@@ -52,6 +53,7 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
     this.fallbackRoute,
     this.showBackButton = true,
     this.showGlobalToolbarActions = true,
+    this.onBackRequested,
   });
 
   @override
@@ -319,6 +321,10 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
   }
 
   Future<void> _handleBackPressed() async {
+    if (widget.onBackRequested case final onBackRequested?) {
+      onBackRequested();
+      return;
+    }
     if (await Navigator.of(context).maybePop()) return;
     final fallback =
         widget.fallbackRoute ??

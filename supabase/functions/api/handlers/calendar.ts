@@ -133,16 +133,6 @@ export async function handleCalendar(
         updated_at: new Date().toISOString(),
       }, { onConflict: "school_id" });
     if (preferenceError) return fail(preferenceError.message);
-    const { error: auditError } = await svc.from("audit_logs").insert({
-      school_id: sid,
-      user_id: user.id,
-      actor_role: roleName(user),
-      action: "calendar_reset",
-      module: "events",
-      event_type: "calendar_reset",
-      summary: `Reset calendar: removed ${eventCount ?? 0} events; generated holidays hidden.`,
-    });
-    if (auditError) console.error("Calendar reset audit failed", auditError);
     return ok({
       events_deleted: eventCount ?? 0,
       generated_holidays_hidden: true,

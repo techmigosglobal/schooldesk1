@@ -1,13 +1,15 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
-import { recordActivity } from "./activity.ts";
 import {
-  deleteR2File,
   r2FileReference,
   r2KeyFromValue,
   r2Reference,
   r2ReferenceInfo,
 } from "../lib/r2_storage.ts";
+import {
+  deleteStoredObject,
+  storageLocationFromValue,
+} from "../storage_helpers.ts";
 
 function schoolId(user: User): string {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -90,20 +92,11 @@ type StorageObject = { bucket_id: string; name: string };
 
 const wipeStorageBuckets = [
   "school-assets",
+  "schooldesk-private-files",
+  "schooldesk-public-media",
   "payment-proofs",
   "issue-attachments",
 ];
-
-function storagePathFromUrl(value: unknown, bucket: string): string {
-  const raw = text(value);
-  if (!raw) return "";
-  const directPrefix = `${bucket}/`;
-  if (raw.startsWith(directPrefix)) return raw.substring(directPrefix.length);
-  const marker = `/object/public/${bucket}/`;
-  const markerIndex = raw.indexOf(marker);
-  if (markerIndex < 0) return "";
-  return decodeURIComponent(raw.substring(markerIndex + marker.length));
-}
 
 function addStoragePath(
   targets: Map<string, Set<string>>,
@@ -113,13 +106,26 @@ function addStoragePath(
 ) {
   const r2Key = r2KeyFromValue(value);
   if (r2Key) {
+    const location = storageLocationFromValue(value, "");
+    if (location) {
+      (targets.get(location.bucket) ?? new Set<string>()).add(location.path);
+      if (!targets.has(location.bucket)) {
+        targets.set(location.bucket, new Set([location.path]));
+      }
+      return;
+    }
     const info = r2ReferenceInfo(value);
-    r2Targets.add(info ? r2Reference(info.key, info.visibility) : r2FileReference(r2Key));
+    r2Targets.add(
+      info ? r2Reference(info.key, info.visibility) : r2FileReference(r2Key),
+    );
     return;
   }
-  const path = storagePathFromUrl(value, bucket);
-  if (path) (targets.get(bucket) ?? new Set<string>()).add(path);
-  if (path && !targets.has(bucket)) targets.set(bucket, new Set([path]));
+  const location = storageLocationFromValue(value, bucket);
+  if (!location) return;
+  (targets.get(location.bucket) ?? new Set<string>()).add(location.path);
+  if (!targets.has(location.bucket)) {
+    targets.set(location.bucket, new Set([location.path]));
+  }
 }
 
 type SchoolWipeAccounts = {
@@ -129,7 +135,8 @@ type SchoolWipeAccounts = {
 
 function isRetainedWipeRole(value: unknown): boolean {
   const role = text(value).toLowerCase();
-  return role === "principal" || role === "coordinator" || role === "super_admin";
+  return role === "principal" || role === "coordinator" ||
+    role === "super_admin";
 }
 
 async function collectSchoolWipeAccounts(
@@ -183,7 +190,9 @@ async function collectSchoolWipeAccounts(
   if (!hasPrincipal) {
     // The caller is a Super Admin, but a principal is still required as the
     // school owner's recovery account after a destructive reset.
-    throw new Error("Wipe blocked: this school has no principal login to preserve");
+    throw new Error(
+      "Wipe blocked: this school has no principal login to preserve",
+    );
   }
   return {
     retainedAccountIds: [...retainedAccountIds],
@@ -203,7 +212,9 @@ async function deleteSchoolAuthAccounts(
         // If the user does not exist in Auth, we can ignore the error
         const msg = error.message?.toLowerCase() || "";
         if (error.status === 404 || msg.includes("not found")) {
-          console.warn(`Auth user ${accountId} not found for deletion, skipping`);
+          console.warn(
+            `Auth user ${accountId} not found for deletion, skipping`,
+          );
           continue;
         }
         throw new Error(error.message);
@@ -239,8 +250,14 @@ async function wipeSchoolStorage(
     svc.schema("storage").from("objects").select("bucket_id, name")
       .in("bucket_id", wipeStorageBuckets)
       .like("name", `%${school}%`),
-    svc.from("issue_attachments").select("storage_path").eq("school_id", school),
-    svc.from("parent_payment_requests").select("proof_url").eq("school_id", school),
+    svc.from("issue_attachments").select("storage_path").eq(
+      "school_id",
+      school,
+    ),
+    svc.from("parent_payment_requests").select("proof_url").eq(
+      "school_id",
+      school,
+    ),
     svc.from("student_documents").select("file_url").eq("school_id", school),
     svc.from("staff_documents").select("file_url").eq("school_id", school),
     svc.from("uploaded_files").select("path").eq("school_id", school),
@@ -271,13 +288,7 @@ async function wipeSchoolStorage(
     targets.get(object.bucket_id)?.add(object.name);
   }
   for (const row of issueResult.data ?? []) {
-    const path = text(row.storage_path);
-    const r2Key = r2KeyFromValue(path);
-    if (r2Key) {
-      const info = r2ReferenceInfo(path);
-      r2Targets.add(info ? r2Reference(info.key, info.visibility) : r2FileReference(r2Key));
-    }
-    else if (path) targets.get("issue-attachments")?.add(path);
+    addStoragePath(targets, "issue-attachments", row.storage_path, r2Targets);
   }
   for (const row of paymentResult.data ?? []) {
     addStoragePath(targets, "payment-proofs", row.proof_url, r2Targets);
@@ -301,26 +312,37 @@ async function wipeSchoolStorage(
   let removed = 0;
   for (const [bucket, paths] of targets.entries()) {
     if (paths.size === 0) continue;
-    for (const batch of Array.from(paths).reduce<string[][]>((all, path, index) => {
-      const batchIndex = Math.floor(index / 100);
-      (all[batchIndex] ??= []).push(path);
-      return all;
-    }, [])) {
+    for (
+      const batch of Array.from(paths).reduce<string[][]>(
+        (all, path, index) => {
+          const batchIndex = Math.floor(index / 100);
+          (all[batchIndex] ??= []).push(path);
+          return all;
+        },
+        [],
+      )
+    ) {
       try {
         const { data, error } = await svc.storage.from(bucket).remove(batch);
         if (error) {
-          console.error(`Failed to remove storage files in bucket ${bucket}:`, error.message);
+          console.error(
+            `Failed to remove storage files in bucket ${bucket}:`,
+            error.message,
+          );
         } else if (data) {
           removed += data.length;
         }
       } catch (err) {
-        console.error(`Exception while removing storage files in bucket ${bucket}:`, err);
+        console.error(
+          `Exception while removing storage files in bucket ${bucket}:`,
+          err,
+        );
       }
     }
   }
   for (const key of r2Targets) {
     try {
-      if (await deleteR2File(key)) removed++;
+      if (await deleteStoredObject(svc, key)) removed++;
     } catch (error) {
       console.error(`Failed to remove R2 object ${key}:`, error);
     }
@@ -363,7 +385,9 @@ function boundedText(value: unknown, max: number): string {
   return text(value).slice(0, max);
 }
 
-function validSeverity(value: string): value is "info" | "warning" | "error" | "fatal" {
+function validSeverity(
+  value: string,
+): value is "info" | "warning" | "error" | "fatal" {
   return ["info", "warning", "error", "fatal"].includes(value);
 }
 
@@ -435,7 +459,8 @@ function responseRow(row: Record<string, unknown>) {
     fingerprint: text(row["fingerprint"]),
     resolved_at: text(row["resolved_at"]) || text(context["resolved_at"]),
     resolved_by: text(row["resolved_by"]) || text(context["resolved_by"]),
-    resolution_note: text(row["resolution_note"]) || text(context["resolution_note"]),
+    resolution_note: text(row["resolution_note"]) ||
+      text(context["resolution_note"]),
     created_at: text(row["created_at"]),
   };
 }
@@ -458,23 +483,57 @@ export async function handleMonitoring(
     }
     try {
       const tables = [
-        "academic_years", "terms", "grades", "rooms", "subjects", "staff",
-        "staff_qualifications", "staff_subjects", "sections", "grade_subjects",
-        "students", "guardians", "student_guardians", "medical_records",
-        "student_documents", "attendance_sessions", "student_attendances",
-        "attendance_summaries", "fee_categories", "fee_structures",
-        "fee_invoices", "fee_invoice_items", "payments", "fee_receipts",
-        "parent_payment_requests", "school_payment_settings", "leave_types",
-        "leave_balances", "student_leave_applications", "announcements",
-        "events", "parent_teacher_meetings", "timetable_slots", "frontend_records"
+        "academic_years",
+        "terms",
+        "grades",
+        "rooms",
+        "subjects",
+        "staff",
+        "staff_qualifications",
+        "staff_subjects",
+        "sections",
+        "grade_subjects",
+        "students",
+        "guardians",
+        "student_guardians",
+        "medical_records",
+        "student_documents",
+        "attendance_sessions",
+        "student_attendances",
+        "attendance_summaries",
+        "fee_categories",
+        "fee_structures",
+        "fee_invoices",
+        "fee_invoice_items",
+        "payments",
+        "fee_receipts",
+        "parent_payment_requests",
+        "school_payment_settings",
+        "leave_types",
+        "leave_balances",
+        "student_leave_applications",
+        "announcements",
+        "events",
+        "parent_teacher_meetings",
+        "timetable_slots",
+        "frontend_records",
       ];
       const backup: Record<string, unknown[]> = {};
       for (const table of tables) {
-        const { data, error } = await svc.from(table).select("*").eq("school_id", school);
+        const { data, error } = await svc.from(table).select("*").eq(
+          "school_id",
+          school,
+        );
         if (error) {
-          if (error.message.includes("school_id") && error.message.includes("does not exist")) {
-            const { data: allData, error: allErr } = await svc.from(table).select("*");
-            if (allErr) return fail(`Backup failed on table ${table}: ${allErr.message}`);
+          if (
+            error.message.includes("school_id") &&
+            error.message.includes("does not exist")
+          ) {
+            const { data: allData, error: allErr } = await svc.from(table)
+              .select("*");
+            if (allErr) {
+              return fail(`Backup failed on table ${table}: ${allErr.message}`);
+            }
             backup[table] = allData ?? [];
           } else {
             return fail(`Backup failed on table ${table}: ${error.message}`);
@@ -496,17 +555,45 @@ export async function handleMonitoring(
       return fail("Unauthorized: SuperAdmin role required", 403);
     }
     try {
-      const body = await req.json().catch(() => ({})) as Record<string, unknown[]>;
+      const body = await req.json().catch(() => ({})) as Record<
+        string,
+        unknown[]
+      >;
       const restoreOrder = [
-        "academic_years", "terms", "grades", "rooms", "subjects", "staff",
-        "staff_qualifications", "staff_subjects", "sections", "grade_subjects",
-        "students", "guardians", "student_guardians", "medical_records",
-        "student_documents", "attendance_sessions", "student_attendances",
-        "attendance_summaries", "fee_categories", "fee_structures",
-        "fee_invoices", "fee_invoice_items", "payments", "fee_receipts",
-        "parent_payment_requests", "school_payment_settings", "leave_types",
-        "leave_balances", "student_leave_applications", "announcements",
-        "events", "parent_teacher_meetings", "timetable_slots", "frontend_records"
+        "academic_years",
+        "terms",
+        "grades",
+        "rooms",
+        "subjects",
+        "staff",
+        "staff_qualifications",
+        "staff_subjects",
+        "sections",
+        "grade_subjects",
+        "students",
+        "guardians",
+        "student_guardians",
+        "medical_records",
+        "student_documents",
+        "attendance_sessions",
+        "student_attendances",
+        "attendance_summaries",
+        "fee_categories",
+        "fee_structures",
+        "fee_invoices",
+        "fee_invoice_items",
+        "payments",
+        "fee_receipts",
+        "parent_payment_requests",
+        "school_payment_settings",
+        "leave_types",
+        "leave_balances",
+        "student_leave_applications",
+        "announcements",
+        "events",
+        "parent_teacher_meetings",
+        "timetable_slots",
+        "frontend_records",
       ];
       for (const table of restoreOrder) {
         const rows = body[table];
@@ -537,7 +624,10 @@ export async function handleMonitoring(
         accounts.retainedAccountIds,
       ).catch((storageErr) => {
         // Fallback: log error but do not fail the entire database wipe
-        console.error("Storage wipe failed, continuing with db wipe:", storageErr);
+        console.error(
+          "Storage wipe failed, continuing with db wipe:",
+          storageErr,
+        );
         return 0;
       });
       const { data, error } = await svc.rpc("wipe_school_data", {
@@ -557,7 +647,8 @@ export async function handleMonitoring(
         auth_accounts_deleted: authAccountsDeleted,
         retained_login_accounts: accounts.retainedAccountIds.length,
         storage_objects_removed: storageObjectsRemoved,
-        message: "School data wiped; only principal and Super Admin logins were preserved",
+        message:
+          "School data wiped; only principal and Super Admin logins were preserved",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -613,7 +704,7 @@ export async function handleMonitoring(
       ? context.metadata as Record<string, unknown>
       : {};
     const approvalAuditFailure = `${metadata.approval_audit_failure ?? ""}` ===
-      "true" || message.includes("approval_audit_write_failed");
+        "true" || message.includes("approval_audit_write_failed");
     const statusCode = integer(context.status_code) ?? 0;
     const isNewServerFailure = approvalAuditFailure || severity === "fatal" ||
       (severity === "error" && statusCode >= 500);
@@ -638,7 +729,9 @@ export async function handleMonitoring(
   }
 
   if (isErrorRetentionPath(path) && method === "GET") {
-    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    if (!isSuperAdmin(user)) {
+      return fail("forbidden: super_admin required", 403);
+    }
     const { data, error } = await svc.rpc("error_event_retention_metrics", {
       p_school_id: school,
     });
@@ -647,7 +740,9 @@ export async function handleMonitoring(
   }
 
   if (isErrorRetentionPath(path) && method === "PATCH") {
-    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    if (!isSuperAdmin(user)) {
+      return fail("forbidden: super_admin required", 403);
+    }
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const warningDays = integer(body["warning_keep_days"]);
     const resolvedDays = integer(body["resolved_keep_days"]);
@@ -672,23 +767,13 @@ export async function handleMonitoring(
         updated_at: new Date().toISOString(),
       }, { onConflict: "school_id" }).select().single();
     if (error) return fail(error.message);
-    await recordActivity(svc, {
-      schoolId: school,
-      userId: user.id,
-      actorRole: "super_admin",
-      action: "monitoring.error_retention_updated",
-      module: "monitoring",
-      eventType: "error_retention_updated",
-      summary: "Super Admin updated error-event retention settings",
-      entityType: "error_event_retention_settings",
-      entityId: school,
-      details: data as Record<string, unknown>,
-    });
     return ok(data as Record<string, unknown>);
   }
 
   if (isErrorCleanupPath(path) && method === "POST") {
-    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    if (!isSuperAdmin(user)) {
+      return fail("forbidden: super_admin required", 403);
+    }
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const preview = body["preview"] !== false;
     const confirmation = text(body["confirmation"]);
@@ -697,9 +782,13 @@ export async function handleMonitoring(
     }
     const beforeRaw = text(body["before"]);
     const before = beforeRaw ? new Date(beforeRaw) : new Date();
-    if (Number.isNaN(before.getTime())) return fail("Invalid cleanup date", 422);
+    if (Number.isNaN(before.getTime())) {
+      return fail("Invalid cleanup date", 422);
+    }
     const severity = text(body["severity"]);
-    if (severity && !validSeverity(severity)) return fail("Invalid severity", 422);
+    if (severity && !validSeverity(severity)) {
+      return fail("Invalid severity", 422);
+    }
     const { data, error } = await svc.rpc("cleanup_resolved_error_events", {
       p_school_id: school,
       p_before: before.toISOString(),
@@ -707,31 +796,19 @@ export async function handleMonitoring(
       p_preview: preview,
     });
     if (error) return fail(error.message);
-    if (!preview) {
-      await recordActivity(svc, {
-        schoolId: school,
-        userId: user.id,
-        actorRole: "super_admin",
-        action: "monitoring.error_events_cleared",
-        module: "monitoring",
-        eventType: "error_events_cleared",
-        summary: "Super Admin cleared resolved error events",
-        entityType: "error_events",
-        entityId: school,
-        details: {
-          before: before.toISOString(),
-          severity: severity || "all",
-          ...(data as Record<string, unknown>),
-        },
-      });
-    }
     return ok({ ...(data as Record<string, unknown>), preview });
   }
 
   if (path === "/monitoring/error-events" && method === "GET") {
     if (!canReadSchoolErrorEvents(user)) return fail("forbidden", 403);
-    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
-    const size = Math.min(Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1), 100);
+    const page = Math.max(
+      parseInt(url.searchParams.get("page") ?? "1") || 1,
+      1,
+    );
+    const size = Math.min(
+      Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
+      100,
+    );
 
     const requestId = text(url.searchParams.get("request_id"));
     const status = text(url.searchParams.get("status"));
@@ -753,7 +830,9 @@ export async function handleMonitoring(
     if (error) return fail(error.message);
     return cors({
       success: true,
-      data: (data ?? []).map((row) => responseRow(row as Record<string, unknown>)),
+      data: (data ?? []).map((row) =>
+        responseRow(row as Record<string, unknown>)
+      ),
       total: count ?? 0,
       page,
       page_size: size,
@@ -773,7 +852,9 @@ export async function handleMonitoring(
   }
 
   if (eventId && method === "DELETE") {
-    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    if (!isSuperAdmin(user)) {
+      return fail("forbidden: super_admin required", 403);
+    }
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     if (text(body["confirmation"]) !== "DELETE RESOLVED ERROR EVENT") {
       return fail("Type DELETE RESOLVED ERROR EVENT to confirm deletion", 422);
@@ -789,24 +870,14 @@ export async function handleMonitoring(
     const { error } = await svc.from("error_events").delete()
       .eq("school_id", school).eq("id", eventId);
     if (error) return fail(error.message);
-    await recordActivity(svc, {
-      schoolId: school,
-      userId: user.id,
-      actorRole: "super_admin",
-      action: "monitoring.error_event_deleted",
-      module: "monitoring",
-      eventType: "error_event_deleted",
-      summary: "Super Admin permanently deleted a resolved error event",
-      entityType: "error_event",
-      entityId: eventId,
-      details: existing as Record<string, unknown>,
-    });
     return ok({ id: eventId, deleted: true });
   }
 
   const resolveId = parseResolveId(path);
   if (resolveId && method === "PATCH") {
-    if (!isSuperAdmin(user)) return fail("forbidden: super_admin required", 403);
+    if (!isSuperAdmin(user)) {
+      return fail("forbidden: super_admin required", 403);
+    }
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const { data, error } = await svc.from("error_events").select("*").eq(
       "school_id",
@@ -819,7 +890,13 @@ export async function handleMonitoring(
     const context = mapContext(existing);
     const resolvedAt = new Date().toISOString();
     const resolutionNote = boundedText(body["resolution_note"], 2048);
-    const updatedContext = { ...context, status: "resolved", resolved_at: resolvedAt, resolved_by: user.id, resolution_note: resolutionNote };
+    const updatedContext = {
+      ...context,
+      status: "resolved",
+      resolved_at: resolvedAt,
+      resolved_by: user.id,
+      resolution_note: resolutionNote,
+    };
 
     const updated = await svc.from("error_events").update({
       context: updatedContext,

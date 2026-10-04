@@ -171,7 +171,7 @@ export async function handleApprovals(
 
     const items: Record<string, unknown>[] = [];
     for (const row of accounts.data ?? []) {
-      const userRow = accountUsersById.get(text(row.user_id)) ?? {};
+      const userRow = (accountUsersById.get(text(row.user_id)) ?? {}) as unknown as Record<string, unknown>;
       items.push({
         id: text(row.id), type: "account", source: "generic",
         requesterName: text(userRow.name, "Account request"),
@@ -235,7 +235,7 @@ export async function handleApprovals(
     }
     for (const row of payments.data ?? []) {
       const student = (row.student ?? {}) as unknown as Record<string, unknown>;
-      const parent = paymentUsersById.get(text(row.parent_user_id)) ?? {};
+      const parent = (paymentUsersById.get(text(row.parent_user_id)) ?? {}) as unknown as Record<string, unknown>;
       const invoice = (row.invoice ?? {}) as unknown as Record<string, unknown>;
       items.push({
         id: text(row.id), type: "fee", source: "fee_payment_proof",

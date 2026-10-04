@@ -166,10 +166,7 @@ void main() {
       expect(parentScreen, contains('String _teacherThreadKey('));
       expect(parentScreen, contains("'\$teacherId::\$studentId'"));
       expect(parentScreen, contains("conversationType: 'principal_parent'"));
-      expect(
-        parentScreen,
-        contains('tap to start direct chat'),
-      );
+      expect(parentScreen, contains('tap to start direct chat'));
       expect(parentScreen, contains('leaderId: leaderId'));
       expect(parentScreen, contains("tooltip: 'Back to chats'"));
       expect(teacherScreen, contains("tooltip: 'Back to chats'"));
@@ -197,10 +194,7 @@ void main() {
         principalScreen,
         isNot(contains("api.getStaff(page: 1, pageSize: 200)")),
       );
-      expect(
-        principalScreen,
-        isNot(contains("api.getUsers(role: 'Parent'")),
-      );
+      expect(principalScreen, isNot(contains("api.getUsers(role: 'Parent'")));
       expect(principalScreen, contains("'id': 'contact-teacher-\$id'"));
       expect(
         principalScreen,
@@ -252,10 +246,12 @@ void main() {
       parentScreen,
       contains('mergeChatMessagesByIdentity(_messages, newMessages)'),
     );
+    expect(parentScreen, contains('_acceptSentMessage('));
     expect(
       teacherScreen,
       contains('mergeChatMessagesByIdentity(_messages, newMessages)'),
     );
+    expect(teacherScreen, contains('_acceptSentMessage('));
   });
 
   test(
@@ -516,10 +512,7 @@ void main() {
       contains('student_id: String(eventData.student_id || "")'),
     );
     expect(realtime, contains("column: 'conversation_id'"));
-    expect(
-      realtime,
-      isNot(matches(RegExp(r"table: 'messages',\s*callback"))),
-    );
+    expect(realtime, isNot(matches(RegExp(r"table: 'messages',\s*callback"))));
   });
 
   test(

@@ -1,12 +1,14 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
 import {
-  deleteR2File,
   legacyStorageWritesEnabled,
   r2FileReference,
   uploadToR2,
 } from "../lib/r2_storage.ts";
-import { signedPrivateFileUrl } from "../storage_helpers.ts";
+import {
+  deleteStoredObject,
+  signedPrivateFileUrl,
+} from "../storage_helpers.ts";
 
 const allowedRoles = new Set(["principal", "coordinator", "teacher", "parent"]);
 const allowedMimeTypes = new Set([
@@ -54,11 +56,7 @@ async function removeAttachment(
   svc: SupabaseClient,
   storagePath: string,
 ) {
-  if (storagePath.startsWith("r2://")) {
-    await deleteR2File(storagePath);
-  } else {
-    await svc.storage.from("issue-attachments").remove([storagePath]);
-  }
+  await deleteStoredObject(svc, storagePath, "issue-attachments");
 }
 
 async function roleOf(svc: SupabaseClient, user: User): Promise<string> {
@@ -222,7 +220,9 @@ export async function handleIssues(
           : storagePath;
         if (!r2Upload) {
           if (!legacyStorageWritesEnabled()) {
-            throw new Error("R2 storage is unavailable; legacy storage writes are disabled");
+            throw new Error(
+              "R2 storage is unavailable; legacy storage writes are disabled",
+            );
           }
           const { error: uploadError } = await svc.storage.from(
             "issue-attachments",
@@ -245,7 +245,9 @@ export async function handleIssues(
         if (attachmentError) throw attachmentError;
       }
     } catch (attachmentError) {
-      const legacyPaths = uploadedPaths.filter((path) => !path.startsWith("r2://"));
+      const legacyPaths = uploadedPaths.filter((path) =>
+        !path.startsWith("r2://")
+      );
       if (legacyPaths.length === uploadedPaths.length && legacyPaths.length) {
         await svc.storage.from("issue-attachments").remove(uploadedPaths);
       } else {
@@ -271,7 +273,10 @@ export async function handleIssues(
   }
 
   if (path == "/issues" && method == "GET") {
-    const page = Math.max(parseInt(url.searchParams.get("page") ?? "1") || 1, 1);
+    const page = Math.max(
+      parseInt(url.searchParams.get("page") ?? "1") || 1,
+      1,
+    );
     const pageSize = Math.min(
       Math.max(parseInt(url.searchParams.get("page_size") ?? "20") || 20, 1),
       100,
@@ -279,12 +284,14 @@ export async function handleIssues(
     let query = svc.from("issues").select(
       "id,school_id,raised_by,raised_by_role,title,description,category,priority,status,resolution_note,resolved_by,resolved_at,created_at,updated_at",
       {
-      count: "exact",
+        count: "exact",
       },
     ).eq("school_id", school);
     if (!isSuperAdmin) query = query.eq("raised_by", user.id);
     const status = text(url.searchParams.get("status"));
-    const statuses = status.split(",").map((value) => value.trim()).filter(Boolean);
+    const statuses = status.split(",").map((value) => value.trim()).filter(
+      Boolean,
+    );
     if (statuses.length === 1) query = query.eq("status", statuses[0]);
     if (statuses.length > 1) query = query.in("status", statuses);
     const search = text(url.searchParams.get("search"));
@@ -381,7 +388,10 @@ export async function handleIssues(
     const storedPath = r2Upload ? r2FileReference(r2Upload.key) : storagePath;
     if (!r2Upload) {
       if (!legacyStorageWritesEnabled()) {
-        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+        return fail(
+          "R2 storage is unavailable; legacy storage writes are disabled",
+          503,
+        );
       }
       const { error: uploadError } = await svc.storage.from("issue-attachments")
         .upload(storagePath, file, {

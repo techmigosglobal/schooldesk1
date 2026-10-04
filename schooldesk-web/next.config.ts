@@ -6,10 +6,18 @@ const csp = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: http: https:",
-  // Local Docker Supabase is the only backend used by this development
-  // build. Production media origins are injected during the separately
-  // approved hosted promotion.
-  "media-src 'self' http://127.0.0.1:54321 http://localhost:54321",
+  // Media origins are set at build time for each deployment. Keep local
+  // Docker available for development without allowing arbitrary production
+  // media hosts.
+  `media-src 'self' blob: http://127.0.0.1:54321 http://localhost:54321 ${(
+    process.env.SCHOOLDESK_MEDIA_CSP_ORIGINS ?? ""
+  )
+    .split(/\s+/)
+    .filter((origin) =>
+      /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(origin) ||
+      /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin)
+    )
+    .join(" ")}`,
   "connect-src 'self'",
   "worker-src 'self' blob:",
   "frame-src 'self' https://www.google.com https://www.google.co.in https://maps.google.com",
@@ -36,6 +44,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   turbopack: { root: process.cwd() },
   async headers() {
     return [

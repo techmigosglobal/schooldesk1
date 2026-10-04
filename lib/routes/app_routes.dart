@@ -20,7 +20,6 @@ import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/event_post_screen.dart';
 import 'package:schooldesk1/shared/screens/school_gallery_screen.dart';
-import 'package:schooldesk1/features/monitoring/presentation/screens/principal_audit_logs_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
 import 'package:schooldesk1/shared/screens/help_screen/help_screen.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/issue_screen.dart';
@@ -101,14 +100,12 @@ class AppRoutes {
   static const String principalEventPosts = '/principal-event-posts-screen';
   static const String principalTimetable = '/principal-timetable-screen';
   static const String principalDocuments = '/principal-documents-screen';
-  static const String principalAuditLogs = '/principal-audit-logs-screen';
   static const String systemMonitor = '/system-monitor-screen';
 
   static const String idCardGeneration = '/id-card-generation-screen';
 
   // Super Admin Module Routes
   static const String superAdminDashboard = '/super-admin-dashboard-screen';
-  static const String superAdminAuditLogs = '/super-admin-audit-logs-screen';
   static const String superAdminSystemMonitor =
       '/super-admin-system-monitor-screen';
   static const String superAdminAccess = '/super-admin-access-screen';
@@ -283,8 +280,6 @@ class AppRoutes {
     ),
     principalTimetable: (context) => const AdminTimetableScreen(),
     principalDocuments: (context) => const AdminDocumentsScreen(),
-    principalAuditLogs: (context) =>
-        const PrincipalAuditLogsScreen(role: 'principal'),
     principalAnalytics: (context) => const PrincipalAnalyticsScreen(),
     systemMonitor: (context) => const SystemMonitorScreen(role: 'principal'),
 
@@ -292,8 +287,6 @@ class AppRoutes {
 
     // Super Admin
     superAdminDashboard: (context) => const SuperAdminShell(),
-    superAdminAuditLogs: (context) =>
-        const PrincipalAuditLogsScreen(role: 'super_admin'),
     superAdminSystemMonitor: (context) =>
         const SystemMonitorScreen(role: 'super_admin'),
     superAdminAccess: (context) =>

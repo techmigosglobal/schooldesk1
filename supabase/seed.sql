@@ -212,9 +212,24 @@ begin
   values (v_school, v_parent_user, v_student)
   on conflict (parent_user_id, student_id) do nothing;
 
-  insert into public.attendance_sessions (id, school_id, section_id, academic_year_id, subject_id, staff_id, date, period_number, is_finalized)
-  values (v_attendance_session, v_school, v_section, v_year, v_subject, v_teacher_staff, current_date, 1, true)
-  on conflict (id) do update set is_finalized = true;
+  -- Keep the deterministic attendance row in history. Today's session must
+  -- remain available for a teacher to mark from the mobile workflow.
+  insert into public.attendance_sessions (
+    id, school_id, section_id, academic_year_id, subject_id, staff_id, date,
+    period_number, is_finalized, status, total_students, present_count,
+    submitted_at
+  )
+  values (
+    v_attendance_session, v_school, v_section, v_year, v_subject,
+    v_teacher_staff, current_date - 1, 1, true, 'submitted', 1, 1, now()
+  )
+  on conflict (id) do update set
+    date = excluded.date,
+    is_finalized = true,
+    status = 'submitted',
+    total_students = 1,
+    present_count = 1,
+    submitted_at = coalesce(attendance_sessions.submitted_at, excluded.submitted_at);
 
   insert into public.student_attendances (session_id, student_id, status, remarks)
   values (v_attendance_session, v_student, 'present', 'Seed attendance')

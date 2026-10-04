@@ -323,13 +323,26 @@ async function teacherDashboardResponse(
     (schoolSectionsResult.data ?? []) as Array<Record<string, unknown>>,
     (gradeSubjectsResult.data ?? []) as Array<Record<string, unknown>>,
   );
+  // Keep the teacher scope contract explicit. The mobile client consumes the
+  // section id for authorization and the human label for the dashboard; both
+  // must be present even when the assignment originated from a class-teacher
+  // relationship rather than staff_subjects.
+  for (const assignment of assigned) {
+    const gradeName = text(assignment.grade_name);
+    const sectionName = text(assignment.section_name);
+    const label = [gradeName, sectionName].filter(Boolean).join(" - ");
+    assignment.class_id = text(assignment.section_id);
+    assignment.class_name = label;
+    assignment.label = label;
+  }
   const sectionIds = assigned.map((section) => text(section.section_id)).filter(
     Boolean,
   );
   const studentsResult = sectionIds.length === 0
     ? { count: 0, error: null }
     : await svc.from("students").select("id", { count: "exact", head: true })
-      .eq("school_id", school).eq("status", "active").in(
+      .eq("school_id", school).eq("is_test_account", false)
+      .eq("status", "active").in(
         "current_section_id",
         sectionIds,
       );
@@ -722,17 +735,14 @@ export async function handleDashboard(
 
     if (dashRole === "super_admin") {
       // Super admin dashboard: system-level metrics + base school data.
-      const [errorEvents, auditLogs] = await Promise.all([
+      const [errorEvents] = await Promise.all([
         svc.from("error_events").select("id", { count: "exact", head: true })
           .eq("school_id", school).contains("context", { status: "open" }),
-        svc.from("audit_logs").select("id", { count: "exact", head: true })
-          .eq("school_id", school),
       ]);
       return ok({
         ...base,
         system_metrics: {
           open_errors: errorEvents.count ?? 0,
-          total_audit_entries: auditLogs.count ?? 0,
           total_students: base.total_students,
           total_staff: base.total_staff,
           total_classes: base.total_sections,

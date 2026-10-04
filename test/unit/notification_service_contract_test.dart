@@ -40,6 +40,10 @@ void main() {
     expect(service, contains('getNotificationPreferences()'));
     expect(service, contains('_hydrateSettings(preferences)'));
     expect(service, contains('markAllNotificationsRead(role: role)'));
+    expect(
+      service,
+      contains('final hasServerUnread = (_serverUnreadCount ?? 0) > 0;'),
+    );
     expect(service, contains('_api.deleteNotification(id)'));
     expect(
       service,

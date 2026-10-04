@@ -246,14 +246,6 @@ export async function handleUsers(
       updated_at: new Date().toISOString(),
     }).eq("id", seg).eq("school_id", school);
     if (profileError) return fail(profileError.message);
-    await svc.from("audit_logs").insert({
-      school_id: school,
-      user_id: user.id,
-      action: "credentials.reset",
-      entity_type: "user",
-      entity_id: seg,
-      details: { username: target.username, temporary_password_issued: true },
-    });
     // This is intentionally the only response carrying the temporary secret.
     return ok({
       id: seg,

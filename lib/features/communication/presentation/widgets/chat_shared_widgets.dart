@@ -2,7 +2,49 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+
+bool chatContactMatchesRoleFilter({
+  required String selectedRole,
+  required String roleLabel,
+}) => selectedRole == 'all' || roleLabel.toLowerCase() == selectedRole;
+
+String? chatDateDividerLabel(DateTime? value, {DateTime? now}) {
+  if (value == null) return null;
+  final local = value.toLocal();
+  final today = now ?? DateTime.now();
+  final localToday = DateTime.utc(today.year, today.month, today.day);
+  final day = DateTime.utc(local.year, local.month, local.day);
+  final difference = localToday.difference(day).inDays;
+  if (difference == 0) return 'Today';
+  if (difference == 1) return 'Yesterday';
+  return DateFormat.yMMMd().format(local);
+}
+
+String chatPreviewDateTime(DateTime? value, {DateTime? now}) {
+  if (value == null) return '';
+  final local = value.toLocal();
+  final label = chatDateDividerLabel(local, now: now);
+  if (label == null) return '';
+  if (label == 'Today') return DateFormat('h:mm a').format(local);
+  if (label == 'Yesterday') return 'Yesterday';
+  return DateFormat.yMMMd().format(local);
+}
+
+List<String> principalDirectChatPreviewLines({
+  required String classContext,
+  required String contactContext,
+  required String latestMessage,
+}) {
+  final context = classContext.trim().isNotEmpty
+      ? classContext.trim()
+      : contactContext.trim();
+  final preview = latestMessage.trim().isEmpty
+      ? 'Start a conversation'
+      : latestMessage.trim();
+  return [if (context.isNotEmpty && context != preview) context, preview];
+}
 
 /// WhatsApp-style chat wallpaper background.
 class ChatWallpaperBackground extends StatelessWidget {

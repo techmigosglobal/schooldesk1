@@ -83,13 +83,31 @@ export async function handleHealth(
   path: string,
   svc: SupabaseClient,
 ): Promise<Response> {
+  const r2Configured = Boolean(r2Config());
+  const supabaseStorageReady = async () => {
+    try {
+      const checks = await Promise.all([
+        svc.storage.from("schooldesk-private-files").list("", { limit: 1 }),
+        svc.storage.from("schooldesk-public-media").list("", { limit: 1 }),
+      ]);
+      return checks.every((check) => !check.error);
+    } catch {
+      return false;
+    }
+  };
+  const storageStatus = async () =>
+    r2Configured
+      ? "r2-configured"
+      : await supabaseStorageReady()
+      ? "supabase-storage"
+      : "unavailable";
+
   if (path === "/health") {
-    const r2Configured = Boolean(r2Config());
     return ok({
       status: "ok",
       timestamp: new Date().toISOString(),
-      version: "2.0.0-supabase-r2",
-      storage: r2Configured ? "r2-configured" : "legacy-compatible",
+      version: "2.1.0-supabase-storage",
+      storage: await storageStatus(),
     });
   }
 
@@ -104,7 +122,6 @@ export async function handleHealth(
     }
   }
 
-  const r2Configured = Boolean(r2Config());
   const r2Required = (Deno.env.get("STORAGE_WRITE_PROVIDER") ?? "")
     .trim().toLowerCase() === "r2";
   return ok({
@@ -114,7 +131,9 @@ export async function handleHealth(
       ? "error:r2_not_configured"
       : r2Configured
       ? "r2-configured"
-      : "legacy-compatible",
+      : await supabaseStorageReady()
+      ? "supabase-storage"
+      : "error:supabase_storage_unavailable",
     edge_function: "ok",
   });
 }

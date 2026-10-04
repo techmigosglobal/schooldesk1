@@ -39,10 +39,12 @@ Files:
 - schema.sql schema, RLS, functions, triggers, policies
 - data.sql   application/auth/storage metadata data
 
-Storage objects are intentionally not included. School post media stays in
-Cloudflare R2. Configure R2 secrets on the self-hosted Edge API and keep
-STORAGE_WRITE_PROVIDER=r2, STORAGE_READ_ORDER=r2,supabase,
-STORAGE_LEGACY_READ=true, STORAGE_LEGACY_WRITE=false during rollback window.
+This is a PostgreSQL platform dump only. It does not contain the Storage file
+bytes, a current R2 media delta, hosted migration history, external secrets,
+or proof that Auth password hashes are portable. For Hostinger, use the
+separate self-hosted storage importer with the verified archive and a fresh
+production media delta. Keep both source services unchanged during rehearsal
+and cutover soak; do not configure R2 credentials on the target API.
 
 Before restore:
 1. Start a fresh self-hosted Supabase stack on Coolify.
@@ -57,8 +59,10 @@ psql --single-transaction --variable ON_ERROR_STOP=1 \
   --file data.sql --dbname "$SELF_HOSTED_POSTGRES_URL"
 
 Then verify auth.users, key public tables, extensions, RLS, Edge API health,
-Realtime, auth login, and R2 read/write paths. Existing platform JWTs are
-invalid after self-hosting; users must sign in again.
+Realtime, auth login, and Supabase Storage object counts and SHA-256 hashes.
+Deploy Edge Functions and external services separately. Existing platform JWTs
+are invalid after self-hosting; users must sign in again. See
+docs/SELF_HOSTED_RESTORE.md for the complete Hostinger runbook.
 EOF
 
 printf 'Restore artifacts written to %s\n' "$OUTPUT_DIR"

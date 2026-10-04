@@ -25,11 +25,13 @@ extension BackendAuthenticatedCache on BackendApiClient {
     final query = Map<String, dynamic>.from(request.queryParameters)
       ..remove('refresh_nonce');
     final normalizedUri = request.copyWith(queryParameters: query).uri;
-    final scope = [
-      _currentUserId ?? 'no-user',
-      _activeBranchId ?? 'no-branch',
-      _currentRoleName ?? 'no-role',
-    ].join('|');
+    final scope =
+        request.extra['schooldeskScope']?.toString() ??
+        [
+          _currentUserId ?? 'no-user',
+          _activeBranchId ?? 'no-branch',
+          _currentRoleName ?? 'no-role',
+        ].join('|');
     return '${normalizedUri.toString()}#schooldesk-cache-scope='
         '${Uri.encodeComponent(scope)}';
   }
@@ -45,7 +47,16 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    if (_client._authToken != null && !_isExternalSignedMedia(options)) {
+    // Freeze account/branch/role scope at dispatch time. Responses that arrive
+    // after a switch must never be written under the new scope.
+    options.extra['schooldeskScope'] = _client.offlineAccountKey;
+    if (_isExternalSignedMedia(options)) {
+      // Presigned object URLs authenticate with their query signature. The
+      // default Supabase anon headers are for Kong only and must not be sent
+      // to R2/S3-compatible hosts.
+      options.headers.remove('Authorization');
+      options.headers.remove('apikey');
+    } else if (_client._authToken != null) {
       options.headers['Authorization'] = 'Bearer ${_client._authToken}';
     }
     handler.next(options);
@@ -173,6 +184,7 @@ class _ErrorInterceptor extends Interceptor {
     // public landing page immediately after sign-in.
     final isBestEffortBackgroundRequest =
         requestPath.contains('/notifications/register-token') ||
+        requestPath.contains('/notifications/revoke-token') ||
         requestPath.contains('/monitoring/error-events');
 
     if (statusCode == 401 && !isAuthRoute && !isBestEffortBackgroundRequest) {
@@ -284,6 +296,16 @@ extension BackendClientHelpers on BackendApiClient {
       final safeMessage = message.isEmpty ? 'Server error occurred.' : message;
       if (statusCode == 401) return AuthException(message: safeMessage);
       if (statusCode == 404) return NotFoundException(message: safeMessage);
+      if (statusCode == 429) {
+        final retryAfter = e.response!.headers.value('retry-after');
+        final waitHint = retryAfter == null || retryAfter.trim().isEmpty
+            ? ''
+            : ' Try again in ${retryAfter.trim()} seconds.';
+        return ServerException(
+          message: 'Too many requests.$waitHint',
+          statusCode: statusCode,
+        );
+      }
       return ServerException(message: safeMessage, statusCode: statusCode);
     }
     return NetworkException(message: e.message ?? 'Network error occurred.');

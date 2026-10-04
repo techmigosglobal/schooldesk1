@@ -10,8 +10,8 @@ void main() {
 
     // The refresh token must be saved BEFORE clearing auth state.
     final refreshTokenIndex = source.indexOf('getRefreshToken()');
-    final clearAuthTokenIndex = source.indexOf(
-      'clearAuthToken()',
+    final clearLocalSessionIndex = source.indexOf(
+      'clearLocalSession()',
       refreshTokenIndex,
     );
     final tokenClearIndex = source.indexOf(
@@ -25,8 +25,8 @@ void main() {
     );
     expect(
       refreshTokenIndex,
-      lessThan(clearAuthTokenIndex),
-      reason: 'Refresh token saved before auth token cleared.',
+      lessThan(clearLocalSessionIndex),
+      reason: 'Refresh token saved before local session data is cleared.',
     );
     expect(
       refreshTokenIndex,
@@ -37,12 +37,12 @@ void main() {
     // Navigation must happen AFTER clearing state but BEFORE background cleanup.
     final navigateIndex = source.indexOf(
       'goFromNavigator',
-      clearAuthTokenIndex,
+      clearLocalSessionIndex,
     );
     final backgroundCleanupIndex = source.indexOf('_backgroundCleanup');
     expect(
       navigateIndex,
-      greaterThan(clearAuthTokenIndex),
+      greaterThan(clearLocalSessionIndex),
       reason: 'Navigation happens after clearing client state.',
     );
     expect(

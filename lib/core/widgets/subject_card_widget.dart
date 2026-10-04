@@ -323,34 +323,52 @@ class SubjectChips extends StatelessWidget {
     final subjects = _subjects;
     if (subjects.isEmpty) return const SizedBox.shrink();
 
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: subjects.map((subject) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: _accentLight,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _accent.withOpacity(0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(_subjectIcon(subject), size: 12, color: _accent),
-              const SizedBox(width: 4),
-              Text(
-                subject,
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF0A5C4E),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: subjects.map((subject) {
+            return ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: constraints.maxWidth.isFinite
+                    ? constraints.maxWidth
+                    : MediaQuery.sizeOf(context).width - 32,
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: _accentLight,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _accent.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(_subjectIcon(subject), size: 12, color: _accent),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        subject,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: fontSize,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF0A5C4E),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
   }
 }

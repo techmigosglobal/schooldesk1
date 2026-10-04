@@ -19,6 +19,7 @@ import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/principal_dashboard_desktop_shell.dart';
@@ -44,7 +45,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   DateTime? _lastBackPressedAt;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
   Map<String, dynamic> _staffAttendanceSummary = const {};
-  List<Map<String, dynamic>> _recentSchoolActivity = const [];
   RepositoryState<LeadershipDashboardCriticalSnapshot> _criticalState =
       const RepositoryState<LeadershipDashboardCriticalSnapshot>.loading();
 
@@ -69,10 +69,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           final redirect = RouteAccessGuard.dashboardForRole(role);
-          SchoolDeskNavigation.go(
-            context,
-            redirect ?? AppRoutes.landingPage,
-          );
+          SchoolDeskNavigation.go(context, redirect ?? AppRoutes.landingPage);
         }
       });
       return;
@@ -213,7 +210,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       final feeStructures = optional.feeStructures;
       final notifications = optional.notifications;
       final staffAttendanceSummary = optional.staffAttendanceSummary;
-      final recentSchoolActivity = optional.recentSchoolActivity;
 
       setState(() {
         _data = _data.withSetupData(
@@ -235,7 +231,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           }).length,
         );
         _staffAttendanceSummary = staffAttendanceSummary;
-        _recentSchoolActivity = recentSchoolActivity;
         _setupLoading = false;
       });
     } on Object catch (_) {
@@ -839,7 +834,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     final expected = _dashboardCount('expected_staff');
     final checkedIn = _dashboardCount('checked_in');
     final onSite = _dashboardCount('currently_on_site');
-    final recent = _recentSchoolActivity.take(3).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -864,52 +858,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     ),
                   ),
                   const Icon(Icons.chevron_right_rounded),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Material(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: () => _open(AppRoutes.principalAuditLogs),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.history_rounded,
-                        color: Color(0xFF0B2F5B),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Recent school activity',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right_rounded),
-                    ],
-                  ),
-                  if (recent.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    for (final activity in recent)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '${activity['summary'] ?? activity['event_type'] ?? 'School activity'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                  ],
                 ],
               ),
             ),
@@ -1744,7 +1692,7 @@ class _PrincipalHeaderBackground extends StatelessWidget {
       children: [
         if (banner.isNotEmpty)
           Image.network(
-            banner,
+            resolveOriginalImageUrl(banner),
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => const _FallbackPrincipalHeaderArt(),
           )
@@ -1757,7 +1705,7 @@ class _PrincipalHeaderBackground extends StatelessWidget {
             child: Opacity(
               opacity: 0.12,
               child: Image.network(
-                logo,
+                resolveOriginalImageUrl(logo),
                 width: 138,
                 height: 138,
                 fit: BoxFit.contain,

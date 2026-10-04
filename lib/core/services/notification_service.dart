@@ -35,6 +35,10 @@ class NotificationService extends ChangeNotifier {
 
   static Future<NotificationService> getInstance() async {
     _instance ??= NotificationService._();
+    // Navigation shells can be constructed before the login route finishes.
+    // Do not send an unauthenticated notifications request; leave the service
+    // unloaded so the first authenticated shell loads the correct account.
+    if (!_instance!._api.isAuthenticated) return _instance!;
     // Only load data once — avoids repeated API calls on every getInstance().
     if (!_instance!._loaded) {
       await (_instance!._loadFuture ??= _instance!._load());
@@ -46,26 +50,46 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> _load() async {
     try {
-      final page = await _api.getNotificationsPage(page: 1);
+      // The history page, unread badge, and preferences are independent
+      // reads. Fetching them together avoids making dashboard construction
+      // wait for three sequential network round trips.
+      final results = await Future.wait<Object?>([
+        _api.getNotificationsPage(page: 1),
+        _loadUnreadCount(),
+        _loadPreferences(),
+      ]);
+      final page = results[0] as NotificationPage;
       _notifications = page.items.map(AppNotification.fromJson).toList();
       _currentPage = page.page;
       _hasMore = page.hasMore;
-      try {
-        _serverUnreadCount = await _api.getUnreadNotificationsCount();
-      } on Object catch (_) {
-        _serverUnreadCount = null;
-      }
-      try {
-        final preferences = await _api.getNotificationPreferences();
-        _hydrateSettings(preferences);
-      } on Object catch (_) {
+      _serverUnreadCount = results[1] as int?;
+      final preferences = results[2] as Map<String, dynamic>?;
+      if (preferences == null) {
         // Notification history remains usable if preference hydration is
         // temporarily unavailable; defaults remain enabled until the next load.
         _settings.clear();
+      } else {
+        _hydrateSettings(preferences);
       }
       _loaded = true;
     } finally {
       _loadFuture = null;
+    }
+  }
+
+  Future<int?> _loadUnreadCount() async {
+    try {
+      return await _api.getUnreadNotificationsCount();
+    } on Object catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _loadPreferences() async {
+    try {
+      return await _api.getNotificationPreferences();
+    } on Object catch (_) {
+      return null;
     }
   }
 
@@ -124,7 +148,13 @@ class NotificationService extends ChangeNotifier {
     final hasPersistentTargets = targets.any(
       (notification) => !notification.id.startsWith('transient_'),
     );
-    if (hasPersistentTargets) await _api.markAllNotificationsRead(role: role);
+    // The unread-count endpoint can report a notification that was not
+    // returned in the currently loaded page (or was filtered from the local
+    // list). Still clear it on the server when the user opens the center.
+    final hasServerUnread = (_serverUnreadCount ?? 0) > 0;
+    if (hasPersistentTargets || hasServerUnread) {
+      await _api.markAllNotificationsRead(role: role);
+    }
     _notifications = _notifications
         .map((n) => _isVisibleToRole(n, role) ? n.copyWith(isRead: true) : n)
         .toList();
@@ -174,6 +204,13 @@ class NotificationService extends ChangeNotifier {
   }
 
   int getUnreadCountForRole(String role) {
+    final transientUnread = _notifications
+        .where((n) => _isVisibleToRole(n, role) && !n.isRead)
+        .where((n) => n.id.startsWith('transient_'))
+        .length;
+    if (_serverUnreadCount != null) {
+      return _serverUnreadCount! + transientUnread;
+    }
     return _notifications
         .where((n) => _isVisibleToRole(n, role) && !n.isRead)
         .length;
@@ -313,6 +350,7 @@ class AppNotification {
   final String sectionId;
   final String teacherId;
   final String studentPhotoUrl;
+  final String action;
 
   const AppNotification({
     required this.id,
@@ -330,6 +368,7 @@ class AppNotification {
     this.sectionId = '',
     this.teacherId = '',
     this.studentPhotoUrl = '',
+    this.action = '',
   });
 
   factory AppNotification.transient({
@@ -345,6 +384,7 @@ class AppNotification {
     String sectionId = '',
     String teacherId = '',
     String studentPhotoUrl = '',
+    String action = '',
   }) {
     return AppNotification(
       id: 'transient_${DateTime.now().microsecondsSinceEpoch}',
@@ -362,6 +402,7 @@ class AppNotification {
       sectionId: sectionId,
       teacherId: teacherId,
       studentPhotoUrl: studentPhotoUrl,
+      action: action,
     );
   }
 
@@ -382,6 +423,7 @@ class AppNotification {
       sectionId: sectionId,
       teacherId: teacherId,
       studentPhotoUrl: studentPhotoUrl,
+      action: action,
     );
   }
 
@@ -395,6 +437,7 @@ class AppNotification {
     'section_id': sectionId,
     'teacher_id': teacherId,
     'student_photo_url': studentPhotoUrl,
+    'action': action,
   };
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
@@ -408,6 +451,7 @@ class AppNotification {
     final studentId = '${json['student_id'] ?? json['studentId'] ?? ''}';
     final sectionId = '${json['section_id'] ?? json['sectionId'] ?? ''}';
     final teacherId = '${json['teacher_id'] ?? json['teacherId'] ?? ''}';
+    final action = '${json['action'] ?? json['sub_type'] ?? ''}';
     final studentPhotoUrl =
         '${json['student_photo_url'] ?? json['studentPhotoUrl'] ?? ''}';
 
@@ -454,6 +498,7 @@ class AppNotification {
       sectionId: sectionId,
       teacherId: teacherId,
       studentPhotoUrl: studentPhotoUrl,
+      action: action,
     );
   }
 }

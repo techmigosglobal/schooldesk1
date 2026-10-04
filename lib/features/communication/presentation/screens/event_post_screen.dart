@@ -104,8 +104,11 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   Timer? _refreshDebounceTimer;
   bool _postsRequestInFlight = false;
   bool _reviewRequestInFlight = false;
+  bool _principalInitialTabResolved = false;
+  bool _principalTabInteracted = false;
 
   bool get _canPublishDirectly => widget.principalMode;
+  bool get _teacherGalleryOnly => !widget.principalMode;
   String get _postNoun =>
       _canPublishDirectly ? 'School Feed Post' : 'Event Post';
   int get _manageTabIndex => widget.principalMode ? 2 : 1;
@@ -148,6 +151,10 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (_teacherGalleryOnly) {
+      _destParentHome = false;
+      _destSchoolGallery = true;
+    }
     _tabController = TabController(
       length: widget.principalMode ? 3 : 2,
       initialIndex: widget.principalMode
@@ -405,22 +412,28 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
 
   void _resolvePrincipalInitialTab(int pendingCount) {
     if (!widget.principalMode) return;
+    if (_principalInitialTabResolved || _principalTabInteracted) return;
     final initialTab = widget.args.initialTab.trim().toLowerCase();
     if (widget.args.referenceId.isNotEmpty || initialTab != 'auto') return;
     final targetIndex = pendingCount > 0 ? 0 : 2;
+    _principalInitialTabResolved = true;
     if (_tabController.index == targetIndex) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || _principalTabInteracted) return;
       _tabController.animateTo(targetIndex);
     });
   }
 
   Future<void> _submit(bool isSubmit) async {
     final destinations = <String>[];
-    if (_destParentHome) destinations.add('PARENTS_HOME');
-    if (_destTeacherHome) destinations.add('TEACHERS_HOME');
-    if (_destSchoolGallery) destinations.add('SCHOOL_GALLERY');
-    if (_destSchoolLanding) destinations.add('SCHOOL_LANDING');
+    if (_teacherGalleryOnly) {
+      destinations.add('SCHOOL_GALLERY');
+    } else {
+      if (_destParentHome) destinations.add('PARENTS_HOME');
+      if (_destTeacherHome) destinations.add('TEACHERS_HOME');
+      if (_destSchoolGallery) destinations.add('SCHOOL_GALLERY');
+      if (_destSchoolLanding) destinations.add('SCHOOL_LANDING');
+    }
 
     if (destinations.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -504,6 +517,8 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
             isSubmit
                 ? _canPublishDirectly
                       ? 'Published to the school feed!'
+                      : _teacherGalleryOnly
+                      ? 'Published to the school gallery!'
                       : 'Submitted for approval!'
                 : 'Draft saved!',
           ),
@@ -544,9 +559,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     _landingValidatedUrls.clear();
     _editingPostId = null;
     _editingRejectedPost = false;
-    _destParentHome = true;
+    _destParentHome = !_teacherGalleryOnly;
     _destTeacherHome = false;
-    _destSchoolGallery = false;
+    _destSchoolGallery = _teacherGalleryOnly;
     _destSchoolLanding = false;
   }
 
@@ -570,20 +585,27 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         ..clear()
         ..addAll(media);
       _landingValidatedUrls.clear();
-      _destParentHome =
-          destinations.isEmpty ||
-          destinations.contains('PARENTS_HOME') ||
-          destinations.contains('Parent Home Feed');
-      _destTeacherHome =
-          destinations.contains('TEACHERS_HOME') ||
-          destinations.contains('Teacher School Feed');
-      _destSchoolGallery =
-          destinations.contains('SCHOOL_GALLERY') ||
-          destinations.contains('School Gallery');
-      _destSchoolLanding =
-          destinations.contains('SCHOOL_LANDING') ||
-          destinations.contains('Landing Page') ||
-          destinations.contains('Public Landing Page');
+      if (_teacherGalleryOnly) {
+        _destParentHome = false;
+        _destTeacherHome = false;
+        _destSchoolGallery = true;
+        _destSchoolLanding = false;
+      } else {
+        _destParentHome =
+            destinations.isEmpty ||
+            destinations.contains('PARENTS_HOME') ||
+            destinations.contains('Parent Home Feed');
+        _destTeacherHome =
+            destinations.contains('TEACHERS_HOME') ||
+            destinations.contains('Teacher School Feed');
+        _destSchoolGallery =
+            destinations.contains('SCHOOL_GALLERY') ||
+            destinations.contains('School Gallery');
+        _destSchoolLanding =
+            destinations.contains('SCHOOL_LANDING') ||
+            destinations.contains('Landing Page') ||
+            destinations.contains('Public Landing Page');
+      }
       _postsError = null;
       _tabController.animateTo(widget.principalMode ? 1 : 0);
     });
@@ -658,6 +680,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         children: [
           TabBar(
             controller: _tabController,
+            onTap: (_) => _principalTabInteracted = true,
             labelColor: context.appTheme.primary,
             unselectedLabelColor: context.appTheme.onSurface.withOpacity(0.6),
             tabs: [
@@ -1312,13 +1335,14 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  CheckboxListTile(
-                    title: const Text('Parent Home Feed'),
-                    value: _destParentHome,
-                    dense: true,
-                    onChanged: (v) =>
-                        setState(() => _destParentHome = v ?? false),
-                  ),
+                  if (widget.principalMode)
+                    CheckboxListTile(
+                      title: const Text('Parent Home Feed'),
+                      value: _destParentHome,
+                      dense: true,
+                      onChanged: (v) =>
+                          setState(() => _destParentHome = v ?? false),
+                    ),
                   if (widget.principalMode)
                     CheckboxListTile(
                       title: const Text('Teacher School Feed'),
@@ -1332,21 +1356,29 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                     ),
                   CheckboxListTile(
                     title: const Text('School Gallery'),
-                    value: _destSchoolGallery,
+                    subtitle: _teacherGalleryOnly
+                        ? const Text(
+                            'Teacher posts publish directly to the school gallery.',
+                          )
+                        : null,
+                    value: _teacherGalleryOnly || _destSchoolGallery,
                     dense: true,
-                    onChanged: (v) =>
-                        setState(() => _destSchoolGallery = v ?? false),
+                    onChanged: _teacherGalleryOnly
+                        ? null
+                        : (v) =>
+                              setState(() => _destSchoolGallery = v ?? false),
                   ),
-                  CheckboxListTile(
-                    title: const Text('Landing Page (pre-login auto slider)'),
-                    subtitle: const Text(
-                      'Images only. The description is optional and is not shown on the slider.',
+                  if (widget.principalMode)
+                    CheckboxListTile(
+                      title: const Text('Landing Page (pre-login auto slider)'),
+                      subtitle: const Text(
+                        'Images only. The description is optional and is not shown on the slider.',
+                      ),
+                      value: _destSchoolLanding,
+                      dense: true,
+                      onChanged: (v) =>
+                          setState(() => _destSchoolLanding = v ?? false),
                     ),
-                    value: _destSchoolLanding,
-                    dense: true,
-                    onChanged: (v) =>
-                        setState(() => _destSchoolLanding = v ?? false),
-                  ),
 
                   const SizedBox(height: 24),
                   Wrap(
@@ -1363,6 +1395,8 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                         child: Text(
                           _canPublishDirectly
                               ? 'Publish to School Feed'
+                              : _teacherGalleryOnly
+                              ? 'Publish to School Gallery'
                               : _editingRejectedPost
                               ? 'Resubmit'
                               : 'Submit for Approval',

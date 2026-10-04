@@ -2,13 +2,16 @@ import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
 import {
   deleteR2File,
-  legacyStorageWritesEnabled,
   legacyR2Reference,
+  legacyStorageWritesEnabled,
   publicR2FileReference,
   publicR2FileUrl,
   uploadPublicToR2,
 } from "../lib/r2_storage.ts";
-import { signedPrivateFileUrl } from "../storage_helpers.ts";
+import {
+  deleteStoredObject,
+  signedPrivateFileUrl,
+} from "../storage_helpers.ts";
 
 const bucket = "school-public-media";
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
@@ -73,32 +76,32 @@ async function eventGalleryRows(
 ) {
   const media = eventMediaItems(row.media_urls);
   const rows = await Promise.all(media.map(async (item, index) => {
-      const object = item !== null && typeof item === "object"
-        ? item as Record<string, unknown>
-        : {};
-      const storedMedia = typeof item === "string"
-        ? item.trim()
-        : text(object.url ?? object.media_url ?? object.mediaUrl ?? object.secure_url);
-      const mediaUrl = migratedPublicUrl(storedMedia) ||
-        await signedPrivateFileUrl(svc, storedMedia, 10 * 60, "school-assets") ||
-        (storedMedia.startsWith("r2://") ? "" : storedMedia);
-      return {
-        id: `event:${text(row.id)}:${index}`,
-        source: "event_post",
-        event_post_id: text(row.id),
-        title: text(row.title) || "School moment",
-        alt_text: text(object.alt_text ?? row.title) || "School gallery image",
-        caption: text(row.body ?? row.description),
-        media_url: mediaUrl,
-        media_type: text(
-          object.media_type ?? object.mediaType ?? object.mime_type ??
-            object.content_type ?? object.kind ?? object.type,
-        ) || "image",
-        public_gallery_visible: row.public_gallery_visible !== false,
-        is_published: row.public_gallery_visible !== false,
-        created_at: row.created_at,
-      };
-    }));
+    const object = item !== null && typeof item === "object"
+      ? item as Record<string, unknown>
+      : {};
+    const storedMedia = typeof item === "string" ? item.trim() : text(
+      object.url ?? object.media_url ?? object.mediaUrl ?? object.secure_url,
+    );
+    const mediaUrl = migratedPublicUrl(storedMedia) ||
+      await signedPrivateFileUrl(svc, storedMedia, 10 * 60, "school-assets") ||
+      (storedMedia.startsWith("r2://") ? "" : storedMedia);
+    return {
+      id: `event:${text(row.id)}:${index}`,
+      source: "event_post",
+      event_post_id: text(row.id),
+      title: text(row.title) || "School moment",
+      alt_text: text(object.alt_text ?? row.title) || "School gallery image",
+      caption: text(row.body ?? row.description),
+      media_url: mediaUrl,
+      media_type: text(
+        object.media_type ?? object.mediaType ?? object.mime_type ??
+          object.content_type ?? object.kind ?? object.type,
+      ) || "image",
+      public_gallery_visible: row.public_gallery_visible !== false,
+      is_published: row.public_gallery_visible !== false,
+      created_at: row.created_at,
+    };
+  }));
   return rows.filter((item) => item.media_url.length > 0);
 }
 
@@ -129,10 +132,18 @@ export async function handleWebsitePublic(
       .eq("school_id", school).in("status", ["approved", "published"])
       .eq("public_gallery_visible", true)
       .order("created_at", { ascending: false }),
-    svc.from("school_website_sections").select("section_key, title, body, image_url")
+    svc.from("school_website_sections").select(
+      "section_key, title, body, image_url",
+    )
       .eq("status", "published").order("created_at"),
-    svc.from("school_website_entries").select("id, entry_type, title, body, image_url, metadata, created_at")
-      .eq("status", "published").in("entry_type", ["program", "news_event", "testimonial"])
+    svc.from("school_website_entries").select(
+      "id, entry_type, title, body, image_url, metadata, created_at",
+    )
+      .eq("status", "published").in("entry_type", [
+        "program",
+        "news_event",
+        "testimonial",
+      ])
       .order("created_at", { ascending: false }),
   ]);
   if (contentError) return fail(contentError.message);
@@ -141,9 +152,11 @@ export async function handleWebsitePublic(
   if (sectionsError) return fail(sectionsError.message);
   if (entriesError) return fail(entriesError.message);
   const publicGallery = (gallery ?? []).map((row) => galleryRow(svc, row));
-  const mobileGallery = (await Promise.all((eventPosts ?? []).map((row) =>
-    eventGalleryRows(svc, row as Record<string, unknown>)
-  ))).flat();
+  const mobileGallery = (await Promise.all(
+    (eventPosts ?? []).map((row) =>
+      eventGalleryRows(svc, row as Record<string, unknown>)
+    ),
+  )).flat();
   return ok({
     content: content ?? {},
     gallery: [...mobileGallery, ...publicGallery],
@@ -158,7 +171,11 @@ export async function handleWebsitePublic(
   });
 }
 
-export async function handleWebsiteEnquiry(req: Request, url: URL, svc: SupabaseClient) {
+export async function handleWebsiteEnquiry(
+  req: Request,
+  url: URL,
+  svc: SupabaseClient,
+) {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const name = text(body.name);
   const phone = text(body.phone);
@@ -167,30 +184,58 @@ export async function handleWebsiteEnquiry(req: Request, url: URL, svc: Supabase
   const childAge = text(body.child_age);
   const program = text(body.program);
   if (!school) return fail("school_id is required", 422);
-  if (!name || !phone || !email || !childAge || !program) return fail("name, phone, email, child age, and program are required", 422);
+  if (!name || !phone || !email || !childAge || !program) {
+    return fail("name, phone, email, child age, and program are required", 422);
+  }
   if (!/^\S+@\S+\.\S+$/.test(email)) return fail("valid email required", 422);
   if (!programs.includes(program)) return fail("invalid program", 422);
   const { data, error } = await svc.from("admission_inquiries").insert({
-    school_id: school, source: text(body.source) || "homepage", parent_name: name,
-    phone, email, child_name: text(body.child_name), child_age: childAge, program,
+    school_id: school,
+    source: text(body.source) || "homepage",
+    parent_name: name,
+    phone,
+    email,
+    child_name: text(body.child_name),
+    child_age: childAge,
+    program,
     message: text(body.message),
   }).select("id").single();
   if (error) return fail(error.message);
   const { data: leaders } = await svc.from("users").select("id, role_name")
-    .eq("school_id", school).eq("is_active", true).in("role_name", ["principal", "coordinator"]);
+    .eq("school_id", school).eq("is_active", true).in("role_name", [
+      "principal",
+      "coordinator",
+    ]);
   for (const leader of leaders ?? []) {
     const title = "New admission inquiry";
     const message = `${name} enquired about ${program}.`;
     const { data: event } = await svc.from("notification_events").insert({
-      school_id: school, user_id: leader.id, event_type: "admission_inquiry",
-      event_data: { reference_type: "admission_inquiry", inquiry_id: data.id, message },
+      school_id: school,
+      user_id: leader.id,
+      event_type: "admission_inquiry",
+      event_data: {
+        reference_type: "admission_inquiry",
+        inquiry_id: data.id,
+        message,
+      },
     }).select("id").maybeSingle();
     if (event?.id) triggerPushProcessing(event.id);
-    await svc.from("notification_logs").insert({ school_id: school, user_id: leader.id,
-      target_role: leader.role_name, title, body: message, type: "admission_inquiry",
-      entity_type: "admission_inquiry", entity_id: data.id, is_read: false });
+    await svc.from("notification_logs").insert({
+      school_id: school,
+      user_id: leader.id,
+      target_role: leader.role_name,
+      title,
+      body: message,
+      type: "admission_inquiry",
+      entity_type: "admission_inquiry",
+      entity_id: data.id,
+      is_read: false,
+    });
   }
-  return ok({ id: data.id, message: "Thank you. Our admissions team will be in touch." });
+  return ok({
+    id: data.id,
+    message: "Thank you. Our admissions team will be in touch.",
+  });
 }
 
 export async function handleAdmissionInquiries(
@@ -263,8 +308,15 @@ export async function handleWebsite(
     if (method === "PUT") {
       const breakingNewsText = text(body.breaking_news_text);
       const breakingNewsEnabled = body.breaking_news_enabled === true;
-      if (breakingNewsText.length > 240) return fail("breaking news text must be 240 characters or fewer", 422);
-      if (breakingNewsEnabled && !breakingNewsText) return fail("breaking news text is required when the ticker is enabled", 422);
+      if (breakingNewsText.length > 240) {
+        return fail("breaking news text must be 240 characters or fewer", 422);
+      }
+      if (breakingNewsEnabled && !breakingNewsText) {
+        return fail(
+          "breaking news text is required when the ticker is enabled",
+          422,
+        );
+      }
       const { data, error } = await svc.from("school_website_content").upsert({
         school_id: school,
         breaking_news_text: breakingNewsText,
@@ -324,13 +376,16 @@ export async function handleWebsite(
       galleryRow(svc, row)
     );
     const selectedEventMedia = (await Promise.all((eventResult.data ?? []).map(
-      async (row) => (await eventGalleryRows(svc, row as Record<string, unknown>)).map((media) => ({
-        ...media,
-        is_published: row.public_gallery_visible !== false,
-        public_gallery_visible: row.public_gallery_visible !== false,
-        status: text(row.status),
-        destinations: row.destinations ?? [],
-      })),
+      async (row) =>
+        (await eventGalleryRows(svc, row as Record<string, unknown>)).map((
+          media,
+        ) => ({
+          ...media,
+          is_published: row.public_gallery_visible !== false,
+          public_gallery_visible: row.public_gallery_visible !== false,
+          status: text(row.status),
+          destinations: row.destinations ?? [],
+        })),
     ))).flat();
     return ok([...selectedEventMedia, ...managedMedia]);
   }
@@ -338,23 +393,32 @@ export async function handleWebsite(
     const form = await req.formData().catch(() => null);
     const file = form?.get("file");
     const allowedMedia = file instanceof File && (
-      file.type.startsWith("image/") || ["video/mp4", "video/webm", "video/quicktime"].includes(file.type)
+      file.type.startsWith("image/") ||
+      ["video/mp4", "video/webm", "video/quicktime"].includes(file.type)
     );
     if (!allowedMedia || !(file instanceof File)) {
       return fail("an image or MP4, WebM, or MOV video is required");
     }
     if (file.size > (file.type.startsWith("video/") ? 50 : 10) * 1024 * 1024) {
-      return fail(file.type.startsWith("video/") ? "videos must be 50 MB or smaller" : "images must be 10 MB or smaller");
+      return fail(
+        file.type.startsWith("video/")
+          ? "videos must be 50 MB or smaller"
+          : "images must be 10 MB or smaller",
+      );
     }
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-    const mediaKey = `website-gallery/${school}/${crypto.randomUUID()}-${safeName}`;
+    const mediaKey =
+      `website-gallery/${school}/${crypto.randomUUID()}-${safeName}`;
     const r2Upload = await uploadPublicToR2(mediaKey, file, file.type);
     const mediaPath = r2Upload
       ? publicR2FileReference(r2Upload.key)
       : `${school}/${crypto.randomUUID()}-${safeName}`;
     if (!r2Upload) {
       if (!legacyStorageWritesEnabled()) {
-        return fail("R2 public storage is unavailable; legacy storage writes are disabled", 503);
+        return fail(
+          "R2 public storage is unavailable; legacy storage writes are disabled",
+          503,
+        );
       }
       const { error: uploadError } = await svc.storage.from(bucket).upload(
         mediaPath,
@@ -380,7 +444,7 @@ export async function handleWebsite(
           ? form.get("is_published") === "true"
           : true,
         created_by: user.id,
-    }).select().single();
+      }).select().single();
     if (error) {
       if (r2Upload) await deleteR2File(mediaPath);
       else await svc.storage.from(bucket).remove([mediaPath]);
@@ -414,11 +478,7 @@ export async function handleWebsite(
     const { error } = await svc.from("school_website_gallery_items").delete()
       .eq("id", match[1]).eq("school_id", school);
     if (error) return fail(error.message);
-    if (publicR2FileUrl(existing.media_path)) {
-      await deleteR2File(existing.media_path);
-    } else {
-      await svc.storage.from(bucket).remove([existing.media_path]);
-    }
+    await deleteStoredObject(svc, existing.media_path, bucket);
     return ok({ deleted: true });
   }
   return fail("not found", 404);

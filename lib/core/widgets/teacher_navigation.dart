@@ -5,6 +5,7 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/services/chat_unread_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/text_utils.dart';
@@ -28,7 +29,9 @@ class TeacherDrawer extends StatefulWidget {
 
 class _TeacherDrawerState extends State<TeacherDrawer> {
   NotificationService? _notifService;
+  final ChatUnreadService _chatUnreadService = ChatUnreadService.instance;
   int _unreadCount = 0;
+  int _unreadMessages = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Teacher workspace';
   String _schoolLogo = '';
@@ -39,7 +42,16 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
   void initState() {
     super.initState();
     _loadNotifications();
+    _loadUnreadMessages();
     _loadIdentity();
+  }
+
+  Future<void> _loadUnreadMessages() async {
+    await _chatUnreadService.refresh(role: 'teacher');
+    if (!mounted) return;
+    _unreadMessages = _chatUnreadService.unreadCount;
+    _chatUnreadService.addListener(_onChatUnreadChanged);
+    setState(() {});
   }
 
   Future<void> _loadNotifications() async {
@@ -95,9 +107,15 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
     });
   }
 
+  void _onChatUnreadChanged() {
+    if (!mounted) return;
+    setState(() => _unreadMessages = _chatUnreadService.unreadCount);
+  }
+
   @override
   void dispose() {
     _notifService?.removeListener(_onNotifChanged);
+    _chatUnreadService.removeListener(_onChatUnreadChanged);
     super.dispose();
   }
 
@@ -230,7 +248,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               activeIcon: Icons.chat_rounded,
               label: 'Messages',
               route: AppRoutes.teacherCommunication,
-              badgeCount: RoleAccessService.teacherUnreadMessages,
+              badgeCount: _unreadMessages,
             ),
             const SchoolDeskNavigationItem(
               index: TeacherNav.complaints,

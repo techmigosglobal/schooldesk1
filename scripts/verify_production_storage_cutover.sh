@@ -29,12 +29,17 @@ request() {
 
 health="$(request health)"
 ready="$(request ready)"
-jq -e '.success == true and .data.status == "ok" and .data.storage == "r2-configured"' \
-  <<<"$health" >/dev/null || { echo "Production health did not confirm R2 configuration" >&2; exit 1; }
-jq -e '.success == true and .data.database == "ok" and .data.edge_function == "ok" and .data.storage == "r2-configured"' \
-  <<<"$ready" >/dev/null || { echo "Production readiness did not confirm database/Edge/R2 health" >&2; exit 1; }
+expected_storage="${EXPECTED_STORAGE_BACKEND:-r2-configured}"
+[[ "$expected_storage" == "r2-configured" || "$expected_storage" == "supabase-storage" ]] || {
+  echo "EXPECTED_STORAGE_BACKEND must be r2-configured or supabase-storage" >&2
+  exit 1
+}
+jq -e --arg storage "$expected_storage" '.success == true and .data.status == "ok" and .data.storage == $storage' \
+  <<<"$health" >/dev/null || { echo "Production health did not confirm $expected_storage" >&2; exit 1; }
+jq -e --arg storage "$expected_storage" '.success == true and .data.database == "ok" and .data.edge_function == "ok" and .data.storage == $storage' \
+  <<<"$ready" >/dev/null || { echo "Production readiness did not confirm database/Edge/$expected_storage health" >&2; exit 1; }
 
-echo "Hosted health: database, Edge Function, and R2 configuration are healthy."
+echo "Hosted health: database, Edge Function, and $expected_storage are healthy."
 
 if [[ -n "${SUPABASE_DB_URL:-}" ]]; then
   command -v supabase >/dev/null 2>&1 || { echo "supabase CLI is required for SUPABASE_DB_URL checks" >&2; exit 1; }
@@ -57,11 +62,9 @@ else
   echo "Hosted migration history: NOT VERIFIED (set SUPABASE_DB_URL in the protected environment)."
 fi
 
-if [[ -n "${SUPABASE_ACCESS_TOKEN:-}" ]]; then
+if [[ -n "${SUPABASE_ACCESS_TOKEN:-}" && -n "${SUPABASE_PROJECT_REF:-}" ]]; then
   command -v supabase >/dev/null 2>&1 || { echo "supabase CLI is required for function checks" >&2; exit 1; }
-  ref="${SUPABASE_PROJECT_REF:-${project_url#https://}}"
-  ref="${ref%%.*}"
-  supabase functions list --project-ref "$ref" -o json >/dev/null
+  supabase functions list --project-ref "$SUPABASE_PROJECT_REF" -o json >/dev/null
   echo "Hosted Edge Function listing: accessible."
 else
   echo "Hosted Edge Function revision list: NOT VERIFIED (set SUPABASE_ACCESS_TOKEN in the protected environment)."

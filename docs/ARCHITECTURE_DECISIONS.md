@@ -1,5 +1,18 @@
 # Architecture decisions
 
+## Active production backend target
+
+ADR-0003 supersedes the earlier R2-first deployment decision for the Hostinger
+migration. Production deployment targets the official self-hosted Supabase
+Docker stack managed by Coolify, with PostgreSQL and Supabase Storage persisted
+on explicit VPS bind mounts. Cloudflare R2 is retained only as a rollback source
+until a separately approved retirement action.
+
+The Edge API uses `STORAGE_WRITE_PROVIDER=supabase` and
+`STORAGE_READ_ORDER=supabase`. Legacy compatibility remains enabled during
+restore and verification, then is disabled after all object hashes and database
+references pass.
+
 ## State management
 
 ADR-0001 supersedes the earlier Provider-only decision. Riverpod 3 is the

@@ -20,6 +20,7 @@ void main() {
     expect(homework, contains('svc.from("homework_submissions")'));
     expect(homework, contains('table_name", "homework"'));
     expect(homework, contains('parentCanAccessStudent'));
+    expect(homework, contains('materializeHomeworkAttachments(svc, row)'));
     expect(api, contains('Future<List<Map<String, dynamic>>> getHomework'));
     expect(api, contains('Future<Map<String, dynamic>> submitHomework'));
   });

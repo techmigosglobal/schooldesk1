@@ -7,6 +7,7 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_models.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/fee_shared/fee_widgets.dart';
@@ -96,11 +97,13 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
 
   String _absoluteUrl(String value) {
     final trimmed = value.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed;
-    }
-    if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
-    return '${EnvConfig.apiOrigin}/$trimmed';
+    final absolute = trimmed.startsWith('http://') ||
+            trimmed.startsWith('https://')
+        ? trimmed
+        : trimmed.startsWith('/')
+        ? '${EnvConfig.apiOrigin}$trimmed'
+        : '${EnvConfig.apiOrigin}/$trimmed';
+    return resolveOriginalImageUrl(absolute);
   }
 
   @override

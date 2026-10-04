@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:schooldesk1/core/auth/role_context.dart';
 import 'package:schooldesk1/core/auth/api_auth_repository.dart';
@@ -128,16 +129,15 @@ import 'package:schooldesk1/modules/communication/domain/notification_diagnostic
 import 'package:schooldesk1/modules/communication/data/api_help_content_repository.dart';
 import 'package:schooldesk1/modules/communication/domain/help_content_repository.dart';
 
-final backendApiClientProvider = Provider<BackendApiClient>(
+final backendApiClientProvider = ChangeNotifierProvider<BackendApiClient>(
   (ref) => BackendApiClient.instance,
 );
 
 final currentRoleNameProvider = Provider<String?>((ref) {
-  return ref
-      .watch(backendApiClientProvider)
-      .currentRoleName
-      ?.trim()
-      .toLowerCase();
+  final client = ref.watch(backendApiClientProvider);
+  // ChangeNotifierProvider subscribes to session and branch changes, so role
+  // gated screens cannot retain the previous account after a refresh/logout.
+  return client.currentRoleName?.trim().toLowerCase();
 });
 
 final authRepositoryProvider = Provider<AuthRepository>(

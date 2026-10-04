@@ -76,7 +76,6 @@ void main() {
         AppRoutes.principalTimetable,
         AppRoutes.principalLessonPlanner,
         AppRoutes.principalDocuments,
-        AppRoutes.principalAuditLogs,
         AppRoutes.principalAccountCreate,
         AppRoutes.principalAccountEdit,
         AppRoutes.principalParentChildAssignment,

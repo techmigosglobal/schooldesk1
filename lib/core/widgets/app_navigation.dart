@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
+import 'package:schooldesk1/core/services/chat_unread_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/text_utils.dart';
@@ -31,7 +32,9 @@ class PrincipalDrawer extends StatefulWidget {
 
 class _PrincipalDrawerState extends State<PrincipalDrawer> {
   NotificationService? _notifService;
+  final ChatUnreadService _chatUnreadService = ChatUnreadService.instance;
   int _unreadCount = 0;
+  int _unreadMessages = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Manage school details';
   String _schoolLogo = '';
@@ -43,7 +46,16 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
   void initState() {
     super.initState();
     _loadNotifications();
+    _loadUnreadMessages();
     _loadIdentity();
+  }
+
+  Future<void> _loadUnreadMessages() async {
+    await _chatUnreadService.refresh(role: _leadershipRole);
+    if (!mounted) return;
+    _unreadMessages = _chatUnreadService.unreadCount;
+    _chatUnreadService.addListener(_onChatUnreadChanged);
+    setState(() {});
   }
 
   Future<void> _loadNotifications() async {
@@ -99,9 +111,15 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
     });
   }
 
+  void _onChatUnreadChanged() {
+    if (!mounted) return;
+    setState(() => _unreadMessages = _chatUnreadService.unreadCount);
+  }
+
   @override
   void dispose() {
     _notifService?.removeListener(_onNotifChanged);
+    _chatUnreadService.removeListener(_onChatUnreadChanged);
     super.dispose();
   }
 
@@ -137,7 +155,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
       hiddenRoutes: isCoordinator ? {AppRoutes.feeMonitoring} : const {},
       selectedIndex: widget.selectedIndex,
       onDestinationSelected: widget.onDestinationSelected,
-      sections: const [
+      sections: [
         SchoolDeskNavigationSection(
           label: 'Overview',
           items: [
@@ -265,6 +283,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               activeIcon: Icons.forum_rounded,
               label: 'Messages & Chats',
               route: AppRoutes.principalChatCommunications,
+              badgeCount: _unreadMessages,
             ),
             SchoolDeskNavigationItem(
               index: PrincipalNav.eventPosts,
@@ -693,13 +712,6 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
         SchoolDeskNavigationSection(
           label: 'System Administration',
           items: [
-            SchoolDeskNavigationItem(
-              index: SuperAdminNav.auditLogs,
-              icon: Icons.history_rounded,
-              activeIcon: Icons.history_rounded,
-              label: 'Audit Logs',
-              route: AppRoutes.superAdminAuditLogs,
-            ),
             SchoolDeskNavigationItem(
               index: SuperAdminNav.systemMonitor,
               icon: Icons.monitor_heart_outlined,

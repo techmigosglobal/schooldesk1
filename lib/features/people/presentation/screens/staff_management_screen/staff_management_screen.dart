@@ -14,6 +14,7 @@ import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/modules/people/data/api_staff_directory_repository.dart';
 import 'package:schooldesk1/modules/people/domain/staff_directory_repository.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
@@ -398,6 +399,17 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       staffSubjects: staffSubjects,
     );
     final linkedUser = _linkedUserForStaff(staff.id, users);
+    final assignedClasses = staff.assignedClasses.isNotEmpty
+        ? staff.assignedClasses
+        : assignments.classes;
+    final loginUsername = staff.username.trim().isNotEmpty
+        ? staff.username.trim()
+        : linkedUser?.username ?? '';
+    final accountRole = staff.accountRole.trim().isNotEmpty
+        ? staff.accountRole.trim()
+        : linkedUser?.roleName.trim().isNotEmpty == true
+        ? linkedUser!.roleName
+        : _roleFromDesignation(staff.designation);
     return StaffModel(
       id: staff.id,
       name: fullName,
@@ -405,7 +417,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       designation: (staff.designation ?? 'Teacher').trim().isEmpty
           ? 'Teacher'
           : staff.designation!.trim(),
-      assignedClasses: assignments.classes,
+      assignedClasses: assignedClasses,
       subjects: assignments.subjects,
       status: staff.status.toLowerCase(),
       leaveBalance: 0,
@@ -417,13 +429,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       phone: (staff.phone ?? '').trim(),
       email: (staff.email ?? '').trim(),
       photoUrl: staff.photoUrl,
-      loginUsername: linkedUser?.username ?? '',
+      loginUsername: loginUsername,
       employmentType: staff.employmentType ?? '',
       documentCount: staff.documentCount,
       documents: staff.documents,
-      accountRole: linkedUser?.roleName.trim().isNotEmpty == true
-          ? linkedUser!.roleName
-          : _roleFromDesignation(staff.designation),
+      accountRole: accountRole,
     );
   }
 
@@ -1067,10 +1077,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     if (value.startsWith('http://') ||
         value.startsWith('https://') ||
         value.startsWith('file://')) {
-      return value;
+      return resolveOriginalImageUrl(value);
     }
-    if (value.startsWith('/')) return '${EnvConfig.apiOrigin}$value';
-    return '${EnvConfig.apiOrigin}/$value';
+    if (value.startsWith('/')) {
+      return resolveOriginalImageUrl('${EnvConfig.apiOrigin}$value');
+    }
+    return resolveOriginalImageUrl('${EnvConfig.apiOrigin}/$value');
   }
 
   Future<void> _openStaffProfileForm([StaffModel? staff]) async {
@@ -1735,7 +1747,7 @@ class _TeacherStatusBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: GoogleFonts.dmSans(
           fontSize: 11,
@@ -2647,31 +2659,54 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
             ],
           ),
           const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: _saving ? null : _addAssignment,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Add Assignment'),
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final button = OutlinedButton.icon(
+                onPressed: _saving ? null : _addAssignment,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Assignment'),
+              );
+              if (constraints.maxWidth < 560) {
+                return SizedBox(width: double.infinity, child: button);
+              }
+              return Align(alignment: Alignment.centerRight, child: button);
+            },
           ),
           if (_assignments.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final assignment in _assignments)
-                  InputChip(
-                    label: Text(
-                      assignment.displayLabel,
-                      overflow: TextOverflow.ellipsis,
+            LayoutBuilder(
+              builder: (context, constraints) => Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final assignment in _assignments)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: constraints.maxWidth,
+                      ),
+                      child: InputChip(
+                        backgroundColor: const Color(0xFFE7F3FB),
+                        side: const BorderSide(color: Color(0xFFB7D8EA)),
+                        labelStyle: GoogleFonts.dmSans(
+                          color: const Color(0xFF1D4F73),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        deleteIconColor: const Color(0xFF1D4F73),
+                        label: Text(
+                          assignment.displayLabel,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onDeleted: _saving
+                            ? null
+                            : () => setState(
+                                () => _assignments.remove(assignment),
+                              ),
+                      ),
                     ),
-                    onDeleted: _saving
-                        ? null
-                        : () => setState(() => _assignments.remove(assignment)),
-                  ),
-              ],
+                ],
+              ),
             ),
           ],
         ],
@@ -3055,10 +3090,12 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
     if (value.startsWith('http://') ||
         value.startsWith('https://') ||
         value.startsWith('file://')) {
-      return value;
+      return resolveOriginalImageUrl(value);
     }
-    if (value.startsWith('/')) return '${EnvConfig.apiOrigin}$value';
-    return '${EnvConfig.apiOrigin}/$value';
+    if (value.startsWith('/')) {
+      return resolveOriginalImageUrl('${EnvConfig.apiOrigin}$value');
+    }
+    return resolveOriginalImageUrl('${EnvConfig.apiOrigin}/$value');
   }
 
   static String _friendlyError(Object error) {
@@ -3267,7 +3304,11 @@ class _ResponsiveFieldRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 330) {
+        // Three compact controls become unreadable on a phone when each is
+        // forced into a third of the row. Stack assignment controls until
+        // there is enough width for their labels and selected values.
+        if (constraints.maxWidth < 330 ||
+            (children.length >= 3 && constraints.maxWidth < 560)) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

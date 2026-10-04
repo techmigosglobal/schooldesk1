@@ -240,13 +240,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                 _buildSectionTitle('System Management'),
                                 const SizedBox(height: 12),
                                 _buildGrid([
-                                  const _ModuleCard(
-                                    label: 'Audit Logs',
-                                    route: AppRoutes.superAdminAuditLogs,
-                                    icon: Icons.history_rounded,
-                                    accent: Color(0xFF0B2F5B),
-                                    cardColor: Color(0xFFEEF7FF),
-                                  ),
                                   _ModuleCard(
                                     label: 'System Monitor',
                                     route: AppRoutes.superAdminSystemMonitor,

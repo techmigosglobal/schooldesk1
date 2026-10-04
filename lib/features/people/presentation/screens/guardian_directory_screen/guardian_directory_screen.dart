@@ -17,6 +17,7 @@ import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 
 String _parentFacingRelationship(String value) {
   final normalized = value.trim().toLowerCase();
@@ -237,9 +238,13 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   String _mediaUrl(String value) {
     final path = value.trim();
     if (path.isEmpty) return '';
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    if (path.startsWith('/')) return '${EnvConfig.apiOrigin}$path';
-    return path;
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return resolveOriginalImageUrl(path);
+    }
+    if (path.startsWith('/')) {
+      return resolveOriginalImageUrl('${EnvConfig.apiOrigin}$path');
+    }
+    return resolveOriginalImageUrl(path);
   }
 
   _GuardianMetadata _guardianMetadataFor(
@@ -832,14 +837,11 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       String guardianRowId;
 
       if (existing == null) {
-        final created = await _repository.createRaw(
-          '/guardians',
-          {
-            ...payloadBase,
-            'student_id': student.studentId,
-            'is_primary': isPrimary,
-          },
-        );
+        final created = await _repository.createRaw('/guardians', {
+          ...payloadBase,
+          'student_id': student.studentId,
+          'is_primary': isPrimary,
+        });
         // The CRUD endpoint wraps responses in { success, data } or returns
         // the record directly depending on the handler — handle both shapes.
         final record = created['data'] is Map
@@ -848,10 +850,10 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         guardianRowId = _stringValue(record['id']);
       } else {
         guardianRowId = _stringValue(existing['id']);
-        await _repository.updateRaw(
-          '/guardians/$guardianRowId',
-          {...payloadBase, 'is_primary': isPrimary},
-        );
+        await _repository.updateRaw('/guardians/$guardianRowId', {
+          ...payloadBase,
+          'is_primary': isPrimary,
+        });
       }
 
       // Explicitly link the guardian row to the student via the dedicated

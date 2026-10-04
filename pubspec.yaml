@@ -1,7 +1,7 @@
 name: schooldesk1
 description: A new Flutter project.
 publish_to: none
-version: 1.0.29+42
+version: 1.0.30+43
 
 environment:
   sdk: ^3.9.0
@@ -39,6 +39,7 @@ dependencies:
   flutter_local_notifications: ^22.3.1
   video_player: ^2.14.0
   package_info_plus: ^10.2.1
+  in_app_update: ^5.0.0
   file_picker: ^13.1.0
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.4.2

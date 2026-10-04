@@ -96,6 +96,31 @@ void main() {
     expect(find.text('Referenced school post'), findsOneWidget);
     expect(find.text('Other pending posts'), findsOneWidget);
   });
+
+  testWidgets(
+    'teacher school posts only offers direct school gallery publishing',
+    (tester) async {
+      BackendApiClient.instance.setCurrentRole('teacher');
+      adapter.routes.remove('GET /event-posts');
+      adapter.routes['GET /event-posts/teacher'] = {
+        'success': true,
+        'data': <Map<String, dynamic>>[],
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: const TeacherEventPostScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Parent Home Feed'), findsNothing);
+      expect(find.text('Landing Page (pre-login auto slider)'), findsNothing);
+      expect(find.text('School Gallery'), findsOneWidget);
+      expect(find.text('Publish to School Gallery'), findsOneWidget);
+    },
+  );
 }
 
 Future<void> _pumpSchoolPosts(

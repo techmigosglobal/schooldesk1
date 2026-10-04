@@ -22,7 +22,6 @@ import 'package:schooldesk1/features/shell/shell.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/event_post_screen.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/issue_screen.dart';
 import 'package:schooldesk1/features/people/presentation/screens/admission_inquiries_screen.dart';
-import 'package:schooldesk1/features/monitoring/presentation/screens/principal_audit_logs_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
 import 'package:schooldesk1/shared/screens/help_screen/help_screen.dart';
 import 'package:schooldesk1/shared/screens/school_gallery_screen.dart';
@@ -393,14 +392,10 @@ class TypedAppRouteRegistry {
         const PrincipalLessonPlannerScreen(),
     AppRoutes.principalTimetable: (_, __) => const AdminTimetableScreen(),
     AppRoutes.principalDocuments: (_, __) => const AdminDocumentsScreen(),
-    AppRoutes.principalAuditLogs: (_, __) =>
-        const PrincipalAuditLogsScreen(role: 'principal'),
     AppRoutes.principalAnalytics: (_, __) => const PrincipalAnalyticsScreen(),
     AppRoutes.systemMonitor: (_, __) =>
         const SystemMonitorScreen(role: 'principal'),
     AppRoutes.idCardGeneration: (_, __) => const IdCardGenerationScreen(),
-    AppRoutes.superAdminAuditLogs: (_, __) =>
-        const PrincipalAuditLogsScreen(role: 'super_admin'),
     AppRoutes.superAdminSystemMonitor: (_, __) =>
         const SystemMonitorScreen(role: 'super_admin'),
     AppRoutes.superAdminAccess: (_, __) =>

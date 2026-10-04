@@ -13,17 +13,18 @@ String resolveOriginalImageUrl(String value) {
   final uri = Uri.tryParse(raw);
   if (uri == null || !uri.hasScheme) return value;
 
-  // The local Edge runtime runs inside Docker and Supabase may return
-  // `kong:8000` (or another Docker-only alias) in generated Storage URLs.
-  // Android/iOS cannot resolve that hostname, even though the host machine
-  // exposes the same gateway on 127.0.0.1:54321 through the ADB reverse
-  // tunnel. Rewrite only when the configured app origin is local; hosted
-  // Supabase URLs are never modified.
-  final localOrigin = Uri.tryParse(EnvConfig.apiOrigin);
-  if (localOrigin != null &&
-      _isLocalOrigin(localOrigin) &&
+  // The Edge Functions runtime may generate Storage URLs from its internal
+  // `http://supabase-kong:8000` origin. Coolify can also expose the same
+  // internal URL through an HTTP sslip.io preview host. Those origins are
+  // unreachable (and cleartext is rejected) from Android/iOS. Keep the
+  // storage path and signed query intact while using the app's public API
+  // origin. This also handles local Docker URLs through the ADB reverse
+  // tunnel.
+  final configuredOrigin = Uri.tryParse(EnvConfig.apiOrigin);
+  if (configuredOrigin != null &&
+      configuredOrigin.host.isNotEmpty &&
       _isDockerStorageHost(uri.host)) {
-    return _rewriteOrigin(uri, localOrigin).toString();
+    return _rewriteOrigin(uri, configuredOrigin).toString();
   }
 
   // Restored rows can still contain an object URL from the retired Supabase
@@ -62,24 +63,24 @@ String resolveOriginalImageUrl(String value) {
   return uri.replace(path: path, queryParameters: params).toString();
 }
 
-bool _isLocalOrigin(Uri uri) {
-  final host = uri.host.toLowerCase();
-  return host == '127.0.0.1' || host == 'localhost' || host == '::1';
-}
-
 bool _isDockerStorageHost(String host) {
   final normalized = host.toLowerCase();
   return normalized == 'kong' ||
       normalized == 'host.docker.internal' ||
       normalized == 'supabase-kong' ||
       normalized.startsWith('supabase_kong_') ||
+      (normalized.startsWith('supabasekong-') &&
+          normalized.endsWith('.sslip.io')) ||
       normalized == '127.0.0.1' ||
       normalized == 'localhost' ||
       normalized == '::1';
 }
 
-Uri _rewriteOrigin(Uri uri, Uri origin) => uri.replace(
+Uri _rewriteOrigin(Uri uri, Uri origin) => Uri(
   scheme: origin.scheme,
   host: origin.host,
   port: origin.hasPort ? origin.port : null,
+  path: uri.path,
+  query: uri.hasQuery ? uri.query : null,
+  fragment: uri.hasFragment ? uri.fragment : null,
 );

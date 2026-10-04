@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,6 +20,17 @@ import 'package:schooldesk1/modules/profile/domain/profile_repository.dart';
 import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+
+@visibleForTesting
+String resolveProfileManagementRole({
+  required String routeRole,
+  String? accountRole,
+}) {
+  final authenticatedRole = accountRole?.trim().toLowerCase() ?? '';
+  return authenticatedRole.isEmpty
+      ? routeRole.trim().toLowerCase()
+      : authenticatedRole;
+}
 
 class ProfileManagementScreen extends StatefulWidget {
   final String role;
@@ -59,11 +71,18 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
   String _avatarPath = '';
   Uint8List? _pendingAvatarBytes;
 
-  bool get _isPrincipal => widget.role.toLowerCase() == 'principal';
-  bool get _isTeacher => widget.role.toLowerCase() == 'teacher';
+  String get _effectiveRole => resolveProfileManagementRole(
+    routeRole: widget.role,
+    accountRole: _profile?.roleName,
+  );
+
+  bool get _isPrincipal => _effectiveRole == 'principal';
+  bool get _isTeacher => _effectiveRole == 'teacher';
+  bool get _isParent => _effectiveRole == 'parent';
+  bool get _canEditProfile => _isPrincipal || _isTeacher;
 
   SchoolDeskRole get _roleEnum {
-    switch (widget.role.trim().toLowerCase()) {
+    switch (_effectiveRole) {
       case 'principal':
       case 'admin':
         return SchoolDeskRole.principal;
@@ -100,12 +119,16 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
     });
     try {
       final profile = await _repository.loadProfile();
+      final accountRole = resolveProfileManagementRole(
+        routeRole: widget.role,
+        accountRole: profile.roleName,
+      );
       Map<String, dynamic> school = {};
-      if (_isPrincipal) {
+      if (accountRole == 'principal') {
         school = await _repository.loadCurrentSchool();
       }
       StaffModel? teacherStaff;
-      if (_isTeacher) {
+      if (accountRole == 'teacher') {
         await RoleAccessService.initialize();
         final staffId = RoleAccessService.teacherStaffId;
         if (staffId.isNotEmpty) {
@@ -167,6 +190,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
   }
 
   Future<void> _save() async {
+    if (!_canEditProfile) return;
     final username = _usernameCtrl.text.trim();
     if (!RegExp(r'^[A-Za-z0-9._-]{3,40}$').hasMatch(username)) {
       _showSnack(
@@ -229,6 +253,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
   }
 
   Future<void> _pickImage() async {
+    if (!_canEditProfile) return;
     try {
       final picked = await ImagePicker().pickImage(
         source: ImageSource.gallery,
@@ -294,7 +319,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
           ),
           backgroundColor: context.appTheme.surface,
           actions: [
-            if (_state.hasData)
+            if (_state.hasData && _canEditProfile)
               TextButton.icon(
                 onPressed: _saving
                     ? null
@@ -328,32 +353,49 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
                 children: [
                   _buildHeader(),
                   const SizedBox(height: 12),
-                  _buildSection(
-                    title: 'Personal Information',
-                    children: [
-                      _field(
-                        'Username',
-                        _usernameCtrl,
-                        Icons.alternate_email_rounded,
-                        helperText:
-                            'Use this username when you sign in. You can change it later.',
-                      ),
-                      _field('Full Name', _nameCtrl, Icons.person_rounded),
-                      _field(
-                        'Email Address',
-                        _emailCtrl,
-                        Icons.email_rounded,
-                        keyboardType: TextInputType.emailAddress,
-                      ),
-                      _field(
-                        'Phone Number',
-                        _phoneCtrl,
-                        Icons.phone_rounded,
-                        keyboardType: TextInputType.phone,
-                      ),
-                      _avatarAttachmentControl(),
-                    ],
-                  ),
+                  if (!_isParent && _canEditProfile)
+                    _buildSection(
+                      title: 'Personal Information',
+                      children: [
+                        _field(
+                          'Username',
+                          _usernameCtrl,
+                          Icons.alternate_email_rounded,
+                          helperText:
+                              'Use this username when you sign in. You can change it later.',
+                        ),
+                        _field('Full Name', _nameCtrl, Icons.person_rounded),
+                        _field(
+                          'Email Address',
+                          _emailCtrl,
+                          Icons.email_rounded,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        _field(
+                          'Phone Number',
+                          _phoneCtrl,
+                          Icons.phone_rounded,
+                          keyboardType: TextInputType.phone,
+                        ),
+                        _avatarAttachmentControl(),
+                      ],
+                    ),
+                  if (_isParent)
+                    _buildSection(
+                      title: 'Parent account',
+                      children: const [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.verified_user_outlined),
+                          title: Text(
+                            'Profile details are managed by the school.',
+                          ),
+                          subtitle: Text(
+                            'Parents can use the portal without entering or editing personal profile fields.',
+                          ),
+                        ),
+                      ],
+                    ),
                   if (_isPrincipal) ...[
                     const SizedBox(height: 12),
                     _buildSection(

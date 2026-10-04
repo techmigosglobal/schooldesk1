@@ -43,6 +43,7 @@ extension BackendAuthApi on BackendApiClient {
 
   Future<void> logout() async {
     final refresh = await TokenStorageService.getRefreshToken();
+    final previousScope = offlineAccountKey;
     if (_authToken != null) {
       try {
         await _dio.post('/auth/logout', data: {'refresh_token': refresh ?? ''});
@@ -50,6 +51,7 @@ extension BackendAuthApi on BackendApiClient {
         // Ignore logout network failures; client-side token clear is mandatory.
       }
     }
+    await offlineSync?.clearAccountData(previousScope);
     clearAuthToken();
     await TokenStorageService.clear();
   }
@@ -79,54 +81,16 @@ extension BackendAuthApi on BackendApiClient {
 
   /// Refreshes the JWT using the stored refresh token.
   ///
-  /// **Deduplication**: If a refresh is already in flight when a second 401
-  /// fires, callers short-circuit to `_refreshCompleter!.future` so only
-  /// **one** network request is made. `_refreshCompleter` is reset to `null`
-  /// in `finally` *after* the Completer has been completed, meaning waiting
-  /// callers receive the result of the single in-flight request.
+  /// **Deduplication**: If a refresh is already in flight when another
+  /// transport receives a 401, the shared session coordinator returns the
+  /// existing future so only one refresh-token rotation is performed.
   Future<bool> refreshSession() async {
-    if (_refreshCompleter != null) {
-      return _refreshCompleter!.future;
+    final refreshed = await SessionRefreshCoordinator.instance.refresh(baseUrl);
+    if (refreshed) {
+      final token = await TokenStorageService.getAccessToken();
+      if (token != null && token.isNotEmpty) setAuthToken(token);
     }
-
-    final refresh = await TokenStorageService.getRefreshToken();
-    if (refresh == null || refresh.isEmpty) {
-      return false;
-    }
-
-    final completer = Completer<bool>();
-    _refreshCompleter = completer;
-    try {
-      final response = await _dio.post(
-        '/auth/refresh',
-        data: {'refresh_token': refresh},
-      );
-      final data = response.data as Map<String, dynamic>;
-      if (data['success'] != true) {
-        if (!completer.isCompleted) completer.complete(false);
-        return false;
-      }
-      final payload = data['data'] as Map<String, dynamic>;
-      final token = payload['token'] as String?;
-      final nextRefresh =
-          (payload['refresh_token'] as String?) ?? (token ?? '');
-      if (token == null || token.isEmpty) {
-        if (!completer.isCompleted) completer.complete(false);
-        return false;
-      }
-      setAuthToken(token);
-      await TokenStorageService.saveTokens(
-        accessToken: token,
-        refreshToken: nextRefresh,
-      );
-      if (!completer.isCompleted) completer.complete(true);
-      return true;
-    } on Object catch (_) {
-      if (!completer.isCompleted) completer.complete(false);
-      return false;
-    } finally {
-      _refreshCompleter = null;
-    }
+    return refreshed;
   }
 
   Future<bool> restoreStoredSession() async {
@@ -181,6 +145,9 @@ extension BackendAuthApi on BackendApiClient {
         '/auth/profile',
         queryParameters: forceRefresh
             ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
+            : null,
+        options: forceRefresh
+            ? Options(headers: const {'Cache-Control': 'no-store'})
             : null,
       );
       final data = _asMap(response.data);

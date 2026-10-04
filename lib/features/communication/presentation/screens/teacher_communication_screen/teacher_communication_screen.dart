@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/services/chat_unread_service.dart';
 import 'package:schooldesk1/core/utils/chat_message_merge.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -40,6 +41,8 @@ class _TeacherCommunicationScreenState
   RealtimeChannel? _realtimeChannel;
   String _realtimeConversationId = '';
   int _realtimeRequest = 0;
+  bool _incrementalLoading = false;
+  bool _incrementalReloadPending = false;
 
   RepositoryState<Object> _state = const RepositoryState.loading();
   bool _sending = false;
@@ -81,7 +84,7 @@ class _TeacherCommunicationScreenState
       channelName: 'teacher-chat-$conversationId',
       conversationId: conversationId,
       onUpdate: () {
-        if (mounted && !_sending) _loadIncremental();
+        _requestIncrementalLoad();
       },
     );
     if (!mounted || request != _realtimeRequest) {
@@ -101,10 +104,34 @@ class _TeacherCommunicationScreenState
     }
   }
 
+  /// Realtime can emit a conversation update and a message update for one
+  /// send. Serialize the follow-up reads so both events share one cursor
+  /// instead of racing and replacing each other's message list.
+  void _requestIncrementalLoad() {
+    if (!mounted || _sending) return;
+    if (_incrementalLoading) {
+      _incrementalReloadPending = true;
+      return;
+    }
+    _incrementalLoading = true;
+    unawaited(() async {
+      try {
+        await _loadIncremental();
+      } finally {
+        _incrementalLoading = false;
+        final retry = _incrementalReloadPending;
+        _incrementalReloadPending = false;
+        if (retry && mounted && !_sending) _requestIncrementalLoad();
+      }
+    }());
+  }
+
   // ── Data loading ──────────────────────────────────────────────────────────
 
   /// Full load: profile + all conversations + messages for active conversation.
-  /// Used on first load, conversation switch, and successful send.
+  /// Used on first load and conversation switch. Sends reconcile their
+  /// canonical response locally and use an incremental refresh in the
+  /// background so the active chat never visibly resets.
   Future<void> _load({bool background = false}) async {
     if (!background) {
       final previous = _state.data;
@@ -290,9 +317,31 @@ class _TeacherCommunicationScreenState
   ) {
     if (conversations.isEmpty) return null;
     final selectedId = _text(selected?['id']);
-    if (selectedId.isEmpty) return null;
+    if (selectedId.isNotEmpty) {
+      for (final row in conversations) {
+        if (_text(row['id']) == selectedId) return row;
+      }
+    }
+
+    // A contact row is a local placeholder until the first message creates a
+    // server conversation. Retain the selected contact by participant scope
+    // after that create, even though its ID changes.
+    if (selected?['is_contact_placeholder'] != true) return null;
+    final selectedType = _text(selected?['type']);
+    final selectedStudentId = _text(selected?['student_id']);
+    final selectedParentId = _text(selected?['parent_id']);
+    final selectedLeaderId = _text(selected?['leader_id']);
     for (final row in conversations) {
-      if (_text(row['id']) == selectedId) return row;
+      if (_text(row['type']) != selectedType) continue;
+      if (selectedType == 'parent_teacher' &&
+          _text(row['parent_id']) == selectedParentId &&
+          _text(row['student_id']) == selectedStudentId) {
+        return row;
+      }
+      if (selectedType == 'principal_teacher' &&
+          _text(row['leader_id']) == selectedLeaderId) {
+        return row;
+      }
     }
     return null;
   }
@@ -360,8 +409,12 @@ class _TeacherCommunicationScreenState
         }
         return;
       }
-      // Full reload to sync confirmed message, updated conversation list, etc.
-      await _load(background: true);
+      _acceptSentMessage(
+        sent: sent,
+        optimistic: optimistic,
+        conversationId: conversationId,
+        body: body,
+      );
     } on Object catch (error) {
       if (!mounted) return;
       // Remove the optimistic message on failure.
@@ -380,8 +433,56 @@ class _TeacherCommunicationScreenState
     }
   }
 
+  void _acceptSentMessage({
+    required Map<String, dynamic> sent,
+    required Map<String, dynamic> optimistic,
+    required String conversationId,
+    required String body,
+  }) {
+    if (!mounted) return;
+    // The API returns the normalized persisted message. Keep the optimistic
+    // fields as a safe fallback for older local gateways that return only an
+    // acknowledgement, then replace the pending bubble in one frame.
+    final canonical = <String, dynamic>{...optimistic, ...sent}
+      ..remove('_pending')
+      ..remove('_offlineQueued')
+      ..remove('queued');
+    final sentAt = _date(canonical['sent_at'] ?? canonical['created_at']);
+    final selected = _selectedConversation;
+    final updatedConversation = selected == null
+        ? null
+        : <String, dynamic>{
+            ...selected,
+            'id': conversationId,
+            'is_contact_placeholder': false,
+            'last_message': body,
+            'last_message_at':
+                sentAt?.toIso8601String() ?? selected['last_message_at'],
+            'last_sender_id': _teacherUserId,
+          };
+    setState(() {
+      _pendingMessages.removeWhere((message) => message == optimistic);
+      _messages = mergeChatMessagesByIdentity(_messages, [canonical]);
+      _messagesCursor = sentAt ?? _messagesCursor;
+      if (updatedConversation != null) {
+        _selectedConversation = updatedConversation;
+        _conversations = _conversations.map((row) {
+          final sameConversation =
+              _text(row['id']) == conversationId ||
+              row['id'] == selected?['id'];
+          return sameConversation ? {...row, ...updatedConversation} : row;
+        }).toList();
+      }
+    });
+    _scrollToBottom();
+    // Reconcile unread counters and the list preview without replacing the
+    // already-rendered message list.
+    unawaited(_loadIncremental());
+  }
+
   Future<void> _markConversationRead(String conversationId) async {
     await _repository.markConversationRead(conversationId);
+    unawaited(ChatUnreadService.instance.refresh(role: 'teacher'));
   }
 
   void _throwIfFailed<T>(Result<T> result, String fallback) {
@@ -394,38 +495,60 @@ class _TeacherCommunicationScreenState
 
   @override
   Widget build(BuildContext context) {
-    return TeacherFlowScaffold(
-      title: 'Communication',
-      subtitle: 'Parent and principal chats in one place',
-      selectedIndex: TeacherNav.communication,
-      loading: _state.isLoading && !_state.hasData,
-      error: _state.hasData ? null : _state.error?.toString(),
-      onRefresh: _load,
-      child: SchoolDeskRepositoryStateView<Object>(
-        state: _state,
-        onRetry: _load,
-        data: (_) => LayoutBuilder(
-          builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 780;
-            final list = _conversationList();
-            final chat = _chatPane(showBackButton: !wide);
-            if (wide) {
-              return Row(
-                children: [
-                  SizedBox(width: 340, child: list),
-                  VerticalDivider(
-                    width: 1,
-                    color: context.appTheme.outlineVariant,
-                  ),
-                  Expanded(child: chat),
-                ],
-              );
-            }
-            return _selectedConversation == null ? list : chat;
-          },
+    return PopScope(
+      canPop: _selectedConversation == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !mounted || _selectedConversation == null) return;
+        setState(() {
+          _selectedConversation = null;
+          _clearMessages();
+        });
+        unawaited(_subscribeRealtime());
+      },
+      child: TeacherFlowScaffold(
+        title: 'Communication',
+        subtitle: 'Parent and principal chats in one place',
+        selectedIndex: TeacherNav.communication,
+        loading: _state.isLoading && !_state.hasData,
+        error: _state.hasData ? null : _state.error?.toString(),
+        onRefresh: _load,
+        onBackRequested: _selectedConversation == null
+            ? null
+            : _backToConversationList,
+        child: SchoolDeskRepositoryStateView<Object>(
+          state: _state,
+          onRetry: _load,
+          data: (_) => LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 780;
+              final list = _conversationList();
+              final chat = _chatPane(showBackButton: !wide);
+              if (wide) {
+                return Row(
+                  children: [
+                    SizedBox(width: 340, child: list),
+                    VerticalDivider(
+                      width: 1,
+                      color: context.appTheme.outlineVariant,
+                    ),
+                    Expanded(child: chat),
+                  ],
+                );
+              }
+              return _selectedConversation == null ? list : chat;
+            },
+          ),
         ),
       ),
     );
+  }
+
+  void _backToConversationList() {
+    setState(() {
+      _selectedConversation = null;
+      _clearMessages();
+    });
+    unawaited(_subscribeRealtime());
   }
 
   Widget _conversationList() {
@@ -476,7 +599,7 @@ class _TeacherCommunicationScreenState
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                _time(_date(row['last_message_at'])),
+                chatPreviewDateTime(_date(row['last_message_at'])),
                 style: const TextStyle(fontSize: 11),
               ),
               if (unread > 0)
@@ -562,20 +685,38 @@ class _TeacherCommunicationScreenState
                       ? 'School leadership'
                       : 'Parent',
                 );
-                return Opacity(
-                  opacity: isPending ? 0.6 : 1.0,
-                  child: ChatBubbleWidget(
-                    messageText: _text(message['body'] ?? message['message']),
-                    time: isPending
-                        ? '...'
-                        : _time(
-                            _date(message['sent_at'] ?? message['created_at']),
-                          ),
-                    isMe: mine,
-                    isRead: message['is_read'] == true,
-                    senderLabel: senderName,
-                    senderRoleLabel: senderRole,
-                  ),
+                final sentAt = _date(
+                  message['sent_at'] ?? message['created_at'],
+                );
+                final dateLabel = isPending
+                    ? null
+                    : chatDateDividerLabel(sentAt);
+                final previousAt = index == 0
+                    ? null
+                    : _date(
+                        displayed[index - 1]['sent_at'] ??
+                            displayed[index - 1]['created_at'],
+                      );
+                final previousLabel = chatDateDividerLabel(previousAt);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (dateLabel != null && dateLabel != previousLabel)
+                      ChatDateSeparator(dateText: dateLabel),
+                    Opacity(
+                      opacity: isPending ? 0.6 : 1.0,
+                      child: ChatBubbleWidget(
+                        messageText: _text(
+                          message['body'] ?? message['message'],
+                        ),
+                        time: isPending ? '...' : _time(sentAt),
+                        isMe: mine,
+                        isRead: message['is_read'] == true,
+                        senderLabel: senderName,
+                        senderRoleLabel: senderRole,
+                      ),
+                    ),
+                  ],
                 );
               },
             ),

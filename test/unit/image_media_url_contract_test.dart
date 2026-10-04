@@ -73,6 +73,30 @@ void main() {
     );
   }, skip: !EnvConfig.isLocal);
 
+  test('hosted Docker storage URLs use the public API origin', () {
+    if (EnvConfig.isLocal || EnvConfig.apiOrigin.isEmpty) return;
+    const internalUrl =
+        'http://supabase-kong:8000/storage/v1/object/sign/'
+        'school-private-files/profile/avatar.jpg?token=test-token';
+    expect(
+      resolveOriginalImageUrl(internalUrl),
+      '${EnvConfig.apiOrigin}/storage/v1/object/sign/'
+      'school-private-files/profile/avatar.jpg?token=test-token',
+    );
+  });
+
+  test('Coolify preview storage URLs use the public API origin', () {
+    if (EnvConfig.isLocal || EnvConfig.apiOrigin.isEmpty) return;
+    const previewUrl =
+        'http://supabasekong-hic3oxds8h6neegjdm4rdguu.82.112.230.198.sslip.io/'
+        'storage/v1/object/public/schooldesk-public-media/school/post.jpg';
+    expect(
+      resolveOriginalImageUrl(previewUrl),
+      '${EnvConfig.apiOrigin}/storage/v1/object/public/'
+      'schooldesk-public-media/school/post.jpg',
+    );
+  });
+
   test('unavailable media resolves to an empty placeholder safely', () async {
     final api = BackendApiClient.instance;
     final previousAdapter = api.dio.httpClientAdapter;

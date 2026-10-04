@@ -4,7 +4,6 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, serviceClient } from "../index.ts";
-import { recordActivity } from "./activity.ts";
 import {
   legacyStorageWritesEnabled,
   r2FileReference,
@@ -287,22 +286,6 @@ export async function handleAuth(
       session_type: normalizedRole === "kiosk" ? "kiosk" : "app",
       last_active: now,
     });
-    await recordActivity(svc(), {
-      schoolId: profile.school_id,
-      userId: authUser.id,
-      actorRole: normalizedRole,
-      action: "auth.login",
-      module: "auth",
-      eventType: "login",
-      summary: normalizedRole === "kiosk"
-        ? "Attendance kiosk signed in"
-        : `${normalizedRole || "User"} signed in`,
-      entityType: "user",
-      entityId: authUser.id,
-      actorName: profileText(profile.name, profileText(authUser.email)),
-      details: { session_type: normalizedRole === "kiosk" ? "kiosk" : "app" },
-    });
-
     return ok({
       // Flutter reads token OR access_token
       token: access_token,
@@ -368,15 +351,6 @@ export async function handleAuth(
       );
       const { data: { user } } = await userClient.auth.getUser();
       if (user) {
-        const { data: profile } = await svc().from("users")
-          .select("school_id, role_name, name, email")
-          .eq("id", user.id)
-          .maybeSingle();
-        const role = profileText(
-          user.app_metadata?.role_name,
-          profileText(profile?.role_name),
-        )
-          .toLowerCase();
         const now = new Date().toISOString();
         await svc().from("user_sessions").update({
           signed_out_at: now,
@@ -387,23 +361,6 @@ export async function handleAuth(
         await svc().from("notification_devices").update({
           is_active: false,
         }).eq("user_id", user.id).eq("is_active", true);
-        if (profile?.school_id) {
-          await recordActivity(svc(), {
-            schoolId: profile.school_id,
-            userId: user.id,
-            actorRole: role,
-            action: "auth.logout",
-            module: "auth",
-            eventType: "logout",
-            summary: role === "kiosk"
-              ? "Attendance kiosk signed out"
-              : `${role || "User"} signed out`,
-            entityType: "user",
-            entityId: user.id,
-            actorName: profileText(profile.name, profileText(user.email)),
-            details: { session_type: role === "kiosk" ? "kiosk" : "app" },
-          });
-        }
       }
       await userClient.auth.signOut();
     }

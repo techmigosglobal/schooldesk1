@@ -54,6 +54,158 @@ function numeric(value: unknown) {
   return null;
 }
 
+type StaffAssignmentDetail = Record<string, unknown>;
+
+/**
+ * The staff table does not own login or class-assignment data. Hydrate those
+ * relationships here so directory consumers receive one tenant-scoped,
+ * page-consistent contract instead of rebuilding it from truncated support
+ * requests.
+ */
+async function enrichStaffRows(
+  svc: SupabaseClient,
+  school: string,
+  rows: Array<Record<string, unknown>>,
+) {
+  const staffIds = [...new Set(rows.map((row) => text(row.id)).filter(Boolean))];
+  if (staffIds.length === 0) return rows;
+
+  const [usersResult, sectionsResult, subjectsResult] = await Promise.all([
+    svc.from("users").select(
+      "id, username, role_name, linked_id, linked_type, is_active",
+    ).eq("school_id", school).eq("linked_type", "staff").in(
+      "linked_id",
+      staffIds,
+    ),
+    svc.from("sections").select(
+      "id, grade_id, section_name, academic_year_id, class_teacher_id, " +
+        "co_teacher_id, grade:grades(id, grade_name)",
+    ).eq("school_id", school),
+    svc.from("staff_subjects").select(
+      "id, staff_id, section_id, grade_id, academic_year_id, subject_id, " +
+        "subject:subjects(id, subject_name)",
+    ).eq("school_id", school).in("staff_id", staffIds),
+  ]);
+  for (const result of [usersResult, sectionsResult, subjectsResult]) {
+    if (result.error) throw new Error(result.error.message);
+  }
+
+  const userByStaffId = new Map<string, Record<string, unknown>>();
+  for (const user of usersResult.data ?? []) {
+    const linkedId = text(user.linked_id);
+    if (linkedId) userByStaffId.set(linkedId, user);
+  }
+
+  const sections = (sectionsResult.data ?? []) as unknown as Array<Record<string, unknown>>;
+  const detailsByStaffId = new Map<string, StaffAssignmentDetail[]>();
+  const labelsByStaffId = new Map<string, string[]>();
+  const detailKeysByStaffId = new Map<string, Set<string>>();
+
+  const addAssignment = (
+    staffId: string,
+    role: string,
+    section: Record<string, unknown>,
+    subject?: Record<string, unknown>,
+    assignmentId = "",
+  ) => {
+    const sectionId = text(section.id);
+    const grade = section.grade && typeof section.grade === "object"
+      ? section.grade as Record<string, unknown>
+      : {};
+    const gradeId = text(section.grade_id || grade.id);
+    const gradeName = text(grade.grade_name);
+    const sectionName = text(section.section_name);
+    const label = [gradeName, sectionName].filter(Boolean).join(" - ") ||
+      sectionId;
+    const subjectId = text(subject?.id || section.subject_id);
+    const subjectName = text(subject?.subject_name || section.subject_name);
+    const key = `${role}:${sectionId}:${subjectId}`;
+    const keys = detailKeysByStaffId.get(staffId) ?? new Set<string>();
+    if (keys.has(key)) return;
+    keys.add(key);
+    detailKeysByStaffId.set(staffId, keys);
+
+    const detail: StaffAssignmentDetail = {
+      role,
+      label,
+      section_id: sectionId,
+      grade_id: gradeId,
+      grade_name: gradeName,
+      section_name: sectionName,
+      academic_year_id: text(section.academic_year_id),
+      ...(subjectId ? { subject_id: subjectId } : {}),
+      ...(subjectName ? { subject_name: subjectName } : {}),
+      ...(assignmentId ? { assignment_id: assignmentId } : {}),
+    };
+    detailsByStaffId.set(staffId, [
+      ...(detailsByStaffId.get(staffId) ?? []),
+      detail,
+    ]);
+    if (label) {
+      const labels = labelsByStaffId.get(staffId) ?? [];
+      if (!labels.includes(label)) labels.push(label);
+      labelsByStaffId.set(staffId, labels);
+    }
+  };
+
+  for (const section of sections) {
+    const classTeacherId = text(section.class_teacher_id);
+    if (staffIds.includes(classTeacherId)) {
+      addAssignment(classTeacherId, "Class Teacher", section);
+    }
+    const coTeacherId = text(section.co_teacher_id);
+    if (staffIds.includes(coTeacherId)) {
+      addAssignment(coTeacherId, "Co-Teacher", section);
+    }
+  }
+
+  for (const assignment of (subjectsResult.data ?? []) as unknown as Array<Record<string, unknown>>) {
+    const staffId = text(assignment.staff_id);
+    const assignmentSectionId = text(assignment.section_id);
+    const assignmentGradeId = text(assignment.grade_id);
+    const assignmentYearId = text(assignment.academic_year_id);
+    const subject = assignment.subject && typeof assignment.subject === "object"
+      ? assignment.subject as Record<string, unknown>
+      : undefined;
+    const matchingSections = sections.filter((section) => {
+      const directMatch = Boolean(
+        assignmentSectionId && text(section.id) === assignmentSectionId,
+      );
+      const gradeMatch = Boolean(
+        !assignmentSectionId && assignmentGradeId &&
+          text(section.grade_id) === assignmentGradeId,
+      );
+      const yearMatch = !assignmentYearId ||
+        text(section.academic_year_id) === assignmentYearId;
+      return (directMatch || gradeMatch) && yearMatch;
+    });
+    for (const section of matchingSections) {
+      addAssignment(
+        staffId,
+        "Subject Teacher",
+        section,
+        subject,
+        text(assignment.id),
+      );
+    }
+  }
+
+  return rows.map((row) => {
+    const staffId = text(row.id);
+    const linkedUser = userByStaffId.get(staffId);
+    const details = detailsByStaffId.get(staffId) ?? [];
+    return {
+      ...row,
+      username: text(linkedUser?.username) || null,
+      login_username: text(linkedUser?.username) || null,
+      user_id: text(linkedUser?.id) || null,
+      account_role: text(linkedUser?.role_name) || text(row.account_role) || null,
+      assigned_classes: labelsByStaffId.get(staffId) ?? [],
+      assigned_class_details: details,
+    };
+  });
+}
+
 function staffWriteFields(
   body: Record<string, unknown>,
   accountRole?: string,
@@ -394,9 +546,25 @@ export async function handleStaff(
     }
     const { data, error, count } = await q;
     if (error) return fail(error.message);
+    let enriched: Array<Record<string, unknown>>;
+    try {
+      enriched = await enrichStaffRows(
+        svc,
+        school,
+        (data ?? []) as unknown as Array<Record<string, unknown>>,
+      );
+    } catch (enrichmentError) {
+      return fail(
+        enrichmentError instanceof Error
+          ? enrichmentError.message
+          : "failed to load staff relationships",
+      );
+    }
     return cors({
       success: true,
-      data: data ?? [],
+      // Preserve the established paginated response contract (`data: data ?? []`)
+      // while returning the hydrated rows from the canonical relationship reads.
+      data: enriched,
       total: count ?? 0,
       page,
       page_size: size,
@@ -443,8 +611,20 @@ export async function handleStaff(
       .eq("school_id", school)
       .single();
     if (error) return fail(error.message);
+    let enriched: Record<string, unknown>;
+    try {
+      enriched = (await enrichStaffRows(svc, school, [
+        data as Record<string, unknown>,
+      ]))[0];
+    } catch (enrichmentError) {
+      return fail(
+        enrichmentError instanceof Error
+          ? enrichmentError.message
+          : "failed to load staff relationships",
+      );
+    }
     return ok({
-      ...data,
+      ...enriched,
       documents: await Promise.all(
         (Array.isArray(data.documents) ? data.documents : []).map(
           async (document: Record<string, unknown>) => ({

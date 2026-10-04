@@ -262,6 +262,91 @@ class OfflineDatabase extends _$OfflineDatabase {
     )..where((row) => row.cacheKey.equals(cacheKey))).getSingleOrNull();
   }
 
+  Future<int> deleteCachedResponses(
+    String accountKey, {
+    List<String> pathPatterns = const [],
+  }) async {
+    final query = delete(cachedResponses)
+      ..where((row) => row.accountKey.equals(accountKey));
+    if (pathPatterns.isNotEmpty) {
+      final predicates = pathPatterns
+          .where((pattern) => pattern.trim().isNotEmpty)
+          .map((pattern) => cachedResponses.path.like('%${pattern.trim()}%'))
+          .toList();
+      if (predicates.isNotEmpty) {
+        query.where((row) {
+          final pathMatch = predicates.reduce((left, right) => left | right);
+          return row.accountKey.equals(accountKey) & pathMatch;
+        });
+      }
+    }
+    return query.go();
+  }
+
+  Future<void> clearAccountData(String accountKey) async {
+    if (accountKey.trim().isEmpty || accountKey == 'anonymous') return;
+    await transaction(() async {
+      for (final table in [
+        'cached_responses',
+        'sync_outbox_entries',
+        'sync_states',
+        'sync_references',
+        'local_file_uploads',
+        'local_attendance_records',
+        'local_attendance_sessions',
+        'local_students',
+        'local_homework_drafts',
+      ]) {
+        await customStatement('DELETE FROM $table WHERE account_key = ?', [
+          accountKey,
+        ]);
+      }
+    });
+  }
+
+  /// Removes local records that are no longer useful to an authenticated
+  /// session. Pending outbox work is retained; only completed/failed work and
+  /// expired read snapshots are eligible for cleanup.
+  Future<void> purgeExpiredData({
+    Duration retention = const Duration(days: 30),
+  }) async {
+    final cutoff = DateTime.now().toUtc().subtract(retention);
+    final cutoffIso = cutoff.toIso8601String();
+    await transaction(() async {
+      await customStatement(
+        'DELETE FROM cached_responses WHERE '
+        '(expires_at IS NOT NULL AND expires_at < ?) OR stored_at < ?',
+        [cutoffIso, cutoffIso],
+      );
+      await customStatement(
+        'DELETE FROM sync_outbox_entries WHERE status IN (?, ?) AND created_at < ?',
+        ['synced', 'failed', cutoffIso],
+      );
+      await customStatement(
+        // File uploads use the table's established status/created_at columns;
+        // unlike typed sync tables they do not have sync_status/local_updated_at.
+        'DELETE FROM local_file_uploads WHERE status IN (?, ?) AND created_at < ?',
+        ['synced', 'failed', cutoffIso],
+      );
+      await customStatement(
+        'DELETE FROM local_attendance_records WHERE local_updated_at < ?',
+        [cutoffIso],
+      );
+      await customStatement(
+        'DELETE FROM local_attendance_sessions WHERE local_updated_at < ?',
+        [cutoffIso],
+      );
+      await customStatement(
+        'DELETE FROM local_students WHERE local_updated_at < ?',
+        [cutoffIso],
+      );
+      await customStatement(
+        'DELETE FROM local_homework_drafts WHERE local_updated_at < ?',
+        [cutoffIso],
+      );
+    });
+  }
+
   Future<int> enqueueMutation({
     required String accountKey,
     required String operationType,

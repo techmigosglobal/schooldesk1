@@ -121,6 +121,7 @@ android/.kotlin/
 
 # Local platform restore dumps; may contain auth and school data.
 /.local/platform-restore/
+/.local/self-hosted-storage/
 
 # Developer convenience dumps — never commit these
 all_files.txt

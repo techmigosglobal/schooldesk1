@@ -188,6 +188,15 @@ class PaginatedList<T> {
   bool get hasMore => page * pageSize < total;
 }
 
+/// Cache provenance retained at the typed transport boundary so repositories
+/// can keep stale data visibly distinct from a fresh backend response.
+class CacheMetadata {
+  const CacheMetadata({required this.isStale, this.storedAt});
+
+  final bool isStale;
+  final DateTime? storedAt;
+}
+
 // ─── School Models ─────────────────────────────────────────────────────────────
 
 class SchoolModel {
@@ -410,6 +419,10 @@ class StaffModel {
   final String? gender;
   final String? joinDate;
   final String photoUrl;
+  final String username;
+  final String accountRole;
+  final List<String> assignedClasses;
+  final List<Map<String, dynamic>> assignedClassDetails;
   final List<Map<String, dynamic>> documents;
   final int documentCount;
 
@@ -430,6 +443,10 @@ class StaffModel {
     this.gender,
     this.joinDate,
     required this.photoUrl,
+    this.username = '',
+    this.accountRole = '',
+    this.assignedClasses = const [],
+    this.assignedClassDetails = const [],
     this.documents = const [],
     this.documentCount = 0,
   });
@@ -464,6 +481,12 @@ class StaffModel {
           json['status'] as String? ??
           (json['is_active'] == false ? 'inactive' : 'active'),
       photoUrl: _photoUrlFromJson(json),
+      username: _modelText(json['username'] ?? json['login_username']),
+      accountRole: _modelText(json['account_role'] ?? json['role_name']),
+      assignedClasses: _assignedClassLabels(json['assigned_classes']),
+      assignedClassDetails: _listMapValue(
+        json['assigned_class_details'] ?? json['class_assignments'],
+      ),
       documents: documents,
       documentCount: documents.length,
     );
@@ -474,6 +497,23 @@ class StaffModel {
     return value
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  static List<String> _assignedClassLabels(dynamic value) {
+    if (value is! List) return const [];
+    return value
+        .map((item) {
+          if (item is String) return item.trim();
+          if (item is Map) {
+            return _modelText(
+              item['label'] ?? item['class_label'] ?? item['name'],
+            );
+          }
+          return '';
+        })
+        .where((label) => label.isNotEmpty)
+        .toSet()
         .toList();
   }
 
@@ -757,41 +797,45 @@ class AttendanceSessionModel {
     this.dailyClaim = const {},
   });
 
-  factory AttendanceSessionModel.fromJson(Map<String, dynamic> json) =>
-      AttendanceSessionModel(
-        id: json['id'] as String,
-        sectionId: json['section_id'] as String? ?? '',
-        timetableSlotId: json['timetable_slot_id'] as String? ?? '',
-        subjectId: json['subject_id'] as String? ?? '',
-        subjectName: _attendanceNestedText(json['subject'], const [
-          'subject_name',
-          'name',
-        ]),
-        staffId: json['staff_id'] as String? ?? '',
-        staffName: _attendanceStaffName(json['staff']),
-        date: json['date'] as String,
-        periodNumber: json['period_number'] as int? ?? 0,
-        totalStudents: json['total_students'] as int? ?? 0,
-        presentCount: json['present_count'] as int? ?? 0,
-        isFinalized: json['is_finalized'] as bool? ?? false,
-        status: (json['status'] as String? ?? '').isEmpty
-            ? ((json['is_finalized'] as bool? ?? false) ? 'submitted' : 'draft')
-            : json['status'] as String,
-        submittedAt: '${json['submitted_at'] ?? ''}',
-        reopenedAt: '${json['reopened_at'] ?? ''}',
-        reopenedBy: '${json['reopened_by'] ?? ''}',
-        reopenReason: '${json['reopen_reason'] ?? ''}',
-        correctionReason: '${json['correction_reason'] ?? ''}',
-        correctionAskedAt: '${json['correction_asked_at'] ?? ''}',
-        correctedAt: '${json['corrected_at'] ?? ''}',
-        studentAttendances:
-            (json['student_attendances'] as List?)
-                ?.whereType<Map>()
-                .map((item) => Map<String, dynamic>.from(item))
-                .toList() ??
-            const [],
-        dailyClaim: _attendanceAsMap(json['daily_claim']),
-      );
+  factory AttendanceSessionModel.fromJson(Map<String, dynamic> json) {
+    final isFinalized = json['is_finalized'] as bool? ?? false;
+    final rawStatus = (json['status'] as String? ?? '').trim();
+    final status = rawStatus.isEmpty
+        ? (isFinalized ? 'submitted' : 'draft')
+        : (isFinalized && rawStatus == 'draft' ? 'submitted' : rawStatus);
+    return AttendanceSessionModel(
+      id: json['id'] as String,
+      sectionId: json['section_id'] as String? ?? '',
+      timetableSlotId: json['timetable_slot_id'] as String? ?? '',
+      subjectId: json['subject_id'] as String? ?? '',
+      subjectName: _attendanceNestedText(json['subject'], const [
+        'subject_name',
+        'name',
+      ]),
+      staffId: json['staff_id'] as String? ?? '',
+      staffName: _attendanceStaffName(json['staff']),
+      date: json['date'] as String,
+      periodNumber: json['period_number'] as int? ?? 0,
+      totalStudents: json['total_students'] as int? ?? 0,
+      presentCount: json['present_count'] as int? ?? 0,
+      isFinalized: isFinalized,
+      status: status,
+      submittedAt: '${json['submitted_at'] ?? ''}',
+      reopenedAt: '${json['reopened_at'] ?? ''}',
+      reopenedBy: '${json['reopened_by'] ?? ''}',
+      reopenReason: '${json['reopen_reason'] ?? ''}',
+      correctionReason: '${json['correction_reason'] ?? ''}',
+      correctionAskedAt: '${json['correction_asked_at'] ?? ''}',
+      correctedAt: '${json['corrected_at'] ?? ''}',
+      studentAttendances:
+          (json['student_attendances'] as List?)
+              ?.whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList() ??
+          const [],
+      dailyClaim: _attendanceAsMap(json['daily_claim']),
+    );
+  }
 }
 
 String _attendanceNestedText(Object? value, List<String> keys) {
@@ -1419,14 +1463,21 @@ class AnnouncementModel {
 
   factory AnnouncementModel.fromJson(Map<String, dynamic> json) =>
       AnnouncementModel(
-        id: json['id'] as String,
-        schoolId: json['school_id'] as String,
-        title: json['title'] as String,
-        content: json['content'] as String,
-        targetAudience: json['target_audience'] as String? ?? 'all',
-        isUrgent: json['is_urgent'] as bool? ?? false,
-        createdBy: json['created_by'] as String,
-        publishedAt: json['published_at'] as String,
-        attachmentUrl: json['attachment_url'] as String?,
+        id: '${json['id'] ?? ''}',
+        schoolId: '${json['school_id'] ?? ''}',
+        title: '${json['title'] ?? ''}',
+        // The API's persisted announcement shape uses `body` and `audience`;
+        // older clients and fixtures used the UI names below. Accept both so
+        // a nullable legacy column cannot crash the teacher dashboard.
+        content: '${json['content'] ?? json['body'] ?? ''}',
+        targetAudience:
+            '${json['target_audience'] ?? json['audience'] ?? 'all'}',
+        isUrgent: json['is_urgent'] as bool? ??
+            '${json['priority'] ?? ''}'.toLowerCase() == 'urgent',
+        createdBy: '${json['created_by'] ?? ''}',
+        publishedAt:
+            '${json['published_at'] ?? json['scheduled_at'] ?? json['created_at'] ?? ''}',
+        attachmentUrl:
+            (json['attachment_url'] ?? json['attachments'])?.toString(),
       );
 }

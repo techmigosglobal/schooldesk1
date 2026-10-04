@@ -3,7 +3,11 @@ import {
   assertEquals,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { signedPrivateFileUrl } from "./storage_helpers.ts";
+import {
+  deleteStoredObject,
+  signedPrivateFileUrl,
+  storageLocationFromValue,
+} from "./storage_helpers.ts";
 
 const envNames = [
   "R2_ENDPOINT",
@@ -14,6 +18,7 @@ const envNames = [
   "R2_REGION",
   "STORAGE_LEGACY_READ",
   "STORAGE_READ_ORDER",
+  "STORAGE_WRITE_PROVIDER",
 ] as const;
 
 async function withStorageEnv(callback: () => Promise<void>) {
@@ -111,3 +116,71 @@ Deno.test(
     });
   },
 );
+
+Deno.test(
+  "legacy source URLs fall back to the consolidated self-hosted bucket",
+  async () => {
+    await withStorageEnv(async () => {
+      Deno.env.set("STORAGE_READ_ORDER", "supabase");
+      const consolidatedSignedUrl =
+        "https://target.example.test/sign/legacy-media?token=test";
+      const svc = {
+        storage: {
+          from: (bucket: string) => ({
+            createSignedUrl: async (path: string, ttl: number) => {
+              assertEquals(ttl, 60);
+              if (bucket === "school-assets") {
+                assertEquals(path, "uploads/school/post/photo.jpg");
+                return { data: null, error: new Error("missing") };
+              }
+              assertEquals(bucket, "schooldesk-private-files");
+              assertEquals(
+                path,
+                "legacy/school-assets/uploads/school/post/photo.jpg",
+              );
+              return {
+                data: { signedUrl: consolidatedSignedUrl },
+                error: null,
+              };
+            },
+          }),
+        },
+      } as unknown as SupabaseClient;
+
+      assertEquals(
+        await signedPrivateFileUrl(svc, legacyUrl, 60, "school-assets"),
+        consolidatedSignedUrl,
+      );
+    });
+  },
+);
+
+Deno.test("R2 references resolve to Supabase only in self-hosted mode", async () => {
+  await withStorageEnv(async () => {
+    const reference = "r2://private/documents/proof.pdf";
+    Deno.env.set("STORAGE_WRITE_PROVIDER", "r2");
+    assertEquals(storageLocationFromValue(reference, ""), null);
+
+    Deno.env.set("STORAGE_WRITE_PROVIDER", "supabase");
+    assertEquals(storageLocationFromValue(reference, ""), {
+      bucket: "schooldesk-private-files",
+      path: "documents/proof.pdf",
+    });
+    let removedBucket = "";
+    let removedPath = "";
+    const svc = {
+      storage: {
+        from: (bucket: string) => ({
+          remove: async (paths: string[]) => {
+            removedBucket = bucket;
+            removedPath = paths[0];
+            return { data: [], error: null };
+          },
+        }),
+      },
+    } as unknown as SupabaseClient;
+    assertEquals(await deleteStoredObject(svc, reference), true);
+    assertEquals(removedBucket, "schooldesk-private-files");
+    assertEquals(removedPath, "documents/proof.pdf");
+  });
+});

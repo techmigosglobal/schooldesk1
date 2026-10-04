@@ -33,8 +33,21 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: unknown, info: React.ErrorInfo) {
-    // Log to console in development; swap to Sentry.captureException(error) when integrated.
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    const stack = error instanceof Error ? error.stack : undefined;
     console.error("[ErrorBoundary] Caught error:", error, info.componentStack);
+    void fetch("/api/observability/client-error", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "web",
+        message,
+        stack,
+        componentStack: info.componentStack,
+        route: window.location.pathname,
+      }),
+      keepalive: true,
+    }).catch(() => undefined);
   }
 
   handleReset = () => {

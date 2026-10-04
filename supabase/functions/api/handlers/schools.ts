@@ -11,7 +11,10 @@ import {
   uploadPublicToR2,
   uploadToR2,
 } from "../lib/r2_storage.ts";
-import { signedPrivateFileUrl } from "../storage_helpers.ts";
+import {
+  deleteStoredObject,
+  signedPrivateFileUrl,
+} from "../storage_helpers.ts";
 
 function isSchoolAdministrator(user: _User) {
   const role = `${
@@ -27,7 +30,12 @@ async function withAuthorizedSignatureUrl(
 ) {
   const path = `${school.authorized_signature_path ?? ""}`.trim();
   if (!path) return { ...school, authorized_signature_url: "" };
-  const signedUrl = await signedPrivateFileUrl(svc, path, 3600, "school-signatures");
+  const signedUrl = await signedPrivateFileUrl(
+    svc,
+    path,
+    3600,
+    "school-signatures",
+  );
   return {
     ...school,
     authorized_signature_url: signedUrl,
@@ -146,7 +154,10 @@ export async function handleSchools(
     let publicUrl = r2Upload?.url ?? "";
     if (!publicUrl) {
       if (!legacyStorageWritesEnabled()) {
-        return fail("R2 public storage is unavailable; legacy storage writes are disabled", 503);
+        return fail(
+          "R2 public storage is unavailable; legacy storage writes are disabled",
+          503,
+        );
       }
       const { error } = await svc.storage.from("school-assets").upload(
         path2,
@@ -218,7 +229,10 @@ export async function handleSchools(
       : `signatures/${schoolId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
     if (!r2Upload) {
       if (!legacyStorageWritesEnabled()) {
-        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+        return fail(
+          "R2 storage is unavailable; legacy storage writes are disabled",
+          503,
+        );
       }
       const { error: uploadError } = await svc.storage.from("school-signatures")
         .upload(signaturePath, file, {
@@ -237,13 +251,7 @@ export async function handleSchools(
       return fail(updateError.message);
     }
     if (previousSignaturePath && previousSignaturePath !== signaturePath) {
-      if (previousSignaturePath.startsWith("r2://")) {
-        await deleteR2File(previousSignaturePath);
-      } else {
-        await svc.storage.from("school-signatures").remove([
-          previousSignaturePath,
-        ]);
-      }
+      await deleteStoredObject(svc, previousSignaturePath, "school-signatures");
     }
     const signedUrl = await signedPrivateFileUrl(
       svc,

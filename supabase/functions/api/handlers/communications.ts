@@ -589,15 +589,35 @@ async function teacherChatContacts(
         student as Record<string, unknown>,
         section as Record<string, unknown>,
       );
-      const { data: links } = await svc.from("parent_student_links")
-        .select(
-          "parent_user_id, parent:users!parent_student_links_parent_user_id_fkey(*)",
-        )
-        .eq("student_id", student.id)
-        .eq("school_id", school);
+      // parent_student_links intentionally has no database FK to users. An
+      // embedded PostgREST relation therefore fails and, because the old code
+      // ignored that error, teachers silently received no parent contacts.
+      const { data: links, error: linksError } = await svc.from(
+        "parent_student_links",
+      ).select("parent_user_id").eq("student_id", student.id).eq(
+        "school_id",
+        school,
+      );
+      if (linksError) throw new Error(linksError.message);
+      const parentIds = uniqueText(
+        (links ?? []).map((link: Record<string, unknown>) =>
+          link.parent_user_id
+        ),
+      );
+      const { data: parents, error: parentsError } = parentIds.length
+        ? await svc.from("users").select("id, name, username, role_name")
+          .eq("school_id", school).eq("role_name", "parent").in("id", parentIds)
+        : { data: [], error: null };
+      if (parentsError) throw new Error(parentsError.message);
+      const parentById = new Map(
+        (parents ?? []).map((parent: Record<string, unknown>) => [
+          text(parent.id),
+          parent,
+        ]),
+      );
 
       for (const link of links ?? []) {
-        const p = (link as any).parent;
+        const p = parentById.get(text(link.parent_user_id));
         if (!p) continue;
         const key = `parent:${p.id}:${student.id}`;
         if (!addedKeys.has(key)) {
@@ -784,7 +804,10 @@ async function canReadChatConversation(
   if (canManageSchoolContent(user)) return true;
   const userRole = role(user);
   if (userRole === "parent") {
-    return text(conversation.parent_id) === user.id &&
+    const participants = readByList(conversation.participant_ids);
+    const isParticipant = text(conversation.parent_id) === user.id ||
+      participants.includes(user.id);
+    return isParticipant &&
       await parentIsLinkedToStudent(
         svc,
         school,
@@ -796,7 +819,10 @@ async function canReadChatConversation(
     const staffId = linkedStaffId(user);
     if (!staffId) return false;
     const convTeacherId = text(conversation.teacher_id);
-    if (convTeacherId !== staffId) return false;
+    const participants = readByList(conversation.participant_ids);
+    const isParticipant = convTeacherId === staffId ||
+      participants.includes(staffId) || participants.includes(user.id);
+    if (!isParticipant) return false;
     const studentId = text(conversation.student_id);
     return !studentId || await teacherIsAssignedToStudent(
       svc,
@@ -1555,32 +1581,41 @@ export async function handleCommunications(
         );
       }
     }
-    if (!canManageSchoolContent(user) || !requestedMonitor) {
-      if (userRole == "teacher") {
-        const teacher = linkedStaffId(user);
-        if (!teacher) return ok([]);
-        q = q.eq("teacher_id", teacher);
-      } else if (userRole == "parent") {
-        q = q.eq("parent_id", user.id);
-      } else {
-        return fail("forbidden", 403);
-      }
+    const needsParticipantCompatibilityScope = !canManageSchoolContent(user) ||
+      !requestedMonitor;
+    if (
+      needsParticipantCompatibilityScope &&
+      !["teacher", "parent"].includes(userRole)
+    ) {
+      return fail("forbidden", 403);
     }
-    const { data, error, count } = await q.order("updated_at", {
-      ascending: false,
-    }).order("id", { ascending: false }).range(
-      (page - 1) * pageSize,
-      page * pageSize - 1,
+    // Do not filter teachers/parents only by teacher_id/parent_id here. Older
+    // conversations were stored with participant_ids but without the newer
+    // normalized columns, so that query returned an empty inbox while the
+    // conversation and messages were still present. The compatibility scope
+    // below accepts both representations before applying the section/student
+    // authorization checks.
+    const shouldPaginateInDatabase = !needsParticipantCompatibilityScope;
+    const orderedQuery = q.order("updated_at", { ascending: false }).order(
+      "id",
+      { ascending: false },
     );
+    const { data, error, count } = shouldPaginateInDatabase
+      ? await orderedQuery.range(
+        (page - 1) * pageSize,
+        page * pageSize - 1,
+      )
+      : await orderedQuery;
     if (error) return fail(error.message);
     let visible = data ?? [];
-    if (userRole === "teacher" && !canManageSchoolContent(user)) {
+    if (userRole === "teacher" && needsParticipantCompatibilityScope) {
       const scope = await resolveActiveTeacherScope(
         svc,
         school,
         linkedStaffId(user),
       );
       if (!scope.isActive) return ok([]);
+      const teacherStaffId = linkedStaffId(user);
       const studentIds = uniqueText(visible.map((row) => row.student_id));
       const { data: students, error: studentError } = studentIds.length
         ? await svc.from("students").select("id, current_section_id").eq(
@@ -1596,12 +1631,18 @@ export async function handleCommunications(
         ]),
       );
       visible = visible.filter((conversation) => {
+        const participants = readByList(conversation.participant_ids);
+        const belongsToTeacher = [user.id, teacherStaffId].some((id) =>
+          id && (text(conversation.teacher_id) === id ||
+            participants.includes(id))
+        );
+        if (!belongsToTeacher) return false;
         const studentId = text(conversation.student_id);
         return !studentId || scope.sections.has(
           sectionByStudent.get(studentId) ?? "",
         );
       });
-    } else if (userRole === "parent" && !canManageSchoolContent(user)) {
+    } else if (userRole === "parent" && needsParticipantCompatibilityScope) {
       const { data: links, error: linkError } = await svc.from(
         "parent_student_links",
       ).select("student_id").eq("school_id", school).eq(
@@ -1612,9 +1653,21 @@ export async function handleCommunications(
       const linkedStudents = new Set(
         uniqueText((links ?? []).map((link) => link.student_id)),
       );
-      visible = visible.filter((conversation) =>
-        linkedStudents.has(text(conversation.student_id))
-      );
+      visible = visible.filter((conversation) => {
+        const participants = readByList(conversation.participant_ids);
+        const belongsToParent = text(conversation.parent_id) === user.id ||
+          participants.includes(user.id);
+        return belongsToParent && linkedStudents.has(
+          text(conversation.student_id),
+        );
+      });
+    }
+    const totalVisible = shouldPaginateInDatabase
+      ? count ?? visible.length
+      : visible.length;
+    if (needsParticipantCompatibilityScope) {
+      const start = (page - 1) * pageSize;
+      visible = visible.slice(start, start + pageSize);
     }
     const rows = await enrichChatConversations(svc, school, visible) as Record<
       string,
@@ -1644,7 +1697,7 @@ export async function handleCommunications(
         unread_count: unreadByConversation.get(text(row["id"])) ?? 0,
       }, user.id)
     );
-    const total = count ?? normalizedRows.length;
+    const total = totalVisible;
     return ok({
       data: normalizedRows,
       total,
@@ -2194,8 +2247,10 @@ export async function handleCommunications(
         return {
           ...row,
           notification_type: row.type ?? "general",
-          reference_type: row.entity_type ?? "",
-          reference_id: row.entity_id ?? "",
+          // Keep the canonical notification columns when present. Older
+          // rows used entity_type/entity_id, so retain those as fallbacks.
+          reference_type: row.reference_type ?? row.entity_type ?? row.type ?? "",
+          reference_id: row.reference_id ?? row.entity_id ?? "",
           target_role: row.target_role ?? "all",
           target_user_id: row.user_id ?? "",
           route: row.route ?? "",
@@ -2203,6 +2258,7 @@ export async function handleCommunications(
           student_id: row.student_id ?? "",
           section_id: row.section_id ?? "",
           teacher_id: row.teacher_id ?? "",
+          action: row.action ?? "",
           student_photo_url: await signedPrivateFileUrl(svc, storedPhotoUrl) ||
             storedPhotoUrl,
           sent_at: row.created_at ?? null,
@@ -2244,8 +2300,8 @@ export async function handleCommunications(
     return ok({
       ...data,
       notification_type: data?.type ?? "general",
-      reference_type: data?.entity_type ?? "",
-      reference_id: data?.entity_id ?? "",
+      reference_type: data?.reference_type ?? data?.entity_type ?? data?.type ?? "",
+      reference_id: data?.reference_id ?? data?.entity_id ?? "",
       target_role: data?.target_role ?? "all",
       target_user_id: data?.user_id ?? "",
       route: data?.route ?? "",
@@ -2253,6 +2309,7 @@ export async function handleCommunications(
       student_id: data?.student_id ?? "",
       section_id: data?.section_id ?? "",
       teacher_id: data?.teacher_id ?? "",
+      action: data?.action ?? "",
       sent_at: data?.created_at ?? null,
     });
   }
@@ -2278,6 +2335,21 @@ export async function handleCommunications(
         `target_role.is.null,target_role.eq.all,target_role.eq.${targetRole}`,
       );
     }
+    if (role(user) === "parent") {
+      const { data: links, error: linksError } = await svc
+        .from("parent_student_links")
+        .select("student_id")
+        .eq("school_id", school)
+        .eq("parent_user_id", user.id);
+      if (linksError) return fail(linksError.message);
+      const linkedStudentIds = (links ?? []).map((link) => text(link.student_id))
+        .filter(Boolean);
+      update = linkedStudentIds.length === 0
+        ? update.is("student_id", null)
+        : update.or(
+          `student_id.is.null,student_id.in.(${linkedStudentIds.join(",")})`,
+        );
+    }
     const { error } = await update;
     if (error) return fail(error.message);
     return ok({ success: true });
@@ -2293,8 +2365,8 @@ export async function handleCommunications(
     return ok({
       ...data,
       notification_type: data?.type ?? "general",
-      reference_type: data?.entity_type ?? "",
-      reference_id: data?.entity_id ?? "",
+      reference_type: data?.reference_type ?? data?.entity_type ?? data?.type ?? "",
+      reference_id: data?.reference_id ?? data?.entity_id ?? "",
       target_role: data?.target_role ?? "all",
       target_user_id: data?.user_id ?? "",
       route: data?.route ?? "",
@@ -2302,6 +2374,7 @@ export async function handleCommunications(
       student_id: data?.student_id ?? "",
       section_id: data?.section_id ?? "",
       teacher_id: data?.teacher_id ?? "",
+      action: data?.action ?? "",
       sent_at: data?.created_at ?? null,
     });
   }

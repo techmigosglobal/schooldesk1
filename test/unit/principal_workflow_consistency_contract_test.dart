@@ -67,6 +67,10 @@ void main() {
     expect(approvals, contains("'Content'"));
     expect(approvals, isNot(contains("'Event Posts'")));
     expect(notifications, contains("label: const Text('Mark as read')"));
+    expect(
+      notifications,
+      contains('await _service?.markAllAsRead(widget.role)'),
+    );
     expect(notifications, isNot(contains('_visibilityReadScheduled')));
   });
 }

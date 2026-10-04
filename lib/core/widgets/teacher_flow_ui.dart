@@ -14,6 +14,7 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 
 const Color teacherFlowBackground = Color(0xFFF8FBFE);
 const Color teacherFlowAccent = Color(0xFF0E5EA8);
@@ -32,6 +33,7 @@ class TeacherFlowScaffold extends StatelessWidget {
   final List<Widget> actions;
   final Widget? floatingActionButton;
   final List<SchoolDeskModuleBottomAction>? mobileBottomActions;
+  final VoidCallback? onBackRequested;
 
   const TeacherFlowScaffold({
     super.key,
@@ -45,6 +47,7 @@ class TeacherFlowScaffold extends StatelessWidget {
     this.actions = const [],
     this.floatingActionButton,
     this.mobileBottomActions,
+    this.onBackRequested,
   });
 
   @override
@@ -69,6 +72,7 @@ class TeacherFlowScaffold extends StatelessWidget {
         mobileBottomActions: mobileBottomActions ?? teacherFlowBottomActions,
         floatingActionButton: floatingActionButton,
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        onBackRequested: onBackRequested,
         showBackButton: false,
         bodyIsScrollable: false,
         body: AnimatedSwitcher(
@@ -177,9 +181,11 @@ class TeacherCurrentClassCard extends StatelessWidget {
                 backgroundColor: Colors.white.withOpacity(0.12),
                 backgroundImage: avatar != null && avatar!.isNotEmpty
                     ? NetworkImage(
-                        avatar!.startsWith('http')
-                            ? avatar!
-                            : '${EnvConfig.apiOrigin}$avatar',
+                        resolveOriginalImageUrl(
+                          avatar!.startsWith('http')
+                              ? avatar!
+                              : '${EnvConfig.apiOrigin}$avatar',
+                        ),
                       )
                     : null,
                 child: avatar == null || avatar!.isEmpty

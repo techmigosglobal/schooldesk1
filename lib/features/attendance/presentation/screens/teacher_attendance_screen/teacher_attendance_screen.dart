@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
@@ -138,26 +140,11 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         );
       }
       final studentsPage = studentsResult.dataOrNull!;
-      final students = <_AttendanceStudent>[];
-      for (final s in studentsPage.data) {
-        final enrollmentId = await _resolveEnrollmentId(
-          _repository,
-          s,
-          sectionId: sectionId,
-          academicYearId: effectiveAcademicYearId,
-        );
-        students.add(
-          _AttendanceStudent(
-            id: s.id,
-            name: s.fullName,
-            roll: s.admissionNumber.isNotEmpty
-                ? s.admissionNumber
-                : s.studentCode,
-            enrollmentId: enrollmentId,
-            enrollmentMissing: enrollmentId.isEmpty,
-          ),
-        );
-      }
+      final students = await _buildAttendanceStudents(
+        studentsPage.data,
+        sectionId: sectionId,
+        academicYearId: effectiveAcademicYearId,
+      );
 
       final date = teacherFlowDate(_selectedDate);
       final sessionsResult = await _repository.loadHistory(
@@ -322,7 +309,8 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
 
   Future<void> _requestCorrection() async {
     final session = _session;
-    if (session == null || !session.isFinalized ||
+    if (session == null ||
+        !session.isFinalized ||
         !_canRequestCorrectionForSelectedSection) {
       return;
     }
@@ -528,22 +516,36 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
             if (locked) ...[
               TeacherFlowCard(
                 icon: Icons.lock_rounded,
-                title: 'Attendance locked',
-                subtitle:
-                    'This session has been submitted. The principal must reopen it before edits are allowed.',
-                status: _statusLabel(_session?.status ?? 'submitted'),
-                statusColor: Colors.green,
-                body: _canRequestCorrectionForSelectedSection
-                    ? Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          onPressed: _saving ? null : _requestCorrection,
-                          icon: const Icon(Icons.report_problem_rounded, size: 18),
-                          label: const Text('Request Correction'),
-                        ),
-                      )
+                title: _session?.isFinalized == true
+                    ? 'Attendance locked'
+                    : 'Attendance in use',
+                subtitle: _session?.isFinalized == true
+                    ? 'This session has been submitted. The principal must reopen it before edits are allowed.'
+                    : 'Another teacher is currently marking this class. You can continue after the attendance window is released.',
+                status: _session?.isFinalized == true
+                    ? _statusLabel(_session?.status ?? 'submitted')
+                    : 'In use',
+                statusColor: _session?.isFinalized == true
+                    ? Colors.green
+                    : Colors.orange,
+                body: _session?.isFinalized == true
+                    ? (_canRequestCorrectionForSelectedSection
+                          ? Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: _saving ? null : _requestCorrection,
+                                icon: const Icon(
+                                  Icons.report_problem_rounded,
+                                  size: 18,
+                                ),
+                                label: const Text('Request Correction'),
+                              ),
+                            )
+                          : const Text(
+                              'Only the Class Teacher can request an attendance correction.',
+                            ))
                     : const Text(
-                        'Only the Class Teacher can request an attendance correction.',
+                        'Wait for the active teacher to finish marking or ask the principal to reopen the attendance window.',
                       ),
               ),
               const SizedBox(height: 12),
@@ -569,6 +571,10 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                       : student.roll,
                   status: _statusLabel(student.status),
                   statusColor: student.statusColor,
+                  trailing: _AttendanceStudentAvatar(
+                    imageUrl: student.photoUrl,
+                    name: student.name,
+                  ),
                   body: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
@@ -732,6 +738,45 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     );
   }
 
+  Future<List<_AttendanceStudent>> _buildAttendanceStudents(
+    List<StudentModel> source, {
+    required String sectionId,
+    required String academicYearId,
+  }) async {
+    // The enrollment endpoint is independently authorized per student. Keep
+    // the reads bounded so a large class loads in parallel without opening a
+    // request burst against the VPS.
+    const batchSize = 8;
+    final students = <_AttendanceStudent>[];
+    for (var start = 0; start < source.length; start += batchSize) {
+      final batch = source.skip(start).take(batchSize);
+      final rows = await Future.wait(
+        batch.map((student) async {
+          final enrollmentId = student.activeEnrollmentId.isNotEmpty
+              ? student.activeEnrollmentId
+              : await _resolveEnrollmentId(
+                  _repository,
+                  student,
+                  sectionId: sectionId,
+                  academicYearId: academicYearId,
+                );
+          return _AttendanceStudent(
+            id: student.id,
+            name: student.fullName,
+            roll: student.admissionNumber.isNotEmpty
+                ? student.admissionNumber
+                : student.studentCode,
+            photoUrl: student.photoUrl,
+            enrollmentId: enrollmentId,
+            enrollmentMissing: enrollmentId.isEmpty,
+          );
+        }),
+      );
+      students.addAll(rows);
+    }
+    return students;
+  }
+
   Widget _selectionPanel() {
     final classOptions = _attendanceClassOptions;
     final selectedSection = _selectedSectionId.isNotEmpty
@@ -883,6 +928,7 @@ class _AttendanceStudent {
   final String id;
   final String name;
   final String roll;
+  final String photoUrl;
   final String enrollmentId;
   final bool enrollmentMissing;
   final String status;
@@ -892,6 +938,7 @@ class _AttendanceStudent {
     required this.id,
     required this.name,
     required this.roll,
+    required this.photoUrl,
     required this.enrollmentId,
     required this.enrollmentMissing,
     this.status = 'unmarked',
@@ -907,10 +954,77 @@ class _AttendanceStudent {
       id: id,
       name: name,
       roll: roll,
+      photoUrl: photoUrl,
       enrollmentId: enrollmentId,
       enrollmentMissing: enrollmentMissing,
       status: status ?? this.status,
       reason: reason ?? this.reason,
+    );
+  }
+}
+
+class _AttendanceStudentAvatar extends StatelessWidget {
+  final String imageUrl;
+  final String name;
+
+  const _AttendanceStudentAvatar({required this.imageUrl, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .map((part) => part[0].toUpperCase())
+        .join();
+    final url = resolveOriginalImageUrl(imageUrl);
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: ClipOval(
+        child: url.isEmpty
+            ? _AttendanceInitials(initials: initials)
+            : CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.cover,
+                memCacheWidth: 132,
+                memCacheHeight: 132,
+                placeholder: (_, __) =>
+                    _AttendanceInitials(initials: initials, loading: true),
+                errorWidget: (_, __, ___) =>
+                    _AttendanceInitials(initials: initials),
+              ),
+      ),
+    );
+  }
+}
+
+class _AttendanceInitials extends StatelessWidget {
+  final String initials;
+  final bool loading;
+
+  const _AttendanceInitials({required this.initials, this.loading = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFEAF3F7),
+      alignment: Alignment.center,
+      child: loading
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Text(
+              initials.isEmpty ? '?' : initials,
+              style: const TextStyle(
+                color: teacherFlowAccent,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
     );
   }
 }

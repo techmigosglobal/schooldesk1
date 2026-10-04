@@ -4,9 +4,9 @@ import {
   assertFalse,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  legacyR2Reference,
   publicR2FileReference,
   publicR2FileUrl,
-  legacyR2Reference,
   r2FileReference,
   r2KeyFromValue,
   r2ReferenceInfo,
@@ -23,6 +23,8 @@ const envNames = [
   "R2_SECRET_ACCESS_KEY",
   "R2_PUBLIC_BASE_URL",
   "R2_REGION",
+  "STORAGE_WRITE_PROVIDER",
+  "SUPABASE_URL",
 ] as const;
 
 function withR2Env(callback: () => void | Promise<void>) {
@@ -89,6 +91,27 @@ Deno.test("legacy unscoped references infer private only for private keys", asyn
   await withR2Env(async () => {
     assertEquals(r2VisibilityFromValue("r2://private/docs/a.pdf"), "private");
     assertEquals(r2VisibilityFromValue("r2://website-gallery/a.jpg"), "public");
+  });
+});
+
+Deno.test("self-hosted mode resolves migrated public R2 refs to Supabase Storage", async () => {
+  await withR2Env(async () => {
+    Deno.env.delete("R2_ENDPOINT");
+    Deno.env.delete("R2_PRIVATE_BUCKET");
+    Deno.env.delete("R2_PUBLIC_BUCKET");
+    Deno.env.delete("R2_ACCESS_KEY_ID");
+    Deno.env.delete("R2_SECRET_ACCESS_KEY");
+    Deno.env.delete("R2_BUCKET");
+    Deno.env.set("STORAGE_WRITE_PROVIDER", "supabase");
+    Deno.env.set("SUPABASE_URL", "https://api.example.test");
+    assertEquals(
+      publicR2FileUrl("r2://public/event-posts/school/photo one.jpg"),
+      "https://api.example.test/storage/v1/object/public/schooldesk-public-media/event-posts/school/photo%20one.jpg",
+    );
+    assertEquals(
+      r2FileReference("documents/proof.pdf"),
+      "schooldesk-private-files/documents/proof.pdf",
+    );
   });
 });
 

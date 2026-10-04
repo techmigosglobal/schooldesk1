@@ -195,7 +195,7 @@ probe coordinator QA_COORDINATOR_USERNAME QA_COORDINATOR_PASSWORD \
   '/attendance/staff?page=1&page_size=1' 200 \
   '/attendance/staff/daily-summary?date=2026-09-23' 200 \
   '/approvals/feed?page=1&page_size=100' 200 \
-  '/audit-logs?page_size=1' 200 \
+  '/audit-logs?page_size=1' 404 \
   '/issues?page=1&page_size=1' 200 \
   '/events?page=1&page_size=1' 200 \
   '/events/calendar-preferences' 200 \
@@ -265,7 +265,7 @@ probe super_admin QA_SUPER_ADMIN_USERNAME QA_SUPER_ADMIN_PASSWORD \
   '/access/permissions' 200 \
   '/monitoring/error-events?page=1&page_size=1' 200 \
   '/issues?page=1&page_size=1' 200 \
-  '/audit-logs?page_size=1' 200 \
+  '/audit-logs?page_size=1' 404 \
   '/dashboard/super_admin' 200 \
   '/fees/summary' 200
 

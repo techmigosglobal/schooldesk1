@@ -60,11 +60,6 @@ import {
 } from "./handlers/website.ts";
 import { handleDemo } from "./handlers/demo.ts";
 import {
-  handleActivity,
-  recordActivity,
-  recordHttpActivity,
-} from "./handlers/activity.ts";
-import {
   consumeRateLimit,
   RateLimitBackendError,
   rateLimitHeaders,
@@ -119,6 +114,8 @@ async function withDirectSql<T>(
 // ── CORS ──────────────────────────────────────────────────────
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Expose-Headers":
+    "Content-Disposition, Idempotency-Replayed, Idempotency-Retryable, Retry-After, X-Request-Id",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, idempotency-key, x-school-id, x-schooldesk-branch-id, x-job-secret",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
@@ -166,6 +163,7 @@ type IdempotencyRow = {
   response_status: number | null;
   response_body: string | null;
   response_content_type: string | null;
+  created_at?: string | null;
 };
 
 function isIdempotentMutation(method: string): boolean {
@@ -262,7 +260,7 @@ async function withIdempotency(
   const hash = await requestHash(req);
   const baseQuery = svc.from("api_idempotency_keys")
     .select(
-      "id, method, path, request_hash, state, response_status, response_body, response_content_type",
+      "id, method, path, request_hash, state, response_status, response_body, response_content_type, created_at",
     )
     .eq("user_id", user.id)
     .eq("school_id", schoolId)
@@ -284,7 +282,22 @@ async function withIdempotency(
     if (existing.state === "completed") {
       return replayIdempotentResponse(existing);
     }
-    return fail("request with this idempotency key is still processing", 409);
+    // A crashed worker can leave a reservation forever. A processing lease
+    // older than ten minutes is abandoned before accepting a retry. The
+    // delete is conditional so an active concurrent request remains owner.
+    const leaseExpired = existing.created_at == null ||
+      Date.now() - Date.parse(existing.created_at) > 10 * 60 * 1000;
+    if (leaseExpired) {
+      const abandoned = await svc.from("api_idempotency_keys").delete()
+        .eq("user_id", user.id).eq("school_id", schoolId)
+        .eq("idempotency_key", key).eq("state", "processing");
+      if (!abandoned.error) return await withIdempotency(req, handler);
+    }
+    return cors(
+      { success: false, error: "request with this idempotency key is still processing" },
+      409,
+      { "Idempotency-Retryable": "true", "Retry-After": "5" },
+    );
   }
 
   const inserted = await svc.from("api_idempotency_keys").insert({
@@ -301,7 +314,7 @@ async function withIdempotency(
     if (`${inserted.error.code ?? ""}` === "23505") {
       const raced = await svc.from("api_idempotency_keys")
         .select(
-          "id, method, path, request_hash, state, response_status, response_body, response_content_type",
+          "id, method, path, request_hash, state, response_status, response_body, response_content_type, created_at",
         )
         .eq("user_id", user.id)
         .eq("school_id", schoolId)
@@ -319,9 +332,10 @@ async function withIdempotency(
           );
         }
         if (row.state === "completed") return replayIdempotentResponse(row);
-        return fail(
-          "request with this idempotency key is still processing",
+        return cors(
+          { success: false, error: "request with this idempotency key is still processing" },
           409,
+          { "Idempotency-Retryable": "true", "Retry-After": "5" },
         );
       }
     }
@@ -429,54 +443,16 @@ function isSensitiveAccountPath(path: string, method: string): boolean {
     path.startsWith("/access") || path.startsWith("/parents/");
 }
 
-async function auditedResponse(
+async function resolveHandlerResponse(
   response: Promise<Response>,
-  svc: ReturnType<typeof serviceClient>,
-  user: NonNullable<Awaited<ReturnType<typeof authedClient>>["user"]>,
-  path: string,
-  method: string,
-  requestPayload: Record<string, unknown> = {},
+  _svc: ReturnType<typeof serviceClient>,
+  _user: NonNullable<Awaited<ReturnType<typeof authedClient>>["user"]>,
+  _path: string,
+  _method: string,
+  _requestPayload: Record<string, unknown> = {},
 ) {
-  const resolved = await response;
-  if (resolved.status === 403) {
-    // Keep denial telemetry deliberately metadata-only: no request body,
-    // credentials, PII, or resource contents are copied into the audit trail.
-    const denial = recordActivity(svc, {
-      schoolId: `${user.app_metadata?.school_id ?? ""}`,
-      userId: user.id,
-      actorRole: `${user.app_metadata?.role_name ?? ""}`.toLowerCase(),
-      action: "authorization.denied",
-      module: path.split("/").filter(Boolean).at(0) || "system",
-      eventType: "authorization_denied",
-      summary: "Authorization denied",
-      entityType: "http_route",
-      entityId: undefined,
-      actorName: undefined,
-      details: { path, method, status: resolved.status },
-    }).catch(() => undefined);
-    if (!scheduleAfterResponse(denial)) await denial;
-  }
-  if (resolved.ok) {
-    const activity = (async () => {
-      const payload = await resolved.clone().json().catch(() => null);
-      if (payload?.success === true || path.endsWith("/export")) {
-        await recordHttpActivity(
-          svc,
-          user,
-          path,
-          method,
-          payload,
-          requestPayload,
-        ).catch(() => undefined);
-      }
-    })();
-    // Audit persistence is important, but it should not add database latency
-    // to every successful API response when EdgeRuntime can finish the work
-    // after the response has been handed to the client. Local/CLI runtimes do
-    // not provide waitUntil, so they retain the synchronous fallback.
-    if (!scheduleAfterResponse(activity)) await activity;
-  }
-  return resolved;
+  // Retains the existing dispatch call shape without producing activity logs.
+  return await response;
 }
 
 function scheduleAfterResponse(task: Promise<void>): boolean {
@@ -899,6 +875,9 @@ export async function handleApiRequest(req: Request): Promise<Response> {
 
   const ratePolicy: RateLimitPolicy = isSensitiveAccountPath(path, method)
     ? "sensitiveAccount"
+    : method !== "GET" && method !== "HEAD" &&
+        (path.startsWith("/uploads") || path.includes("/attachments"))
+    ? "authenticatedUpload"
     : method === "GET" || method === "HEAD"
     ? "authenticatedRead"
     : "authenticatedWrite";
@@ -911,7 +890,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
 
   // Route dispatch
   if (path.startsWith("/branches")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleBranches(req, path, method, url, svc, user),
       svc,
       user,
@@ -920,7 +899,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/schools")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleSchools(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -929,7 +908,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/dashboard")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleDashboard(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -938,7 +917,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/class-daily-claims")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleDailyClaims(req, path, method, url, svc, user),
       svc,
       user,
@@ -956,7 +935,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     path.startsWith("/staff-subjects") ||
     path.startsWith("/rooms")
   ) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleAcademics(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -965,7 +944,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/events") || path.startsWith("/holidays")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleCalendar(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -978,7 +957,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     path.startsWith("/student-documents") ||
     path.startsWith("/staff-documents")
   ) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleDocuments(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -987,7 +966,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/principal")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handlePrincipal(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -996,7 +975,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/website")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleWebsite(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1005,7 +984,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/staff")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleStaff(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1014,7 +993,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/students")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleStudents(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1023,7 +1002,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/guardians")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleGuardians(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1032,7 +1011,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/users")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleUsers(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1041,7 +1020,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/account-approvals") || path.startsWith("/approvals")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleApprovals(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1050,7 +1029,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/attendance")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleAttendance(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1065,7 +1044,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     const feeRequestPayload = method === "GET"
       ? {}
       : await req.clone().json().catch(() => ({})) as Record<string, unknown>;
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleFees(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1075,7 +1054,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/leave") || path.startsWith("/student-leave")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleLeave(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1084,7 +1063,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/homework")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleHomework(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1093,7 +1072,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/medical-records")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleMedical(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1105,7 +1084,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     return handleHealthReminders(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/timetable")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleTimetable(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1122,7 +1101,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     path.startsWith("/notifications/subscribe") ||
     path.startsWith("/notifications/unsubscribe")
   ) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleNotifications(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1140,7 +1119,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     path === "/notifications" ||
     path.startsWith("/notifications/")
   ) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleCommunications(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1149,7 +1128,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/uploads")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleUploads(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1158,7 +1137,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/event-posts")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleEvents(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1167,7 +1146,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/me/students") || path.startsWith("/parents")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleParent(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1179,7 +1158,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     return handleHelp(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/access")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleAccess(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1188,7 +1167,7 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     );
   }
   if (path.startsWith("/issues")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleIssues(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1196,14 +1175,11 @@ export async function handleApiRequest(req: Request): Promise<Response> {
       method,
     );
   }
-  if (path.startsWith("/audit-logs")) {
-    return handleActivity(path, method, url, svc, user);
-  }
   if (path.startsWith("/monitoring")) {
     return handleMonitoring(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/reports")) {
-    return auditedResponse(
+    return resolveHandlerResponse(
       handleReports(req, path, method, url, client, svc, user),
       svc,
       user,
@@ -1218,7 +1194,24 @@ export async function handleApiRequest(req: Request): Promise<Response> {
 // Keep imports side-effect free for contract/unit tests. Supabase/Deno runs
 // this module as the entrypoint, where import.meta.main is true.
 if (import.meta.main) {
-  Deno.serve((req: Request) =>
-    withIdempotency(req, () => handleApiRequest(req))
-  );
+  Deno.serve((req: Request) => {
+    const requestId = req.headers.get("x-request-id")?.trim() ||
+      crypto.randomUUID();
+    const startedAt = performance.now();
+    return withIdempotency(req, () => handleApiRequest(req)).then((response) => {
+      const durationMs = Math.round(performance.now() - startedAt);
+      response.headers.set("x-request-id", requestId);
+      if (response.status >= 500 || durationMs >= 1500) {
+        console.error(JSON.stringify({
+          event: "schooldesk.api_request",
+          request_id: requestId,
+          method: req.method,
+          path: new URL(req.url).pathname,
+          status: response.status,
+          duration_ms: durationMs,
+        }));
+      }
+      return response;
+    });
+  });
 }

@@ -199,7 +199,6 @@ All handlers are in `supabase/functions/api/handlers/`. The entry point is `supa
 | `health.ts` | `/health`, `/ready` | Public | Health check and readiness probe |
 | `monitoring.ts` | `/monitoring/*` | Principal, Super Admin | System health, error events, retention |
 | `reports.ts` | `/reports/*` | Principal, Coordinator | Report data, exports |
-| `activity.ts` | `/activity/*` | Principal, Coordinator | Audit log queries |
 | `approvals.ts` | `/approvals/*` | Principal, Coordinator | Approval center |
 | `schools.ts` | `/schools/*` | All (scoped) | Branch info, school profile |
 | `branches.ts` | `/branches/*` | Principal | Branch list and selection |
@@ -667,7 +666,6 @@ Event occurs (payment, attendance, leave approval, etc.)
 | `messages` | Chat messages | YES |
 | `notifications` | In-app notification queue | Per user |
 | `device_tokens` | FCM device tokens | Per user |
-| `audit_logs` | Audit trail | YES |
 | `school_website` | Public website content | YES |
 | `admission_inquiries` | Public inquiry submissions | YES |
 | `leave_requests` | Teacher and student leave | YES |
@@ -758,24 +756,12 @@ Every data-loading surface must implement these states explicitly:
 
 ---
 
-## 19. Audit Logging
+## 19. Operational Diagnostics
 
-### Audit-Logged Operations
-
-| Operation | Table | Required Fields |
-|-----------|-------|----------------|
-| Account creation/edit/deactivation | `audit_logs` | user_id, target_user_id, action, branch_id, timestamp |
-| Role assignment change | `audit_logs` | user_id, target_user_id, old_role, new_role, branch_id, timestamp |
-| Fee payment recorded | `audit_logs` | user_id, student_id, amount, method, invoice_id, branch_id, timestamp |
-| Fee concession applied | `audit_logs` | user_id, student_id, concession_amount, reason, branch_id, timestamp |
-| Payment reversal | `audit_logs` | user_id, original_payment_id, reason, branch_id, timestamp |
-| Student import (Sheets) | `audit_logs` | user_id, branch_id, rows_attempted, rows_succeeded, rows_failed, timestamp |
-| Student export (Sheets) | `audit_logs` | user_id, branch_id, rows_exported, timestamp |
-| Branch switch | `audit_logs` | user_id, old_branch_id, new_branch_id, timestamp |
-| Attendance correction | `audit_logs` | user_id, session_id, student_id, old_status, new_status, branch_id, timestamp |
-| Approval decision | `audit_logs` | user_id, request_id, decision, reason, branch_id, timestamp |
-| Document upload/delete | `audit_logs` | user_id, document_type, action, branch_id, timestamp |
-| Error event manual cleanup | `audit_logs` | super_admin_user_id, event_ids, confirmation_code, timestamp |
+Operational error events and session records remain available for reliability
+and account-session workflows. The former `audit_logs` feature and its retained
+history have been removed; payment and approval state continues to be recorded
+on its authoritative business tables.
 
 ---
 

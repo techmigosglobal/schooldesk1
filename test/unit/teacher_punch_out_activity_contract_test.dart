@@ -46,36 +46,17 @@ void main() {
     expect(source, contains(r'Out ${_timeLabel(checkOut)}'));
   });
 
-  test(
-    'activity log schema, API, and authentication session events are wired',
-    () {
-      final migration = File(
-        'supabase/migrations/20260719102101_staff_punch_out_and_activity_log.sql',
-      ).readAsStringSync();
-      final activity = File(
-        'supabase/functions/api/handlers/activity.ts',
-      ).readAsStringSync();
-      final auth = File(
-        'supabase/functions/api/handlers/auth.ts',
-      ).readAsStringSync();
-      expect(migration, contains('check_out_source'));
-      expect(migration, contains('signed_out_at'));
-      expect(migration, contains('actor_role'));
-      expect(activity, contains('/audit-logs/export'));
-      expect(activity, contains('recordHttpActivity'));
-      expect(activity, contains('.range(from, from + limit - 1)'));
-      expect(auth, contains('auth.login'));
-      expect(auth, contains('auth.logout'));
-      expect(auth, isNot(contains('refresh_token: refresh_token')));
-    },
-  );
-
-  test('principal audit UI has meaningful activity filters', () {
-    final source = File(
-      'lib/features/monitoring/presentation/screens/principal_audit_logs_screen.dart',
+  test('staff punch-out and session tracking remain active', () {
+    final migration = File(
+      'supabase/migrations/20260719102101_staff_punch_out_and_activity_log.sql',
     ).readAsStringSync();
-    expect(source, contains('Actor role'));
-    expect(source, contains('Search activity'));
-    expect(source, contains("log['summary']"));
+    final auth = File(
+      'supabase/functions/api/handlers/auth.ts',
+    ).readAsStringSync();
+    expect(migration, contains('check_out_source'));
+    expect(migration, contains('signed_out_at'));
+    expect(auth, contains('from("user_sessions").insert'));
+    expect(auth, contains('signed_out_at: now'));
+    expect(auth, isNot(contains('refresh_token: refresh_token')));
   });
 }

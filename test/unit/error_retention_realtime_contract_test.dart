@@ -43,7 +43,8 @@ void main() {
         contains('Only resolved error events can be permanently deleted'),
       );
       expect(handler, contains('cleanup_resolved_error_events'));
-      expect(handler, contains('recordActivity(svc'));
+      expect(handler, contains('cleanup_resolved_error_events'));
+      expect(handler, contains('from("error_events").delete()'));
       expect(api, contains('getErrorRetentionMetrics'));
       expect(api, contains('previewResolvedErrorCleanup'));
       expect(api, contains('clearResolvedErrorEvents'));

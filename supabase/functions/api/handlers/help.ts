@@ -1,12 +1,14 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
 import {
-  deleteR2File,
   legacyStorageWritesEnabled,
   r2FileReference,
   uploadToR2,
 } from "../lib/r2_storage.ts";
-import { signedPrivateFileUrl } from "../storage_helpers.ts";
+import {
+  deleteStoredObject,
+  signedPrivateFileUrl,
+} from "../storage_helpers.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -98,7 +100,10 @@ export async function handleHelp(
     const storedPath = r2Upload ? r2FileReference(r2Upload.key) : pathValue;
     if (!r2Upload) {
       if (!legacyStorageWritesEnabled()) {
-        return fail("R2 storage is unavailable; legacy storage writes are disabled", 503);
+        return fail(
+          "R2 storage is unavailable; legacy storage writes are disabled",
+          503,
+        );
       }
       const { error } = await svc.storage.from("help-tutorial-videos").upload(
         pathValue,
@@ -291,7 +296,11 @@ export async function handleHelp(
 
     if (error) return fail(error.message);
     if (`${existing.video_path ?? ""}`.startsWith("r2://")) {
-      await deleteR2File(existing.video_path);
+      await deleteStoredObject(
+        svc,
+        existing.video_path,
+        "help-tutorial-videos",
+      );
     } else if (existing.video_path) {
       await svc.storage.from("help-tutorial-videos").remove([
         `${existing.video_path}`,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
+import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/modules/finance/data/api_admin_fees_repository.dart';
 import 'package:schooldesk1/modules/finance/domain/admin_fees_repository.dart';
@@ -695,11 +696,13 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
 
   String _absoluteMediaUrl(String value) {
     final trimmed = value.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed;
-    }
-    if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
-    return '${EnvConfig.apiOrigin}/$trimmed';
+    final absolute = trimmed.startsWith('http://') ||
+            trimmed.startsWith('https://')
+        ? trimmed
+        : trimmed.startsWith('/')
+        ? '${EnvConfig.apiOrigin}$trimmed'
+        : '${EnvConfig.apiOrigin}/$trimmed';
+    return resolveOriginalImageUrl(absolute);
   }
 
   void _showFullImage(String url) {

@@ -183,7 +183,7 @@ class _EventPostMediaCarouselState extends State<EventPostMediaCarousel> {
       return;
     }
     final current = widget.mediaItems[_currentIndex];
-    _timer = Timer(Duration(seconds: current.isVideo ? 8 : 3), () {
+    _timer = Timer(Duration(seconds: current.isVideo ? 8 : 5), () {
       if (!mounted || !widget.isActive || widget.mediaItems.length <= 1) {
         return;
       }
@@ -228,7 +228,10 @@ class _EventPostMediaCarouselState extends State<EventPostMediaCarousel> {
                 height: widget.height,
                 autoPlay: widget.isActive && index == _currentIndex,
                 muted: true,
-                loadOnInit: true,
+                // Do not initialize every off-screen video in a feed card.
+                // The visible item starts immediately; a neighboring item
+                // starts when PageView makes it current.
+                loadOnInit: widget.isActive && index == _currentIndex,
                 onTap:
                     widget.onOpen ??
                     () => openEventPostMediaPreview(context, item),
