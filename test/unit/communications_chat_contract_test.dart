@@ -175,6 +175,21 @@ void main() {
   );
 
   test(
+    'mobile chat routes do not overlay the lower-left conversation touch area',
+    () {
+      final principalScreen = File(
+        'lib/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart',
+      ).readAsStringSync();
+      final parentScreen = File(
+        'lib/features/communication/presentation/screens/parent_teacher_chat_screen/parent_teacher_chat_screen.dart',
+      ).readAsStringSync();
+
+      expect(principalScreen, isNot(contains('DashboardFabWidget')));
+      expect(parentScreen, isNot(contains('DashboardFabWidget')));
+    },
+  );
+
+  test(
     'principal chat direct tab hydrates teacher and parent contacts even before threads exist',
     () {
       final principalScreen = File(

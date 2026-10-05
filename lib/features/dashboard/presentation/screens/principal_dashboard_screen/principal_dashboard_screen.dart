@@ -1048,7 +1048,7 @@ class _PrincipalHomeData {
     final attendance = Map<String, dynamic>.from(
       dashboard['today_attendance'] as Map? ?? {},
     );
-    final schoolName = _text(school['name'], fallback: 'School');
+    final schoolName = _text(school['name']);
     final board = _schoolDescriptor(
       _text(school['affiliation_board']),
       _text(school['school_type']),
@@ -1096,7 +1096,7 @@ class _PrincipalHomeData {
     required List<Map<String, dynamic>> feeStructures,
     required int unreadNotifications,
   }) {
-    final schoolName = _text(school['name'], fallback: 'School');
+    final schoolName = _text(school['name']);
     final registered =
         _text(school['id']).isNotEmpty ||
         _text(school['registration_no']).isNotEmpty;
@@ -1105,27 +1105,31 @@ class _PrincipalHomeData {
         _text(school['school_type']).isNotEmpty &&
         _text(school['principal_name']).isNotEmpty;
     final hasAcademicYear = academicYears.isNotEmpty;
-    final hasClasses = grades.isNotEmpty || sections.isNotEmpty;
+    final hasClasses = grades.isNotEmpty && sections.isNotEmpty;
+    final hasCurrentAcademicYear = academicYears.any((year) => year.isCurrent);
+    final currentYearIds = academicYears
+        .where((year) => year.isCurrent)
+        .map((year) => year.id)
+        .toSet();
+    final currentSections = sections
+        .where((section) => currentYearIds.contains(section.academicYearId))
+        .toList();
+    final unassignedClasses = currentSections
+        .where((section) => section.classTeacherId.trim().isEmpty)
+        .length;
     final hasSubjects = subjects.isNotEmpty;
     final hasTeachers = staffTotal > 0;
     final hasStudents = studentsTotal > 0;
     final hasFees = feeStructures.isNotEmpty;
     final isCoordinator = RoleAccessService.currentRoleName == 'coordinator';
-    final goLiveReady = [
-      registered,
-      profileReady,
-      hasAcademicYear,
-      hasClasses,
-      hasSubjects,
-      hasTeachers,
-      hasStudents,
-      if (!isCoordinator) hasFees,
-    ].every((v) => v);
-
     final metrics = Map<String, dynamic>.from(
       dashboard['metrics'] as Map? ?? {},
     );
 
+    final unassignedStudents = _intValue(
+      metrics['active_unassigned_students'],
+      0,
+    );
     final pendingFeeRequests = _intValue(metrics['pending_fee_requests'], 0);
     final pendingAccessApprovals = _intValue(
       metrics['pending_access_approvals'],
@@ -1167,13 +1171,29 @@ class _PrincipalHomeData {
           route: AppRoutes.academicManagement,
           isComplete: hasAcademicYear,
         ),
-        if (_intValue(metrics['active_unassigned_students'], 0) > 0)
-          _SetupStep(
-            title:
-                '${_intValue(metrics['active_unassigned_students'], 0)} student(s) need a class assignment',
-            route: AppRoutes.studentOversight,
-            isComplete: false,
-          ),
+        _SetupStep(
+          title: hasCurrentAcademicYear
+              ? 'Current academic year selected'
+              : 'Select the current academic year',
+          route: AppRoutes.academicManagement,
+          isComplete: hasCurrentAcademicYear,
+        ),
+        _SetupStep(
+          title: unassignedStudents == 0
+              ? 'Student class assignments complete'
+              : '$unassignedStudents student(s) need a class assignment',
+          route: AppRoutes.studentOversight,
+          isComplete: unassignedStudents == 0,
+        ),
+        _SetupStep(
+          title: currentSections.isEmpty
+              ? 'Create classes for the current academic year'
+              : unassignedClasses == 0
+              ? 'Class teachers assigned'
+              : '$unassignedClasses class(es) need a class teacher',
+          route: AppRoutes.principalClasses,
+          isComplete: currentSections.isNotEmpty && unassignedClasses == 0,
+        ),
         _SetupStep(
           title: 'Classes & Sections Creation',
           route: AppRoutes.principalClasses,
@@ -1200,7 +1220,6 @@ class _PrincipalHomeData {
             route: AppRoutes.feeMonitoring,
             isComplete: hasFees,
           ),
-        _SetupStep(title: 'Go Live', isComplete: goLiveReady),
       ],
     );
   }
@@ -2217,8 +2236,8 @@ class _SetupPreviewPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final pending = steps.where((step) => !step.isComplete).take(4).toList();
-    final visibleSteps = pending.isEmpty ? steps.take(4).toList() : pending;
+    final pending = steps.where((step) => !step.isComplete).toList();
+    final visibleSteps = pending;
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(18),
@@ -2265,14 +2284,16 @@ class _SetupPreviewPanel extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Go Live Progress',
+                        'School Setup Progress',
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: const Color(0xFF0F172A),
                           fontWeight: FontWeight.w900,
                         ),
                       ),
                       Text(
-                        '$completed/$total setup steps complete',
+                        pending.isEmpty
+                            ? 'All $total setup checks complete'
+                            : '${pending.length} items need attention · $completed/$total complete',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: const Color(0xFF64748B),
                           fontWeight: FontWeight.w600,

@@ -452,7 +452,19 @@ async function resolveHandlerResponse(
   _requestPayload: Record<string, unknown> = {},
 ) {
   // Retains the existing dispatch call shape without producing activity logs.
-  return await response;
+  const resolved = await response;
+  if (_method === "GET" && _path.startsWith("/event-posts")) {
+    const headers = new Headers(resolved.headers);
+    headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    headers.set("Pragma", "no-cache");
+    headers.set("Vary", "Authorization, x-schooldesk-branch-id");
+    return new Response(resolved.body, {
+      status: resolved.status,
+      statusText: resolved.statusText,
+      headers,
+    });
+  }
+  return resolved;
 }
 
 function scheduleAfterResponse(task: Promise<void>): boolean {

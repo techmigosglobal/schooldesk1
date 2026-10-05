@@ -119,6 +119,10 @@ class OfflineDioInterceptor extends Interceptor {
     final clean = request.path.toLowerCase();
     if (clean.contains('/health') ||
         clean.contains('/uploads') ||
+        // Event-post responses contain short-lived signed media URLs. Keeping
+        // them in the generic offline cache causes expired links to be shown
+        // as broken media on the next online session.
+        clean.startsWith('/event-posts') ||
         // Payment-request reads can contain short-lived signed proof URLs;
         // keep those out of the generic cache. Historical payment/receipt
         // reads remain cacheable and are explicitly offline-capable.

@@ -497,24 +497,29 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
 
   Future<void> _startVideo() async {
     if (_controller != null || _loading) return;
-    setState(() => _loading = true);
-    final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(resolveOriginalImageUrl(widget.url)),
+    );
     _controller = controller;
     try {
       await controller.initialize();
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
+      if (!mounted || _controller != controller) return;
       await controller.setLooping(true);
       await controller.setVolume(_muted ? 0 : 1);
       if (widget.autoPlay) await controller.play();
+      if (!mounted || _controller != controller) return;
       setState(() {
         _loading = false;
         _ready = true;
       });
     } on Object catch (_) {
+      if (_controller != controller) return;
       await controller.dispose();
+      if (_controller != controller) return;
       _controller = null;
       if (mounted) {
         setState(() {
@@ -567,7 +572,23 @@ class _EventPostVideoPreviewState extends State<EventPostVideoPreview> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
-      return _videoShell(context, child: Center(child: Text(_error!)));
+      return _videoShell(
+        context,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_error!, style: const TextStyle(color: Colors.white)),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _startVideo,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry video'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
     if (!_ready) {
       return _videoShell(

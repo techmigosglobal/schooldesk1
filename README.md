@@ -41,6 +41,20 @@ health/readiness contract and R2 configuration from `env.supabase.json`; set
 `SUPABASE_DB_URL` and `SUPABASE_ACCESS_TOKEN` only in the protected environment
 to enable hosted migration-history and Edge Function listing checks.
 
+### Hostinger VPS Android releases
+
+For Android artifacts that must use the self-hosted Supabase stack, use the VPS
+wrapper rather than the generic managed-Supabase build command:
+
+```bash
+scripts/build-android-vps.sh aab
+```
+
+The wrapper reads the VPS JWT anon key over SSH, checks that
+`https://api.arishville.com/functions/v1/api/health` returns HTTP 200, injects
+the VPS URL and key into a temporary build environment, and shreds that file
+after the build. It does not commit or print the key.
+
 ### Telangana holiday calendar
 
 `Holiday calender - Telangana.pdf` is the source of truth for the 24 official

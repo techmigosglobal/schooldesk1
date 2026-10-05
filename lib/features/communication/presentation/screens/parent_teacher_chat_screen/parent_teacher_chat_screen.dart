@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/utils/chat_message_merge.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
@@ -605,7 +604,6 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 760;
     return PopScope(
       canPop: _selectedThread == null,
       onPopInvokedWithResult: (didPop, _) {
@@ -623,10 +621,6 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
           selectedIndex: ParentNav.chat,
           onDestinationSelected: (_) {},
         ),
-        floatingActionButton: (!isWide && _selectedThread != null)
-            ? null
-            : const DashboardFabWidget(role: DashboardRole.parent),
-        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         onBackRequested: _selectedThread == null
             ? null
             : _backToConversationList,

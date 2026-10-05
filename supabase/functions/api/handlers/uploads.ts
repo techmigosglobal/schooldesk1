@@ -1,6 +1,6 @@
 // handlers/uploads.ts — multipart file upload → R2 or Supabase Storage
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok, triggerPushProcessing } from "../index.ts";
+import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
 import {
   renderStructuredReportPdf,
   StructuredExportTable,
@@ -37,6 +37,12 @@ import {
   uploadPublicToR2,
   uploadToR2,
 } from "../lib/r2_storage.ts";
+
+// Feed payloads carry signed Storage URLs. Keep links usable while a user is
+// browsing a long feed, while the API/client no-store boundary prevents these
+// URLs from becoming durable cache entries.
+export const EVENT_POST_MEDIA_URL_TTL_SECONDS = 60 * 60;
+
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -343,11 +349,21 @@ async function materializeEventPostMedia(
       // bucket even though the database still contains its old public URL.
       // A signed target URL is valid for the authorized feed and avoids
       // sending the client back to a missing source bucket object.
-      url = await signedPrivateFileUrl(svc, stored, undefined, "school-assets");
+      url = await signedPrivateFileUrl(
+        svc,
+        stored,
+        EVENT_POST_MEDIA_URL_TTL_SECONDS,
+        "school-assets",
+      );
       if (!url) url = publicR2FileUrl(migratedLegacyRef ?? stored);
     }
     if (!url && (!publicOnly || postIsPublic)) {
-      url = await signedPrivateFileUrl(svc, stored, undefined, "school-assets");
+      url = await signedPrivateFileUrl(
+        svc,
+        stored,
+        EVENT_POST_MEDIA_URL_TTL_SECONDS,
+        "school-assets",
+      );
     }
     if (!url && publicOnly && postIsPublic) {
       // Preserve the legacy URL only when the R2 copy is unavailable. This
@@ -3644,5 +3660,13 @@ export async function handleLandingFeed(
     ),
   );
 
-  return ok(rows);
+  return cors(
+    { success: true, data: rows },
+    200,
+    {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "Pragma": "no-cache",
+      "Vary": "x-schooldesk-branch-id",
+    },
+  );
 }

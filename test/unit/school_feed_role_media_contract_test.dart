@@ -34,6 +34,16 @@ void main() {
       expect(parentRepository, contains('getHomeFeedEventPostsPage'));
       expect(parentRepository, contains('page: 1, pageSize: 10'));
       expect(api, contains('getHomeFeedEventPostsPage(page: 1, pageSize: 10)'));
+      expect(api, contains("'media_version': 2"));
+      expect(
+        File('lib/core/offline/offline_sync_engine.dart').readAsStringSync(),
+        contains("clean.startsWith('/event-posts')"),
+      );
+      expect(handler, contains('EVENT_POST_MEDIA_URL_TTL_SECONDS = 60 * 60'));
+      expect(
+        File('supabase/functions/api/index.ts').readAsStringSync(),
+        contains('Cache-Control", "no-store, no-cache, must-revalidate'),
+      );
       expect(
         teacherRepository,
         isNot(contains('getHomeFeedEventPosts().catchError')),
@@ -59,7 +69,10 @@ void main() {
       expect(media, contains('thumbnailUrl'));
       expect(media, contains('BoxFit.contain'));
       expect(teacherFeed, contains('EventPostMediaCarousel('));
-      expect(media, contains('loadOnInit: true'));
+      expect(
+        media,
+        contains('loadOnInit: widget.isActive && index == _currentIndex'),
+      );
     },
   );
 

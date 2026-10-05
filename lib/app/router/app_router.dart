@@ -8,8 +8,10 @@ import 'package:schooldesk1/app/router/typed_app_route_registry.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final api = ref.watch(backendApiClientProvider);
-  return GoRouter(
+  // Listen to the client identity, not each session notification. GoRouter's
+  // refreshListenable reevaluates access without discarding the active route.
+  final api = ref.watch(backendApiClientProvider.notifier);
+  final router = GoRouter(
     debugLogDiagnostics: false,
     navigatorKey: PushNotificationService.navigatorKey,
     refreshListenable: api,
@@ -24,10 +26,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         currentRole: api.currentRoleName,
       );
     },
-    routes: [
-      for (final route in TypedAppRouteRegistry.all) route.toGoRoute(),
-    ],
+    routes: [for (final route in TypedAppRouteRegistry.all) route.toGoRoute()],
   );
+  ref.onDispose(router.dispose);
+  return router;
 });
 
 /// Transitional adapter used by migrated role modules while the legacy route

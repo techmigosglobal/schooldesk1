@@ -264,6 +264,10 @@ extension BackendEventsApi on BackendApiClient {
         queryParameters: {
           'page': page,
           'page_size': pageSize,
+          // Feed responses contain short-lived signed Storage URLs. Version
+          // the read key so an older offline snapshot cannot be reused after
+          // the storage migration or after its signed links expire.
+          'media_version': 2,
           if (forceRefresh)
             'refresh_nonce': DateTime.now().millisecondsSinceEpoch,
         },

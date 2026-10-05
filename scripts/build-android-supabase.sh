@@ -97,6 +97,16 @@ jq -e '
 api_base_url="$(jq -r '.API_BASE_URL' "$env_file")"
 supabase_url="$(jq -r '.SUPABASE_URL' "$env_file")"
 firebase_project="$(jq -r '.FIREBASE_PROJECT_ID' "$env_file")"
+if [[ "$api_base_url" == "https://api.arishville.com/functions/v1/api" ]]; then
+  [[ "$supabase_url" == "https://api.arishville.com" ]] ||
+    fail "VPS API_BASE_URL requires SUPABASE_URL=https://api.arishville.com"
+  jq -e '
+    (.SUPABASE_ANON_KEY | type == "string")
+    and (.SUPABASE_ANON_KEY | startswith("eyJ"))
+    and ((.SUPABASE_ANON_KEY | split(".")) | length == 3)
+  ' "$env_file" >/dev/null ||
+    fail "VPS builds require the self-hosted JWT anon key; refusing the managed-project key"
+fi
 log "Using Supabase backend : $api_base_url"
 log "Using Supabase project  : $supabase_url"
 log "Using Firebase project  : $firebase_project"

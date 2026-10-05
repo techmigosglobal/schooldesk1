@@ -34,32 +34,19 @@ class ApiLeadershipDashboardRepository
     required Map<String, dynamic> dashboard,
   }) {
     return guardApi(() async {
+      // Missing setup data is unknown, not an incomplete configuration. Let
+      // required reads fail so the dashboard shows its retry state instead of
+      // telling the school to create records that may already exist.
       final values = await Future.wait<Object>([
-        _try(() => _api.getAcademicYears(), <AcademicYearModel>[]),
-        _try(() => _api.getGrades(), <GradeModel>[]),
-        _try(() => _api.getSections(), <SectionModel>[]),
-        _try(() => _api.getRawList('/subjects'), <Map<String, dynamic>>[]),
-        _try(
-          () => _api.getStaff(page: 1, pageSize: 1),
-          const PaginatedList<StaffModel>(
-            data: [],
-            total: 0,
-            page: 1,
-            pageSize: 1,
-          ),
-        ),
-        _try(
-          () => _api.getStudents(page: 1, pageSize: 1),
-          const PaginatedList<StudentModel>(
-            data: [],
-            total: 0,
-            page: 1,
-            pageSize: 1,
-          ),
-        ),
+        _api.getAcademicYears(),
+        _api.getGrades(),
+        _api.getSections(),
+        _api.getRawList('/subjects'),
+        _api.getStaff(page: 1, pageSize: 1),
+        _api.getStudents(page: 1, pageSize: 1),
         role == 'coordinator'
             ? Future.value(<Map<String, dynamic>>[])
-            : _try(() => _api.getFeeStructures(), <Map<String, dynamic>>[]),
+            : _api.getFeeStructures(),
         _try(() => _api.getNotifications(), <Map<String, dynamic>>[]),
         _try(() => _api.getStaffDailyAttendanceSummary(), <String, dynamic>{}),
       ]).timeout(const Duration(seconds: 45));

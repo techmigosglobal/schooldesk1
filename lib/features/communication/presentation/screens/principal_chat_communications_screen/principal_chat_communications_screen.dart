@@ -7,7 +7,6 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/utils/chat_message_merge.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
-import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:schooldesk1/core/services/chat_realtime_service.dart';
@@ -575,7 +574,6 @@ class _PrincipalChatCommunicationsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 840;
     final hasSelection = _tabController.index == 0
         ? _selectedMonitorConversation != null
         : _selectedDirectConversation != null;
@@ -597,14 +595,6 @@ class _PrincipalChatCommunicationsScreenState
           selectedIndex: PrincipalNav.messages,
           onDestinationSelected: (_) {},
         ),
-        floatingActionButton: (!isWide && hasSelection)
-            ? null
-            : DashboardFabWidget(
-                role: _leadershipRole == 'coordinator'
-                    ? DashboardRole.coordinator
-                    : DashboardRole.principal,
-              ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         onBackRequested: hasSelection ? _backToConversationList : null,
         bottom: TabBar(
           controller: _tabController,
