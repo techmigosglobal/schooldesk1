@@ -17,6 +17,8 @@ const localDefaults = {
 const envSchema = z.object({
   /** Base URL of the SchoolDesk backend API (no trailing slash). */
   SCHOOLDESK_API_BASE_URL: z.string().url().optional(),
+  /** Public Supabase anon key used by the API gateway; never a service-role key. */
+  SCHOOLDESK_API_ANON_KEY: z.string().min(1).optional(),
   /** Public website school UUID for fetching published branded content. */
   SCHOOLDESK_PUBLIC_SCHOOL_ID: z
     .string()
@@ -48,6 +50,7 @@ function parseEnv() {
   const parsed = result.data;
   const requiredProduction = [
     "SCHOOLDESK_API_BASE_URL",
+    "SCHOOLDESK_API_ANON_KEY",
     "SCHOOLDESK_PUBLIC_SCHOOL_ID",
     "NEXT_PUBLIC_SITE_URL",
   ] as const;
