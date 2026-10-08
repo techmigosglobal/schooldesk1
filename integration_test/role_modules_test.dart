@@ -88,6 +88,7 @@ void main() {
 
   group('Role Module Integration Tests', () {
     testWidgets('App initializes without crash', (tester) async {
+      addTearDown(app.disposeAppSemanticsHandleForTesting);
       await _launchApp(tester);
       expect(find.byType(app.MyApp), findsOneWidget);
     });

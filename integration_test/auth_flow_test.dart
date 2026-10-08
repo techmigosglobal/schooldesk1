@@ -29,6 +29,7 @@ void main() {
 
   group('Auth Flow Integration Tests', () {
     testWidgets('App launches and shows landing page', (tester) async {
+      addTearDown(app.disposeAppSemanticsHandleForTesting);
       await _launchApp(tester);
 
       // The app root should be visible once async startup finishes.
