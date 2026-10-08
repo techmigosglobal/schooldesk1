@@ -29,11 +29,14 @@ void main() {
 
   group('Auth Flow Integration Tests', () {
     testWidgets('App launches and shows landing page', (tester) async {
-      addTearDown(app.disposeAppSemanticsHandleForTesting);
-      await _launchApp(tester);
+      try {
+        await _launchApp(tester);
 
-      // The app root should be visible once async startup finishes.
-      expect(find.byType(app.MyApp), findsOneWidget);
+        // The app root should be visible once async startup finishes.
+        expect(find.byType(app.MyApp), findsOneWidget);
+      } finally {
+        app.disposeAppSemanticsHandleForTesting();
+      }
     });
 
     // TODO: Add full auth flow tests when backend is integrated
@@ -53,9 +56,10 @@ void main() {
 
 Future<void> _launchApp(WidgetTester tester) async {
   final originalErrorWidgetBuilder = ErrorWidget.builder;
-  app.main();
+  final originalFlutterErrorHandler = FlutterError.onError;
 
   try {
+    await app.main();
     for (var attempt = 0; attempt < 40; attempt++) {
       await tester.pump(const Duration(milliseconds: 500));
       if (find.byType(app.MyApp).evaluate().isNotEmpty) {
@@ -64,5 +68,6 @@ Future<void> _launchApp(WidgetTester tester) async {
     }
   } finally {
     ErrorWidget.builder = originalErrorWidgetBuilder;
+    FlutterError.onError = originalFlutterErrorHandler;
   }
 }

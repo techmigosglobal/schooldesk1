@@ -88,18 +88,22 @@ void main() {
 
   group('Role Module Integration Tests', () {
     testWidgets('App initializes without crash', (tester) async {
-      addTearDown(app.disposeAppSemanticsHandleForTesting);
-      await _launchApp(tester);
-      expect(find.byType(app.MyApp), findsOneWidget);
+      try {
+        await _launchApp(tester);
+        expect(find.byType(app.MyApp), findsOneWidget);
+      } finally {
+        app.disposeAppSemanticsHandleForTesting();
+      }
     });
   });
 }
 
 Future<void> _launchApp(WidgetTester tester) async {
   final originalErrorWidgetBuilder = ErrorWidget.builder;
-  app.main();
+  final originalFlutterErrorHandler = FlutterError.onError;
 
   try {
+    await app.main();
     for (var attempt = 0; attempt < 40; attempt++) {
       await tester.pump(const Duration(milliseconds: 500));
       if (find.byType(app.MyApp).evaluate().isNotEmpty) {
@@ -108,5 +112,6 @@ Future<void> _launchApp(WidgetTester tester) async {
     }
   } finally {
     ErrorWidget.builder = originalErrorWidgetBuilder;
+    FlutterError.onError = originalFlutterErrorHandler;
   }
 }
