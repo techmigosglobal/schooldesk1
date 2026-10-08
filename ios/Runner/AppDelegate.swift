@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import workmanager_apple
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -7,6 +8,10 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    WorkmanagerPlugin.registerPeriodicTask(
+      withIdentifier: "schooldesk-periodic-offline-sync",
+      frequency: NSNumber(value: 15 * 60)
+    )
     // Firebase is initialized once from Dart in main.dart. Calling
     // FirebaseApp.configure() here as well can configure a second default app
     // before firebase_core starts, and crashes on launch when the native plist

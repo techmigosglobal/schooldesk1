@@ -46,10 +46,7 @@ void main() async {
   // required --dart-define-from-file=env.supabase.json flag.
   EnvConfig.validate();
 
-  final offlineSync = await _startupStep(
-    'OfflineSyncEngine.initialize',
-    OfflineSyncEngine.initialize,
-  );
+  final offlineSync = await OfflineSyncEngine.initialize();
   BackendApiClient.instance.attachOfflineSync(offlineSync);
 
   // ── Firebase — MUST be initialised before any Firebase API is called ─────
@@ -57,11 +54,8 @@ void main() async {
   // (Android) automatically when options is null; Dart-define overrides
   // supplement that for environments that need runtime configuration.
   try {
-    await _startupStep(
-      'Firebase.initializeApp',
-      () => Firebase.initializeApp(
-        options: FirebaseRuntimeOptions.currentPlatform,
-      ),
+    await Firebase.initializeApp(
+      options: FirebaseRuntimeOptions.currentPlatform,
     );
     developer.log('[Firebase] Initialized successfully.', name: 'startup');
   } on Object catch (error) {
@@ -83,28 +77,19 @@ void main() async {
     );
   }
 
-  await _startupStep(
-    'Supabase.initialize',
-    () => Supabase.initialize(
-      url: EnvConfig.supabaseUrl,
-      anonKey: EnvConfig.supabaseAnonKey,
-    ),
+  await Supabase.initialize(
+    url: EnvConfig.supabaseUrl,
+    anonKey: EnvConfig.supabaseAnonKey,
   );
 
-  await _startupStep(
-    'BackendApiClient.initialize',
-    BackendApiClient.initialize,
-  );
+  await BackendApiClient.initialize();
   if (EnvConfig.enableLogging) {
     developer.log(
       '[API CONFIG] Backend attached: ${BackendApiClient.instance.baseUrl}',
       name: 'BackendApiClient',
     );
   }
-  await _startupStep(
-    'ErrorReportingService.initialize',
-    ErrorReportingService.instance.initialize,
-  );
+  await ErrorReportingService.instance.initialize();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     unawaited(ErrorReportingService.instance.recordFlutterError(details));
@@ -113,28 +98,21 @@ void main() async {
     unawaited(ErrorReportingService.instance.recordPlatformError(error, stack));
     return false;
   };
-  await _startupStep('ServiceLocator.initialize', ServiceLocator.initialize);
+  await ServiceLocator.initialize();
   unawaited(offlineSync.start());
   unawaited(OfflineBackgroundSyncScheduler.initialize());
 
-  await _startupStep('DesktopWindowManager.init', DesktopWindowManager.init);
+  await DesktopWindowManager.init();
 
   // Initialize theme provider
-  final themeProvider = await _startupStep(
-    'ThemeProvider.create',
-    ThemeProvider.create,
-  );
-  final appSettingsProvider = await _startupStep(
-    'AppSettingsProvider.create',
-    AppSettingsProvider.create,
-  );
+  final themeProvider = await ThemeProvider.create();
+  final appSettingsProvider = await AppSettingsProvider.create();
 
   // Never hide a framework error. A blank screen makes failures impossible for
   // a user to report and prevents the error boundary's retry action from being
   // reached when more than one widget fails in the same frame.
   ErrorWidget.builder = buildSchoolDeskErrorWidget;
 
-  developer.log('[startup] runApp begin', name: 'startup');
   runApp(
     ProviderScope(
       child: MultiProvider(
@@ -149,24 +127,6 @@ void main() async {
     ),
   );
   _deferStartupServices();
-}
-
-Future<T> _startupStep<T>(String name, Future<T> Function() operation) async {
-  developer.log('[startup] $name begin', name: 'startup');
-  try {
-    final result = await operation();
-    developer.log('[startup] $name complete', name: 'startup');
-    return result;
-  } on Object catch (error, stackTrace) {
-    developer.log(
-      '[startup] $name failed',
-      name: 'startup',
-      error: error,
-      stackTrace: stackTrace,
-      level: 1000,
-    );
-    rethrow;
-  }
 }
 
 /// The application-wide error boundary is deliberately a pure builder so every
