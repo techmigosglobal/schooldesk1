@@ -138,6 +138,19 @@ jobs:
               2>&1 | tee -a build/ios/simulator-test.log
           done
 
+      - name: Collect simulator diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          mkdir -p build/ios/simulator-diagnostics
+          xcrun simctl spawn "$IOS_SIMULATOR_UDID" log show \
+            --last 10m --style compact --level debug \
+            > build/ios/simulator-diagnostics/system.log 2>&1
+          find "$HOME/Library/Logs/DiagnosticReports" \
+            -type f -mmin -30 \( -iname '*Runner*' -o -iname '*arishville*' \) \
+            -exec cp -f {} build/ios/simulator-diagnostics/ \; 2>/dev/null
+
       - name: Upload iOS Simulator evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -149,6 +162,7 @@ jobs:
             build/ios/iphonesimulator/*.app
             build/ios/simulator-build.log
             build/ios/simulator-test.log
+            build/ios/simulator-diagnostics/**
             ${{ runner.temp }}/ios-simulator.txt
 
       - name: Shut down Simulator
