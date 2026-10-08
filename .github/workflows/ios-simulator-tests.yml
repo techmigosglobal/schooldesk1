@@ -112,12 +112,18 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          flutter test --no-pub \
-            --device-id="$IOS_SIMULATOR_UDID" \
-            --dart-define-from-file="$SCHOOLDESK_ENV_FILE" \
+          : > build/ios/simulator-test.log
+          for test_file in \
             integration_test/auth_flow_test.dart \
-            integration_test/role_modules_test.dart \
-            2>&1 | tee build/ios/simulator-test.log
+            integration_test/role_modules_test.dart; do
+            printf '\n===== %s =====\n' "$test_file" | tee -a build/ios/simulator-test.log
+            flutter test --no-pub \
+              --no-uninstall \
+              --device-id="$IOS_SIMULATOR_UDID" \
+              --dart-define-from-file="$SCHOOLDESK_ENV_FILE" \
+              "$test_file" \
+              2>&1 | tee -a build/ios/simulator-test.log
+          done
 
       - name: Upload iOS Simulator evidence
         if: ${{ always() }}
