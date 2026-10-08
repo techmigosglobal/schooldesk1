@@ -74,16 +74,25 @@ jobs:
           chmod 600 "$env_file"
           jq -e '
             type == "object"
-            and (.API_BASE_URL | type == "string" and test("^https://.+\\.supabase\\.co/functions/v1/api$"))
-            and (.SUPABASE_URL | type == "string" and test("^https://.+\\.supabase\\.co$"))
+            and (.API_BASE_URL == "https://api.arishville.com/functions/v1/api")
+            and (.SUPABASE_URL == "https://api.arishville.com")
+            and (.SUPABASE_ANON_KEY | type == "string" and startswith("eyJ") and ((split(".")) | length == 3))
             and (.APP_ENV == "production")
             and ((.ENABLE_LOGGING | tostring) == "false")
             and (.FIREBASE_IOS_APP_ID | type == "string" and length > 0)
           ' "$env_file" >/dev/null || {
-            echo "::error::Production environment is invalid or missing Firebase iOS settings."
+            echo "::error::VPS production environment is invalid or missing Firebase iOS settings."
             exit 1
           }
           printf 'SCHOOLDESK_ENV_FILE=%s\n' "$env_file" >> "$GITHUB_ENV"
+
+      - name: Verify VPS API health
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          health_url="$(jq -r '.API_BASE_URL + "/health"' "$SCHOOLDESK_ENV_FILE")"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            --max-time 20 "$health_url" -o /dev/null
 
       - name: Restore Apple distribution signing assets
         env:

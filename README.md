@@ -121,11 +121,13 @@ before starting an archive (the current release is `1.0.23+35`). Do not commit
 
 ### iOS Simulator verification in GitHub Actions
 
-The `iOS Simulator Tests` workflow runs on a GitHub-hosted macOS runner. It
-restores the protected production runtime configuration, builds an unsigned
-`Runner.app` for an iPhone Simulator, runs the iOS-safe Flutter integration
-smoke tests, and uploads the simulator app and logs as a short-retention
-artifact. This is simulator evidence, not proof of physical-device behavior.
+The `iOS Simulator Tests` workflow runs on a GitHub-hosted macOS runner. Its
+protected `ios-release` environment must target the self-hosted VPS
+(`https://api.arishville.com`); the workflow checks the VPS API health endpoint,
+builds an unsigned `Runner.app` for an iPhone Simulator, runs the iOS-safe
+Flutter integration smoke tests, and uploads the simulator app and logs as a
+short-retention artifact. This is simulator evidence, not proof of
+physical-device behavior.
 
 Run it from **Actions → iOS Simulator Tests → Run workflow**, or push a change
 to `main` that touches the Flutter/iOS test surface. The signed IPA workflow
