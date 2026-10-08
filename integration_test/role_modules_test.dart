@@ -103,7 +103,7 @@ Future<void> _launchApp(WidgetTester tester) async {
   final originalFlutterErrorHandler = FlutterError.onError;
 
   try {
-    await app.main();
+    app.main();
     for (var attempt = 0; attempt < 40; attempt++) {
       await tester.pump(const Duration(milliseconds: 500));
       if (find.byType(app.MyApp).evaluate().isNotEmpty) {
