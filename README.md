@@ -119,6 +119,18 @@ before starting an archive (the current release is `1.0.23+35`). Do not commit
      build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
    ```
 
+### iOS Simulator verification in GitHub Actions
+
+The `iOS Simulator Tests` workflow runs on a GitHub-hosted macOS runner. It
+restores the protected production runtime configuration, builds an unsigned
+`Runner.app` for an iPhone Simulator, runs the iOS-safe Flutter integration
+smoke tests, and uploads the simulator app and logs as a short-retention
+artifact. This is simulator evidence, not proof of physical-device behavior.
+
+Run it from **Actions → iOS Simulator Tests → Run workflow**, or push a change
+to `main` that touches the Flutter/iOS test surface. The signed IPA workflow
+remains separate and is still the path for App Store Connect/TestFlight.
+
 ### iOS privacy release checklist
 
 - The binary does not use Core Location and does not declare a location usage

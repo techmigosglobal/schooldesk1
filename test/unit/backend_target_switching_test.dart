@@ -95,9 +95,10 @@ void main() {
     expect(source, contains('aab|abb'));
     expect(source, contains('jq -e'));
     expect(source, contains('API_BASE_URL'));
+    expect(source, contains('def https_origin'));
     expect(
       source,
-      contains(r'test("^https://.+\\.supabase\\.co/functions/v1/api$")'),
+      contains(r'.API_BASE_URL == (.SUPABASE_URL + "/functions/v1/api")'),
     );
     expect(source, contains('SUPABASE_URL'));
     expect(source, contains('SUPABASE_ANON_KEY'));

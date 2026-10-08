@@ -1,0 +1,143 @@
+name: iOS Simulator Tests
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/ios-simulator-tests.yml'
+      - 'ios/**'
+      - 'lib/**'
+      - 'integration_test/**'
+      - 'test/**'
+      - 'assets/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-simulator-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test iOS Simulator app
+    runs-on: macos-15
+    environment: ios-release
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: 'latest-stable'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+
+      - name: Check Apple simulator toolchain
+        run: |
+          set -Eeuo pipefail
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Restore protected runtime configuration
+        env:
+          SCHOOLDESK_RELEASE_ENV_BASE64: ${{ secrets.SCHOOLDESK_RELEASE_ENV_BASE64 }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ -n "$SCHOOLDESK_RELEASE_ENV_BASE64" ]] || {
+            echo "::error::Missing GitHub environment secret: SCHOOLDESK_RELEASE_ENV_BASE64"
+            exit 1
+          }
+
+          env_file="$RUNNER_TEMP/schooldesk-simulator.env.json"
+          printf '%s' "$SCHOOLDESK_RELEASE_ENV_BASE64" | base64 --decode > "$env_file"
+          chmod 600 "$env_file"
+          jq -e '
+            type == "object"
+            and (.API_BASE_URL | type == "string" and test("^https://.+\\.supabase\\.co/functions/v1/api$"))
+            and (.SUPABASE_URL | type == "string" and test("^https://.+\\.supabase\\.co$"))
+            and (.APP_ENV == "production")
+            and ((.ENABLE_LOGGING | tostring) == "false")
+            and (.FIREBASE_IOS_APP_ID | type == "string" and length > 0)
+          ' "$env_file" >/dev/null || {
+            echo "::error::Production environment is invalid or missing Firebase iOS settings."
+            exit 1
+          }
+          printf 'SCHOOLDESK_ENV_FILE=%s\n' "$env_file" >> "$GITHUB_ENV"
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Select and boot an iPhone Simulator
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          device_json="$(xcrun simctl list devices available -j)"
+          device_udid="$(jq -r '[.devices | to_entries[] | .value[] | select(.name | startswith("iPhone"))] | .[0].udid // empty' <<<"$device_json")"
+          device_name="$(jq -r '[.devices | to_entries[] | .value[] | select(.name | startswith("iPhone"))] | .[0].name // empty' <<<"$device_json")"
+          [[ -n "$device_udid" ]] || {
+            echo "::error::No available iPhone Simulator was found on the GitHub macOS runner."
+            exit 1
+          }
+
+          xcrun simctl boot "$device_udid" 2>/dev/null || true
+          xcrun simctl bootstatus "$device_udid" -b
+          printf 'IOS_SIMULATOR_UDID=%s\n' "$device_udid" >> "$GITHUB_ENV"
+          printf 'IOS_SIMULATOR_NAME=%s\n' "$device_name" >> "$GITHUB_ENV"
+          printf '%s (%s)\n' "$device_name" "$device_udid" | tee "$RUNNER_TEMP/ios-simulator.txt"
+
+      - name: Build unsigned iOS Simulator app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p build/ios
+          flutter build ios --simulator --debug \
+            --dart-define-from-file="$SCHOOLDESK_ENV_FILE" \
+            2>&1 | tee build/ios/simulator-build.log
+
+      - name: Run iOS integration tests on Simulator
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          flutter test --no-pub \
+            --device-id="$IOS_SIMULATOR_UDID" \
+            --dart-define-from-file="$SCHOOLDESK_ENV_FILE" \
+            integration_test/auth_flow_test.dart \
+            integration_test/role_modules_test.dart \
+            2>&1 | tee build/ios/simulator-test.log
+
+      - name: Upload iOS Simulator evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: schooldesk-ios-simulator-${{ github.run_number }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            build/ios/iphonesimulator/*.app
+            build/ios/simulator-build.log
+            build/ios/simulator-test.log
+            ${{ runner.temp }}/ios-simulator.txt
+
+      - name: Shut down Simulator
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          if [[ -n "${IOS_SIMULATOR_UDID:-}" ]]; then
+            xcrun simctl shutdown "$IOS_SIMULATOR_UDID"
+          fi
+          rm -f "${SCHOOLDESK_ENV_FILE:-}"
