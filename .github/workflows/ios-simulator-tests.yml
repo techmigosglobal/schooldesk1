@@ -117,11 +117,11 @@ jobs:
             integration_test/auth_flow_test.dart \
             integration_test/role_modules_test.dart; do
             printf '\n===== %s =====\n' "$test_file" | tee -a build/ios/simulator-test.log
-            flutter test --no-pub \
-              --no-uninstall \
+            flutter drive \
+              --driver=test_driver/integration_test.dart \
+              --target="$test_file" \
               --device-id="$IOS_SIMULATOR_UDID" \
               --dart-define-from-file="$SCHOOLDESK_ENV_FILE" \
-              "$test_file" \
               2>&1 | tee -a build/ios/simulator-test.log
           done
 
