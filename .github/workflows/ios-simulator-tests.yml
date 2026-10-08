@@ -84,8 +84,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           health_url="$(jq -r '.API_BASE_URL + "/health"' "$SCHOOLDESK_ENV_FILE")"
+          anon_key="$(jq -r '.SUPABASE_ANON_KEY' "$SCHOOLDESK_ENV_FILE")"
           curl --fail --silent --show-error --retry 3 --retry-delay 2 \
-            --max-time 20 "$health_url" -o /dev/null
+            --max-time 20 \
+            -H "apikey: $anon_key" \
+            -H "Authorization: Bearer $anon_key" \
+            "$health_url" -o /dev/null
 
       - name: Install Flutter dependencies
         run: flutter pub get
