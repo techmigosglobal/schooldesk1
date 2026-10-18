@@ -1,0 +1,82 @@
+name: Upload existing signed iOS IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: Run ID of the signed production IPA build
+        required: true
+        type: string
+      artifact_name:
+        description: Signed IPA artifact name from that run
+        required: true
+        type: string
+      expected_sha256:
+        description: Verified SHA-256 of the signed IPA
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: signed-ios-ipa-production
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: macos-15
+    environment: ios-release
+    timeout-minutes: 30
+    steps:
+      - name: Download signed build and symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/signed-ios-artifact
+
+      - name: Verify exact signed production IPA
+        env:
+          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
+          IOS_BUNDLE_ID: ${{ secrets.SCHOOLDESK_IOS_BUNDLE_ID }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import os, hashlib, zipfile, plistlib, re, subprocess
+          root = Path(os.environ['RUNNER_TEMP'])
+          files = list((root / 'signed-ios-artifact').rglob('*.ipa'))
+          assert len(files) == 1, 'Expected exactly one IPA'
+          ipa = files[0]
+          expected = os.environ['EXPECTED_SHA256'].lower()
+          assert re.fullmatch(r'[0-9a-f]{64}', expected), 'Invalid expected SHA-256'
+          assert hashlib.sha256(ipa.read_bytes()).hexdigest() == expected, 'IPA checksum mismatch'
+          target = root / 'verify-signed-ipa'
+          with zipfile.ZipFile(ipa) as archive:
+              assert archive.testzip() is None, 'Corrupt IPA archive'
+              assert all(not name.startswith('/') and '..' not in Path(name).parts for name in archive.namelist()), 'Unsafe archive path'
+              archive.extractall(target)
+          apps = list((target / 'Payload').glob('*.app'))
+          assert len(apps) == 1, 'Expected exactly one signed app'
+          app = apps[0]
+          info = plistlib.loads((app / 'Info.plist').read_bytes())
+          assert info['CFBundleIdentifier'] == os.environ['IOS_BUNDLE_ID'], 'Unexpected bundle ID'
+          binary = app / 'Frameworks/App.framework/App'
+          assert b'https://api.arishville.com/functions/v1/api' in binary.read_bytes(), 'Hostinger API missing'
+          subprocess.run(['codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app)], check=True)
+          print('Verified signed Hostinger build: ' + info['CFBundleShortVersionString'] + ' (' + str(info['CFBundleVersion']) + ')')
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('SIGNED_IPA_PATH=' + str(ipa) + '\n')
+          PY
+
+      - name: Upload verified IPA to App Store Connect
+        uses: apple-actions/upload-testflight-build@v5.4.0
+        with:
+          app-path: ${{ env.SIGNED_IPA_PATH }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_KEY }}

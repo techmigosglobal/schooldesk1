@@ -184,7 +184,7 @@ jobs:
               const body = await response.json().catch(() => ({}));
               const reason = (body.errors || []).map(error => [error.code, error.title, error.detail].filter(Boolean).join(': ')).join('; ');
               if (response.status === 403) {
-                console.log('::warning::App Store Connect read permission unavailable; upload validation will enforce the build number. ' + reason);
+                console.log('::warning::App Store Connect preflight unavailable; upload validation will enforce the build number. ' + reason);
                 return null;
               }
               throw new Error('App Store Connect read failed: HTTP ' + response.status + ' ' + reason);
