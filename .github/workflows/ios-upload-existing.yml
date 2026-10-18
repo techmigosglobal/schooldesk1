@@ -59,7 +59,7 @@ jobs:
           with zipfile.ZipFile(ipa) as archive:
               assert archive.testzip() is None, 'Corrupt IPA archive'
               assert all(not name.startswith('/') and '..' not in Path(name).parts for name in archive.namelist()), 'Unsafe archive path'
-              archive.extractall(target)
+          subprocess.run(['unzip', '-q', str(ipa), '-d', str(target)], check=True)
           apps = list((target / 'Payload').glob('*.app'))
           assert len(apps) == 1, 'Expected exactly one signed app'
           app = apps[0]
