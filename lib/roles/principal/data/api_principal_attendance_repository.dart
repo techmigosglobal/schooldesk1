@@ -8,6 +8,10 @@ class ApiPrincipalAttendanceRepository
   final BackendApiClient _api;
 
   @override
+  Future<AttendanceSessionModel> loadSession(String sessionId) =>
+      _api.getAttendanceSession(sessionId);
+
+  @override
   Future<PaginatedList<AttendanceSessionModel>> loadSessions({
     String? startDate,
     String? endDate,
@@ -79,8 +83,17 @@ class ApiPrincipalAttendanceRepository
   Future<AttendanceSessionModel> reopenSession(
     String sessionId, {
     required String reason,
+    required String sectionId,
+    required String date,
+    String? studentId,
   }) {
-    return _api.reopenAttendanceSession(sessionId, reason: reason);
+    return _api.reopenAttendanceSession(
+      sessionId,
+      reason: reason,
+      sectionId: sectionId,
+      date: date,
+      studentId: studentId,
+    );
   }
 
   @override

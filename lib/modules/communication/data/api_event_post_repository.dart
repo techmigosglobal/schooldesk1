@@ -49,6 +49,17 @@ class ApiEventPostRepository implements EventPostRepository {
   }) => _api.getGalleryEventPosts(forceRefresh: forceRefresh);
 
   @override
+  Future<PaginatedList<Map<String, dynamic>>> loadPublishedPostsPage({
+    int page = 1,
+    int pageSize = 20,
+    String destination = 'FEED',
+  }) => _api.getPublishedEventPostsPage(
+    page: page,
+    pageSize: pageSize,
+    destination: destination,
+  );
+
+  @override
   Future<Map<String, dynamic>> loadPost(String id) => _api.getEventPost(id);
 
   @override
@@ -93,6 +104,20 @@ class ApiEventPostRepository implements EventPostRepository {
       destinations: destinations,
       isSubmit: isSubmit,
     );
+  }
+
+  @override
+  Future<void> updateVisibility(
+    String id,
+    List<String> destinations, {
+    bool? publicGalleryVisible,
+  }) async {
+    await _api.updateRaw('/event-posts/$id', {
+      'destinations': destinations,
+      if (publicGalleryVisible != null)
+        'public_gallery_visible': publicGalleryVisible,
+    });
+    await _api.invalidateCachedReads();
   }
 
   @override

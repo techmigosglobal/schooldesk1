@@ -674,6 +674,12 @@ class SchoolDeskScreenRegistry {
       feature: SchoolDeskFeature.documents,
     ),
     SchoolDeskScreenMetadata(
+      route: '/principal/send-notification',
+      title: 'Send Notification',
+      module: 'Communication',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/notification-center-screen',
       title: 'Notifications',
       module: 'Shared Tools',

@@ -110,10 +110,10 @@ class AppTheme {
     primary: primaryLight,
     primaryLight: Color(0xFF86C9F4),
     primaryContainer: Color(0xFF123E70),
-    onPrimary: onPrimary,
+    onPrimary: Color(0xFF082F49),
     secondary: Color(0xFF86C9F4),
     secondaryContainer: Color(0xFF153A5E),
-    onSecondary: onPrimary,
+    onSecondary: Color(0xFF082F49),
     accent: Color(0xFFFBBF24),
     success: Color(0xFF22C55E),
     successContainer: Color(0xFF14532D),
@@ -133,6 +133,104 @@ class AppTheme {
     muted: Color(0xFFA8C2D8),
   );
 
+  static Color _selectionForeground(
+    SchoolDeskTheme tokens,
+    Set<WidgetState> states,
+  ) {
+    if (states.contains(WidgetState.disabled)) return tokens.onSurfaceVariant;
+    return tokens.isDark ? tokens.onSurface : secondary;
+  }
+
+  // RawChip resolves the color, not WidgetStateTextStyle itself.
+  static TextStyle _chipLabel(SchoolDeskTheme tokens) =>
+      GoogleFonts.ibmPlexSans(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        color: WidgetStateColor.resolveWith(
+          (states) => _selectionForeground(tokens, states),
+        ),
+      );
+
+  static TextStyle _inputLabel(SchoolDeskTheme tokens) =>
+      WidgetStateTextStyle.resolveWith(
+        (states) => TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: states.contains(WidgetState.error)
+              ? tokens.error
+              : states.contains(WidgetState.focused)
+              ? tokens.primary
+              : tokens.onSurfaceVariant,
+        ),
+      );
+
+  static SegmentedButtonThemeData _segmentedButtons(SchoolDeskTheme tokens) =>
+      SegmentedButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => _selectionForeground(tokens, states),
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) return tokens.panelMuted;
+            return states.contains(WidgetState.selected)
+                ? tokens.primaryContainer
+                : tokens.surface;
+          }),
+          side: WidgetStateProperty.resolveWith(
+            (states) => BorderSide(
+              color: states.contains(WidgetState.focused)
+                  ? tokens.focusRing
+                  : tokens.outline,
+              width: states.contains(WidgetState.focused) ? 2 : 1,
+            ),
+          ),
+          minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+        ),
+      );
+
+  static SwitchThemeData _switches(SchoolDeskTheme tokens) => SwitchThemeData(
+    thumbColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) return tokens.textMuted;
+      return states.contains(WidgetState.selected)
+          ? tokens.onPrimary
+          : tokens.onSurfaceVariant;
+    }),
+    trackColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) return tokens.panelMuted;
+      return states.contains(WidgetState.selected)
+          ? tokens.primary
+          : tokens.panelMuted;
+    }),
+    trackOutlineColor: WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.focused)
+          ? tokens.focusRing
+          : tokens.outline,
+    ),
+  );
+
+  static CheckboxThemeData _checkboxes(SchoolDeskTheme tokens) =>
+      CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) return tokens.panelMuted;
+          return states.contains(WidgetState.selected)
+              ? tokens.primary
+              : Colors.transparent;
+        }),
+        checkColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? tokens.onSurfaceVariant
+              : tokens.onPrimary,
+        ),
+        side: WidgetStateBorderSide.resolveWith(
+          (states) => BorderSide(
+            color: states.contains(WidgetState.disabled)
+                ? tokens.outline
+                : tokens.onSurfaceVariant,
+            width: 1.5,
+          ),
+        ),
+      );
+
   static ThemeData get lightTheme => ThemeData(
     useMaterial3: true,
     extensions: const <ThemeExtension<dynamic>>[_lightTokens],
@@ -140,9 +238,13 @@ class AppTheme {
       primary: primary,
       primaryContainer: primaryContainer,
       onPrimary: onPrimary,
+      onPrimaryContainer: secondary,
       secondary: secondary,
       secondaryContainer: secondaryContainer,
       onSecondary: onSecondary,
+      onSecondaryContainer: secondary,
+      onError: Colors.white,
+      onErrorContainer: Color(0xFF7F1D1D),
       surface: surface,
       surfaceContainerHighest: surfaceVariant,
       error: error,
@@ -282,15 +384,17 @@ class AppTheme {
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: error, width: 2),
       ),
-      labelStyle: GoogleFonts.ibmPlexSans(
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-        color: muted,
+      floatingLabelStyle: _inputLabel(_lightTokens),
+      counterStyle: const TextStyle(color: onSurfaceVariant),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: outlineVariant),
       ),
+      labelStyle: _inputLabel(_lightTokens),
       hintStyle: GoogleFonts.ibmPlexSans(
         fontSize: 15,
         fontWeight: FontWeight.w400,
-        color: muted,
+        color: onSurfaceVariant,
       ),
       errorStyle: GoogleFonts.ibmPlexSans(
         fontSize: 13,
@@ -303,7 +407,7 @@ class AppTheme {
         backgroundColor: primary,
         foregroundColor: onPrimary,
         disabledBackgroundColor: outlineVariant,
-        disabledForegroundColor: muted,
+        disabledForegroundColor: onSurfaceVariant,
         elevation: 0,
         shadowColor: const Color(0x1F0E5EA8),
         overlayColor: primaryLight.withAlpha(56),
@@ -320,7 +424,7 @@ class AppTheme {
       style: OutlinedButton.styleFrom(
         foregroundColor: primary,
         backgroundColor: surface,
-        disabledForegroundColor: muted,
+        disabledForegroundColor: onSurfaceVariant,
         side: const BorderSide(color: Color(0xFF93C5FD), width: 1.5),
         overlayColor: primaryContainer,
         minimumSize: const Size(64, 48),
@@ -337,7 +441,7 @@ class AppTheme {
         backgroundColor: primary,
         foregroundColor: onPrimary,
         disabledBackgroundColor: outlineVariant,
-        disabledForegroundColor: muted,
+        disabledForegroundColor: onSurfaceVariant,
         overlayColor: primaryLight.withAlpha(56),
         minimumSize: const Size(64, 48),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -348,14 +452,17 @@ class AppTheme {
         ),
       ),
     ),
+    segmentedButtonTheme: _segmentedButtons(_lightTokens),
+    switchTheme: _switches(_lightTokens),
+    checkboxTheme: _checkboxes(_lightTokens),
     chipTheme: ChipThemeData(
+      checkmarkColor: secondary,
+      disabledColor: outlineVariant,
       backgroundColor: surfaceVariant,
       selectedColor: primaryContainer,
       side: const BorderSide(color: outlineVariant),
-      labelStyle: GoogleFonts.ibmPlexSans(
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-      ),
+      labelStyle: _chipLabel(_lightTokens),
+      secondaryLabelStyle: _chipLabel(_lightTokens),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
@@ -570,10 +677,14 @@ class AppTheme {
     colorScheme: const ColorScheme.dark(
       primary: primaryLight,
       primaryContainer: Color(0xFF123E70),
-      onPrimary: onPrimary,
+      onPrimary: Color(0xFF082F49),
+      onPrimaryContainer: Color(0xFFDCEFFF),
       secondary: Color(0xFF86C9F4),
       secondaryContainer: Color(0xFF153A5E),
-      onSecondary: onPrimary,
+      onSecondary: Color(0xFF082F49),
+      onSecondaryContainer: Color(0xFFDCEFFF),
+      onError: Color(0xFF450A0A),
+      onErrorContainer: Color(0xFFFEE4E2),
       surface: Color(0xFF0B294B),
       surfaceContainerHighest: Color(0xFF12395F),
       error: Color(0xFFF87171),
@@ -705,15 +816,26 @@ class AppTheme {
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: primaryLight, width: 2),
       ),
-      labelStyle: GoogleFonts.ibmPlexSans(
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-        color: const Color(0xFFA8C2D8),
+      floatingLabelStyle: _inputLabel(_darkTokens),
+      counterStyle: const TextStyle(color: Color(0xFFC7DCEA)),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFF334E68)),
       ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFF87171)),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFF87171), width: 2),
+      ),
+      errorStyle: const TextStyle(color: Color(0xFFF87171)),
+      labelStyle: _inputLabel(_darkTokens),
       hintStyle: GoogleFonts.ibmPlexSans(
         fontSize: 15,
         fontWeight: FontWeight.w400,
-        color: const Color(0xFFA8C2D8),
+        color: const Color(0xFFC7DCEA),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
@@ -753,7 +875,7 @@ class AppTheme {
       style: OutlinedButton.styleFrom(
         foregroundColor: primaryLight,
         backgroundColor: const Color(0xFF0B294B),
-        disabledForegroundColor: const Color(0xFF627D98),
+        disabledForegroundColor: const Color(0xFFA8C2D8),
         side: const BorderSide(color: primaryLight, width: 1.5),
         overlayColor: const Color(0xFF123E70),
         minimumSize: const Size(64, 48),
@@ -765,14 +887,17 @@ class AppTheme {
         ),
       ),
     ),
+    segmentedButtonTheme: _segmentedButtons(_darkTokens),
+    switchTheme: _switches(_darkTokens),
+    checkboxTheme: _checkboxes(_darkTokens),
     chipTheme: ChipThemeData(
+      checkmarkColor: const Color(0xFFDCEFFF),
+      disabledColor: const Color(0xFF334E68),
       backgroundColor: const Color(0xFF12395F),
       selectedColor: const Color(0xFF123E70),
       side: const BorderSide(color: Color(0xFF334E68)),
-      labelStyle: GoogleFonts.ibmPlexSans(
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-      ),
+      labelStyle: _chipLabel(_darkTokens),
+      secondaryLabelStyle: _chipLabel(_darkTokens),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),

@@ -1,3 +1,4 @@
+import 'package:schooldesk1/core/utils/timetable_time.dart';
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -309,8 +310,8 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   }
 
   String _slotTime(Map<String, dynamic> slot) {
-    final start = teacherFlowText(slot['start_time']);
-    final end = teacherFlowText(slot['end_time']);
+    final start = normalizeTimetableTime(slot['start_time']) ?? '--:--';
+    final end = normalizeTimetableTime(slot['end_time']) ?? '--:--';
     if (start.isEmpty && end.isEmpty) {
       return 'Period ${teacherFlowInt(slot['period_number'])}';
     }
@@ -563,12 +564,7 @@ class _TeacherWeekdaySelector extends StatelessWidget {
               onSelected: (_) => onSelected(day),
               showCheckmark: false,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              labelStyle: TextStyle(
-                color: selected ? Colors.white : teacherFlowInk,
-                fontWeight: FontWeight.w800,
-              ),
-              selectedColor: teacherFlowAccent,
-              backgroundColor: teacherFlowAccent.withValues(alpha: 0.08),
+              labelStyle: const TextStyle(fontWeight: FontWeight.w800),
               side: BorderSide(
                 color: selected
                     ? teacherFlowAccent

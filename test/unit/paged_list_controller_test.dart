@@ -3,6 +3,31 @@ import 'package:schooldesk1/core/paging/paged_list_controller.dart';
 import 'package:schooldesk1/core/network/models/backend_models.dart';
 
 void main() {
+  test('refresh replaces rows without dropping previously seen IDs', () async {
+    var title = 'original';
+    final controller = PagedListController<Map<String, dynamic>>(
+      itemKey: (row) => '${row['id']}',
+      loadPage: ({required page, required pageSize}) async => PaginatedList(
+        data: [
+          {'id': 'a', 'title': title},
+          {'id': 'a', 'title': 'duplicate'},
+        ],
+        total: 1,
+        page: page,
+        pageSize: pageSize,
+      ),
+    );
+    await controller.load();
+    title = 'updated';
+    await controller.refresh();
+    expect(controller.items, [
+      {'id': 'a', 'title': 'updated'},
+    ]);
+    await controller.refresh();
+    expect(controller.items.length, 1);
+    controller.dispose();
+  });
+
   test('pages append in order and suppress duplicate rows', () async {
     final controller = PagedListController<Map<String, dynamic>>(
       pageSize: 2,

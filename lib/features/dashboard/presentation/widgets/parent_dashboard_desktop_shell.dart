@@ -1,3 +1,4 @@
+import 'package:schooldesk1/core/utils/attendance_labels.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -318,7 +319,7 @@ class _ChildOverviewPanel extends StatelessWidget {
           child['section_name'] ??
           child['class'],
     );
-    final attendancePct = _double(child['attendance_pct']);
+    final attendanceLabel = attendanceTodayLabel(child);
     final feeBalance = _double(child['pending_fee_balance']);
     final homeworkPending = (child['homework_due'] as int?) ?? 0;
 
@@ -396,15 +397,14 @@ class _ChildOverviewPanel extends StatelessWidget {
               children: [
                 _StatRow(
                   label: "Attendance",
-                  value: attendancePct > 0
-                      ? '${attendancePct.toStringAsFixed(1)}%'
-                      : 'N/A',
+                  value: attendanceLabel,
                   icon: Icons.bar_chart_rounded,
-                  color: attendancePct >= 75
+                  color:
+                      attendanceLabel == 'Present' || attendanceLabel == 'Late'
                       ? const Color(0xFF16A34A)
-                      : attendancePct > 0
-                      ? const Color(0xFFF59E0B)
-                      : const Color(0xFF6B7280),
+                      : attendanceLabel == 'Absent'
+                      ? const Color(0xFFDC2626)
+                      : tokens.muted,
                 ),
                 Divider(height: tokens.spacing.md, color: tokens.panelBorder),
                 _StatRow(

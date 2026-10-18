@@ -223,9 +223,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                             if (index == _visibleRequests.length) {
                               return _buildLoadMoreButton();
                             }
-                            return _buildRequestCard(
-                              _visibleRequests[index],
-                            );
+                            return _buildRequestCard(_visibleRequests[index]);
                           },
                         ),
                 ),
@@ -341,7 +339,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
               ),
               labelStyle: TextStyle(
                 color: isSelected
-                    ? Colors.white
+                    ? context.appTheme.onPrimary
                     : context.appTheme.onSurfaceVariant,
                 fontWeight: FontWeight.w700,
               ),
@@ -696,8 +694,8 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
 
   String _absoluteMediaUrl(String value) {
     final trimmed = value.trim();
-    final absolute = trimmed.startsWith('http://') ||
-            trimmed.startsWith('https://')
+    final absolute =
+        trimmed.startsWith('http://') || trimmed.startsWith('https://')
         ? trimmed
         : trimmed.startsWith('/')
         ? '${EnvConfig.apiOrigin}$trimmed'

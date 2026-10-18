@@ -108,10 +108,10 @@ const List<SchoolDeskModuleBottomAction> teacherFlowBottomActions = [
     route: AppRoutes.teacherAttendance,
   ),
   SchoolDeskModuleBottomAction(
-    label: 'Profile',
-    icon: Icons.account_circle_outlined,
-    activeIcon: Icons.account_circle_rounded,
-    route: AppRoutes.profileScreen,
+    label: 'Settings',
+    icon: Icons.settings_outlined,
+    activeIcon: Icons.settings_rounded,
+    route: AppRoutes.settingsScreen,
     arguments: 'teacher',
   ),
 ];

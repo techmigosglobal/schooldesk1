@@ -1,3 +1,4 @@
+import { attendanceDateContext, schoolDay, validateTeacherAttendanceDate } from "../lib/school_day.ts";
 // handlers/attendance.ts — sessions, mark, summary, staff, QR, corrections
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
@@ -382,19 +383,26 @@ async function attendanceStudentsBelongToSection(
   svc: SupabaseClient,
   school: string,
   sectionId: string,
-  studentIds: string[],
+  records: Array<Record<string, unknown>>,
+  academicYearId: string,
+  date: string,
 ): Promise<boolean> {
+  const studentIds = records.map(row => `${row.student_id ?? ""}`.trim());
   const uniqueIds = [...new Set(studentIds.map((id) => `${id ?? ""}`.trim()))]
     .filter(Boolean);
   if (!sectionId || uniqueIds.length !== studentIds.length || uniqueIds.length === 0) {
     return false;
   }
-  const { data, error } = await svc.from("students").select("id").eq(
-    "school_id",
-    school,
-  ).eq("current_section_id", sectionId).eq("status", "active").in("id", uniqueIds);
+  const {data,error} = await svc.rpc("attendance_roster",{p_school:school,p_section:sectionId,p_year:academicYearId,p_date:date});
   if (error) throw new Error(error.message);
-  return (data ?? []).length === uniqueIds.length;
+  const roster = new Map<string,string>((data?.items ?? []).map((row: Record<string,unknown>)=>[`${row.id}`,`${row.active_enrollment_id ?? ""}`]));
+  for (const row of records) {
+    const id = `${row.student_id ?? ""}`;
+    const enrollment = `${row.enrollment_id ?? ""}`;
+    if (!roster.has(id) || (enrollment && enrollment !== roster.get(id))) return false;
+    row.enrollment_id = roster.get(id) || null;
+  }
+  return true;
 }
 
 async function canUseAttendanceSession(
@@ -441,6 +449,29 @@ export async function handleAttendance(
   const linkedStaffId = (user.app_metadata?.linked_id as string | undefined) ??
     "";
   const roleName = role(user);
+
+  if (path === "/attendance/context" && method === "GET") {
+    const sectionId = `${url.searchParams.get("section_id") ?? ""}`.trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sectionId)) {
+      return fail("Choose a valid class section", 422);
+    }
+    if (!canManageAttendance(roleName) &&
+      (roleName !== "teacher" || !await teacherCanUseSection(svc, school, linkedStaffId, sectionId))) {
+      return fail("forbidden", 403);
+    }
+    const { data: section, error: sectionError } = await svc.from("sections")
+      .select("academic_year_id").eq("school_id", school).eq("id", sectionId).maybeSingle();
+    if (sectionError) return fail(sectionError.message);
+    if (!section) return fail("section not found", 404);
+    const [yearResult, day] = await Promise.all([
+      section.academic_year_id ? svc.from("academic_years")
+        .select("id,start_date,end_date,is_current").eq("school_id", school)
+        .eq("id", section.academic_year_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+      schoolDay(svc, school),
+    ]);
+    if (yearResult.error) return fail(yearResult.error.message);
+    return ok({ section_id: sectionId, ...attendanceDateContext(yearResult.data, day.date) });
+  }
 
   if (path === "/attendance/reports/exports" && method === "POST") {
     if (!canManageAttendance(roleName)) return fail("forbidden", 403);
@@ -530,6 +561,20 @@ export async function handleAttendance(
     });
   }
 
+  if (path === "/attendance/roster" && method === "GET") {
+    const sectionId = `${url.searchParams.get("section_id") ?? ""}`;
+    const date = `${url.searchParams.get("date") ?? ""}`;
+    if (!canManageAttendance(roleName) && !await teacherCanUseSection(svc,school,linkedStaffId,sectionId)) return fail("forbidden",403);
+    const {data: scopedSection,error: sectionError} = await svc.from("sections").select("academic_year_id").eq("school_id",school).eq("id",sectionId).maybeSingle();
+    if (sectionError) return fail(sectionError.message);
+    if (!scopedSection) return fail("section not found",404);
+    const year = String(scopedSection.academic_year_id);
+    const dateError = await validateTeacherAttendanceDate(svc,school,year,date);
+    if (dateError) return fail(dateError,422);
+    const {data,error} = await svc.rpc("attendance_roster",{p_school:school,p_section:sectionId,p_year:year,p_date:date});
+    return error ? fail(error.message,422) : ok(data);
+  }
+
   if (path === "/attendance/sessions" && method === "POST") {
     const { period_no: _legacyPeriodNo, ...rest } = body as Record<
       string,
@@ -537,7 +582,7 @@ export async function handleAttendance(
     >;
     const sectionId = `${body.section_id ?? ""}`.trim();
     const staffId = `${body.staff_id ?? ""}`.trim();
-    const operationDate = `${body.date ?? todayDate()}`
+    const operationDate = `${body.date ?? (await schoolDay(svc, school)).date}`
       .split("T")[0];
     if (!sectionId) return fail("section_id required");
     if (!canManageAttendance(roleName)) {
@@ -553,6 +598,11 @@ export async function handleAttendance(
       sectionId,
       `${body.academic_year_id ?? ""}`.trim(),
     );
+    if (!canManageAttendance(roleName)) {
+      const dateError = await validateTeacherAttendanceDate(svc, school, academicYearId, operationDate);
+      if (dateError) return fail(dateError, 422);
+    }
+
     if (!academicYearId) return fail("section and academic year do not match", 422);
     const claimingStaffId = canManageAttendance(roleName)
       ? staffId || linkedStaffId
@@ -728,6 +778,10 @@ export async function handleAttendance(
         error instanceof Error ? error.message : "failed to load session",
       );
     }
+    if (!canManageAttendance(roleName)) {
+      const dateError = await validateTeacherAttendanceDate(svc, school, `${session.academic_year_id ?? ""}`, `${session.date ?? ""}`.slice(0,10));
+      if (dateError) return fail(dateError, 422);
+    }
     if (session.is_finalized === true) {
       return fail("attendance session is finalized", 409);
     }
@@ -778,7 +832,8 @@ export async function handleAttendance(
       svc,
       school,
       `${session.section_id ?? ""}`,
-      records.map((record: Record<string, unknown>) => `${record.student_id ?? ""}`),
+      records,
+      `${session.academic_year_id ?? ""}`, `${session.date ?? ""}`.slice(0,10),
     )) return fail("attendance records must belong to the active session section", 422);
     const { data, error } = await svc.from("student_attendances").upsert(
       records,
@@ -851,6 +906,10 @@ export async function handleAttendance(
         error instanceof Error ? error.message : "failed to load session",
       );
     }
+    if (!canManageAttendance(roleName)) {
+      const dateError = await validateTeacherAttendanceDate(svc, school, `${session.academic_year_id ?? ""}`, `${session.date ?? ""}`.slice(0,10));
+      if (dateError) return fail(dateError, 422);
+    }
     if (session.is_finalized === true) {
       return fail("attendance session is finalized", 409);
     }
@@ -869,7 +928,8 @@ export async function handleAttendance(
       svc,
       school,
       `${session.section_id ?? ""}`,
-      records.map((record: Record<string, unknown>) => `${record.student_id ?? ""}`),
+      records,
+      `${session.academic_year_id ?? ""}`, `${session.date ?? ""}`.slice(0,10),
     )) return fail("attendance records must belong to the active session section", 422);
     const { data, error } = await svc.from("student_attendances").upsert(
       records,
@@ -1005,28 +1065,38 @@ export async function handleAttendance(
   const reopenMatch = path.match(/^\/attendance\/sessions\/([^/]+)\/reopen$/);
   if (reopenMatch && method === "POST") {
     if (!canManageAttendance(roleName)) return fail("forbidden", 403);
-    const { data, error } = await svc.from("attendance_sessions").update({
-      is_finalized: false,
-      status: "reopened",
-      correction_request: body.reason ?? null,
-      reopen_reason: body.reason ?? null,
-      reopened_by: user.id,
-      reopened_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq("id", reopenMatch[1]).eq("school_id", school).select().single();
-    if (error) return fail(error.message);
-    if (data) {
-      await svc.from("class_daily_operation_claims").update({
-        status: "reopened",
-        reopened_at: new Date().toISOString(),
-        reopened_by: user.id,
-        reopen_reason: body.reason ?? null,
-        updated_at: new Date().toISOString(),
-      }).eq("school_id", school).eq("section_id", `${data.section_id ?? ""}`)
-        .eq("operation", "attendance").eq(
-          "operation_date",
-          `${data.date ?? ""}`.split("T")[0],
-        );
+    if (!body.section_id || !body.date) {
+      // Old student-detail menus send an unrelated session ID and only a
+      // reason. The server cannot recover the intended class from that request.
+      return fail(
+        "For safe attendance corrections, update SchoolDesk or contact your school administrator to reopen the correct class and date.",
+        409,
+      );
+    }
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof body.reason !== "string" || !body.reason.trim() ||
+      typeof body.section_id !== "string" || !uuid.test(body.section_id) ||
+      typeof body.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.date) ||
+      !uuid.test(reopenMatch[1]) ||
+      (body.student_id !== undefined &&
+        (typeof body.student_id !== "string" || !uuid.test(body.student_id)))) {
+      return fail("valid class, date, student and reason are required", 400);
+    }
+    const { data, error } = await svc.rpc("reopen_attendance_session_scoped", {
+      p_school_id: school,
+      p_session_id: reopenMatch[1],
+      p_actor_id: user.id,
+      p_reason: body.reason.trim(),
+      p_section_id: body.section_id,
+      p_date: body.date,
+      p_student_id: body.student_id ?? null,
+    });
+    if (error) {
+      const status = error.code === "42501" ? 403
+        : error.code === "P0002" ? 404
+        : ["22023", "22007", "22008", "22P02"].includes(error.code) ? 400
+        : error.code === "P0001" ? 409 : 500;
+      return fail(error.message, status);
     }
     return ok(data);
   }

@@ -1,3 +1,6 @@
+import 'package:schooldesk1/features/communication/presentation/screens/chat_workspace/chat_workspace_screen.dart';
+import 'package:schooldesk1/features/communication/presentation/screens/principal_send_notification_screen/principal_send_notification_screen.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/features/academics/academics.dart';
@@ -174,6 +177,8 @@ class AppRoutes {
 
   // Shared Routes
   static const String schoolGallery = '/school-gallery-screen';
+  static const String principalSendNotification =
+      '/principal/send-notification';
   static const String notificationCenter = '/notification-center-screen';
   static const String settingsScreen = '/settings-screen';
   static const String profileScreen = '/profile-screen';
@@ -227,9 +232,8 @@ class AppRoutes {
     principalPaymentRecordForm: (context) => AdminPaymentRecordFormScreen(
       args: _principalPaymentRecordFormArgs(context),
     ),
-    communicationCenter: (context) => const PrincipalChatCommunicationsScreen(),
-    principalChatCommunications: (context) =>
-        const PrincipalChatCommunicationsScreen(),
+    communicationCenter: (context) => _chatForLeadership(context),
+    principalChatCommunications: (context) => _chatForLeadership(context),
     complaintManagement: (context) =>
         const IssueScreen(role: IssueScreenRole.principal),
     eventsCalendar: (context) => const EventsCalendarScreen(),
@@ -303,7 +307,7 @@ class AppRoutes {
     teacherAttendanceHistory: (context) =>
         const TeacherAttendanceHistoryScreen(),
     teacherMyAttendance: (context) => const TeacherMyAttendanceScreen(),
-    teacherCommunication: (context) => const TeacherCommunicationScreen(),
+    teacherCommunication: (context) => _chatFromArguments(context, 'teacher'),
     teacherComplaints: (context) =>
         const IssueScreen(role: IssueScreenRole.teacher),
     teacherLeave: (context) => const TeacherLeaveScreen(),
@@ -331,7 +335,7 @@ class AppRoutes {
     parentHomeworkSubmit: (context) => ParentHomeworkSubmissionScreen(
       args: _parentHomeworkSubmissionArgs(context),
     ),
-    parentTeacherChat: (context) => const ParentTeacherChatScreen(),
+    parentTeacherChat: (context) => _chatFromArguments(context, 'parent'),
     parentComplaints: (context) =>
         const IssueScreen(role: IssueScreenRole.parent),
     parentFees: (context) => const ParentFeeHub(),
@@ -357,17 +361,30 @@ class AppRoutes {
 
     // Shared
     schoolGallery: (context) => const SchoolGalleryScreen(),
+    principalSendNotification: (context) =>
+        const PrincipalSendNotificationScreen(),
     notificationCenter: (context) {
-      final role = _routeArguments(context) as String? ?? 'principal';
+      final role =
+          BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ??
+          _routeArguments(context) as String? ??
+          'principal';
       return NotificationCenterScreen(role: role);
     },
     settingsScreen: (context) {
-      final role = _routeArguments(context) as String? ?? 'principal';
+      final role =
+          BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ??
+          _routeArguments(context) as String? ??
+          'principal';
       return AppSettingsScreen(role: role);
     },
     profileScreen: (context) {
-      final role = _routeArguments(context) as String? ?? 'principal';
-      return ProfileManagementScreen(role: role);
+      final role =
+          BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ??
+          _routeArguments(context) as String? ??
+          'principal';
+      return role == 'parent'
+          ? const AppSettingsScreen(role: 'parent')
+          : ProfileManagementScreen(role: role);
     },
     globalSearch: (context) => const GlobalSearchScreen(),
     help: (context) => const HelpScreen(),
@@ -375,20 +392,36 @@ class AppRoutes {
       final args = _routeArguments(context) is Map
           ? Map<String, dynamic>.from(_routeArguments(context) as Map)
           : <String, dynamic>{};
-      final role = (args['role'] as String? ?? 'teacher').toLowerCase();
-      switch (role) {
-        case 'parent':
-          return const ParentTeacherChatScreen();
-        case 'principal':
-        case 'coordinator':
-        case 'admin':
-          return const PrincipalChatCommunicationsScreen();
-        case 'teacher':
-        default:
-          return const TeacherCommunicationScreen();
-      }
+      final role =
+          (BackendApiClient.instance.currentRoleName ??
+                  args['role'] as String? ??
+                  'teacher')
+              .toLowerCase();
+      return role == 'super_admin'
+          ? const PrincipalChatCommunicationsScreen()
+          : _chatFromArguments(context, role == 'admin' ? 'principal' : role);
     },
   };
+
+  static Widget _chatFromArguments(BuildContext context, String role) {
+    final raw = _routeArguments(context);
+    final args = raw is Map ? raw : const {};
+    return ChatWorkspaceScreen(
+      role: role,
+      initialConversationId: '${args['conversation_id'] ?? ''}',
+      initialStudentId: '${args['student_id'] ?? ''}',
+    );
+  }
+
+  static Widget _chatForLeadership(BuildContext context) {
+    final role = BackendApiClient.instance.currentRoleName ?? 'principal';
+    return role == 'super_admin'
+        ? const PrincipalChatCommunicationsScreen()
+        : _chatFromArguments(
+            context,
+            role == 'coordinator' ? 'coordinator' : 'principal',
+          );
+  }
 
   static Widget buildRoutePage(
     BuildContext context, {
@@ -404,7 +437,11 @@ class AppRoutes {
       child: child,
       routeBuilder: routeBuilder,
     );
-    if (metadata == null) return routeChild;
+    // Chat owns its inbox/thread back stack and responsive navigation. The
+    // generic frame's PopScope would also handle a blocked thread back.
+    if (routeChild is ChatWorkspaceScreen || metadata == null) {
+      return routeChild;
+    }
     return SchoolDeskRouteFrame(metadata: metadata, child: routeChild);
   }
 

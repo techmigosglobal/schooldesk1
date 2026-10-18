@@ -1,3 +1,4 @@
+import 'package:schooldesk1/features/profile/presentation/screens/settings_screen/settings_screen.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -295,6 +296,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isParent) return const AppSettingsScreen(role: 'parent');
     final tokens = Theme.of(context).schoolDesk;
     final roleColor = tokens.roleColor(_roleEnum);
     final rawBottomPadding = MediaQuery.viewPaddingOf(context).bottom;

@@ -57,13 +57,30 @@ class SchoolDeskRepositoryStateView<T> extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (state.isOffline)
-          SchoolDeskStatusPanel.stale(
-            title: 'Showing saved data',
-            message: state.error == null
-                ? 'Backend is unavailable. Cached data remains visible.'
-                : 'Refresh failed. Cached data remains visible.',
-            onAction: onRetry,
+        if (state.isRefreshing) const LinearProgressIndicator(minHeight: 2),
+        if (state.isOffline && !state.isRefreshing)
+          Material(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.history_rounded, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      state.error == null
+                          ? 'Showing saved data. Reconnecting…'
+                          : 'Refresh failed. Saved data remains visible.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  TextButton(onPressed: onRetry, child: const Text('Retry')),
+                ],
+              ),
+            ),
           ),
         if (expandStaleContent) Expanded(child: content) else content,
       ],

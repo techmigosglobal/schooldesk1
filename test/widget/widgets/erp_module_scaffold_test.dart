@@ -62,7 +62,7 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
     expect(find.text(SchoolDeskGlossary.search), findsOneWidget);
     expect(find.text(SchoolDeskGlossary.notifications), findsOneWidget);
-    expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
+    expect(find.text(SchoolDeskGlossary.settings), findsOneWidget);
   });
 
   testWidgets('compact principal shell uses notifications navigation', (
@@ -90,7 +90,7 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
     expect(find.text(SchoolDeskGlossary.search), findsOneWidget);
     expect(find.text(SchoolDeskGlossary.notifications), findsOneWidget);
-    expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
+    expect(find.text(SchoolDeskGlossary.settings), findsOneWidget);
     expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
@@ -122,7 +122,7 @@ void main() {
       expect(find.byTooltip(SchoolDeskGlossary.notifications), findsOneWidget);
       expect(find.byTooltip(SchoolDeskGlossary.profile), findsOneWidget);
       expect(find.text(SchoolDeskGlossary.notifications), findsWidgets);
-      expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
+      expect(find.text(SchoolDeskGlossary.settings), findsOneWidget);
     },
   );
 
@@ -159,7 +159,7 @@ void main() {
     expect(find.byTooltip(SchoolDeskGlossary.notifications), findsNothing);
     expect(find.byTooltip(SchoolDeskGlossary.profile), findsNothing);
     expect(find.text(SchoolDeskGlossary.notifications), findsWidgets);
-    expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
+    expect(find.text(SchoolDeskGlossary.settings), findsOneWidget);
   });
 
   testWidgets('desktop role shell can suppress global toolbar actions', (

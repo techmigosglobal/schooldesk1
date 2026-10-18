@@ -318,6 +318,7 @@ function withEventRouting(
 ): NotificationTemplate {
   const data = {
     ...template.data,
+    ...(eventValue(eventData,"notification_id") ? {notification_id:eventValue(eventData,"notification_id")} : {}),
     ...(template.data["reference_type"]
       ? {}
       : {
@@ -374,6 +375,9 @@ function getNotificationTemplate(
   eventData: Record<string, unknown>,
 ): NotificationTemplate {
   switch (eventType) {
+    case "custom_notification":
+      return {title:String(eventData.title || "School notification"),body:String(eventData.message || ""),
+        data:{event_type:eventType,reference_type:"notification_broadcast",reference_id:String(eventData.reference_id || ""),route:"/notification-center-screen"}};
     case "complaint_escalated":
       return {
         title: "New Complaint Escalated",
@@ -761,6 +765,9 @@ function getNotificationTemplate(
         },
       };
 
+    case "issue":
+      return {title:String(eventData.title || "Issue update"),body:String(eventData.message || "Your issue has an update"),data:{event_type:"issue",reference_type:"issue",reference_id:String(eventData.reference_id || ""),route:String(eventData.route || "/notification-center-screen")}};
+
     case "health_reminder":
       return {
         title: String(eventData.title || "Health Reminder"),
@@ -1127,6 +1134,26 @@ async function processNotificationEvent(
         transientFailureCount: 0,
         reason: "retired_ptm_feature",
       };
+    }
+    if (["birthday","birthday_wish","health_reminder"].includes(event.event_type)) {
+      const {data:school,error:schoolError} = await supabase.from("schools").select("timezone").eq("id",event.school_id).single();
+      if (schoolError) throw schoolError;
+      const parts = new Intl.DateTimeFormat("en-CA",{timeZone:school.timezone || "Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+      const part=(kind:string)=>parts.find(value=>value.type===kind)?.value;
+      const today=`${part("year")}-${part("month")}-${part("day")}`;
+      let current = true;
+      if (event.event_type === "health_reminder") {
+        const id = eventValue(event.event_data,"health_reminder_id") || eventValue(event.event_data,"reference_id");
+        const {data:reminder,error} = await supabase.from("health_reminders").select("reminder_date,is_active").eq("school_id",event.school_id).eq("id",id).maybeSingle();
+        if (error) throw error;
+        current = reminder?.is_active === true && reminder.reminder_date === today;
+      } else {
+        current = eventValue(event.event_data,"reference_id").includes(today);
+      }
+      if (!current) {
+        await markEventProcessed(event.id,{status:"skipped_outdated_highlight"});
+        return {processed:true,sentCount:0,invalidTokenCount:0,transientFailureCount:0,reason:"outdated_highlight"};
+      }
     }
     // Immediate API processing and pg_cron may overlap. Atomically transition
     // the row out of the pending set before contacting FCM; only one worker can

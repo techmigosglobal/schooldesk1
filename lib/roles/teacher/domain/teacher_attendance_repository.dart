@@ -1,9 +1,19 @@
 import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/core/utils/result.dart';
 import 'package:schooldesk1/roles/teacher/domain/teacher_attendance_snapshot.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_attendance_context.dart';
 
 abstract interface class TeacherAttendanceRepository {
+  Future<Result<TeacherAttendanceContext>> loadContext({
+    required String sectionId,
+  });
+
   Future<Result<List<AcademicYearModel>>> loadAcademicYears();
+
+  Future<Result<List<StudentModel>>> loadRoster({
+    required String sectionId,
+    required String date,
+  });
 
   Future<Result<PaginatedList<StudentModel>>> loadStudents({
     required String sectionId,

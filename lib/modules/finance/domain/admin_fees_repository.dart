@@ -58,10 +58,9 @@ abstract interface class AdminFeesRepository {
 
   Future<void> deleteRaw(String path);
 
-  Future<void> deleteFeeStructure(
-    String id, {
-    required bool removePending,
-  });
+  Future<Map<String, dynamic>> reversePayment(String id, String reason);
+
+  Future<void> deleteFeeStructure(String id, {required bool removePending});
 
   Future<Map<String, dynamic>> createFeeStructure({
     required String academicYearId,

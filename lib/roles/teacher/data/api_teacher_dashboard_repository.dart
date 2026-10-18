@@ -39,7 +39,7 @@ class ApiTeacherDashboardRepository implements TeacherDashboardRepository {
   Future<String> _loadSchoolName({required bool forceRefresh}) async {
     try {
       final school = await _api.getCurrentSchool(forceRefresh: forceRefresh);
-      final value = '${school['organization_name'] ?? school['name'] ?? ''}'
+      final value = '${school['display_name'] ?? school['name'] ?? ''}'
           .trim();
       return value.isEmpty ? 'School' : value;
     } on Object {

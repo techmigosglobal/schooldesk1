@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:schooldesk1/core/utils/timetable_time.dart';
 
 import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -439,7 +439,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           SizedBox(
             width: 96,
             child: Text(
-              '${_text(slot['start_time'], fallback: '--:--')} – ${_text(slot['end_time'], fallback: '--:--')}',
+              '${normalizeTimetableTime(slot['start_time']) ?? '--:--'} – ${normalizeTimetableTime(slot['end_time']) ?? '--:--'}',
               style: const TextStyle(
                 color: _accent,
                 fontSize: 12,
@@ -605,12 +605,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 FilterChip(
                   label: Text(_dayLabels[day - 1]),
                   selected: _selectedDays.contains(day),
-                  selectedColor: _accent,
-                  checkmarkColor: Colors.white,
-                  labelStyle: TextStyle(
-                    color: _selectedDays.contains(day) ? Colors.white : _ink,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w800),
                   onSelected: _saving
                       ? null
                       : (selected) => _toggleDay(day, selected),
@@ -772,14 +767,32 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     return TextField(
       controller: controller,
       enabled: !_saving,
-      keyboardType: TextInputType.datetime,
-      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9:]'))],
-      onChanged: (value) {
-        if (isStart) {
-          row.startTime = value.trim();
-        } else {
-          row.endTime = value.trim();
-        }
+      readOnly: true,
+      onTap: () async {
+        final normalized = normalizeTimetableTime(controller.text);
+        final parts = (normalized ?? '09:00').split(':');
+        final selected = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay(
+            hour: int.parse(parts[0]),
+            minute: int.parse(parts[1]),
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+            child: child!,
+          ),
+        );
+        if (selected == null || !mounted) return;
+        final value =
+            '${selected.hour.toString().padLeft(2, '0')}:${selected.minute.toString().padLeft(2, '0')}';
+        setState(() {
+          controller.text = value;
+          if (isStart) {
+            row.startTime = value;
+          } else {
+            row.endTime = value;
+          }
+        });
       },
       decoration: InputDecoration(
         labelText: label,
@@ -1250,8 +1263,12 @@ class _TimetableRowDraft {
   factory _TimetableRowDraft.fromSlot(Map<String, dynamic> slot) {
     final slotType = _AdminTimetableScreenState._text(slot['slot_type']);
     return _TimetableRowDraft(
-      startTime: _AdminTimetableScreenState._text(slot['start_time']),
-      endTime: _AdminTimetableScreenState._text(slot['end_time']),
+      startTime:
+          normalizeTimetableTime(slot['start_time']) ??
+          _AdminTimetableScreenState._text(slot['start_time']),
+      endTime:
+          normalizeTimetableTime(slot['end_time']) ??
+          _AdminTimetableScreenState._text(slot['end_time']),
       subjectId: slotType == 'free' || slotType == 'break'
           ? ''
           : _AdminTimetableScreenState._text(slot['subject_id']),

@@ -123,9 +123,7 @@ void main() {
     expect(error.isError, isTrue);
 
     final stale = RepositoryState.fromResult<List<String>>(
-      const Result<List<String>>.err(
-        UnknownFailure(message: 'refresh failed'),
-      ),
+      const Result<List<String>>.err(UnknownFailure(message: 'refresh failed')),
       previous: const RepositoryState<List<String>>(
         data: ['cached'],
         source: RepositorySource.remote,
@@ -454,14 +452,8 @@ void main() {
       container.read(eventPostRepositoryProvider),
       isA<EventPostRepository>(),
     );
-    expect(
-      container.read(issueRepositoryProvider),
-      isA<IssueRepository>(),
-    );
-    expect(
-      container.read(profileRepositoryProvider),
-      isA<ProfileRepository>(),
-    );
+    expect(container.read(issueRepositoryProvider), isA<IssueRepository>());
+    expect(container.read(profileRepositoryProvider), isA<ProfileRepository>());
     expect(
       container.read(adminTimetableRepositoryProvider),
       isA<AdminTimetableRepository>(),
@@ -586,11 +578,27 @@ void main() {
 
     for (final path in screens) {
       final source = File(path).readAsStringSync();
-      expect(
-        source,
-        isNot(contains('BackendApiClient.instance')),
-        reason: '$path must use its role repository boundary',
-      );
+      if (path.contains('/teacher_attendance_screen/')) {
+        // Authentication changes revoke an open attendance context immediately;
+        // data operations still go through the scoped attendance repository.
+        expect(source, contains('TeacherAttendanceRepository'));
+        expect(source, contains('addListener(_scopeChanged)'));
+        expect(source, isNot(contains('api.get')));
+        expect(source, isNot(contains('api.post')));
+        expect(source, isNot(contains('api.put')));
+        expect(source, isNot(contains('api.delete')));
+      } else if (path.endsWith('/admin_fees_screen/admin_fees_screen.dart')) {
+        expect(source, contains('AdminFeesRepository'));
+        expect(source, contains('BackendApiClient.instance.currentRoleName'));
+        expect(source, isNot(contains('BackendApiClient.instance.get')));
+        expect(source, isNot(contains('BackendApiClient.instance.post')));
+      } else {
+        expect(
+          source,
+          isNot(contains('BackendApiClient.instance')),
+          reason: '$path must use its role repository boundary',
+        );
+      }
     }
   });
 }

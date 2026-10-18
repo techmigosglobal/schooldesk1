@@ -18,7 +18,7 @@ void main() {
     expect(handler, contains('homework_due: homeworkDueByStudent'));
     expect(handler, contains('pending_fee_balance: feeBalanceByStudent'));
     expect(handler, contains('metrics: { ...base.metrics, unread_messages'));
-    expect(screen, contains("value: _percentage(child['attendance_pct'])"));
+    expect(screen, contains("value: attendanceTodayLabel(child)"));
     expect(screen, contains("value: _metricNumber(child['homework_due'])"));
     expect(screen, contains("label: 'Unread Messages'"));
     expect(screen, contains('_ParentChildTopSwitcher('));

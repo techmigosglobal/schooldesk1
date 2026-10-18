@@ -21,10 +21,13 @@ extension IssuesApi on BackendApiClient {
       final payload = _asMap(response.data);
       if (payload['success'] == true) {
         return PaginatedList<Map<String, dynamic>>(
-          data: _asListMap(payload['data']),
-          total: _asInt(payload['total']),
-          page: _asInt(payload['page'], fallback: page),
-          pageSize: _asInt(payload['page_size'], fallback: pageSize),
+          data: _asListMap(_asMap(payload['data'])['data']),
+          total: _asInt(_asMap(payload['data'])['total']),
+          page: _asInt(_asMap(payload['data'])['page'], fallback: page),
+          pageSize: _asInt(
+            _asMap(payload['data'])['page_size'],
+            fallback: pageSize,
+          ),
         );
       }
       throw ServerException(

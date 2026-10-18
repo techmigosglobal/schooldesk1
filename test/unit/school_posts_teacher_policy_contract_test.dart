@@ -41,12 +41,7 @@ void main() {
         'teachers may not publish school posts to the public landing page',
       ),
     );
-    expect(
-      source,
-      contains(
-        '(isPrincipal || userRole === "teacher") && body.is_submit === true',
-      ),
-    );
+    expect(source, contains('isPrincipal && body.is_submit === true ||'));
     expect(source, contains('destinations: effectiveDestinations'));
   });
 

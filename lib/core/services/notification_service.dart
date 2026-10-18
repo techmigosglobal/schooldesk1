@@ -9,6 +9,7 @@ class NotificationService extends ChangeNotifier {
   /// Clears the cached singleton — call this on user logout so the next login
   /// starts with a fresh, empty notification list rather than stale data.
   static void resetInstance() {
+    _instance?._generation++;
     _instance = null;
   }
 
@@ -17,10 +18,16 @@ class NotificationService extends ChangeNotifier {
   final Map<String, bool> _settings = {};
   bool _loaded = false;
   Future<void>? _loadFuture;
+  Future<void>? _refreshFuture;
+  bool _reloadRequested = false;
   int _currentPage = 1;
   bool _hasMore = false;
   bool _loadingMore = false;
   int? _serverUnreadCount;
+  int _generation = 0;
+  final Map<String, int> _filterPages = {};
+  final Map<String, bool> _filterMore = {};
+  bool hasMoreForFilter(String category) => _filterMore[category] ?? true;
 
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
   int get totalUnread =>
@@ -49,6 +56,8 @@ class NotificationService extends ChangeNotifier {
   NotificationService._();
 
   Future<void> _load() async {
+    final scope = _api.offlineAccountKey;
+    final generation = ++_generation;
     try {
       // The history page, unread badge, and preferences are independent
       // reads. Fetching them together avoids making dashboard construction
@@ -58,7 +67,10 @@ class NotificationService extends ChangeNotifier {
         _loadUnreadCount(),
         _loadPreferences(),
       ]);
+      if (scope != _api.offlineAccountKey || generation != _generation) return;
       final page = results[0] as NotificationPage;
+      _filterPages.clear();
+      _filterMore.clear();
       _notifications = page.items.map(AppNotification.fromJson).toList();
       _currentPage = page.page;
       _hasMore = page.hasMore;
@@ -94,17 +106,37 @@ class NotificationService extends ChangeNotifier {
   }
 
   /// Force a fresh reload of notifications from the backend.
-  Future<void> refresh() async {
-    _loaded = false;
-    await _load();
-    notifyListeners();
+  Future<void> refresh() {
+    final running = _refreshFuture;
+    if (running != null) {
+      _reloadRequested = true;
+      return running;
+    }
+    return _refreshFuture = _refreshLoop();
+  }
+
+  Future<void> _refreshLoop() async {
+    try {
+      if (_loadFuture != null) await _loadFuture;
+      do {
+        _reloadRequested = false;
+        _loaded = false;
+        await (_loadFuture ??= _load());
+        notifyListeners();
+      } while (_reloadRequested);
+    } finally {
+      _refreshFuture = null;
+    }
   }
 
   Future<void> loadMore() async {
     if (_loadingMore || !_hasMore) return;
+    final scope = _api.offlineAccountKey;
+    final generation = _generation;
     _loadingMore = true;
     try {
       final page = await _api.getNotificationsPage(page: _currentPage + 1);
+      if (scope != _api.offlineAccountKey || generation != _generation) return;
       final existingIds = _notifications.map((item) => item.id).toSet();
       _notifications.addAll(
         page.items
@@ -119,6 +151,35 @@ class NotificationService extends ChangeNotifier {
     }
   }
 
+  Future<void> loadFilter(String category, {bool reset = false}) async {
+    if (_loadingMore || (!reset && !hasMoreForFilter(category))) return;
+    final scope = _api.offlineAccountKey;
+    final generation = _generation;
+    _loadingMore = true;
+    notifyListeners();
+    try {
+      final next = reset ? 1 : (_filterPages[category] ?? 0) + 1;
+      final page = await _api.getNotificationsPage(
+        page: next,
+        category: category == 'unread' ? null : category,
+        isRead: category == 'unread' ? false : null,
+      );
+      if (scope != _api.offlineAccountKey || generation != _generation) return;
+      final rows = {for (final row in _notifications) row.id: row};
+      for (final row in page.items) {
+        final item = AppNotification.fromJson(row);
+        rows[item.id] = item;
+      }
+      _notifications = rows.values.toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      _filterPages[category] = next;
+      _filterMore[category] = page.hasMore;
+    } finally {
+      _loadingMore = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> addNotification(AppNotification notification) async {
     _notifications.insert(0, notification);
     if (!notification.isRead && _serverUnreadCount != null) {
@@ -128,11 +189,12 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<void> markAsRead(String id) async {
-    if (!id.startsWith('transient_')) {
+    if (!id.startsWith('transient_') && !id.startsWith('highlight_')) {
       await _api.markNotificationRead(id);
     }
     final idx = _notifications.indexWhere((n) => n.id == id);
     if (idx >= 0) {
+      if (_notifications[idx].isRead) return;
       _notifications[idx] = _notifications[idx].copyWith(isRead: true);
       if (_serverUnreadCount != null && _serverUnreadCount! > 0) {
         _serverUnreadCount = _serverUnreadCount! - 1;

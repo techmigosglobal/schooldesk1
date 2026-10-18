@@ -126,3 +126,8 @@ android/.kotlin/
 # Developer convenience dumps — never commit these
 all_files.txt
 flutter_*.log
+
+# Private release evidence and generated distribution artifacts
+/.local/
+/artifacts/android/
+/artifacts/design/

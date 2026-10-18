@@ -56,8 +56,14 @@ void main() {
     ).readAsStringSync();
 
     expect(communications, contains('.eq("school_id", school)'));
-    expect(communications, contains('linkedStudentIds'));
-    expect(communications, contains(r'student_id.in.(${linkedStudentIds.join'));
+    expect(communications, contains('scopeNotificationQuery('));
+    final scope = File(
+      'supabase/functions/api/handlers/notification_scope.ts',
+    ).readAsStringSync();
+    expect(scope, contains('parent_student_links'));
+    expect(scope, contains('.eq("parent_user_id",user.id)'));
+    expect(scope, contains(r'student_id.in.(${ids.join'));
+    expect(scope, contains('query.is("student_id",null)'));
     expect(attendance, contains('student_id: delivery.studentId'));
     expect(
       attendance,
@@ -79,10 +85,7 @@ void main() {
     ).readAsStringSync();
 
     expect(chat, contains('ParentChildSelectionService.indexFor'));
-    expect(
-      chat,
-      contains('_repository.loadConversations('),
-    );
+    expect(chat, contains('_repository.loadConversations('));
     expect(chat, isNot(contains("type: 'parent_teacher'")));
     expect(chat, isNot(contains("type: 'principal_parent'")));
   });

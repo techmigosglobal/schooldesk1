@@ -23,6 +23,7 @@ class LeadershipDashboardOptionalSnapshot {
     required this.feeStructures,
     required this.notifications,
     required this.staffAttendanceSummary,
+    this.attentionCounts = const {},
   });
 
   final List<AcademicYearModel> academicYears;
@@ -34,4 +35,5 @@ class LeadershipDashboardOptionalSnapshot {
   final List<Map<String, dynamic>> feeStructures;
   final List<Map<String, dynamic>> notifications;
   final Map<String, dynamic> staffAttendanceSummary;
+  final Map<String, int> attentionCounts;
 }

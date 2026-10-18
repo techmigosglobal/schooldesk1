@@ -191,8 +191,6 @@ void main() {
         'schoolGallery',
         'teacherCommunication',
         'teacherLeave',
-        'notificationCenter',
-        'profileScreen',
         'settingsScreen',
       ]) {
         expect(

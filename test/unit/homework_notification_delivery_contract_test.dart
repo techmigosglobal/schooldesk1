@@ -39,25 +39,15 @@ void main() {
       'supabase/functions/api/handlers/homework.ts',
     ).readAsStringSync();
 
-    final assignmentLog = homework.substring(
-      homework.indexOf('const notifications ='),
-      homework.indexOf('// Also queue FCM pushes'),
-    );
-    final submissionLog = homework.substring(
-      homework.indexOf('const notifBase ='),
-      homework.indexOf('// Create push notification event for the teacher'),
-    );
-    final feedbackLog = homework.substring(
-      homework.indexOf('const parentNotifs ='),
-      homework.indexOf('// Create push notification events for each parent'),
-    );
-
-    for (final log in [assignmentLog, submissionLog, feedbackLog]) {
-      expect(log, contains('priority: "high"'));
-      expect(log, isNot(contains('reference_type:')));
-      expect(log, isNot(contains('reference_id:')));
-      expect(log, isNot(contains('action:')));
-    }
+    final migration = File(
+      'supabase/migrations/20261016171021_role_workflow_delivery_repairs.sql',
+    ).readAsStringSync();
+    expect(homework, contains('wakeWorkflowDelivery'));
+    expect(migration, contains('insert into public.notification_logs'));
+    expect(migration, contains("'high',false"));
+    expect(migration, contains('on conflict(user_id,entity_type,entity_id)'));
+    expect(migration, contains('insert into public.notification_events'));
+    expect(migration, contains('schooldesk_workflow_notice'));
   });
 
   test('homework keeps parent comments and teacher feedback separate', () {
@@ -113,7 +103,12 @@ void main() {
         homework,
         contains('feedback is required before marking the dairy done'),
       );
-      expect(homework, contains('event_type: "homework_feedback"'));
+      expect(
+        File(
+          'supabase/migrations/20261016171021_role_workflow_delivery_repairs.sql',
+        ).readAsStringSync(),
+        contains("'homework_feedback'"),
+      );
       expect(homework, contains('priority: "high"'));
     },
   );

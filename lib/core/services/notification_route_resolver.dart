@@ -80,7 +80,7 @@ class NotificationRouteResolver {
 
     final fallbackRoute = switch (referenceType) {
       'announcement' || 'notice' => _communicationRouteFor(role),
-      'message' => _messageRouteFor(role),
+      'message' || 'conversation' || 'chat_message' => _messageRouteFor(role),
       'issue' || 'complaint' => _issueRouteFor(role),
       'homework' => _homeworkRouteFor(role, data),
       'fee' => _feeRouteFor(role),
@@ -165,6 +165,26 @@ class NotificationRouteResolver {
         'referenceType': referenceType.isEmpty ? 'approval' : referenceType,
         'referenceId': referenceId,
         'initialTab': isLeave ? 'leave' : 'approvals',
+      };
+    }
+    final chatRoute = const {
+      AppRoutes.parentTeacherChat,
+      AppRoutes.teacherCommunication,
+      AppRoutes.communicationCenter,
+      AppRoutes.principalChatCommunications,
+      AppRoutes.homeworkMessaging,
+    }.contains(route);
+    if (chatRoute &&
+        const {
+          'message',
+          'conversation',
+          'chat_message',
+        }.contains(referenceType)) {
+      final conversationId = '${data['conversation_id'] ?? referenceId}'.trim();
+      return {
+        'role': role,
+        if (conversationId.isNotEmpty) 'conversation_id': conversationId,
+        ...parentChildContext,
       };
     }
     if (referenceId.isEmpty) {

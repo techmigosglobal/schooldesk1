@@ -2,6 +2,8 @@ import 'package:schooldesk1/core/network/models/backend_models.dart';
 
 /// Data boundary for Principal attendance oversight.
 abstract interface class PrincipalAttendanceRepository {
+  Future<AttendanceSessionModel> loadSession(String sessionId);
+
   Future<PaginatedList<AttendanceSessionModel>> loadSessions({
     String? startDate,
     String? endDate,
@@ -39,6 +41,9 @@ abstract interface class PrincipalAttendanceRepository {
   Future<AttendanceSessionModel> reopenSession(
     String sessionId, {
     required String reason,
+    required String sectionId,
+    required String date,
+    String? studentId,
   });
 
   Future<Map<String, dynamic>> loadStaffDailySummary({required String date});

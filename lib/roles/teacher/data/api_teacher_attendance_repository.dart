@@ -1,3 +1,6 @@
+import 'package:schooldesk1/core/errors/exceptions.dart';
+import 'package:dio/dio.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_attendance_context.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/repositories/api_repository_utils.dart';
 import 'package:schooldesk1/core/utils/result.dart';
@@ -9,10 +12,65 @@ class ApiTeacherAttendanceRepository implements TeacherAttendanceRepository {
 
   final BackendApiClient _api;
 
+  // These calendar/roster reads must not reuse cached configuration or marks.
+  Future<dynamic> _fresh(String path, Map<String, dynamic> query) async {
+    try {
+      final response = await _api.dio.get<dynamic>(
+        path,
+        queryParameters: query,
+        options: Options(headers: {'Cache-Control': 'no-store'}),
+      );
+      final envelope = Map<String, dynamic>.from(response.data as Map);
+      if (envelope['success'] != true) {
+        throw ServerException(
+          message: '${envelope['error'] ?? 'Unable to load attendance'}',
+        );
+      }
+      return envelope['data'];
+    } on DioException catch (error) {
+      final payload = error.response?.data;
+      throw ServerException(
+        message: payload is Map && payload['error'] is String
+            ? payload['error'] as String
+            : 'Unable to reach school attendance. Check your connection and retry.',
+        statusCode: error.response?.statusCode,
+      );
+    }
+  }
+
+  @override
+  Future<Result<TeacherAttendanceContext>> loadContext({
+    required String sectionId,
+  }) => guardApi(
+    () async => TeacherAttendanceContext.fromJson(
+      Map<String, dynamic>.from(
+        await _fresh('/attendance/context', {'section_id': sectionId}) as Map,
+      ),
+    ),
+  );
+
   @override
   Future<Result<List<AcademicYearModel>>> loadAcademicYears() {
     return guardApi(_api.getAcademicYears);
   }
+
+  @override
+  Future<Result<List<StudentModel>>> loadRoster({
+    required String sectionId,
+    required String date,
+  }) => guardApi(() async {
+    final result = Map<String, dynamic>.from(
+      await _fresh('/attendance/roster', {
+            'section_id': sectionId,
+            'date': date,
+          })
+          as Map,
+    );
+    return (result['items'] as List? ?? [])
+        .whereType<Map>()
+        .map((row) => StudentModel.fromJson(Map<String, dynamic>.from(row)))
+        .toList();
+  });
 
   @override
   Future<Result<PaginatedList<StudentModel>>> loadStudents({
@@ -65,7 +123,11 @@ class ApiTeacherAttendanceRepository implements TeacherAttendanceRepository {
     required String date,
   }) {
     return guardApi(
-      () => _api.getAttendanceSessions(sectionId: sectionId, date: date),
+      () => _api.getAttendanceSessions(
+        sectionId: sectionId,
+        date: date,
+        forceRefresh: true,
+      ),
     );
   }
 
@@ -99,11 +161,7 @@ class ApiTeacherAttendanceRepository implements TeacherAttendanceRepository {
     required bool finalize,
   }) {
     return guardApi(
-      () => _api.markAttendance(
-        sessionId,
-        attendances,
-        finalize: finalize,
-      ),
+      () => _api.markAttendance(sessionId, attendances, finalize: finalize),
     );
   }
 

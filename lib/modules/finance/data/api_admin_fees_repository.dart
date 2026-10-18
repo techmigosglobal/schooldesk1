@@ -100,10 +100,12 @@ class ApiAdminFeesRepository implements AdminFeesRepository {
   Future<void> deleteRaw(String path) => _api.deleteRaw(path);
 
   @override
-  Future<void> deleteFeeStructure(
-    String id, {
-    required bool removePending,
-  }) => _api.deleteFeeStructure(id, removePending: removePending);
+  Future<Map<String, dynamic>> reversePayment(String id, String reason) =>
+      _api.reverseFeePayment(id, reason);
+
+  @override
+  Future<void> deleteFeeStructure(String id, {required bool removePending}) =>
+      _api.deleteFeeStructure(id, removePending: removePending);
 
   @override
   Future<Map<String, dynamic>> createFeeStructure({
@@ -175,10 +177,8 @@ class ApiAdminFeesRepository implements AdminFeesRepository {
   Future<Map<String, dynamic>> applyFeeInvoiceSync(
     String id, {
     required bool includePartiallyPaid,
-  }) => _api.applyFeeInvoiceSync(
-    id,
-    includePartiallyPaid: includePartiallyPaid,
-  );
+  }) =>
+      _api.applyFeeInvoiceSync(id, includePartiallyPaid: includePartiallyPaid);
 
   @override
   Future<List<Map<String, dynamic>>> loadTerms(String academicYearId) =>

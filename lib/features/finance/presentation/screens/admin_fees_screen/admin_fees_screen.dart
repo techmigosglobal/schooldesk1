@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:flutter/services.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
@@ -47,6 +48,7 @@ class AdminFeesScreen extends StatefulWidget {
 
 class _AdminFeesScreenState extends State<AdminFeesScreen> {
   late final AdminFeesRepository _repository;
+  String? _reversingPaymentId;
   late final PaymentConfigRepository _paymentConfigRepository;
   RepositoryState<Object> _state = const RepositoryState.loading();
   late _FinanceView _view;
@@ -631,6 +633,25 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                           tooltip: 'Export Receipt',
                           onPressed: () => _exportReceipt(payment),
                         ),
+                        if (BackendApiClient.instance.currentRoleName
+                                    ?.toLowerCase() ==
+                                'principal' &&
+                            !const {
+                              'reversed',
+                              'void',
+                              'voided',
+                              'cancelled',
+                            }.contains(
+                              _textValue(payment['status']).toLowerCase(),
+                            ))
+                          IconButton(
+                            tooltip: 'Reverse recorded payment',
+                            onPressed: _reversingPaymentId == null
+                                ? () => _reversePayment(payment)
+                                : null,
+                            icon: const Icon(Icons.undo_rounded),
+                            color: Theme.of(context).colorScheme.error,
+                          ),
                       ],
                     ),
                   ),
@@ -638,6 +659,75 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _reversePayment(Map<String, dynamic> payment) async {
+    final id = _textValue(payment['id']);
+    if (id.isEmpty || _reversingPaymentId != null) return;
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: const Text('Reverse recorded payment?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Student: ${_textValue(payment['name'])}\nInvoice: ${_textValue(payment['invoice_number'] ?? payment['invoice_id'])}\nAmount: ${_money(_numValue(payment['amount']))}\nReference: ${_textValue(payment['transaction_id'])}',
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'The receipt will be voided and the amount restored to the student’s balance. The record remains in payment history.',
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  maxLength: 500,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason (required)',
+                  ),
+                  onChanged: (_) => setDialog(() {}),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: controller.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(dialogContext, true),
+              child: const Text('Reverse payment'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final reason = controller.text.trim();
+    // Delay controller disposal until the dialog route finishes its transition.
+    Future<void>.delayed(const Duration(milliseconds: 400), controller.dispose);
+    if (confirmed != true || !mounted) return;
+    setState(() => _reversingPaymentId = id);
+    try {
+      await _repository.reversePayment(id, reason);
+      if (!mounted) return;
+      _snack(
+        'Payment reversed. Receipt voided and balance updated.',
+        success: true,
+      );
+      await _loadData();
+    } on Object catch (error) {
+      if (mounted) _snack('Unable to reverse payment: $error');
+    } finally {
+      if (mounted) setState(() => _reversingPaymentId = null);
+    }
   }
 
   Widget _buildPaymentFilters() {
@@ -1193,10 +1283,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     if (payload == null || !mounted) return;
     setState(() => _updatingConcessionIds.add(id));
     try {
-      await _repository.updateRaw(
-        '/fees/concessions/$id',
-        payload,
-      );
+      await _repository.updateRaw('/fees/concessions/$id', payload);
       if (!mounted) return;
       await _loadData();
       _snack(
@@ -1222,10 +1309,9 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     setState(() => _updatingConcessionIds.add(id));
     final targetStatus = approved ? 'approved' : 'rejected';
     try {
-      final updated = await _repository.updateRaw(
-        '/fees/concessions/$id',
-        {'status': targetStatus},
-      );
+      final updated = await _repository.updateRaw('/fees/concessions/$id', {
+        'status': targetStatus,
+      });
       if (!mounted) return;
       setState(() {
         _concessions = _concessions.map((row) {
@@ -1492,10 +1578,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     );
     if (confirmed != true) return;
     try {
-      await _repository.deleteFeeStructure(
-        id,
-        removePending: true,
-      );
+      await _repository.deleteFeeStructure(id, removePending: true);
       if (!mounted) return;
       await _loadData();
       _snack('Fee component deleted.', success: true);

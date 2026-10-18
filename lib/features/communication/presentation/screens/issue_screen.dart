@@ -159,15 +159,15 @@ class _IssueScreenState extends State<IssueScreen>
           'mime_type': optimized?.mimeType ?? mimeType,
         });
       }
-      await _repository.createWithAttachments(
+      final savedIssue = await _repository.createWithAttachments(
         draft.payload,
         files,
       );
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Issue raised and sent to Super Admin.'),
+          SnackBar(
+            content: Text('Issue #${savedIssue['id']} saved for Super Admin.'),
           ),
         );
       }

@@ -17,7 +17,7 @@ class ApiLeadershipDashboardRepository
     return guardApi(() async {
       final results = await Future.wait<Object>([
         _api.getDashboard(role, forceRefresh: true),
-        _api.getCurrentSchool(),
+        _api.getCurrentSchool(forceRefresh: true),
         _api.getProfile(),
       ]);
       return LeadershipDashboardCriticalSnapshot(
@@ -49,6 +49,11 @@ class ApiLeadershipDashboardRepository
             : _api.getFeeStructures(),
         _try(() => _api.getNotifications(), <Map<String, dynamic>>[]),
         _try(() => _api.getStaffDailyAttendanceSummary(), <String, dynamic>{}),
+        _api.getApprovalFeed(
+          status: 'pending',
+          pageSize: 1,
+          forceRefresh: true,
+        ),
       ]).timeout(const Duration(seconds: 45));
 
       return LeadershipDashboardOptionalSnapshot(
@@ -61,6 +66,7 @@ class ApiLeadershipDashboardRepository
         feeStructures: values[6] as List<Map<String, dynamic>>,
         notifications: values[7] as List<Map<String, dynamic>>,
         staffAttendanceSummary: values[8] as Map<String, dynamic>,
+        attentionCounts: (values[9] as ApprovalFeedPage).countsByType,
       );
     });
   }

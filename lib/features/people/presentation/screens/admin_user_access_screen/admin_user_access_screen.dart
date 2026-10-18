@@ -440,7 +440,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: selected == options[i]
-                    ? Colors.white
+                    ? context.appTheme.onPrimary
                     : context.appTheme.onSurface,
               ),
               selectedColor: context.appTheme.primary,

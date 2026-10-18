@@ -126,9 +126,9 @@ class PrincipalPreviewCard extends StatelessWidget {
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: color,
+        color: context.appTheme.isDark ? context.appTheme.surface : color,
         borderRadius: BorderRadius.circular(14),
-        border: border ?? Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        border: border ?? Border.all(color: context.appTheme.outlineVariant, width: 1),
         boxShadow: const [
           BoxShadow(
             color: Color(0x180F172A),
@@ -426,7 +426,7 @@ class PrincipalPreviewSectionHeader extends StatelessWidget {
               style: principalPreviewTextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w900,
-                color: PrincipalPreviewColors.ink,
+                color: context.appTheme.onSurface,
               ),
             ),
           ),
@@ -689,12 +689,12 @@ class _PrincipalPreviewSearchFieldState
                     isDense: true,
                     hintStyle: principalPreviewTextStyle(
                       fontSize: 13,
-                      color: PrincipalPreviewColors.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                   style: principalPreviewTextStyle(
                     fontSize: 13,
-                    color: PrincipalPreviewColors.dark,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
               ),
@@ -786,7 +786,7 @@ class _MetricCard extends StatelessWidget {
               style: principalPreviewTextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: PrincipalPreviewColors.muted,
+                color: context.appTheme.muted,
               ),
             ),
           ],
@@ -860,7 +860,7 @@ class PrincipalPreviewSignalGrid extends StatelessWidget {
                 style: principalPreviewTextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
-                  color: PrincipalPreviewColors.muted,
+                  color: context.appTheme.muted,
                 ),
               ),
             ],
@@ -893,7 +893,7 @@ class PrincipalPreviewSmallNote extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F4F8),
+        color: context.appTheme.surfaceVariant,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
@@ -905,7 +905,7 @@ class PrincipalPreviewSmallNote extends StatelessWidget {
               style: principalPreviewTextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w900,
-                color: PrincipalPreviewColors.dark,
+                color: context.appTheme.onSurface,
                 height: 1.5,
               ),
             ),
@@ -914,7 +914,7 @@ class PrincipalPreviewSmallNote extends StatelessWidget {
               style: principalPreviewTextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                color: PrincipalPreviewColors.muted,
+                color: context.appTheme.muted,
                 height: 1.5,
               ),
             ),
@@ -1042,8 +1042,8 @@ class PrincipalPreviewBottomNav extends StatelessWidget {
       top: false,
       child: Container(
         height: 72,
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: context.appTheme.surface,
           border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
           boxShadow: [
             BoxShadow(
@@ -1196,7 +1196,7 @@ class PrincipalPreviewEmpty extends StatelessWidget {
                   style: principalPreviewTextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w900,
-                    color: PrincipalPreviewColors.dark,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -1205,7 +1205,7 @@ class PrincipalPreviewEmpty extends StatelessWidget {
                   style: principalPreviewTextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: PrincipalPreviewColors.muted,
+                    color: context.appTheme.muted,
                     height: 1.4,
                   ),
                 ),

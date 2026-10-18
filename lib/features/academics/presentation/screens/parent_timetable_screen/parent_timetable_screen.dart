@@ -1,3 +1,4 @@
+import 'package:schooldesk1/core/utils/timetable_time.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -183,9 +184,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
       );
       final response = sectionId.isEmpty
           ? <Map<String, dynamic>>[]
-          : (await _repository.loadSlots(
-              sectionId: sectionId,
-            )).when(
+          : (await _repository.loadSlots(sectionId: sectionId)).when(
               success: (slots) => slots,
               failure: (failure) => throw StateError(failure.message),
             );
@@ -461,8 +460,8 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
           slot['room_number'] ?? roomMap['room_number'],
           fallback: '-',
         );
-        final startTime = _stringValue(slot['start_time'], fallback: '-');
-        final endTime = _stringValue(slot['end_time'], fallback: '-');
+        final startTime = normalizeTimetableTime(slot['start_time']) ?? '--:--';
+        final endTime = normalizeTimetableTime(slot['end_time']) ?? '--:--';
         final periodNum = _intValue(slot['period_number'], fallback: index + 1);
         final gradient = _subjectGradients[index % _subjectGradients.length];
 

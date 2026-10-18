@@ -61,6 +61,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     'coordinator',
   }.contains(widget.role.trim().toLowerCase());
 
+  bool get _canTestPush => const {
+    'principal',
+    'super_admin',
+  }.contains(widget.role.trim().toLowerCase());
+
   bool get _isCoordinator => widget.role.trim().toLowerCase() == 'coordinator';
 
   @override
@@ -70,6 +75,45 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       length: _tabCountForRole(widget.role),
       vsync: this,
     );
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging && _tabController.index > 0) {
+        final categories = widget.role == 'teacher'
+            ? [
+                '',
+                NotificationCategory.homework,
+                NotificationCategory.birthday,
+                NotificationCategory.healthAlert,
+                NotificationCategory.general,
+              ]
+            : widget.role == 'coordinator'
+            ? [
+                '',
+                NotificationCategory.pendingApproval,
+                NotificationCategory.birthday,
+                NotificationCategory.healthAlert,
+                NotificationCategory.event,
+              ]
+            : widget.role == 'principal'
+            ? [
+                '',
+                NotificationCategory.pendingApproval,
+                NotificationCategory.birthday,
+                NotificationCategory.healthAlert,
+                NotificationCategory.feeDue,
+                NotificationCategory.event,
+              ]
+            : [
+                '',
+                NotificationCategory.pendingApproval,
+                NotificationCategory.feeDue,
+                NotificationCategory.event,
+                NotificationCategory.general,
+              ];
+        if (_tabController.index < categories.length) {
+          _loadFilter(categories[_tabController.index], reset: true);
+        }
+      }
+    });
     _init();
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'notification-center-${widget.role}',
@@ -93,14 +137,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       );
     });
     try {
+      _service?.removeListener(_onInboxChanged);
       _service = await NotificationService.getInstance();
-      if (forceRefresh || _isSchoolLeader) {
-        await _service?.refresh();
-      }
-      // Opening the center means the current role has seen its notification
-      // inbox. Clear the unread badge immediately, including server-side
-      // unread rows that are not present in the current page.
-      await _service?.markAllAsRead(widget.role);
+      _service?.addListener(_onInboxChanged);
+      await _service?.refresh();
       await PushNotificationService.instance.syncApplicationBadge(
         count: _service?.totalUnread,
       );
@@ -128,8 +168,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     }
   }
 
+  void _onInboxChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _service?.removeListener(_onInboxChanged);
     _realtimeSubscription?.dispose();
     _tabController.dispose();
     super.dispose();
@@ -203,6 +248,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       ),
       body: SchoolDeskRepositoryStateView<Object>(
         state: _state,
+        expandStaleContent: true,
         onRetry: () => _init(forceRefresh: true),
         data: (_) => ColoredBox(
           color: bgColor,
@@ -311,6 +357,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                           ),
                           _buildList(
                             NotificationCategory.feeDue,
+                            bgColor,
+                            surfaceColor,
+                            onSurfaceColor,
+                            mutedColor,
+                          ),
+                          _buildList(
+                            NotificationCategory.event,
                             bgColor,
                             surfaceColor,
                             onSurfaceColor,
@@ -427,12 +480,22 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                 children: [
                   _ParentNotificationFilters(
                     activeFilter: _parentFilter,
-                    onChanged: (filter) =>
-                        setState(() => _parentFilter = filter),
+                    onChanged: (filter) {
+                      setState(() => _parentFilter = filter);
+                      if (filter == 'unread') {
+                        _loadFilter('unread', reset: true);
+                      }
+                      if (filter == 'fees') {
+                        _loadFilter(NotificationCategory.feeDue, reset: true);
+                      }
+                      if (filter == 'academics') {
+                        _loadFilter('academics', reset: true);
+                      }
+                    },
                   ),
                   SizedBox(height: tokens.spacing.lg),
                   Text(
-                    'Today',
+                    'Updates',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
@@ -450,12 +513,17 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                       ),
                       SizedBox(height: tokens.spacing.sm),
                     ],
-                  if ((_service?.hasMore ?? false) && items.isNotEmpty) ...[
+                  if (_parentFilter == 'all'
+                      ? (_service?.hasMore ?? false)
+                      : (_service?.hasMoreForFilter(_parentPageFilter) ??
+                            false)) ...[
                     SizedBox(height: tokens.spacing.sm),
                     OutlinedButton.icon(
                       onPressed: _service?.isLoadingMore == true
                           ? null
-                          : _loadMore,
+                          : () => _parentFilter == 'all'
+                                ? _loadMore()
+                                : _loadFilter(_parentPageFilter),
                       icon: _service?.isLoadingMore == true
                           ? const SizedBox.square(
                               dimension: 16,
@@ -662,7 +730,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             categoryLabel: _categoryLabel(category),
             hasBackendIssue: _error != null,
             runtimeStatus: PushNotificationService.instance.runtimeStatus,
-            showPushDiagnostics: _isSchoolLeader,
+            showPushDiagnostics: _canTestPush,
             diagnosticsInFlight: _runningPushDiagnostic,
             onRunPushDiagnostics: _runPushDiagnostics,
           ),
@@ -719,10 +787,15 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                 ),
               ),
             ),
-          if ((_service?.hasMore ?? false) && items.isNotEmpty) ...[
+          if (category == null
+              ? (_service?.hasMore ?? false)
+              : (_service?.hasMoreForFilter(category) ?? false)) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: _service?.isLoadingMore == true ? null : _loadMore,
+              onPressed: _service?.isLoadingMore == true
+                  ? null
+                  : () =>
+                        category == null ? _loadMore() : _loadFilter(category),
               icon: _service?.isLoadingMore == true
                   ? const SizedBox.square(
                       dimension: 16,
@@ -790,6 +863,17 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     }
   }
 
+  String get _parentPageFilter =>
+      _parentFilter == 'fees' ? NotificationCategory.feeDue : _parentFilter;
+
+  Future<void> _loadFilter(String category, {bool reset = false}) async {
+    try {
+      await _service?.loadFilter(category, reset: reset);
+    } on Object catch (error) {
+      if (mounted) setState(() => _state = _state.copyWith(error: error));
+    }
+  }
+
   Future<void> _loadMore() async {
     final service = _service;
     if (service == null || service.isLoadingMore || !service.hasMore) return;
@@ -808,6 +892,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   }
 
   Future<void> _openNotification(AppNotification notif) async {
+    await _markAsRead(notif);
+    if (!mounted) return;
     if (widget.role.trim().toLowerCase() == 'parent') {
       await ParentChildSelectionService.saveStudentId(notif.studentId);
     }
@@ -820,6 +906,20 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         context,
         target.route,
         arguments: target.arguments,
+      );
+    } else {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(notif.title),
+          content: SingleChildScrollView(child: SelectableText(notif.body)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
       );
     }
   }

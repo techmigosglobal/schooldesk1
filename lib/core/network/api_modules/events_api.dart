@@ -195,11 +195,38 @@ extension BackendEventsApi on BackendApiClient {
   /// appeared in a school surface.
   Future<List<Map<String, dynamic>>> getPrincipalEventPosts() async {
     try {
-      return (await _getEventPostsPage('/event-posts', pageSize: 100)).data;
+      final rows = <Map<String, dynamic>>[];
+      final ids = <Object?>{};
+      var page = 1;
+      while (true) {
+        final result = await _getEventPostsPage(
+          '/event-posts',
+          page: page,
+          pageSize: 100,
+        );
+        rows.addAll(result.data.where((row) => ids.add(row['id'])));
+        if (!result.hasMore || result.data.isEmpty) return rows;
+        page++;
+      }
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
+
+  Future<PaginatedList<Map<String, dynamic>>> getPublishedEventPostsPage({
+    int page = 1,
+    int pageSize = 20,
+    String destination = 'FEED',
+  }) => _getEventPostsPage(
+    '/event-posts',
+    page: page,
+    pageSize: pageSize,
+    forceRefresh: true,
+    filters: {
+      'published_only': 'true',
+      if (destination.isNotEmpty) 'destination': destination,
+    },
+  );
 
   Future<Map<String, dynamic>> getEventPost(String id) async {
     final safeId = id.trim();
@@ -257,6 +284,7 @@ extension BackendEventsApi on BackendApiClient {
     int page = 1,
     int pageSize = 20,
     bool forceRefresh = false,
+    Map<String, dynamic> filters = const {},
   }) async {
     try {
       final response = await _get(
@@ -268,6 +296,7 @@ extension BackendEventsApi on BackendApiClient {
           // the read key so an older offline snapshot cannot be reused after
           // the storage migration or after its signed links expire.
           'media_version': 2,
+          ...filters,
           if (forceRefresh)
             'refresh_nonce': DateTime.now().millisecondsSinceEpoch,
         },

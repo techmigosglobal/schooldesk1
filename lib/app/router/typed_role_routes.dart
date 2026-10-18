@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:schooldesk1/core/auth/role_context.dart';
@@ -7,9 +8,8 @@ import 'package:schooldesk1/features/profile/presentation/screens/profile_manage
 import 'package:schooldesk1/features/profile/presentation/screens/settings_screen/settings_screen.dart';
 import 'package:schooldesk1/features/shell/presentation/screens/global_search_screen/global_search_screen.dart';
 import 'package:schooldesk1/shared/screens/help_screen/help_screen.dart';
-import 'package:schooldesk1/features/communication/presentation/screens/parent_teacher_chat_screen/parent_teacher_chat_screen.dart';
+import 'package:schooldesk1/features/communication/presentation/screens/chat_workspace/chat_workspace_screen.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart';
-import 'package:schooldesk1/features/communication/presentation/screens/teacher_communication_screen/teacher_communication_screen.dart';
 import 'package:schooldesk1/roles/coordinator/coordinator_shell.dart';
 import 'package:schooldesk1/roles/kiosk/kiosk_shell.dart';
 import 'package:schooldesk1/roles/parent/parent_shell.dart';
@@ -83,8 +83,19 @@ class SharedRoleRouteArgs {
   final SchoolDeskRole role;
 
   static SharedRoleRouteArgs fromState(GoRouterState state) {
+    final api = BackendApiClient.instance;
+    final extra = state.extra;
+    final legacyRole = extra is SharedRoleRouteArgs
+        ? extra.roleName
+        : extra is String
+        ? extra
+        : extra is Map
+        ? '${extra['role'] ?? extra['role_name'] ?? ''}'
+        : null;
     return SharedRoleRouteArgs(
       role:
+          SchoolDeskRoleParsing.fromWireName(api.currentRoleName) ??
+          SchoolDeskRoleParsing.fromWireName(legacyRole) ??
           SchoolDeskRoleParsing.fromWireName(
             state.uri.queryParameters['role'],
           ) ??
@@ -151,7 +162,9 @@ class ProfileRoute extends GoRouteData {
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
-    return ProfileManagementScreen(role: args.roleName);
+    return args.role == SchoolDeskRole.parent
+        ? const AppSettingsScreen(role: 'parent')
+        : ProfileManagementScreen(role: args.roleName);
   }
 }
 
@@ -181,9 +194,7 @@ class HomeworkMessagingRoute extends GoRouteData {
   final SharedRoleRouteArgs args;
 
   static HomeworkMessagingRoute fromState(GoRouterState state) {
-    return HomeworkMessagingRoute(
-      args: SharedRoleRouteArgs.fromState(state),
-    );
+    return HomeworkMessagingRoute(args: SharedRoleRouteArgs.fromState(state));
   }
 
   @override
@@ -191,12 +202,16 @@ class HomeworkMessagingRoute extends GoRouteData {
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
-    return switch (args.role) {
-      SchoolDeskRole.parent => const ParentTeacherChatScreen(),
-      SchoolDeskRole.principal ||
-      SchoolDeskRole.coordinator ||
-      SchoolDeskRole.superAdmin => const PrincipalChatCommunicationsScreen(),
-      _ => const TeacherCommunicationScreen(),
-    };
+    return args.role == SchoolDeskRole.superAdmin
+        ? const PrincipalChatCommunicationsScreen()
+        : ChatWorkspaceScreen(
+            role: args.roleName,
+            initialConversationId: _chatArgument(state, 'conversation_id'),
+            initialStudentId: _chatArgument(state, 'student_id'),
+          );
   }
 }
+
+String _chatArgument(GoRouterState state, String key) => state.extra is Map
+    ? '${(state.extra as Map)[key] ?? state.uri.queryParameters[key] ?? ''}'
+    : state.uri.queryParameters[key] ?? '';

@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/roles/teacher/domain/teacher_attendance_context.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -9,7 +12,6 @@ import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/utils/media_url.dart';
 
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
-import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/roles/teacher/data/api_teacher_attendance_repository.dart';
@@ -27,18 +29,73 @@ class TeacherAttendanceScreen extends StatefulWidget {
       _TeacherAttendanceScreenState();
 }
 
-class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
+class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen>
+    with WidgetsBindingObserver {
   TeacherAttendanceRepository get _repository =>
       widget.repository ?? ApiTeacherAttendanceRepository.legacyDefault;
 
   bool _saving = false;
+  bool _dirty = false;
+  TeacherAttendanceContext? _attendanceContext;
+  bool _dateInitialized = false;
+  int _generation = 0;
+  String _identity = '';
+  String get _currentIdentity {
+    final api = BackendApiClient.instance;
+    return '${api.currentUserId}|${api.activeBranchId}|${api.currentRoleName}';
+  }
+
+  bool _isCurrent(int generation, String identity) =>
+      mounted && generation == _generation && identity == _currentIdentity;
+  bool get _canEdit =>
+      !_saving &&
+      !_state.isLoading &&
+      _state.error == null &&
+      _attendanceContext?.contains(_selectedDate) == true;
+
+  String _friendlyError(Object error) => error.toString().replaceFirst(
+    RegExp(r'^(Bad state: |Exception: |FormatException: )'),
+    '',
+  );
+
+  void _scopeChanged() {
+    if (_identity == _currentIdentity) return;
+    _identity = _currentIdentity;
+    _generation++;
+    scheduleMicrotask(() {
+      if (!mounted) return;
+      setState(() {
+        _dirty = false;
+        _saving = false;
+        _selectedSectionId = '';
+        _sectionId = '';
+        _staffId = '';
+        _academicYearId = '';
+        _classLabel = 'Assigned class';
+        _session = null;
+        _students = [];
+        _attendanceContext = null;
+        _dateInitialized = false;
+        _state = const RepositoryState.loading();
+      });
+      _loadFlow(refreshScope: true);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_saving) {
+      _loadFlow(refreshScope: true);
+    }
+  }
+
   RepositoryState<Object> _state = const RepositoryState.loading();
   String _classLabel = 'Assigned class';
   String _subjectLabel = 'Daily attendance';
   String _timeLabel = 'Whole day';
   AttendanceSessionModel? _session;
   List<_AttendanceStudent> _students = [];
-  DateTime _selectedDate = DateTime.now();
+  DateTime _selectedDate = DateTime(1970);
   String _selectedSectionId = '';
   String _sectionId = '';
   String _staffId = '';
@@ -51,24 +108,35 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _identity = _currentIdentity;
+    BackendApiClient.instance.addListener(_scopeChanged);
     _loadFlow();
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'teacher-attendance',
       modules: const {'attendance'},
       onRefresh: () {
-        if (mounted && !_saving) _loadFlow();
+        if (mounted && !_saving && !_dirty) _loadFlow();
       },
     );
   }
 
   @override
   void dispose() {
+    _generation++;
+    WidgetsBinding.instance.removeObserver(this);
+    BackendApiClient.instance.removeListener(_scopeChanged);
     _realtimeSubscription?.dispose();
     super.dispose();
   }
 
-  Future<void> _loadFlow() async {
+  Future<void> _loadFlow({bool refreshScope = false}) async {
+    if (_saving) return;
+    final generation = ++_generation;
+    final identity = _currentIdentity;
     final previous = _state.data;
+    final hadDirtyMarks = _dirty;
+    final requestedSection = _selectedSectionId;
     setState(() {
       _state = RepositoryState.loading(
         data: previous,
@@ -80,14 +148,22 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
     });
     try {
-      await RoleAccessService.initialize();
+      if (refreshScope) {
+        await RoleAccessService.refreshAfterConnectivity();
+      } else {
+        await RoleAccessService.initialize();
+      }
+      if (!_isCurrent(generation, identity)) return;
       final staffId = RoleAccessService.teacherStaffId;
       if (staffId.isEmpty) {
         throw Exception('Teacher staff profile is not linked to this login.');
       }
       final classOptions = _attendanceClassOptions;
-      final sectionId = _selectedSectionId.isNotEmpty
-          ? _selectedSectionId
+      final sectionId =
+          classOptions.any(
+            (row) => _sectionIdFromClassRow(row) == requestedSection,
+          )
+          ? requestedSection
           : (RoleAccessService.teacherClassId.isNotEmpty
                 ? RoleAccessService.teacherClassId
                 : _sectionIdFromClassRow(
@@ -100,57 +176,100 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         );
       }
 
-      final assignedRow = classOptions.firstWhere(
-        (row) => _sectionIdFromClassRow(row) == sectionId,
-        orElse: () => const {},
-      );
-      String effectiveAcademicYearId = teacherFlowText(
-        assignedRow['academic_year_id'],
-      );
-      try {
-        if (effectiveAcademicYearId.isEmpty) {
-          final yearsResult = await _repository.loadAcademicYears();
-          if (yearsResult.isFailure) {
-            throw StateError(
-              yearsResult.failureOrNull?.message ??
-                  'Unable to load academic years',
-            );
-          }
-          final years = yearsResult.dataOrNull!;
-          final active = years.where((y) => y.isCurrent);
-          if (active.isNotEmpty) {
-            effectiveAcademicYearId = active.first.id;
-          } else if (years.isNotEmpty) {
-            effectiveAcademicYearId = years.first.id;
-          }
-        }
-      } on Object catch (_) {
-        // If we can't get academic year, proceed with empty — backend may still accept.
-      }
-
-      // Load students for the selected class-teacher or co-teacher section.
-      final studentsResult = await _repository.loadStudents(
-        sectionId: sectionId,
-        page: 1,
-        pageSize: 120,
-      );
-      if (studentsResult.isFailure) {
-        throw StateError(
-          studentsResult.failureOrNull?.message ?? 'Unable to load students',
+      if (hadDirtyMarks && requestedSection != sectionId) {
+        throw Exception(
+          'Your class assignment changed. Your unsaved marks are retained. Choose an assigned class to continue.',
         );
       }
-      final studentsPage = studentsResult.dataOrNull!;
+      final contextResult = await _repository.loadContext(sectionId: sectionId);
+      if (!_isCurrent(generation, identity)) return;
+      if (contextResult.isFailure) {
+        throw Exception(
+          contextResult.failureOrNull?.message ??
+              'Unable to load school attendance dates.',
+        );
+      }
+      final attendanceContext = contextResult.dataOrNull!;
+      if (attendanceContext.sectionId != sectionId) {
+        throw Exception('Attendance class changed. Refresh and try again.');
+      }
+      final oldYearId = _academicYearId;
+      setState(() {
+        _attendanceContext = attendanceContext;
+        _selectedSectionId = sectionId;
+        _sectionId = sectionId;
+        _staffId = staffId;
+        _classLabel = _classLabelForSection(sectionId);
+        if (!hadDirtyMarks) {
+          _academicYearId = attendanceContext.academicYearId ?? '';
+        }
+        if (!hadDirtyMarks &&
+            (!_dateInitialized || !attendanceContext.contains(_selectedDate))) {
+          _selectedDate = attendanceContext.initialDate;
+          _dateInitialized = true;
+        }
+      });
+      if (!attendanceContext.hasSelectableDates) {
+        throw Exception(attendanceContext.guidance);
+      }
+      if (hadDirtyMarks) {
+        if (!attendanceContext.contains(_selectedDate) ||
+            oldYearId != attendanceContext.academicYearId ||
+            requestedSection != sectionId) {
+          throw Exception(
+            'School attendance dates changed. Your unsaved marks are retained. Choose a valid date or class before continuing.',
+          );
+        }
+        // Refresh ownership/finalization without replacing unsaved marks.
+        final history = await _repository.loadHistory(
+          sectionId: sectionId,
+          date: teacherFlowDate(_selectedDate),
+        );
+        if (!_isCurrent(generation, identity)) return;
+        if (history.isFailure) {
+          throw Exception(
+            history.failureOrNull?.message ??
+                'Unable to refresh attendance ownership.',
+          );
+        }
+        final matching = history.dataOrNull!.where(
+          (session) => session.periodNumber == 1,
+        );
+        setState(() {
+          _session = matching.isEmpty ? null : matching.first;
+          _state = const RepositoryState(
+            data: Object(),
+            source: RepositorySource.remote,
+            phase: RepositoryPhase.ready,
+          );
+        });
+        return;
+      }
+      final effectiveAcademicYearId = _academicYearId;
+      final studentsResult = await _repository.loadRoster(
+        sectionId: sectionId,
+        date: teacherFlowDate(_selectedDate),
+      );
+      if (!_isCurrent(generation, identity)) return;
+      if (studentsResult.isFailure) {
+        throw StateError(
+          studentsResult.failureOrNull?.message ??
+              'Unable to load attendance roster',
+        );
+      }
       final students = await _buildAttendanceStudents(
-        studentsPage.data,
+        studentsResult.dataOrNull!,
         sectionId: sectionId,
         academicYearId: effectiveAcademicYearId,
       );
 
+      if (!_isCurrent(generation, identity)) return;
       final date = teacherFlowDate(_selectedDate);
       final sessionsResult = await _repository.loadHistory(
         sectionId: sectionId,
         date: date,
       );
+      if (!_isCurrent(generation, identity)) return;
       if (sessionsResult.isFailure) {
         throw StateError(
           sessionsResult.failureOrNull?.message ??
@@ -165,7 +284,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       final session = matching.isNotEmpty ? matching.first : null;
       final attendanceRows = _hydrateSavedAttendanceRows(students, session);
 
-      if (!mounted) return;
+      if (!_isCurrent(generation, identity)) return;
       setState(() {
         _selectedSectionId = sectionId;
         _sectionId = sectionId;
@@ -179,6 +298,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         _timeLabel = 'Whole day';
         _session = session;
         _students = attendanceRows;
+        _dirty = false;
         _state = const RepositoryState(
           data: Object(),
           source: RepositorySource.remote,
@@ -186,17 +306,12 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         );
       });
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!_isCurrent(generation, identity)) return;
       setState(() {
-        _state = previous == null
-            ? RepositoryState.error(error: error)
-            : RepositoryState(
-                data: previous,
-                source: RepositorySource.cache,
-                isStale: true,
-                error: error,
-                lastUpdated: _state.lastUpdated,
-              );
+        _state = RepositoryState.error(
+          data: previous,
+          error: _friendlyError(error),
+        );
       });
     }
   }
@@ -222,12 +337,13 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
     }
     final session = result.dataOrNull!;
-    if (mounted) setState(() => _session = session);
     return session;
   }
 
   Future<void> _saveAttendance({required bool finalize}) async {
-    if (_isLockedByAnotherTeacher || (_session?.isFinalized ?? false)) {
+    if (!_canEdit ||
+        _isLockedByAnotherTeacher ||
+        (_session?.isFinalized ?? false)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text(
@@ -259,9 +375,13 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
       return;
     }
+    final generation = _generation;
+    final identity = _currentIdentity;
     setState(() => _saving = true);
     try {
       final session = await _ensureSessionForSave();
+      if (!_isCurrent(generation, identity)) return;
+      setState(() => _session = session);
       final rowsForSave = finalize ? _students : _markedStudents;
       final attendances = rowsForSave.map((student) {
         final enrollmentId = student.enrollmentId;
@@ -283,7 +403,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
           result.failureOrNull?.message ?? 'Unable to save attendance',
         );
       }
-      if (!mounted) return;
+      if (!_isCurrent(generation, identity)) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -292,14 +412,17 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      setState(() => _saving = false);
+      setState(() {
+        _saving = false;
+        _dirty = false;
+      });
       await _loadFlow();
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!_isCurrent(generation, identity)) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to save attendance: $error'),
+          content: Text('Unable to save attendance: ${_friendlyError(error)}'),
           backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -314,6 +437,8 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         !_canRequestCorrectionForSelectedSection) {
       return;
     }
+    final generation = _generation;
+    final identity = _currentIdentity;
     final controller = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
@@ -341,7 +466,11 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       ),
     );
     controller.dispose();
-    if (reason == null || reason.trim().isEmpty) return;
+    if (reason == null ||
+        reason.trim().isEmpty ||
+        !_isCurrent(generation, identity)) {
+      return;
+    }
     setState(() => _saving = true);
     try {
       final result = await _repository.requestCorrection(
@@ -354,7 +483,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
               'Unable to request attendance correction',
         );
       }
-      if (!mounted) return;
+      if (!_isCurrent(generation, identity)) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Correction request sent to principal'),
@@ -364,11 +493,13 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       setState(() => _saving = false);
       await _loadFlow();
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!_isCurrent(generation, identity)) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to request correction: $error'),
+          content: Text(
+            'Unable to request correction: ${_friendlyError(error)}',
+          ),
           backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -377,8 +508,13 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }
 
   void _markAll(String status) {
-    if (_isLockedByAnotherTeacher || (_session?.isFinalized ?? false)) return;
+    if (!_canEdit ||
+        _isLockedByAnotherTeacher ||
+        (_session?.isFinalized ?? false)) {
+      return;
+    }
     setState(() {
+      _dirty = true;
       _students = _students
           .map((student) => student.copyWith(status: status, reason: ''))
           .toList();
@@ -410,8 +546,13 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }
 
   Future<void> _markOne(_AttendanceStudent student, String status) async {
-    if (_isLockedByAnotherTeacher || (_session?.isFinalized ?? false)) return;
+    if (!_canEdit ||
+        _isLockedByAnotherTeacher ||
+        (_session?.isFinalized ?? false)) {
+      return;
+    }
     setState(() {
+      _dirty = true;
       _students = _students
           .map(
             (row) => row.id == student.id
@@ -438,46 +579,52 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       title: 'Student Attendance',
       subtitle: 'Assigned class attendance',
       selectedIndex: TeacherNav.attendance,
-      loading: _state.isLoading && !_state.hasData,
-      error: _state.hasData ? null : _state.error?.toString(),
-      onRefresh: _loadFlow,
-      child: SchoolDeskRepositoryStateView<Object>(
-        state: _state,
-        onRetry: _loadFlow,
-        emptyTitle: 'No attendance data',
-        emptyMessage: 'Assigned students are not available offline.',
-        data: (_) => TeacherFlowScrollView(
-          children: [
-            TeacherCurrentClassCard(
-              greeting: 'Attendance window',
-              classLabel: _classLabel,
-              subject: _subjectLabel,
-              timeLabel: _timeLabel,
-              actions: [
-                TeacherFlowAction(
-                  label: 'History',
-                  icon: Icons.history_rounded,
-                  onTap: () => SchoolDeskNavigation.push(
-                    context,
-                    AppRoutes.teacherAttendanceHistory,
-                  ),
+      onRefresh: () => _loadFlow(refreshScope: true),
+      child: TeacherFlowScrollView(
+        children: [
+          TeacherCurrentClassCard(
+            greeting: 'Attendance window',
+            classLabel: _classLabel,
+            subject: _subjectLabel,
+            timeLabel: _timeLabel,
+            actions: [
+              TeacherFlowAction(
+                label: 'History',
+                icon: Icons.history_rounded,
+                onTap: () => SchoolDeskNavigation.push(
+                  context,
+                  AppRoutes.teacherAttendanceHistory,
                 ),
-                TeacherFlowAction(
-                  label: 'All Present',
-                  icon: Icons.done_all_rounded,
-                  filled: true,
-                  onTap: locked ? null : () => _markAll('present'),
-                ),
-                TeacherFlowAction(
-                  label: 'Refresh',
-                  icon: Icons.refresh_rounded,
-                  onTap: _loadFlow,
-                ),
-              ],
+              ),
+              TeacherFlowAction(
+                label: 'All Present',
+                icon: Icons.done_all_rounded,
+                filled: true,
+                onTap: locked || !_canEdit ? null : () => _markAll('present'),
+              ),
+              TeacherFlowAction(
+                label: 'Refresh',
+                icon: Icons.refresh_rounded,
+                onTap: () => _loadFlow(refreshScope: true),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          _selectionPanel(),
+          const SizedBox(height: 18),
+          if (_state.isLoading) const LinearProgressIndicator(),
+          if (_state.error != null)
+            TeacherFlowCard(
+              icon: Icons.info_outline_rounded,
+              title: 'Attendance unavailable',
+              subtitle: _friendlyError(_state.error!),
+              body: TextButton.icon(
+                onPressed: () => _loadFlow(refreshScope: true),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
             ),
-            const SizedBox(height: 18),
-            _selectionPanel(),
-            const SizedBox(height: 18),
+          if (_state.hasData) ...[
             TeacherFlowMetricGrid(
               metrics: [
                 TeacherFlowMetric(
@@ -533,7 +680,9 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                           ? Align(
                               alignment: Alignment.centerLeft,
                               child: OutlinedButton.icon(
-                                onPressed: _saving ? null : _requestCorrection,
+                                onPressed: !_canEdit
+                                    ? null
+                                    : _requestCorrection,
                                 icon: const Icon(
                                   Icons.report_problem_rounded,
                                   size: 18,
@@ -614,7 +763,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed:
-                        _saving ||
+                        !_canEdit ||
                             _students.isEmpty ||
                             locked ||
                             _markedStudents.isEmpty
@@ -628,7 +777,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                 Expanded(
                   child: FilledButton.icon(
                     onPressed:
-                        _saving ||
+                        !_canEdit ||
                             _students.isEmpty ||
                             locked ||
                             _unmarkedStudents.isNotEmpty
@@ -647,7 +796,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
               ],
             ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -660,7 +809,12 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }) {
     final isSelected = student.status == status;
     return InkWell(
-      onTap: () => _markOne(student, status),
+      onTap:
+          !_canEdit ||
+              _isLockedByAnotherTeacher ||
+              (_session?.isFinalized ?? false)
+          ? null
+          : () => _markOne(student, status),
       borderRadius: BorderRadius.circular(10),
       child: Container(
         constraints: const BoxConstraints(minWidth: 92, minHeight: 40),
@@ -785,23 +939,34 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     return TeacherFlowCard(
       icon: Icons.tune_rounded,
       title: 'Attendance selection',
-      subtitle: '${teacherFlowDate(_selectedDate)} · Whole day',
+      subtitle: _dateInitialized
+          ? '${teacherFlowDate(_selectedDate)} · Whole day'
+          : 'School dates loading',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TeacherFlowActionWrap(
             actions: [
               TeacherFlowAction(
-                label: 'Date',
+                label: _dateInitialized
+                    ? 'Choose date · ${teacherFlowDate(_selectedDate)}'
+                    : 'Choose date',
                 icon: Icons.calendar_today_rounded,
-                onTap: _pickDate,
+                onTap: _saving || _attendanceContext?.hasSelectableDates != true
+                    ? null
+                    : _pickDate,
               ),
             ],
           ),
-          if (classOptions.length > 1) ...[
+          if (classOptions.isNotEmpty) ...[
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: selectedSection.isEmpty ? null : selectedSection,
+              value:
+                  classOptions.any(
+                    (row) => _sectionIdFromClassRow(row) == selectedSection,
+                  )
+                  ? selectedSection
+                  : null,
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Class / Section',
@@ -816,15 +981,28 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                   )
                   .where((item) => item.value?.trim().isNotEmpty == true)
                   .toList(),
-              onChanged: (value) {
-                if (value == null || value == _selectedSectionId) return;
-                setState(() {
-                  _selectedSectionId = value;
-                  _session = null;
-                  _students = [];
-                });
-                _loadFlow();
-              },
+              onChanged: _saving
+                  ? null
+                  : (value) async {
+                      final generation = _generation;
+                      final identity = _currentIdentity;
+                      if (value == null ||
+                          value == _selectedSectionId ||
+                          !await _confirmDiscard() ||
+                          !_isCurrent(generation, identity)) {
+                        return;
+                      }
+                      setState(() {
+                        _selectedSectionId = value;
+                        _session = null;
+                        _students = [];
+                        _attendanceContext = null;
+                        _dateInitialized = false;
+                        _dirty = false;
+                        _state = const RepositoryState.loading();
+                      });
+                      _loadFlow(refreshScope: true);
+                    },
             ),
           ],
         ],
@@ -832,16 +1010,56 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     );
   }
 
+  Future<bool> _confirmDiscard() async {
+    if (!_dirty) return true;
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Discard unsaved attendance?'),
+            content: const Text(
+              'Save the current register before changing the class or date, or discard these changes.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep editing'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Discard changes'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Future<void> _pickDate() async {
+    final calendar = _attendanceContext;
+    final generation = _generation;
+    final identity = _currentIdentity;
+    if (calendar == null ||
+        !calendar.hasSelectableDates ||
+        !await _confirmDiscard() ||
+        !_isCurrent(generation, identity)) {
+      return;
+    }
+    final initial = calendar.contains(_selectedDate)
+        ? _selectedDate
+        : calendar.initialDate;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 30)),
+      initialDate: initial,
+      firstDate: calendar.minDate!,
+      lastDate: calendar.maxDate!,
     );
-    if (picked == null) return;
+    if (picked == null || !_isCurrent(generation, identity)) return;
     setState(() {
       _selectedDate = picked;
+      _session = null;
+      _students = [];
+      _dirty = false;
+      _state = const RepositoryState.loading();
     });
     await _loadFlow();
   }

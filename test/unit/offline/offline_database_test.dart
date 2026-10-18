@@ -148,10 +148,7 @@ void main() {
       expect(await database.pendingWorkCount('account-a|branch-a|teacher'), 2);
 
       await database.markMutationFailed(second, 'permanent validation failure');
-      expect(
-        await database.pendingWorkCount('account-a|branch-a|teacher'),
-        2,
-      );
+      expect(await database.pendingWorkCount('account-a|branch-a|teacher'), 2);
     },
   );
 

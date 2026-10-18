@@ -132,8 +132,8 @@ void main() {
     const starts = ['08:00', '09:00', '10:00'];
     const ends = ['08:30', '09:30', '10:30'];
     for (var row = 0; row < 3; row++) {
-      await tester.enterText(fields.at(row * 2), starts[row]);
-      await tester.enterText(fields.at(row * 2 + 1), ends[row]);
+      await _pickTime(tester, fields.at(row * 2), starts[row]);
+      await _pickTime(tester, fields.at(row * 2 + 1), ends[row]);
     }
     await tester.tap(find.text('Save Timetable'));
     await tester.pumpAndSettle();
@@ -217,4 +217,21 @@ void _seedRoutes(TestBackendAdapter adapter) {
     'success': true,
     'data': <Map<String, dynamic>>[],
   };
+}
+
+Future<void> _pickTime(WidgetTester tester, Finder field, String value) async {
+  await tester.ensureVisible(field);
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  await tester.tap(find.byTooltip('Switch to text input mode'));
+  await tester.pumpAndSettle();
+  final parts = value.split(':');
+  final inputs = find.descendant(
+    of: find.byType(TimePickerDialog),
+    matching: find.byType(TextField),
+  );
+  await tester.enterText(inputs.at(0), parts[0]);
+  await tester.enterText(inputs.at(1), parts[1]);
+  await tester.tap(find.text('OK'));
+  await tester.pumpAndSettle();
 }

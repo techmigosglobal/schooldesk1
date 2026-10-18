@@ -47,6 +47,17 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final expectedScope = options.extra['schooldeskExpectedScope'];
+    if (expectedScope != null && expectedScope != _client.offlineAccountKey) {
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.cancel,
+          error: StateError('Your account changed. Please reopen this screen.'),
+        ),
+      );
+      return;
+    }
     // Freeze account/branch/role scope at dispatch time. Responses that arrive
     // after a switch must never be written under the new scope.
     options.extra['schooldeskScope'] = _client.offlineAccountKey;

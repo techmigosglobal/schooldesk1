@@ -168,8 +168,14 @@ begin
   insert into public.enrollments (
     school_id, student_id, section_id, academic_year_id, roll_number, status
   )
-  values (v_school, v_student, v_section, v_year, '1', 'active')
-  on conflict do nothing;
+  select v_school, v_student, v_section, v_year, '1', 'active'
+  where not exists (
+    select 1 from public.enrollments
+    where student_id = v_student and academic_year_id = v_year
+  );
+  update public.enrollments set roll_number = '1'
+  where student_id = v_student and academic_year_id = v_year
+    and section_id = v_section and roll_number is null;
 
   insert into public.guardians (
     id, school_id, student_id, full_name, relationship, phone, email,

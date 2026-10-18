@@ -1906,7 +1906,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
                     selectedColor: context.appTheme.surface,
                     disabledColor: context.appTheme.surface,
                     labelStyle: GoogleFonts.dmSans(
-                      color: const Color(0xFF1C2A32),
+                      color: context.appTheme.onSurface,
                       fontWeight: FontWeight.w700,
                     ),
                     deleteIconColor: const Color(0xFF566B78),

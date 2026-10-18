@@ -3236,9 +3236,8 @@ export async function handleFees(
         },
       ).maybeSingle();
       if (error) {
-        const status = error.message.toLowerCase().includes("already")
-          ? 409
-          : 400;
+        const status = error.message.toLowerCase().includes("already") ? 409
+          : error.message.toLowerCase().includes("not found") ? 404 : 400;
         return fail(error.message, status);
       }
       const data = rawReversal as unknown as Record<string, unknown> | null;

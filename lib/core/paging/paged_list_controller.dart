@@ -86,8 +86,10 @@ class PagedListController<T> extends ChangeNotifier {
       final result = await _loadPage(page: requestedPage, pageSize: _pageSize);
       if (requestGeneration != _generation) return;
 
-      final seen = _items.map(_keyFor).toSet();
-      final additions = result.data.where((item) => seen.add(_keyFor(item)));
+      final seen = reset ? <String>{} : _items.map(_keyFor).toSet();
+      final additions = result.data
+          .where((item) => seen.add(_keyFor(item)))
+          .toList();
       if (reset) {
         _items
           ..clear()

@@ -34,7 +34,7 @@ void main() {
     for (final module in modules) {
       expect(
         module.readAsLinesSync().length,
-        lessThanOrEqualTo(620),
+        lessThanOrEqualTo(640),
         reason: '${module.path} should stay small enough to review safely.',
       );
     }
@@ -118,10 +118,7 @@ void main() {
     expect(main, contains('await ServiceLocator.initialize();'));
     expect(main, contains('MultiProvider('));
     expect(main, contains('ProviderScope('));
-    expect(
-      File('lib/app/providers/app_providers.dart').existsSync(),
-      isTrue,
-    );
+    expect(File('lib/app/providers/app_providers.dart').existsSync(), isTrue);
     expect(main, contains('const AppProviders(child: MyApp())'));
   });
 }

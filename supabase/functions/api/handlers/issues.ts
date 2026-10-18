@@ -1,3 +1,4 @@
+import { wakeWorkflowDelivery } from "../lib/workflow_delivery.ts";
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
 import {
@@ -74,46 +75,7 @@ async function notify(
   issueId: string,
   targetRole: string,
 ) {
-  const ids = [...new Set(recipients.filter(Boolean))];
-  if (ids.length === 0) return;
-  const logs = ids.map((userId) => ({
-    school_id: school,
-    user_id: userId,
-    target_role: targetRole,
-    title,
-    body,
-    type: "issue",
-    entity_type: "issue",
-    entity_id: issueId,
-    route: ["principal", "coordinator"].includes(targetRole)
-      ? "/complaint-management-screen"
-      : targetRole === "teacher"
-      ? "/teacher-complaints-screen"
-      : targetRole === "super_admin"
-      ? "/super-admin-issues-screen"
-      : "/parent-complaints-screen",
-    priority: "high",
-    is_read: false,
-  }));
-  await svc.from("notification_logs").insert(logs);
-  const { data } = await svc.from("notification_events").insert(
-    logs.map((row) => ({
-      school_id: row.school_id,
-      user_id: row.user_id,
-      event_type: "issue",
-      event_data: {
-        title: row.title,
-        message: row.body,
-        reference_type: "issue",
-        reference_id: issueId,
-        route: row.route,
-      },
-    })),
-  ).select("id");
-  const eventIds = (data ?? []).map((row: Record<string, unknown>) =>
-    text(row.id)
-  ).filter(Boolean);
-  if (eventIds.length) triggerPushProcessing(eventIds);
+  await wakeWorkflowDelivery(svc, school, issueId);
 }
 
 async function issueForAccess(
@@ -133,26 +95,7 @@ async function notifySuperAdminsOfIssue(
   role: string,
   issue: Record<string, unknown>,
 ) {
-  const { data: admins } = await svc.from("users").select("id").eq(
-    "school_id",
-    school,
-  ).eq("role_name", "super_admin").eq("is_active", true);
-  const reporter = role === "coordinator"
-    ? "Coordinator"
-    : role === "principal"
-    ? "Principal"
-    : role === "teacher"
-    ? "Teacher"
-    : "Parent";
-  await notify(
-    svc,
-    school,
-    (admins ?? []).map((row: Record<string, unknown>) => text(row.id)),
-    "New issue raised",
-    `${reporter}: ${text(issue.title)}`,
-    text(issue.id),
-    "super_admin",
-  );
+  await wakeWorkflowDelivery(svc, school, text(issue.id));
 }
 
 export async function handleIssues(
@@ -196,6 +139,7 @@ export async function handleIssues(
       school_id: school,
       raised_by: user.id,
       raised_by_role: role,
+      delivery_ready: false,
       title,
       description,
       category: text(form.get("category")) || "other",
@@ -263,6 +207,9 @@ export async function handleIssues(
           : "attachment upload failed; issue was not created",
       );
     }
+    const { error: readyError } = await svc.from("issues").update({ delivery_ready: true })
+      .eq("id", issue.id).eq("school_id", school);
+    if (readyError) return fail(readyError.message);
     await notifySuperAdminsOfIssue(svc, school, role, issue);
     const { data: savedIssue } = await issueForAccess(
       svc,

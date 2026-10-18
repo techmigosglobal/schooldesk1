@@ -32,6 +32,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
 
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
+  final _displayNameCtrl = TextEditingController();
   final _typeCtrl = TextEditingController();
   final _boardCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
@@ -66,6 +67,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _displayNameCtrl.dispose();
     _typeCtrl.dispose();
     _boardCtrl.dispose();
     _emailCtrl.dispose();
@@ -103,6 +105,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
       if (!mounted) return;
       setState(() {
         _nameCtrl.text = _text(school['name']);
+        _displayNameCtrl.text = _text(school['display_name']);
         _typeCtrl.text = _text(school['school_type']);
         _boardCtrl.text = _text(school['affiliation_board']);
         _emailCtrl.text = _text(school['email']);
@@ -156,8 +159,10 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     setState(() => _saving = true);
     try {
       await _repository.updateCurrentSchool({
-        'name': _nameCtrl.text.trim(),
-        'school_type': _typeCtrl.text.trim(),
+        if (_nameCtrl.text.trim().isNotEmpty) 'name': _nameCtrl.text.trim(),
+        'display_name': _displayNameCtrl.text.trim(),
+        if (_typeCtrl.text.trim().isNotEmpty)
+          'school_type': _typeCtrl.text.trim(),
         'affiliation_board': _boardCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
         'phone': _phoneCtrl.text.trim(),
@@ -171,8 +176,10 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         'city': _cityCtrl.text.trim(),
         'state': _stateCtrl.text.trim(),
         'postal_code': _postalCtrl.text.trim(),
-        'timezone': _timezoneCtrl.text.trim(),
-        'currency': _currencyCtrl.text.trim().toUpperCase(),
+        if (_timezoneCtrl.text.trim().isNotEmpty)
+          'timezone': _timezoneCtrl.text.trim(),
+        if (_currencyCtrl.text.trim().isNotEmpty)
+          'currency': _currencyCtrl.text.trim().toUpperCase(),
         'motto': _mottoCtrl.text.trim(),
         'logo_url': _logoPath.trim(),
       });
@@ -340,6 +347,13 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                   ]),
                   _section('Basic Details', [
                     _field(
+                      'Display Name',
+                      _displayNameCtrl,
+                      Icons.badge_outlined,
+                      validator: (value) =>
+                          _optionalText(value, 'Display name'),
+                    ),
+                    _field(
                       'School Name',
                       _nameCtrl,
                       Icons.apartment_rounded,
@@ -357,11 +371,8 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                       'Affiliation Board',
                       _boardCtrl,
                       Icons.verified_rounded,
-                      validator: (value) => _requiredText(
-                        value,
-                        'Affiliation board',
-                        max: 80,
-                      ),
+                      validator: (value) =>
+                          _requiredText(value, 'Affiliation board', max: 80),
                     ),
                     _field(
                       'Established Year',
@@ -471,9 +482,10 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
 
   Widget _identityHeader() {
     final principalColor = context.appTheme.roleColor(SchoolDeskRole.principal);
-    final name = _nameCtrl.text.trim().isEmpty
+    final titleName = _displayNameCtrl.text.trim().isNotEmpty ? _displayNameCtrl.text.trim() : _nameCtrl.text.trim();
+    final name = titleName.isEmpty
         ? 'School Profile'
-        : _nameCtrl.text.trim();
+        : titleName;
     final subtitle = [
       _boardCtrl.text.trim(),
       _typeCtrl.text.trim(),
@@ -567,6 +579,8 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
   }
 
   Widget _section(String title, List<Widget> children) {
+    children = children.where((child) => child is! SizedBox).toList();
+    if (children.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -683,6 +697,9 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
+    if (!_editing && controller.text.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: TextFormField(
@@ -711,7 +728,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
 
   String? _requiredText(String? value, String field, {int max = 120}) {
     final text = value?.trim() ?? '';
-    if (text.isEmpty) return '$field is required.';
+    if (text.isEmpty) return null;
     if (text.length > max) return '$field must be $max characters or less.';
     return null;
   }
@@ -724,9 +741,10 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
   }
 
   String? _requiredEmail(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
     final requiredError = _requiredText(value, 'School email', max: 160);
     if (requiredError != null) return requiredError;
-    final text = value!.trim();
+    final text = value.trim();
     final emailPattern = RegExp(
       r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$',
     );
@@ -735,9 +753,10 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
   }
 
   String? _requiredPhone(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
     final requiredError = _requiredText(value, 'School phone', max: 24);
     if (requiredError != null) return requiredError;
-    final normalized = value!.replaceAll(RegExp(r'[\s()-]'), '');
+    final normalized = value.replaceAll(RegExp(r'[\s()-]'), '');
     if (!RegExp(r'^\+?[0-9]{7,15}$').hasMatch(normalized)) {
       return 'Enter a valid school phone number.';
     }
@@ -758,18 +777,20 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
   }
 
   String? _requiredPostalCode(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
     final requiredError = _requiredText(value, 'Postal code', max: 12);
     if (requiredError != null) return requiredError;
-    if (!RegExp(r'^[A-Za-z0-9 -]{3,12}$').hasMatch(value!.trim())) {
+    if (!RegExp(r'^[A-Za-z0-9 -]{3,12}$').hasMatch(value.trim())) {
       return 'Enter a valid postal code.';
     }
     return null;
   }
 
   String? _requiredEstablishedYear(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
     final requiredError = _requiredText(value, 'Established year', max: 4);
     if (requiredError != null) return requiredError;
-    final year = int.tryParse(value!.trim());
+    final year = int.tryParse(value.trim());
     final currentYear = DateTime.now().year;
     if (year == null || year < 1800 || year > currentYear) {
       return 'Enter a year between 1800 and $currentYear.';
@@ -778,18 +799,20 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
   }
 
   String? _requiredTimezone(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
     final requiredError = _requiredText(value, 'Timezone', max: 64);
     if (requiredError != null) return requiredError;
-    if (!RegExp(r'^[A-Za-z_]+/[A-Za-z_]+$|^UTC$').hasMatch(value!.trim())) {
+    if (!RegExp(r'^[A-Za-z_]+/[A-Za-z_]+$|^UTC$').hasMatch(value.trim())) {
       return 'Use an IANA timezone like Asia/Kolkata or UTC.';
     }
     return null;
   }
 
   String? _requiredCurrency(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
     final requiredError = _requiredText(value, 'Currency', max: 3);
     if (requiredError != null) return requiredError;
-    if (!RegExp(r'^[A-Za-z]{3}$').hasMatch(value!.trim())) {
+    if (!RegExp(r'^[A-Za-z]{3}$').hasMatch(value.trim())) {
       return 'Use a 3-letter currency code like INR.';
     }
     return null;
@@ -801,8 +824,8 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         final compact = constraints.maxWidth < 430;
         final message = Text(
           _editing
-              ? 'Review changes, then save them to Supabase.'
-              : 'School identity is synced from Supabase.',
+              ? 'Review changes, then save.'
+              : 'Your school details are up to date.',
           style: GoogleFonts.dmSans(
             fontSize: 12,
             color: context.appTheme.onSurface,

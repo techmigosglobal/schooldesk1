@@ -179,6 +179,17 @@ class LocalHomeworkDrafts extends Table {
   Set<Column<Object>> get primaryKey => {accountKey, localId};
 }
 
+/// Composers persist independently of HTTP snapshots and queued mutations.
+class LocalChatDrafts extends Table {
+  TextColumn get accountKey => text()();
+  TextColumn get threadKey => text()();
+  TextColumn get body => text()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {accountKey, threadKey};
+}
+
 @DriftDatabase(
   tables: [
     CachedResponses,
@@ -190,6 +201,7 @@ class LocalHomeworkDrafts extends Table {
     LocalAttendanceSessions,
     LocalStudents,
     LocalHomeworkDrafts,
+    LocalChatDrafts,
   ],
 )
 class OfflineDatabase extends _$OfflineDatabase {
@@ -208,7 +220,7 @@ class OfflineDatabase extends _$OfflineDatabase {
       );
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -227,6 +239,7 @@ class OfflineDatabase extends _$OfflineDatabase {
           'ON sync_outbox_entries (account_key, idempotency_key)',
         );
       }
+      if (from < 6) await m.createTable(localChatDrafts);
     },
   );
 
@@ -296,6 +309,7 @@ class OfflineDatabase extends _$OfflineDatabase {
         'local_attendance_sessions',
         'local_students',
         'local_homework_drafts',
+        'local_chat_drafts',
       ]) {
         await customStatement('DELETE FROM $table WHERE account_key = ?', [
           accountKey,

@@ -105,8 +105,9 @@ void main() {
       final dashboard = File(
         'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
       ).readAsStringSync();
-      final navigation = File('lib/core/widgets/app_navigation.dart')
-          .readAsStringSync();
+      final navigation = File(
+        'lib/core/widgets/app_navigation.dart',
+      ).readAsStringSync();
 
       expect(reports, contains("if (!_isCoordinator) const Tab(text: 'Fee')"));
       expect(reports, contains("if (!_isCoordinator) _buildFeeTab()"));
@@ -190,7 +191,10 @@ void main() {
       expect(notifications, contains("'coordinator'"));
       expect(notifications, contains('if (!_isCoordinator)'));
       expect(calendar, contains("role == 'coordinator'"));
-      expect(classHub, contains("arguments: _isCoordinator ? 'coordinator' : 'principal'"));
+      expect(
+        classHub,
+        contains("arguments: _isCoordinator ? 'coordinator' : 'principal'"),
+      );
     });
 
     test(

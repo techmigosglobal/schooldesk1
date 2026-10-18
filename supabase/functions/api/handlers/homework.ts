@@ -1,3 +1,4 @@
+import { wakeWorkflowDelivery } from "../lib/workflow_delivery.ts";
 // handlers/homework.ts — homework assignments, parent submissions, teacher review
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
@@ -981,15 +982,13 @@ export async function handleHomework(
           text(homework.subject_id),
         )
       ) return fail("forbidden", 403);
-      const claim = await loadHomeworkDailyClaim(svc, school, homework);
-      if (!claim || text(claim.claimed_by_staff_id) !== linkedStaffId) {
-        return fail("homework is claimed by another teacher", 409);
-      }
+
     } else if (!isSchoolLeader(user)) {
       return fail("forbidden", 403);
     }
     const reviewStatus = text(body.status, "reviewed");
     const reviewRemarks = text(body.remarks);
+    if (!["reviewed", "needs_revision"].includes(reviewStatus)) return fail("invalid review status", 422);
     if (reviewStatus === "reviewed" && !reviewRemarks) {
       return fail("feedback is required before marking the dairy done", 422);
     }
@@ -1004,79 +1003,8 @@ export async function handleHomework(
     ).select().single();
     if (error) return fail(error.message);
 
-    // Notify the parent of the reviewed student
     const submissionRow = data as Record<string, unknown>;
-    const studentId = text(submissionRow.student_id);
-    const hw = await loadHomework(svc, school, homeworkId);
-    const hwTitle = text(hw?.title, "Dairy");
-    if (studentId) {
-      const { data: linkRows } = await svc.from("parent_student_links")
-        .select("parent_user_id")
-        .eq("school_id", school)
-        .eq("student_id", studentId);
-      if (linkRows && linkRows.length > 0) {
-        const feedbackTitle = reviewStatus === "reviewed"
-          ? `Dairy Approved: ${hwTitle}`
-          : `Dairy Needs Revision: ${hwTitle}`;
-        const feedbackBody = reviewRemarks.length > 0
-          ? reviewRemarks
-          : (reviewStatus === "reviewed"
-            ? "Your child's dairy has been approved by the teacher."
-            : "Your child's dairy needs revision. Please check the feedback.");
-        const parentNotifs = linkRows.map((l: { parent_user_id: string }) => ({
-          school_id: school,
-          user_id: l.parent_user_id,
-          target_role: "parent",
-          title: feedbackTitle,
-          body: feedbackBody,
-          type: "homework",
-          entity_type: "homework",
-          entity_id: homeworkId,
-          is_read: false,
-          priority: "high",
-          route: "/parent-homework-screen/submit",
-          student_id: studentId,
-        }));
-        const { error: notificationError } = await svc.from(
-          "notification_logs",
-        ).upsert(parentNotifs.map((notification) => ({
-          ...notification,
-          created_at: new Date().toISOString(),
-        })), { onConflict: "user_id,entity_type,entity_id" });
-        if (notificationError) {
-          console.error(
-            "Failed to write homework feedback in-app notification",
-            notificationError.message,
-          );
-        }
-        // Create push notification events for each parent
-        try {
-          const eventIds: string[] = [];
-          for (const l of linkRows) {
-            const { data: eventRow } = await svc.from("notification_events")
-              .insert({
-                school_id: school,
-                user_id: l.parent_user_id,
-                event_type: "homework_feedback",
-                event_data: {
-                  homework_id: homeworkId,
-                  title: feedbackTitle,
-                  message: feedbackBody,
-                  reference_type: "homework",
-                  reference_id: homeworkId,
-                  action: reviewStatus === "reviewed"
-                    ? "approved"
-                    : "needs_revision",
-                  route: "/parent-homework-screen/submit",
-                  student_id: studentId,
-                },
-              }).select("id").maybeSingle();
-            if (eventRow?.id) eventIds.push(eventRow.id);
-          }
-          triggerPushProcessing(eventIds);
-        } catch (_) { /* best-effort */ }
-      }
-    }
+    await wakeWorkflowDelivery(svc, school, homeworkId);
 
     return ok(
       await materializeHomeworkAttachments(

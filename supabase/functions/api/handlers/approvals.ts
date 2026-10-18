@@ -1,3 +1,4 @@
+import { readAllApprovalRows, uniqueGenericApprovals } from "../lib/approval_feed_utils.ts";
 // handlers/approvals.ts
 // NOTE: 'exam' module is permanently excluded — no exam approval entries
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
@@ -113,6 +114,9 @@ export async function handleApprovals(
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
 
   if (path === "/approvals/feed" && method === "GET") {
+    if (!["principal", "coordinator", "admin", "super_admin"].includes(
+      text(user.app_metadata?.role_name).toLowerCase(),
+    )) return fail("forbidden", 403);
     const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1"));
     const requestedSize = Number.parseInt(url.searchParams.get("page_size") ?? "20");
     const size = Math.min(Math.max(Number.isFinite(requestedSize) ? requestedSize : 20, 1), 100);
@@ -122,27 +126,27 @@ export async function handleApprovals(
 
     const [accounts, generic, staffLeave, studentLeave, concessions, payments, events] =
       await Promise.all([
-        svc.from("account_approvals").select(
+        readAllApprovalRows(() => svc.from("account_approvals").select(
           "id, user_id, role, status, created_at, updated_at",
-        ).eq("school_id", school).limit(100),
-        svc.from("approval_requests").select(
+        ).eq("school_id", school).order("id")),
+        readAllApprovalRows(() => svc.from("approval_requests").select(
           "id, module, operation_type, entity_type, entity_id, status, submitted_at, created_at, review_note, requested_by:users!approval_requests_requested_by_fkey(name, role_name)",
-        ).eq("school_id", school).limit(100),
-        svc.from("leave_applications").select(
+        ).eq("school_id", school).order("id")),
+        readAllApprovalRows(() => svc.from("leave_applications").select(
           "id, staff_id, status, start_date, end_date, reason, created_at, staff:staff(first_name, last_name, designation)",
-        ).eq("school_id", school).limit(100),
-        svc.from("student_leave_applications").select(
+        ).eq("school_id", school).order("id")),
+        readAllApprovalRows(() => svc.from("student_leave_applications").select(
           "id, student_id, status, start_date, end_date, reason, created_at, updated_at, student:students(first_name, last_name, current_section:sections(section_name, grade:grades(grade_name)))",
-        ).eq("school_id", school).limit(100),
-        financeAuthorized ? svc.from("fee_concessions").select(
+        ).eq("school_id", school).order("id")),
+        financeAuthorized ? readAllApprovalRows(() => svc.from("fee_concessions").select(
           "id, student_id, status, amount, reason, created_at, updated_at, student:students(first_name, last_name, current_section:sections(section_name, grade:grades(grade_name)))",
-        ).eq("school_id", school).limit(100) : Promise.resolve({ data: [], error: null }),
-        financeAuthorized ? svc.from("parent_payment_requests").select(
+        ).eq("school_id", school).order("id")) : Promise.resolve({ data: [], error: null }),
+        financeAuthorized ? readAllApprovalRows(() => svc.from("parent_payment_requests").select(
           "id, student_id, parent_user_id, status, amount, payment_method, transaction_ref, remarks, admin_remarks, payment_date, created_at, updated_at, student:students(first_name, last_name), invoice:fee_invoices(invoice_number)",
-        ).eq("school_id", school).limit(100) : Promise.resolve({ data: [], error: null }),
-        svc.from("event_posts").select(
+        ).eq("school_id", school).order("id")) : Promise.resolve({ data: [], error: null }),
+        readAllApprovalRows(() => svc.from("event_posts").select(
           "id, title, body, status, created_at, updated_at, created_by",
-        ).eq("school_id", school).in("status", ["pending", "submitted"]).limit(100),
+        ).eq("school_id", school).in("status", ["pending", "submitted"]).order("id")),
       ]);
     const results = [accounts, generic, staffLeave, studentLeave, concessions, payments, events];
     const queryError = results.find((result) => result.error);
@@ -182,7 +186,12 @@ export async function handleApprovals(
         decisionPath: `/account-approvals/${text(row.id)}/approve`,
       });
     }
-    for (const row of generic.data ?? []) {
+    for (const row of uniqueGenericApprovals(generic.data ?? [], {
+      account: accounts.data ?? [], event: events.data ?? [],
+      leave: staffLeave.data ?? [], student_leave: studentLeave.data ?? [],
+      fee_concession: concessions.data ?? [], payment: payments.data ?? [],
+    })) {
+      if ([row.module, row.entity_type].some((value) => REMOVED_MODULES.includes(text(value).toLowerCase()))) continue;
       if (!financeAuthorized && isFinanceApproval(row.module, row.entity_type)) continue;
       const requestedBy = (row.requested_by ?? {}) as unknown as Record<string, unknown>;
       const type = approvalType(row.module, row.entity_type);

@@ -34,6 +34,7 @@ class RouteAccessGuard {
   static const Map<String, Set<String>> _routeRoles = {
     AppRoutes.idCardGeneration: {'principal'},
     // Principal routes
+    AppRoutes.principalSendNotification: {'principal'},
     AppRoutes.principalDashboard: {'principal'},
     AppRoutes.coordinatorDashboard: {'coordinator'},
     AppRoutes.staffManagement: {'principal'},
@@ -154,6 +155,9 @@ class RouteAccessGuard {
     }
 
     final normalizedRole = _normalizeRole(currentRole);
+    if (normalizedRole == 'parent' && routeName == AppRoutes.profileScreen) {
+      return AppRoutes.settingsScreen;
+    }
     if (normalizedRole == 'kiosk' && routeName != AppRoutes.kioskQrAttendance) {
       return dashboardForRole(normalizedRole);
     }
@@ -180,8 +184,14 @@ class RouteAccessGuard {
     if (publicRoutes.contains(routeName)) {
       return const <String>{};
     }
+    if (routeName == AppRoutes.profileScreen) {
+      return {...authenticatedRoles}..remove('parent');
+    }
     if (sharedProtectedRoutes.contains(routeName)) {
       return authenticatedRoles;
+    }
+    if (routeName == AppRoutes.principalSendNotification) {
+      return const {'principal'};
     }
     final configured = _routeRoles[routeName] ?? const <String>{};
     if (configured.contains('principal') &&

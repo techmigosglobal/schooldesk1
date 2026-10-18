@@ -21,6 +21,7 @@ extension BackendSchoolApi on BackendApiClient {
   Future<Map<String, dynamic>> getCurrentSchool({
     bool forceRefresh = false,
   }) async {
+    final scope = offlineAccountKey;
     try {
       final cached = _cachedCurrentSchool;
       if (cached != null && !forceRefresh) {
@@ -31,8 +32,14 @@ extension BackendSchoolApi on BackendApiClient {
         queryParameters: forceRefresh
             ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
             : null,
+        options: forceRefresh
+            ? Options(headers: const {'Cache-Control': 'no-store'})
+            : null,
       );
       final data = _asMap(response.data);
+      if (scope != offlineAccountKey) {
+        throw ServerException(message: 'Your school changed. Please refresh.');
+      }
       if (data['success'] == true) {
         final school = Map<String, dynamic>.from(data['data'] as Map? ?? {});
         _cachedCurrentSchool = school;
@@ -47,11 +54,16 @@ extension BackendSchoolApi on BackendApiClient {
   Future<Map<String, dynamic>> updateCurrentSchool(
     Map<String, dynamic> payload,
   ) async {
+    final scope = offlineAccountKey;
     try {
       final response = await _dio.patch('/schools/current', data: payload);
+      if (scope != offlineAccountKey) {
+        throw ServerException(message: 'Your school changed. Please refresh.');
+      }
       final data = _asMap(response.data);
       if (data['success'] == true) {
         final school = Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        await invalidateCachedReads();
         _cachedCurrentSchool = school;
         return school;
       }
@@ -84,7 +96,12 @@ extension BackendSchoolApi on BackendApiClient {
       final data = _asMap(response.data);
       if (data['success'] == true) {
         final payload = Map<String, dynamic>.from(data['data'] as Map? ?? {});
-        return '${payload['logo_url'] ?? ''}';
+        final logoUrl = '${payload['logo_url'] ?? ''}'.trim();
+        if (logoUrl.isEmpty) {
+          throw ServerException(message: 'School logo was not saved');
+        }
+        await invalidateCachedReads();
+        return logoUrl;
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to upload school logo',

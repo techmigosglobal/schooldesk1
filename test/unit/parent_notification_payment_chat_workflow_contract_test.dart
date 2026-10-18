@@ -14,9 +14,13 @@ void main() {
       final communicationsHandler = File(
         'supabase/functions/api/handlers/communications.ts',
       ).readAsStringSync();
+      final scopeHandler = File(
+        'supabase/functions/api/handlers/notification_scope.ts',
+      ).readAsStringSync();
 
-      expect(notificationHandler, contains('parent_student_links'));
-      expect(notificationHandler, contains('linkedStudentIds'));
+      expect(notificationHandler, contains('scopeNotificationQuery'));
+      expect(scopeHandler, contains('parent_student_links'));
+      expect(scopeHandler, contains('parent_user_id'));
       expect(
         communicationsHandler,
         contains('row.reference_type ?? row.entity_type'),

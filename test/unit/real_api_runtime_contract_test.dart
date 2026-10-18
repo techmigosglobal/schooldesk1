@@ -47,7 +47,7 @@ void main() {
       'lib/core/widgets/teacher_navigation.dart',
     ]) {
       final source = File(path).readAsStringSync();
-      expect(source, contains("school['organization_name'] ?? school['name']"));
+      expect(source, contains("school['display_name'] ?? school['name']"));
       expect(source, isNot(contains("_schoolName = 'Arish Ville Preschool'")));
     }
   });

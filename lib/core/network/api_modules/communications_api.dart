@@ -297,14 +297,75 @@ extension BackendCommunicationsApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> sendCustomBroadcast({
+    required String key,
+    required String title,
+    required String message,
+    required List<String> roles,
+    required String mode,
+    required List<String> userIds,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/notifications/broadcasts',
+        data: {
+          'title': title,
+          'message': message,
+          'roles': roles,
+          'mode': mode,
+          'user_ids': userIds,
+        },
+        options: Options(headers: {'Idempotency-Key': key}),
+      );
+      final envelope = _asMap(response.data);
+      if (envelope['success'] != true) {
+        throw ServerException(
+          message: envelope['error'] ?? 'Unable to send notification',
+        );
+      }
+      return _asMap(envelope['data']);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> reverseFeePayment(
+    String id,
+    String reason,
+  ) async {
+    try {
+      final response = await _dio.delete(
+        '/fees/payments/$id',
+        data: {'reason': reason},
+      );
+      final envelope = _asMap(response.data);
+      if (envelope['success'] != true) {
+        throw ServerException(
+          message: envelope['error'] ?? 'Unable to reverse payment',
+        );
+      }
+      return _asMap(envelope['data']);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<NotificationPage> getNotificationsPage({
     int page = 1,
     int pageSize = 50,
+    String? category,
+    bool? isRead,
   }) async {
     try {
       final response = await _get(
         '/notifications',
-        queryParameters: {'page': page, 'page_size': pageSize},
+        queryParameters: {
+          'page': page,
+          'page_size': pageSize,
+          if (category != null) 'category': category,
+          if (isRead != null) 'is_read': '$isRead',
+        },
+        options: Options(headers: const {'Cache-Control': 'no-store'}),
       );
       final envelope = _asMap(response.data);
       if (envelope['success'] == true) {
@@ -312,7 +373,7 @@ extension BackendCommunicationsApi on BackendApiClient {
         final data = rawData is Map
             ? _asMap(rawData)
             : const <String, dynamic>{};
-        final rows = rawData is Map ? data['items'] : rawData;
+        final rows = rawData is Map ? data['items'] ?? data['data'] : rawData;
         final items = _asListMap(rows).map((notification) {
           final normalized = Map<String, dynamic>.from(notification);
           normalized['id'] ??= normalized['notification_id'];
@@ -333,11 +394,6 @@ extension BackendCommunicationsApi on BackendApiClient {
       throw ServerException(
         message: envelope['error'] ?? 'Failed to get notifications',
       );
-    } on AuthException catch (_) {
-      // Auth token may be expired or cleared by a concurrent request.
-      // Return empty list instead of crashing — the user will see the
-      // login screen shortly if the session is truly expired.
-      return NotificationPage.empty(page: page, pageSize: pageSize);
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -349,12 +405,14 @@ extension BackendCommunicationsApi on BackendApiClient {
 
   Future<void> markNotificationRead(String notificationId) async {
     try {
-      final response = await SchoolDeskApi.instance.client.markNotificationRead(
-        notificationId,
+      final response = await _dio.put(
+        '/notifications/$notificationId/read',
+        data: const <String, dynamic>{},
       );
-      if (response.success != true) {
+      final envelope = _asMap(response.data);
+      if (envelope['success'] != true) {
         throw ServerException(
-          message: response.error ?? 'Failed to mark notification as read',
+          message: envelope['error'] ?? 'Failed to mark notification as read',
         );
       }
     } on DioException catch (e) {

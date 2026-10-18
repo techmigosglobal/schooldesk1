@@ -219,7 +219,7 @@ void main() {
       expect(principal, contains('method === "PUT"'));
       expect(principal, contains('method === "DELETE"'));
       expect(principal, contains('/principal/subjects'));
-      expect(principal, contains('/actions'));
+      expect(principal, contains('type: "principal_action"'));
     },
   );
 
@@ -244,10 +244,7 @@ void main() {
       studentOversight,
       contains('_repository.loadGrades(forceRefresh: true)'),
     );
-    expect(
-      adminStudents,
-      contains('forceRefresh: resetPage'),
-    );
+    expect(adminStudents, contains('forceRefresh: resetPage'));
     expect(adminStudents, contains('forceRefresh: resetPage'));
   });
 

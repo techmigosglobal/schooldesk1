@@ -393,6 +393,14 @@ class PushNotificationService {
     // app is foregrounded. Retry the local-notification setup here so a
     // transient startup/plugin failure does not silently turn a delivered
     // push into an in-app-only notification.
+    int? badgeCount;
+    try {
+      final service = await NotificationService.getInstance();
+      await service.refresh();
+      badgeCount = service.totalUnread;
+    } on Object catch (_) {
+      // Showing the push remains useful if notification history is offline.
+    }
     if (!_localNotificationsReady) {
       await _initializeLocalNotifications();
     }
@@ -402,14 +410,6 @@ class PushNotificationService {
         name: 'PushNotificationService',
       );
       return;
-    }
-    int? badgeCount;
-    try {
-      final service = await NotificationService.getInstance();
-      await service.refresh();
-      badgeCount = service.totalUnread;
-    } on Object catch (_) {
-      // Showing the push remains useful if notification history is offline.
     }
     final notification = message.notification;
     final title =

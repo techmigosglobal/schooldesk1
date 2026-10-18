@@ -31,7 +31,6 @@ class ParentDrawer extends StatefulWidget {
 class _ParentDrawerState extends State<ParentDrawer> {
   NotificationService? _notifService;
   final ChatUnreadService _chatUnreadService = ChatUnreadService.instance;
-  int _unreadCount = 0;
   int _unreadMessages = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Family access';
@@ -61,7 +60,6 @@ class _ParentDrawerState extends State<ParentDrawer> {
     if (!mounted) return;
     setState(() {
       _notifService = svc;
-      _unreadCount = svc.getUnreadCountForRole('parent');
     });
     svc.addListener(_onNotifChanged);
   }
@@ -82,7 +80,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
       final childNames = RoleAccessService.parentChildNames;
       setState(() {
         _schoolName = safeText(
-          school['organization_name'] ?? school['name'],
+          school['display_name'] ?? school['name'],
           fallback: 'School',
         );
         _schoolSubtitle = safeText(
@@ -107,7 +105,6 @@ class _ParentDrawerState extends State<ParentDrawer> {
   void _onNotifChanged() {
     if (!mounted) return;
     setState(() {
-      _unreadCount = _notifService?.getUnreadCountForRole('parent') ?? 0;
     });
   }
 
@@ -276,19 +273,6 @@ class _ParentDrawerState extends State<ParentDrawer> {
           icon: Icons.search_rounded,
           label: 'Global Search',
           route: AppRoutes.globalSearch,
-        ),
-        SchoolDeskNavigationFooterAction(
-          icon: Icons.notifications_outlined,
-          label: 'Notifications',
-          route: AppRoutes.notificationCenter,
-          arguments: 'parent',
-          badgeCount: _unreadCount,
-        ),
-        const SchoolDeskNavigationFooterAction(
-          icon: Icons.account_circle_outlined,
-          label: 'Profile',
-          route: AppRoutes.profileScreen,
-          arguments: 'parent',
         ),
         const SchoolDeskNavigationFooterAction(
           icon: Icons.settings_outlined,

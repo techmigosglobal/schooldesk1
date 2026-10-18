@@ -31,7 +31,7 @@ void main() {
         center,
         contains('PushNotificationService.instance.runtimeStatus'),
       );
-      expect(center, contains("label: 'Push'"));
+      expect(center, contains("label: 'Push ready'"));
       expect(center, isNot(contains('Push Ready')));
       expect(center, isNot(contains('Enable Push')));
       expect(center, contains('Test Push'));

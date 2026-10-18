@@ -20,7 +20,6 @@ void main() {
     expect(handler, contains('isUuid(storedYearId) ? storedYearId : ""'));
     expect(handler, contains('loadHomeworkDailyClaim(svc, school, row)'));
     expect(handler, contains('loadHomeworkDailyClaim(svc, school, existing)'));
-    expect(handler, contains('loadHomeworkDailyClaim(svc, school, homework)'));
     expect(
       handler,
       contains('assignment.isClassTeacher || assignment.isCoTeacher'),

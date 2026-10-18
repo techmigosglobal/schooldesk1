@@ -8,14 +8,13 @@ void main() {
     () {
       final routes = File('lib/routes/app_routes.dart').readAsStringSync();
 
-      expect(routes, contains("case 'parent':"));
-      expect(routes, contains('return const ParentTeacherChatScreen();'));
-      expect(routes, contains("case 'principal':"));
-      expect(
-        routes,
-        contains('return const PrincipalChatCommunicationsScreen();'),
-      );
-      expect(routes, contains('return const TeacherCommunicationScreen();'));
+      expect(routes, contains('ChatWorkspaceScreen('));
+      expect(routes, contains('_chatFromArguments'));
+      expect(routes, contains("'parent'"));
+      expect(routes, contains("'teacher'"));
+      expect(routes, contains("'principal'"));
+      expect(routes, contains("'coordinator'"));
+      expect(routes, contains('PrincipalChatCommunicationsScreen('));
     },
   );
 

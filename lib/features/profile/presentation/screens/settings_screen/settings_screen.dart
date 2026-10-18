@@ -21,11 +21,7 @@ class AppSettingsScreen extends StatefulWidget {
   final String role;
   final ProfileRepository? repository;
 
-  const AppSettingsScreen({
-    super.key,
-    required this.role,
-    this.repository,
-  });
+  const AppSettingsScreen({super.key, required this.role, this.repository});
 
   @override
   State<AppSettingsScreen> createState() => _AppSettingsScreenState();
@@ -95,6 +91,18 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
         data: (_) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (widget.role.trim().toLowerCase() != 'parent')
+              ListTile(
+                leading: const Icon(Icons.manage_accounts_outlined),
+                title: const Text('My account'),
+                subtitle: const Text('View and edit your personal details'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => SchoolDeskNavigation.push(
+                  context,
+                  AppRoutes.profileScreen,
+                  arguments: widget.role,
+                ),
+              ),
             _buildSection(
               'APPEARANCE',
               surfaceColor,
@@ -120,10 +128,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   subtitle:
                       'Uses Arish Ville sizing, not the phone display size',
                   value:
-                      _settingsProvider?.getSetting(
-                        'font_size',
-                        'medium',
-                      ) ??
+                      _settingsProvider?.getSetting('font_size', 'medium') ??
                       'medium',
                   options: const ['small', 'medium', 'large'],
                   onSurfaceColor: onSurfaceColor,
@@ -139,10 +144,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   title: 'Compact View',
                   subtitle: 'Show more content with reduced spacing',
                   value:
-                      _settingsProvider?.getSetting(
-                        'compact_view',
-                        false,
-                      ) ??
+                      _settingsProvider?.getSetting('compact_view', false) ??
                       false,
                   onSurfaceColor: onSurfaceColor,
                   mutedColor: mutedColor,
@@ -169,10 +171,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   onSurfaceColor: onSurfaceColor,
                   mutedColor: mutedColor,
                   onChanged: (v) async {
-                    await _notifService?.updateSetting(
-                      'pending_approvals',
-                      v,
-                    );
+                    await _notifService?.updateSetting('pending_approvals', v);
                     if (mounted) setState(() {});
                   },
                 ),
@@ -234,10 +233,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Icon(
-                          Icons.chevron_right_rounded,
-                          color: mutedColor,
-                        ),
+                      : Icon(Icons.chevron_right_rounded, color: mutedColor),
                   onTap: _createBackup,
                 ),
                 _buildActionTile(
@@ -269,12 +265,8 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            _buildSection(
-              'ACCOUNT',
-              surfaceColor,
-              outlineColor,
-              mutedColor,
-              [
+            _buildSection('ACCOUNT', surfaceColor, outlineColor, mutedColor, [
+              if (widget.role.trim().toLowerCase() != 'parent')
                 _buildActionTile(
                   icon: Icons.person_outline_rounded,
                   iconColor: context.appTheme.primary,
@@ -292,34 +284,27 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     arguments: widget.role,
                   ),
                 ),
-                _buildActionTile(
-                  icon: Icons.lock_outline_rounded,
-                  iconColor: context.appTheme.secondary,
-                  title: 'Change Password',
-                  subtitle: 'Update your login password',
-                  onSurfaceColor: onSurfaceColor,
-                  mutedColor: mutedColor,
-                  trailing: Icon(
-                    Icons.chevron_right_rounded,
-                    color: mutedColor,
-                  ),
-                  onTap: _openChangePasswordPage,
-                ),
-                _buildActionTile(
-                  icon: Icons.logout_rounded,
-                  iconColor: context.appTheme.error,
-                  title: 'Sign Out',
-                  subtitle: 'Log out from your account',
-                  onSurfaceColor: onSurfaceColor,
-                  mutedColor: mutedColor,
-                  trailing: Icon(
-                    Icons.chevron_right_rounded,
-                    color: mutedColor,
-                  ),
-                  onTap: () => LogoutService.signOut(context),
-                ),
-              ],
-            ),
+              _buildActionTile(
+                icon: Icons.lock_outline_rounded,
+                iconColor: context.appTheme.secondary,
+                title: 'Change Password',
+                subtitle: 'Update your login password',
+                onSurfaceColor: onSurfaceColor,
+                mutedColor: mutedColor,
+                trailing: Icon(Icons.chevron_right_rounded, color: mutedColor),
+                onTap: _openChangePasswordPage,
+              ),
+              _buildActionTile(
+                icon: Icons.logout_rounded,
+                iconColor: context.appTheme.error,
+                title: 'Sign Out',
+                subtitle: 'Log out from your account',
+                onSurfaceColor: onSurfaceColor,
+                mutedColor: mutedColor,
+                trailing: Icon(Icons.chevron_right_rounded, color: mutedColor),
+                onTap: () => LogoutService.signOut(context),
+              ),
+            ]),
             const SizedBox(height: 16),
             _buildSection('ABOUT', surfaceColor, outlineColor, mutedColor, [
               _buildInfoTile(
@@ -857,7 +842,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
               const _BackendGapBanner(
                 icon: Icons.verified_user_outlined,
                 message:
-                    'Password changes are verified against the VPS backend for the current signed-in account.',
+                    'Confirm your current password to securely update your account password.',
               ),
               const SizedBox(height: 16),
               _passwordField(

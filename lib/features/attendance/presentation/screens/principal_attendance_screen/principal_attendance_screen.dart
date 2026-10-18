@@ -169,12 +169,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     if (!_isViewingToday) return;
     try {
       final results = await Future.wait<Object>([
-        _repository.loadStaffAttendance(
-          date: _selectedDateText,
-        ),
-        _repository.loadStaffDailySummary(
-          date: _selectedDateText,
-        ),
+        _repository.loadStaffAttendance(date: _selectedDateText),
+        _repository.loadStaffDailySummary(date: _selectedDateText),
       ]);
       if (!mounted) return;
       setState(() {
@@ -1254,6 +1250,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       await _loadStudentAttendance(student.id);
     }
     if (!mounted) return;
+    final attendanceDate = _selectedDateText;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _StudentDetailPage(
@@ -1263,68 +1260,147 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           statusColor: _studentStatusColor(student.id),
           records: _studentAttendanceRecords,
           staffDirectory: _staff,
-          onReopen: _sessions.isEmpty
-              ? null
-              : () => _openSessionDetail(_sessions.first),
+          onReopen: () => _openStudentSession(student, attendanceDate),
         ),
       ),
     );
   }
 
-  Future<void> _openSessionDetail(AttendanceSessionModel session) async {
+  Future<void> _openStudentSession(
+    StudentModel student,
+    String attendanceDate,
+  ) async {
+    try {
+      final selectedDate = DateTime.parse(attendanceDate);
+      // Refresh this student's records rather than using the school-wide,
+      // paginated session list or the student's possibly changed current class.
+      final records = await _repository.loadStudentAttendanceRecords(
+        student.id,
+        month: selectedDate.month,
+        year: selectedDate.year,
+      );
+      final matching = <String, Map<String, dynamic>>{};
+      for (final record in records) {
+        if (_recordDate(record) != attendanceDate) continue;
+        final session = record['session'];
+        final sessionId = _text(
+          record['session_id'] ?? (session is Map ? session['id'] : null),
+        );
+        if (sessionId.isNotEmpty) matching[sessionId] = record;
+      }
+      if (!mounted) return;
+      if (matching.isEmpty) {
+        _showSnack('No attendance record for this student on $attendanceDate.');
+        return;
+      }
+      final sessions = await Future.wait(
+        matching.keys.map(_repository.loadSession),
+      );
+      if (!mounted) return;
+      for (final session in sessions) {
+        final recordSession = matching[session.id]?['session'];
+        final recordSectionId = recordSession is Map
+            ? _text(recordSession['section_id'])
+            : '';
+        if (session.date.split('T').first != attendanceDate ||
+            recordSectionId.isEmpty ||
+            session.sectionId != recordSectionId ||
+            !session.studentAttendances.any(
+              (row) => _text(row['student_id']) == student.id,
+            )) {
+          _showSnack('Attendance context changed. Refresh and try again.');
+          return;
+        }
+      }
+      final session = sessions.length == 1
+          ? sessions.single
+          : await showDialog<AttendanceSessionModel>(
+              context: context,
+              builder: (context) => SimpleDialog(
+                title: Text('Choose register for $attendanceDate'),
+                children: [
+                  for (final session in sessions)
+                    SimpleDialogOption(
+                      onPressed: () => Navigator.pop(context, session),
+                      child: Text(
+                        '${_sectionLabel(session.sectionId)} · '
+                        'Period ${session.periodNumber} · '
+                        '${_sessionStaffLabel(session)}',
+                      ),
+                    ),
+                ],
+              ),
+            );
+      if (!mounted || session == null) return;
+      await _openSessionDetail(session, studentId: student.id);
+    } on Object catch (error) {
+      if (mounted) _showSnack('Unable to load attendance actions: $error');
+    }
+  }
+
+  Future<void> _openSessionDetail(
+    AttendanceSessionModel session, {
+    String? studentId,
+  }) async {
     final reason = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_sectionLabel(session.sectionId), style: _UiText.headline),
-            const SizedBox(height: 8),
-            Text(
-              '${_sessionStaffLabel(session)} · ${_sessionStatusLabel(session)} · ${_attendancePercent(session).toStringAsFixed(0)}%',
-              style: _UiText.caption,
-            ),
-            const SizedBox(height: 18),
-            ListTile(
-              leading: const Icon(Icons.lock_open_rounded),
-              title: const Text('Reopen Attendance'),
-              subtitle: const Text('Allow the teacher to submit a correction'),
-              onTap: () async {
-                final entered = await _promptReason('Reopen Attendance');
-                if (!mounted) return;
-                Navigator.pop(context, entered);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.notifications_active_outlined),
-              title: const Text('Send Reminder'),
-              subtitle: Text('Notify ${_sessionStaffLabel(session)}'),
-              onTap: () {
-                Navigator.pop(context);
-                _showSnack(
-                  'Reminder queued for ${_sessionStaffLabel(session)}',
-                  success: true,
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.table_chart_outlined),
-              title: const Text('Export Class Register'),
-              subtitle: const Text('Open attendance register export'),
-              onTap: () {
-                Navigator.pop(context);
-                _openReportDetail('Class Attendance Report', 'csv');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.history_rounded),
-              title: const Text('Audit Trail'),
-              subtitle: Text(_auditTrailSummary(session)),
-            ),
-          ],
+      isScrollControlled: true,
+      builder: (context) => SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_sectionLabel(session.sectionId), style: _UiText.headline),
+              const SizedBox(height: 4),
+              Text(session.date.split('T').first, style: _UiText.caption),
+              const SizedBox(height: 8),
+              Text(
+                '${_sessionStaffLabel(session)} · ${_sessionStatusLabel(session)} · ${_attendancePercent(session).toStringAsFixed(0)}%',
+                style: _UiText.caption,
+              ),
+              const SizedBox(height: 18),
+              ListTile(
+                leading: const Icon(Icons.lock_open_rounded),
+                title: const Text('Reopen Attendance'),
+                subtitle: const Text(
+                  'Allow the teacher to submit a correction',
+                ),
+                onTap: () async {
+                  final entered = await _promptReason(
+                    'Reopen ${_sectionLabel(session.sectionId)} '
+                    'on ${session.date.split('T').first}',
+                  );
+                  if (!mounted) return;
+                  Navigator.pop(context, entered);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: const Text('Send Reminder'),
+                subtitle: const Text(
+                  'Reminder delivery is unavailable from this menu',
+                ),
+                enabled: false,
+              ),
+              ListTile(
+                leading: const Icon(Icons.table_chart_outlined),
+                title: const Text('Export Class Register'),
+                subtitle: const Text('Open attendance register export'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _exportSessionRegister(session);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.history_rounded),
+                title: const Text('Audit Trail'),
+                subtitle: Text(_auditTrailSummary(session)),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1333,6 +1409,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       await _repository.reopenSession(
         session.id,
         reason: reason.trim(),
+        sectionId: session.sectionId,
+        date: session.date.split('T').first,
+        studentId: studentId,
       );
       if (!mounted) return;
       _showSnack('Attendance reopened', success: true);
@@ -1343,13 +1422,13 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   Future<String?> _promptReason(String title) {
-    final controller = TextEditingController();
+    var reason = '';
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
         content: TextField(
-          controller: controller,
+          onChanged: (value) => reason = value,
           autofocus: true,
           maxLines: 3,
           decoration: const InputDecoration(
@@ -1363,16 +1442,67 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            onPressed: () => Navigator.pop(context, reason.trim()),
             child: const Text('Reopen'),
           ),
         ],
       ),
-    ).whenComplete(controller.dispose);
+    );
   }
 
   Future<void> _openReportDetail(String title, String format) async {
     await _exportAttendanceReport(title, format);
+  }
+
+  Future<void> _exportSessionRegister(AttendanceSessionModel session) async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final date = session.date.split('T').first;
+      final classLabel = _sectionLabel(session.sectionId);
+      await _repository.createReportExport(
+        path: '/attendance/reports/exports',
+        reportTitle: 'Class Attendance Report',
+        format: 'csv',
+        reportType: 'attendance',
+        scope: 'principal_attendance',
+        parameters: {
+          'session_id': session.id,
+          'section_id': session.sectionId,
+          'date': date,
+        },
+      );
+      final lines = <String>['Date,Class,Student,Admission,Status'];
+      for (final row in session.studentAttendances) {
+        final student = row['student'] is Map
+            ? row['student'] as Map
+            : const {};
+        final name =
+            '${_text(student['first_name'])} ${_text(student['last_name'])}'
+                .trim();
+        lines.add(
+          [
+            date,
+            classLabel,
+            name.isEmpty ? _text(row['student_id']) : name,
+            _text(student['admission_number']),
+            _text(row['status']),
+          ].map(_csvCell).join(','),
+        );
+      }
+      if (!mounted) return;
+      await const ShareExportService().shareBytes(
+        bytes: Uint8List.fromList(utf8.encode(lines.join('\n'))),
+        fileName: 'attendance_${session.id}_$date.csv',
+        mimeType: 'text/csv',
+        title: '$classLabel attendance on $date',
+        context: context,
+      );
+    } on Object catch (error) {
+      if (mounted) _showSnack('Unable to export register: $error');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   Future<void> _exportAttendanceReport(String title, String format) async {
@@ -2040,7 +2170,7 @@ class _SoftCard extends StatelessWidget {
           ),
         ],
       ),
-      child: child,
+      child: Material(type: MaterialType.transparency, child: child),
     );
   }
 }
@@ -2095,13 +2225,7 @@ class _SegmentChip extends StatelessWidget {
         selected: selected,
         onSelected: (_) => onTap(),
         showCheckmark: false,
-        selectedColor: const Color(0xFF1976E8),
-        backgroundColor: Colors.white,
-        labelStyle: TextStyle(
-          color: selected ? Colors.white : const Color(0xFF4B5563),
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
-        ),
+        labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
         side: const BorderSide(color: Color(0xFFEAF0F7)),
       ),
     );

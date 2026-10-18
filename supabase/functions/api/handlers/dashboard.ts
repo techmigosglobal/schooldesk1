@@ -1,3 +1,5 @@
+import { dashboardHighlights } from "./dashboard_highlights.ts";
+import { schoolDay } from "../lib/school_day.ts";
 // handlers/dashboard.ts — admin, principal, teacher, parent dashboards
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok } from "../index.ts";
@@ -14,35 +16,6 @@ function sid(u: User) {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-const FINANCE_APPROVAL_MODULES = new Set([
-  "fee",
-  "fees",
-  "finance",
-  "payment",
-  "payments",
-  "concession",
-  "concessions",
-  "invoice",
-  "invoices",
-  "receipt",
-  "receipts",
-  "fee_invoice",
-  "fee_receipt",
-  "fee_concession",
-  "payment_proof",
-  "fee_payment_proof",
-]);
-
-function isFinanceApproval(module: unknown, entityType: unknown): boolean {
-  const normalize = (value: unknown) =>
-    text(value).toLowerCase().replace(/[\s-]+/g, "_");
-  return [module, entityType].some((value) => {
-    const normalized = normalize(value);
-    return FINANCE_APPROVAL_MODULES.has(normalized) ||
-      normalized.split("_").some((part) => FINANCE_APPROVAL_MODULES.has(part));
-  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -395,6 +368,7 @@ async function parentDashboardResponse(
     });
   }
 
+  const day = await schoolDay(svc, school);
   const [
     attendanceResult,
     invoiceResult,
@@ -403,11 +377,7 @@ async function parentDashboardResponse(
     conversationResult,
     announcementsResult,
   ] = await Promise.all([
-    svc.from("attendance_summaries").select(
-      "student_id, percentage, updated_at",
-    )
-      .eq("school_id", school).in("student_id", studentIds)
-      .order("updated_at", { ascending: false }),
+    svc.rpc("parent_attendance_overview", {p_school:school,p_students:studentIds}),
     svc.from("fee_invoices").select(
       "student_id, balance, net_amount, paid_amount, status",
     ).eq("school_id", school).in("student_id", studentIds),
@@ -453,11 +423,11 @@ async function parentDashboardResponse(
   if (messageResult.error) return fail(messageResult.error.message);
 
   const attendanceByStudent = new Map<string, number>();
+  const todayByStudent = new Map<string, Record<string, unknown>>();
   for (const row of attendanceResult.data ?? []) {
     const studentId = text(row.student_id);
-    if (studentId && !attendanceByStudent.has(studentId)) {
-      attendanceByStudent.set(studentId, number(row.percentage));
-    }
+    if (row.attendance_pct !== null) attendanceByStudent.set(studentId,number(row.attendance_pct));
+    todayByStudent.set(studentId,row.attendance_today);
   }
   const feeBalanceByStudent = new Map<string, number>();
   for (const row of invoiceResult.data ?? []) {
@@ -559,6 +529,7 @@ async function parentDashboardResponse(
     const resolvedPhotoUrl = await signedPrivateFileUrl(svc, storedPhotoUrl);
     return {
       ...student,
+      attendance_today: todayByStudent.get(studentId) ?? {date:day.date,status:null,is_finalized:false,session_id:null},
       name: studentName(student),
       class: text(grade?.grade_name),
       section: text(section?.section_name),
@@ -577,6 +548,8 @@ async function parentDashboardResponse(
 
   return ok({
     children,
+    school_name: day.name,
+    school_date: day.date,
     metrics: { ...base.metrics, unread_messages: unreadMessages },
     recent_announcements: announcementsResult.data ?? [],
   });
@@ -592,6 +565,7 @@ export async function handleDashboard(
   user: User,
 ): Promise<Response> {
   const school = sid(user);
+  if (path === "/dashboard/highlights" && _method === "GET") return dashboardHighlights(svc, user);
   const role = roleName(user);
   const requestedRole = text(
     url.searchParams.get("role") ?? path.split("/").filter(Boolean)[1],
@@ -612,16 +586,12 @@ export async function handleDashboard(
       return fail("forbidden", 403);
     }
 
-    const today = new Date();
-    const todayStart = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-    ).toISOString();
+    const { date: todayDate } = await schoolDay(svc, school);
     const financeAuthorized = isFinanceLeader(user);
-    const approvalRequestsQuery = svc.from("approval_requests").select(
-      "id, module, entity_type",
-    ).eq("school_id", school).eq("status", "pending");
+    const pendingEventsQuery = svc.from("event_posts").select("id", { count: "exact", head: true })
+      .eq("school_id", school).in("status", ["pending", "submitted"]);
+    const pendingAccountsQuery = svc.from("account_approvals").select("id", { count: "exact", head: true })
+      .eq("school_id", school).eq("status", "pending");
 
     const [
       assignedStudents,
@@ -633,7 +603,8 @@ export async function handleDashboard(
       attendanceSessions,
       todayAttendanceRows,
       todayPresentRows,
-      approvalRequests,
+      pendingEvents,
+      pendingAccounts,
     ] = await Promise.all([
       svc.from("students").select("id", { count: "exact", head: true })
         .eq("school_id", school).eq("is_test_account", false)
@@ -656,26 +627,22 @@ export async function handleDashboard(
         count: "exact",
         head: true,
       }).eq("school_id", school).eq("status", "pending"),
-      svc.from("student_attendances").select("id, status", {
-        count: "exact",
-        head: true,
-      }).eq("school_id", school),
-      svc.from("student_attendances").select("id", {
-        count: "exact",
-        head: true,
-      }).eq(
-        "school_id",
-        school,
-      ).gte("created_at", todayStart),
-      svc.from("student_attendances").select("id", {
-        count: "exact",
-        head: true,
-      }).eq("school_id", school).eq("status", "present").gte(
-        "created_at",
-        todayStart,
-      ),
-      approvalRequestsQuery,
+      svc.from("attendance_sessions").select("id", { count: "exact", head: true })
+        .eq("school_id", school).eq("date", todayDate).eq("is_finalized", true),
+      svc.from("student_attendances").select("id, session:attendance_sessions!inner(school_id,date,is_finalized)", {
+        count: "exact", head: true,
+      }).eq("session.school_id", school).eq("session.date", todayDate).eq("session.is_finalized", true),
+      svc.from("student_attendances").select("id, session:attendance_sessions!inner(school_id,date,is_finalized)", {
+        count: "exact", head: true,
+      }).eq("session.school_id", school).eq("session.date", todayDate).eq("session.is_finalized", true).eq("status", "present"),
+      pendingEventsQuery,
+      pendingAccountsQuery,
     ]);
+
+    const operationsError = [assignedStudents, unassignedStudents, staff, announcements,
+      sections, pendingLeave, attendanceSessions, todayAttendanceRows,
+      todayPresentRows, pendingEvents, pendingAccounts].find((result) => result.error)?.error;
+    if (operationsError) return fail(operationsError.message, 500);
 
     // Calculate today's attendance percentage from bounded head-count queries.
     const todayMarked = todayAttendanceRows.count ?? 0;
@@ -693,13 +660,9 @@ export async function handleDashboard(
       recentAnnouncements: (announcements.data ?? []) as Array<
         Record<string, unknown>
       >,
-      pendingEventApprovals: (approvalRequests.data ?? []).filter((row) =>
-        financeAuthorized || !isFinanceApproval(row.module, row.entity_type)
-      ).length,
-      pendingAccessApprovals: (approvalRequests.data ?? []).filter((row) =>
-        financeAuthorized || !isFinanceApproval(row.module, row.entity_type)
-      ).length,
-      attendanceToday: attendanceSessions.data?.length ?? 0,
+      pendingEventApprovals: pendingEvents.count ?? 0,
+      pendingAccessApprovals: pendingAccounts.count ?? 0,
+      attendanceToday: attendanceSessions.count ?? 0,
       attendancePercentage: attendancePct,
       attendancePresent: todayPresent,
       attendanceMarked: todayMarked,

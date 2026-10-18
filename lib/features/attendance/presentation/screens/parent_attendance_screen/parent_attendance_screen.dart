@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -46,13 +47,19 @@ class ParentAttendanceScreen extends StatefulWidget {
 }
 
 class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int _selectedNavIndex = ParentNav.attendance;
   int _activeChildIndex = 0;
 
   RepositoryState<_ParentAttendanceSnapshot> _state =
       const RepositoryState.loading();
   int _attendanceRequestToken = 0;
+  int _childrenRequestToken = 0;
+  String _loadedStudentId = '';
+  OfflineSyncEngine? _connection;
+  bool _wasOffline = false;
+  DateTime? _lastRecoveryAttempt;
+  Timer? _recoveryTimer;
   RealtimeRefreshSubscription? _realtimeSubscription;
 
   _ParentAttendanceSnapshot? get _snapshot => _state.data;
@@ -70,6 +77,14 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    try {
+      _connection = OfflineSyncEngine.instance;
+      _wasOffline = _connection!.isOffline;
+      _connection!.addListener(_onConnectionChanged);
+    } on StateError {
+      /* optional in isolated tests */
+    }
     _loadData();
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'parent-attendance',
@@ -82,13 +97,39 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     );
   }
 
+  void _onConnectionChanged() {
+    final offline = _connection?.isOffline ?? false;
+    final now = DateTime.now();
+    if (_wasOffline &&
+        !offline &&
+        (_lastRecoveryAttempt == null ||
+            now.difference(_lastRecoveryAttempt!) >
+                const Duration(seconds: 30))) {
+      _lastRecoveryAttempt = now;
+      _recoveryTimer?.cancel();
+      _recoveryTimer = Timer(const Duration(milliseconds: 800), () {
+        if (mounted) _loadData(forceRefresh: true);
+      });
+    }
+    _wasOffline = offline;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _loadData(forceRefresh: true);
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _connection?.removeListener(_onConnectionChanged);
+    _recoveryTimer?.cancel();
     _realtimeSubscription?.dispose();
     super.dispose();
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
+    final token = ++_childrenRequestToken;
     final previous = _state.data;
     setState(() {
       _state = RepositoryState.loading(
@@ -123,16 +164,27 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         fallback: _activeChildIndex,
       );
 
-      if (!mounted) return;
+      if (!mounted || token != _childrenRequestToken) return;
+      final sameStudent =
+          childRows.isNotEmpty &&
+          _childId(childRows[selectedIndex]) == _loadedStudentId;
       setState(() {
         _activeChildIndex = selectedIndex;
         _state = RepositoryState.loading(
           data: _ParentAttendanceSnapshot(
             childRows: childRows,
-            attendanceHistory: previous?.attendanceHistory ?? const [],
-            attendanceSummary: previous?.attendanceSummary ?? const {},
-            attendanceDayStatus: previous?.attendanceDayStatus ?? const {},
-            periodRowsByDay: previous?.periodRowsByDay ?? const {},
+            attendanceHistory: sameStudent
+                ? previous?.attendanceHistory ?? const []
+                : const [],
+            attendanceSummary: sameStudent
+                ? previous?.attendanceSummary ?? const {}
+                : const {},
+            attendanceDayStatus: sameStudent
+                ? previous?.attendanceDayStatus ?? const {}
+                : const {},
+            periodRowsByDay: sameStudent
+                ? previous?.periodRowsByDay ?? const {}
+                : const {},
           ),
           source: RepositorySource.cache,
           isStale: true,
@@ -145,7 +197,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         setState(() => _state = const RepositoryState.empty());
       }
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || token != _childrenRequestToken) return;
       setState(() {
         _state = previous == null
             ? RepositoryState.error(error: e)
@@ -198,7 +250,11 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         );
       }
       final attendanceSnapshot = snapshot.dataOrNull!;
-      final attendanceSummary = attendanceSnapshot.summary;
+      final prior = _loadedStudentId == studentId ? _snapshot : null;
+      final attendanceSummary =
+          attendanceSnapshot.failedSections.contains('summary')
+          ? prior?.attendanceSummary ?? attendanceSnapshot.summary
+          : attendanceSnapshot.summary;
       final attendanceRecords = attendanceSnapshot.records;
       final leaveRequests = attendanceSnapshot.leaveRequests;
       final periodRows = _periodRowsFromSources(
@@ -206,7 +262,12 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         records: attendanceRecords,
         leaveRequests: leaveRequests,
       );
-      final attendanceDayStatus = _dayStatusFromPeriodRows(periodRows);
+      final preservedRows =
+          attendanceSnapshot.failedSections.contains('records')
+          ? prior?.periodRowsByDay.values.expand((rows) => rows).toList() ??
+                periodRows
+          : periodRows;
+      final attendanceDayStatus = _dayStatusFromPeriodRows(preservedRows);
 
       if (!mounted ||
           requestToken != _attendanceRequestToken ||
@@ -215,16 +276,25 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         return;
       }
       setState(() {
+        _loadedStudentId = studentId;
         _state = RepositoryState(
           data: _ParentAttendanceSnapshot(
             childRows: _childRows,
-            attendanceHistory: periodRows.take(20).toList(),
+            attendanceHistory: preservedRows.take(20).toList(),
             attendanceSummary: attendanceSummary,
             attendanceDayStatus: attendanceDayStatus,
-            periodRowsByDay: _groupPeriodRowsByDay(periodRows),
+            periodRowsByDay: _groupPeriodRowsByDay(preservedRows),
             partialError: attendanceSnapshot.partialError,
           ),
-          source: RepositorySource.remote,
+          source:
+              attendanceSnapshot.fromCache ||
+                  attendanceSnapshot.partialError != null
+              ? RepositorySource.cache
+              : RepositorySource.remote,
+          isStale:
+              attendanceSnapshot.fromCache ||
+              attendanceSnapshot.partialError != null,
+          error: attendanceSnapshot.partialError,
           lastUpdated: DateTime.now().toUtc(),
         );
       });
@@ -274,6 +344,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
 
       body: SchoolDeskRepositoryStateView<_ParentAttendanceSnapshot>(
         state: _state,
+        expandStaleContent: true,
         onRetry: () => _loadData(forceRefresh: true),
         emptyTitle: 'No linked students',
         emptyMessage: 'No linked students found for this parent account.',
@@ -302,10 +373,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     return _statusBanner(
       icon: Icons.cloud_off_rounded,
       message: 'Some attendance data is unavailable. Showing available data.',
-      action: () => _loadChildAttendance(
-        _activeChildIndex,
-        forceRefresh: true,
-      ),
+      action: () => _loadChildAttendance(_activeChildIndex, forceRefresh: true),
     );
   }
 

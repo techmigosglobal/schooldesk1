@@ -1,3 +1,4 @@
+import { normalizeEventDestinations, validatePlacementDestinations } from "../lib/event_destinations.ts";
 // handlers/uploads.ts — multipart file upload → R2 or Supabase Storage
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
@@ -164,12 +165,7 @@ function asStringArray(value: unknown): string[] {
 }
 
 function normalizeDestinations(value: unknown, visibility: unknown): string[] {
-  const destinations = asStringArray(value);
-  if (destinations.length > 0) return [...new Set(destinations)];
-  const normalizedVisibility = `${visibility ?? ""}`.trim().toLowerCase();
-  if (normalizedVisibility === "public") return ["SCHOOL_LANDING"];
-  if (normalizedVisibility === "gallery") return ["SCHOOL_GALLERY"];
-  return ["PARENTS_HOME"];
+  return normalizeEventDestinations(value, visibility);
 }
 
 function teacherEventPostPolicy(
@@ -2471,11 +2467,8 @@ export async function handleEvents(
       "school_id",
       school,
     ).in("status", ["approved", "published"])
-      // Gallery is the canonical media archive. Include approved media from
-      // the landing page, parent feed, teacher feed, and the gallery itself;
-      // posts without media are not gallery items. `destinations` is not used
-      // as the filter because a post can intentionally target more than one
-      // surface.
+      // Destination controls apply to this surface independently of other feeds.
+      .contains("destinations", JSON.stringify(["SCHOOL_GALLERY"]))
       .not("media_urls", "is", null)
       .not("media_urls", "eq", "[]")
       .order("created_at", {
@@ -2537,21 +2530,13 @@ export async function handleEvents(
       from: 0,
       to: TEACHER_SCHOOL_FEED_LIMIT - 1,
     };
-    // Teacher feed is a staff-facing surface. Existing parent-home posts are
-    // school-wide updates, while TEACHERS_HOME is an explicit staff-only
-    // destination. Gallery posts are included because they are approved
-    // school activity updates, but landing-only posts remain public-site-only.
-    const teacherDestinations = [
-      `destinations.cs.${JSON.stringify(["TEACHERS_HOME"])}`,
-      `destinations.cs.${JSON.stringify(["PARENTS_HOME"])}`,
-      `destinations.cs.${JSON.stringify(["SCHOOL_GALLERY"])}`,
-    ].join(",");
+    // Staff visibility must honor the explicit Teacher Home destination.
     const { data, error, count } = await svc.from("event_posts").select("*", {
       count: "exact",
     }).eq(
       "school_id",
       school,
-    ).in("status", ["approved", "published"]).or(teacherDestinations)
+    ).in("status", ["approved", "published"]).contains("destinations", JSON.stringify(["TEACHERS_HOME"]))
       .order("created_at", {
         ascending: false,
       }).order("id", {
@@ -2599,12 +2584,21 @@ export async function handleEvents(
       "school_id",
       school,
     );
-    if (url.searchParams.get("status")) {
+    if (url.searchParams.get("published_only") === "true") {
+      q = q.in("status", ["approved", "published"]);
+    } else if (url.searchParams.get("status")) {
       q = q.eq("status", url.searchParams.get("status")!);
+    }
+    const destination = url.searchParams.get("destination") ?? "";
+    if (destination === "FEED") {
+      q = q.or('destinations.cs.["PARENTS_HOME"],destinations.cs.["SCHOOL_GALLERY"]');
+    } else if (destination) {
+      if (validatePlacementDestinations([destination])) return fail("invalid destination", 400);
+      q = q.contains("destinations", JSON.stringify([destination]));
     }
     const { data, error, count } = await q.order("created_at", {
       ascending: false,
-    }).range(paging.from, paging.to);
+    }).order("id", { ascending: false }).range(paging.from, paging.to);
     if (error) return fail(error.message);
     const rows = await eventPostRows(
       svc,
@@ -2720,11 +2714,31 @@ export async function handleEvents(
     if (existingError) return fail(existingError.message);
     if (!existing) return fail("not found", 404);
     const userRole = roleValue(user);
+    if (!["principal", "coordinator", "admin", "super_admin", "teacher"].includes(userRole)) {
+      return fail("forbidden", 403);
+    }
     if (
-      !["principal", "coordinator"].includes(userRole) &&
+      !["principal", "coordinator", "admin", "super_admin"].includes(userRole) &&
       `${existing.created_by ?? ""}` !== user.id
     ) {
       return fail("forbidden", 403);
+    }
+    // Placement edits are leadership-only, even when the requester authored
+    // the post. Keep content, approval and public website settings untouched.
+    const placementOnly = "destinations" in body && Object.keys(body).every((key) =>
+      ["destinations", "public_gallery_visible"].includes(key)
+    );
+    if (placementOnly) {
+      if (!["principal", "coordinator", "admin", "super_admin"].includes(userRole)) {
+        return fail("forbidden", 403);
+      }
+      const invalid = validatePlacementDestinations(body.destinations);
+      if (invalid) return fail(invalid, 400);
+      if ("public_gallery_visible" in body && typeof body.public_gallery_visible !== "boolean") {
+        return fail("public_gallery_visible must be a boolean", 400);
+      }
+      // Continue through the media promotion/demotion flow below so changing
+      // public placement still applies the existing storage safeguards.
     }
     const currentStatus = `${existing.status ?? "draft"}`.trim().toLowerCase();
     const description = textValue(
@@ -2758,7 +2772,7 @@ export async function handleEvents(
       requestedPublicGalleryVisible;
     let mediaCleanup: string[] = [];
     if (
-      directPublish &&
+      (directPublish || ["approved", "published"].includes(currentStatus)) &&
       requiresPublicEventMedia(effectiveDestinations, publicGalleryVisible)
     ) {
       try {
@@ -2777,7 +2791,14 @@ export async function handleEvents(
         return fail(`private media demotion failed: ${error}`, 502);
       }
     }
-    const payload = {
+    const payload: Record<string, unknown> = placementOnly ? {
+      destinations: effectiveDestinations,
+      media_urls: media,
+      ...(typeof body.public_gallery_visible === "boolean"
+        ? { public_gallery_visible: body.public_gallery_visible }
+        : {}),
+      updated_at: new Date().toISOString(),
+    } : {
       title: textValue(
         body.title,
         `${existing.title ?? "Untitled event post"}`,

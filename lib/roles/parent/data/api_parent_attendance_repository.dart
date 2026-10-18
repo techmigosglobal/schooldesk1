@@ -29,11 +29,22 @@ class ApiParentAttendanceRepository implements ParentAttendanceRepository {
   }) {
     return guardApi(() async {
       Object? partialError;
+      var fromCache = false;
+      final failedSections = <String>{};
+      void cache(CacheMetadata value) {
+        fromCache = fromCache || value.isStale;
+      }
+
       Future<Map<String, dynamic>> loadSummary() async {
         try {
-          return await _api.getStudentAttendanceSummary(studentId: studentId);
+          return await _api.getStudentAttendanceSummary(
+            studentId: studentId,
+            forceRefresh: forceRefresh,
+            onCacheMetadata: cache,
+          );
         } on Object catch (error) {
           partialError ??= error;
+          failedSections.add('summary');
           return <String, dynamic>{'student_id': studentId};
         }
       }
@@ -44,9 +55,12 @@ class ApiParentAttendanceRepository implements ParentAttendanceRepository {
             studentId,
             month: DateTime.now().month,
             year: DateTime.now().year,
+            forceRefresh: forceRefresh,
+            onCacheMetadata: cache,
           );
         } on Object catch (error) {
           partialError ??= error;
+          failedSections.add('records');
           return const <Map<String, dynamic>>[];
         }
       }
@@ -59,6 +73,7 @@ class ApiParentAttendanceRepository implements ParentAttendanceRepository {
           );
         } on Object catch (error) {
           partialError ??= error;
+          failedSections.add('leave');
           return const <Map<String, dynamic>>[];
         }
       }
@@ -73,6 +88,8 @@ class ApiParentAttendanceRepository implements ParentAttendanceRepository {
         records: List<Map<String, dynamic>>.from(results[1] as List),
         leaveRequests: List<Map<String, dynamic>>.from(results[2] as List),
         partialError: partialError?.toString(),
+        fromCache: fromCache,
+        failedSections: failedSections,
       );
     });
   }

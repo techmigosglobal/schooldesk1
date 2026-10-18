@@ -30,7 +30,6 @@ class TeacherDrawer extends StatefulWidget {
 class _TeacherDrawerState extends State<TeacherDrawer> {
   NotificationService? _notifService;
   final ChatUnreadService _chatUnreadService = ChatUnreadService.instance;
-  int _unreadCount = 0;
   int _unreadMessages = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Teacher workspace';
@@ -59,7 +58,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
     if (!mounted) return;
     setState(() {
       _notifService = svc;
-      _unreadCount = svc.getUnreadCountForRole('teacher');
     });
     svc.addListener(_onNotifChanged);
   }
@@ -79,7 +77,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
       final profile = results[1] as UserResponse;
       setState(() {
         _schoolName = safeText(
-          school['organization_name'] ?? school['name'],
+          school['display_name'] ?? school['name'],
           fallback: 'School',
         );
         _schoolSubtitle = safeText(
@@ -103,7 +101,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
   void _onNotifChanged() {
     if (!mounted) return;
     setState(() {
-      _unreadCount = _notifService?.getUnreadCountForRole('teacher') ?? 0;
     });
   }
 
@@ -284,19 +281,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
           icon: Icons.search_rounded,
           label: 'Global Search',
           route: AppRoutes.globalSearch,
-        ),
-        SchoolDeskNavigationFooterAction(
-          icon: Icons.notifications_outlined,
-          label: 'Notifications',
-          route: AppRoutes.notificationCenter,
-          arguments: 'teacher',
-          badgeCount: _unreadCount,
-        ),
-        const SchoolDeskNavigationFooterAction(
-          icon: Icons.account_circle_outlined,
-          label: 'Profile',
-          route: AppRoutes.profileScreen,
-          arguments: 'teacher',
         ),
         const SchoolDeskNavigationFooterAction(
           icon: Icons.settings_outlined,

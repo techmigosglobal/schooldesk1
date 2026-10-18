@@ -69,6 +69,7 @@ class SchoolDeskUiIllustrations {
       'assets/images/ui/school-posts-approval.png';
   static const createposts = 'assets/images/ui/createposts.png';
   static const chat = 'assets/images/ui/illustration-chat.png';
+  static const sendNotification = 'assets/images/ui/send-notification.svg';
   static const calendar = 'assets/images/ui/leaves.png';
   static const classRoutine = 'assets/images/ui/principal-classes.png';
   static const resources = 'assets/images/ui/illustration-resources.png';

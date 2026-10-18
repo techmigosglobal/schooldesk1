@@ -3,6 +3,23 @@ part of '../backend_api_client.dart';
 extension BackendAttendanceApi on BackendApiClient {
   // ─── Attendance ─────────────────────────────────────────────────────────────
 
+  Future<AttendanceSessionModel> getAttendanceSession(String sessionId) async {
+    try {
+      final response = await _dio.get('/attendance/sessions/$sessionId');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return AttendanceSessionModel.fromJson(
+          data['data'] as Map<String, dynamic>,
+        );
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Attendance session unavailable',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<AttendanceSessionModel>> getAttendanceSessions({
     String? sectionId,
     String? date,
@@ -12,6 +29,7 @@ extension BackendAttendanceApi on BackendApiClient {
     String? staffId,
     int page = 1,
     int pageSize = 20,
+    bool forceRefresh = false,
   }) async {
     return (await getAttendanceSessionsPage(
       sectionId: sectionId,
@@ -22,6 +40,7 @@ extension BackendAttendanceApi on BackendApiClient {
       staffId: staffId,
       page: page,
       pageSize: pageSize,
+      forceRefresh: forceRefresh,
     )).data;
   }
 
@@ -34,6 +53,7 @@ extension BackendAttendanceApi on BackendApiClient {
     String? staffId,
     int page = 1,
     int pageSize = 20,
+    bool forceRefresh = false,
   }) async {
     try {
       final queryParams = <String, dynamic>{
@@ -50,6 +70,9 @@ extension BackendAttendanceApi on BackendApiClient {
       final response = await _get(
         '/attendance/sessions',
         queryParameters: queryParams,
+        options: forceRefresh
+            ? Options(headers: const {'Cache-Control': 'no-store'})
+            : null,
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
@@ -300,11 +323,19 @@ extension BackendAttendanceApi on BackendApiClient {
   Future<AttendanceSessionModel> reopenAttendanceSession(
     String sessionId, {
     required String reason,
+    required String sectionId,
+    required String date,
+    String? studentId,
   }) async {
     try {
       final response = await _dio.post(
         '/attendance/sessions/$sessionId/reopen',
-        data: {'reason': reason},
+        data: {
+          'reason': reason,
+          'section_id': sectionId,
+          'date': date,
+          if (studentId != null) 'student_id': studentId,
+        },
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
@@ -324,6 +355,8 @@ extension BackendAttendanceApi on BackendApiClient {
     required String studentId,
     String? academicYearId,
     String? termId,
+    bool forceRefresh = false,
+    void Function(CacheMetadata)? onCacheMetadata,
   }) async {
     try {
       final queryParams = <String, dynamic>{'student_id': studentId};
@@ -337,7 +370,11 @@ extension BackendAttendanceApi on BackendApiClient {
       final response = await _get(
         '/attendance/summary',
         queryParameters: queryParams,
+        options: forceRefresh
+            ? Options(headers: const {'Cache-Control': 'no-store'})
+            : null,
       );
+      onCacheMetadata?.call(cacheMetadataFromResponse(response));
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         final payload = data['data'];
@@ -356,21 +393,42 @@ extension BackendAttendanceApi on BackendApiClient {
     String studentId, {
     int? month,
     int? year,
+    bool forceRefresh = false,
+    void Function(CacheMetadata)? onCacheMetadata,
   }) async {
-    final queryParams = <String, dynamic>{};
-    if (month != null) queryParams['month'] = month.toString().padLeft(2, '0');
-    if (year != null) queryParams['year'] = '$year';
-    final params = queryParams.isEmpty ? null : queryParams;
+    final params = <String, dynamic>{
+      if (month != null) 'month': '$month',
+      if (year != null) 'year': '$year',
+    };
+    Future<List<Map<String, dynamic>>> read(String path) async {
+      try {
+        final response = await _get(
+          path,
+          queryParameters: params,
+          options: forceRefresh
+              ? Options(headers: const {'Cache-Control': 'no-store'})
+              : null,
+        );
+        onCacheMetadata?.call(cacheMetadataFromResponse(response));
+        final envelope = _asMap(response.data);
+        if (envelope['success'] != true) {
+          throw ServerException(
+            message: envelope['error'] ?? 'Unable to load attendance',
+          );
+        }
+        final payload = envelope['data'];
+        return _asListMap(
+          payload is Map ? payload['items'] ?? payload['data'] : payload,
+        );
+      } on DioException catch (e) {
+        throw _handleError(e);
+      }
+    }
+
     try {
-      return await getRawList(
-        '/students/$studentId/attendance',
-        queryParameters: params,
-      );
+      return await read('/students/$studentId/attendance');
     } on NotFoundException {
-      return getRawList(
-        '/attendance/students/$studentId',
-        queryParameters: params,
-      );
+      return read('/attendance/students/$studentId');
     }
   }
 

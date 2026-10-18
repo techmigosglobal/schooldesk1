@@ -101,7 +101,16 @@ void main() {
       expect(handler, contains('counts_by_type'));
       expect(handler, contains('pending_count'));
       expect(handler, contains('expected_status'));
-      expect(handler, contains('limit(100)'));
+      expect(handler, contains('readAllApprovalRows'));
+      expect(
+        handler,
+        contains('const pageItems = filtered.slice(start, start + size)'),
+      );
+      final paging = File(
+        'supabase/functions/api/lib/approval_feed_utils.ts',
+      ).readAsStringSync();
+      expect(paging, contains('build().range(from, from + size - 1)'));
+      expect(paging, contains('if (result.error) return'));
       expect(api, contains('getApprovalFeed'));
       expect(api, contains('PaginatedList<Map<String, dynamic>>'));
     },

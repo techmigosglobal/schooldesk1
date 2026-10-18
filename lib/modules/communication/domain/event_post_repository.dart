@@ -1,3 +1,4 @@
+import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'dart:typed_data';
 
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
@@ -22,6 +23,12 @@ abstract interface class EventPostRepository {
     bool forceRefresh = false,
   });
 
+  Future<PaginatedList<Map<String, dynamic>>> loadPublishedPostsPage({
+    int page = 1,
+    int pageSize = 20,
+    String destination = 'FEED',
+  });
+
   Future<Map<String, dynamic>> loadPost(String id);
 
   Future<void> createPost({
@@ -43,6 +50,12 @@ abstract interface class EventPostRepository {
     required List<EventPostMediaItem> media,
     required List<String> destinations,
     required bool isSubmit,
+  });
+
+  Future<void> updateVisibility(
+    String id,
+    List<String> destinations, {
+    bool? publicGalleryVisible,
   });
 
   Future<void> deletePost(String id);

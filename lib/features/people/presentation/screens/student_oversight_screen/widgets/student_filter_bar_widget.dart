@@ -61,7 +61,7 @@ class StudentFilterBarWidget extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: selected
-                          ? Colors.white
+                          ? context.appTheme.onPrimary
                           : context.appTheme.onSurface,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     ),
@@ -99,7 +99,7 @@ class StudentFilterBarWidget extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: selected
-                          ? Colors.white
+                          ? context.appTheme.onPrimary
                           : context.appTheme.onSurface,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     ),

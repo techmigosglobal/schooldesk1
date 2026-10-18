@@ -1,3 +1,4 @@
+import 'package:schooldesk1/core/widgets/school_brand_logo.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -41,10 +42,12 @@ class PrincipalDashboardScreen extends StatefulWidget {
 
 class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   bool _setupLoading = false;
+  int _loadGeneration = 0;
   String? _setupError;
   DateTime? _lastBackPressedAt;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
   Map<String, dynamic> _staffAttendanceSummary = const {};
+  Map<String, int> _attentionCounts = const {};
   RepositoryState<LeadershipDashboardCriticalSnapshot> _criticalState =
       const RepositoryState<LeadershipDashboardCriticalSnapshot>.loading();
 
@@ -78,8 +81,21 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'principal-dashboard',
       modules: _isCoordinator
-          ? const {'announcements', 'event_posts', 'attendance'}
-          : const {'announcements', 'event_posts', 'attendance', 'fees'},
+          ? const {
+              'announcements',
+              'event_posts',
+              'attendance',
+              'approvals',
+              'leave',
+            }
+          : const {
+              'announcements',
+              'event_posts',
+              'attendance',
+              'fees',
+              'approvals',
+              'leave',
+            },
       onRefresh: () {
         if (mounted) _loadDashboard();
       },
@@ -93,6 +109,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   }
 
   Future<void> _loadDashboard() async {
+    final generation = ++_loadGeneration;
     final previous = _criticalState;
     setState(() {
       _criticalState =
@@ -125,7 +142,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               criticalResult,
               previous: previous.hasData ? previous : null,
             );
-        if (!mounted) return;
+        if (!mounted || generation != _loadGeneration) return;
         setState(() {
           _criticalState = state;
         });
@@ -136,7 +153,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       final school = critical.school;
       final profile = critical.profile;
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _criticalState =
             RepositoryState.fromResult<LeadershipDashboardCriticalSnapshot>(
@@ -148,15 +165,16 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           school: school,
           profile: profile,
         );
+        _setupError = null;
         _setupLoading =
             true; // Setup section shows a spinner until phase 2 is done
       });
 
       // ── Phase 2: Optional data ──────────────────────────────────────────────
       // Fires in background after the UI is visible. Does not block rendering.
-      _loadSetupData(repository, dashboard, school);
+      _loadSetupData(repository, dashboard, school, generation);
     } on TimeoutException catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _criticalState =
             RepositoryState<LeadershipDashboardCriticalSnapshot>.error(
@@ -168,7 +186,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             );
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _criticalState =
             RepositoryState<LeadershipDashboardCriticalSnapshot>.error(
@@ -186,6 +204,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     LeadershipDashboardRepository repository,
     Map<String, dynamic> dashboard,
     Map<String, dynamic> school,
+    int generation,
   ) async {
     try {
       final optionalResult = await repository.loadOptional(
@@ -199,7 +218,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       }
       final optional = optionalResult.dataOrNull!;
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
 
       final academicYears = optional.academicYears;
       final grades = optional.grades;
@@ -230,11 +249,12 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             return targetRole == 'all' || targetRole == _leadershipRole;
           }).length,
         );
+        _attentionCounts = optional.attentionCounts;
         _staffAttendanceSummary = staffAttendanceSummary;
         _setupLoading = false;
       });
     } on Object catch (_) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _setupLoading = false;
         _setupError = 'Some school data couldn\'t be loaded.';
@@ -742,6 +762,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     accent: Color(0xFF0E5EA8),
                     cardColor: Color(0xFFDCEFFF),
                   ),
+                  if (!_isCoordinator)
+                    const _AcademicModuleItem(
+                      label: 'Send Notification',
+                      route: AppRoutes.principalSendNotification,
+                      illustration: SchoolDeskUiIllustrations.sendNotification,
+                      fallbackIcon: Icons.notification_add_outlined,
+                      accent: Color(0xFF0E5EA8),
+                      cardColor: Color(0xFFDCEFFF),
+                    ),
                 ],
                 onTap: (item) => _open(item.route),
               ),
@@ -825,7 +854,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   Future<void> _open(String route, {Object? arguments}) async {
     await SchoolDeskNavigation.push(context, route, arguments: arguments);
-    if (mounted && route == AppRoutes.notificationCenter) {
+    if (mounted) {
       await _loadDashboard();
     }
   }
@@ -864,7 +893,90 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           ),
         ),
         const SizedBox(height: 12),
+        _attentionGuidance(),
+        const SizedBox(height: 12),
         TodaysHighlightsCard(role: _leadershipRole),
+      ],
+    );
+  }
+
+  Widget _attentionGuidance() {
+    if (_setupLoading) return const SizedBox.shrink();
+    if (_setupError != null) {
+      return ListTile(
+        leading: const Icon(Icons.info_outline),
+        title: const Text('School guidance unavailable'),
+        subtitle: const Text(
+          'Setup and pending requests could not be refreshed.',
+        ),
+        trailing: TextButton(
+          onPressed: _loadDashboard,
+          child: const Text('Retry'),
+        ),
+      );
+    }
+    const labels = {
+      'account': 'Account and access requests',
+      'event': 'School posts awaiting review',
+      'leave': 'Staff leave requests',
+      'student_leave': 'Student leave requests',
+      'fee': 'Fee requests',
+      'fee_concession': 'Fee concession requests',
+      'fee_payment_proof': 'Payment proofs awaiting verification',
+      'admission': 'Admission requests',
+      'student': 'Student requests',
+      'tc': 'Transfer certificates',
+      'timetable': 'Timetable requests',
+      'class': 'Class requests',
+      'academic_info': 'Academic information requests',
+      'document': 'Document requests',
+      'documents': 'Document requests',
+      'communication': 'Communication requests',
+    };
+    final pending = _attentionCounts.entries
+        .where((entry) => entry.value > 0)
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_data.schoolLogoUrl.isEmpty)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.add_photo_alternate_outlined),
+              title: const Text('Recommended: add your school logo'),
+              subtitle: const Text(
+                'Show your school branding throughout the app.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(AppRoutes.principalSchoolProfile),
+            ),
+          ),
+        if (pending.isNotEmpty) ...[
+          const _SectionTitle('Needs attention'),
+          const SizedBox(height: 8),
+          Card(
+            child: Column(
+              children: [
+                for (final item in pending)
+                  ListTile(
+                    leading: const Icon(Icons.pending_actions_outlined),
+                    title: Text(
+                      '${item.value} · ${labels[item.key] ?? item.key.replaceAll('_', ' ')}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _open(
+                      item.key == 'event'
+                          ? AppRoutes.principalEventApprovals
+                          : AppRoutes.approvalCenter,
+                      arguments: {
+                        'initialTab': item.key == 'event' ? 'review' : item.key,
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1241,8 +1353,9 @@ class _PrincipalHomeData {
   }
 
   static String _assetUrl(String path) {
-    if (path.isEmpty || path.startsWith('http')) return path;
-    return '${EnvConfig.apiOrigin}$path';
+    if (path.isEmpty) return '';
+    final url = path.startsWith('http') ? path : '${EnvConfig.apiOrigin}$path';
+    return resolveOriginalImageUrl(url);
   }
 
   static String _schoolDescriptor(String board, String type) {
@@ -1523,7 +1636,7 @@ class _SchoolIdentityBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _HeaderSchoolLogo(imageUrl: data.schoolLogoUrl, size: logoSize),
+          SchoolBrandLogo(imageUrl: data.schoolLogoUrl, size: logoSize),
           SizedBox(width: compact ? 10 : 14),
           Expanded(
             child: Column(
@@ -1653,42 +1766,6 @@ class _HeaderNotificationButton extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-class _HeaderSchoolLogo extends StatelessWidget {
-  final String imageUrl;
-  final double size;
-
-  const _HeaderSchoolLogo({required this.imageUrl, required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    final url = imageUrl.trim();
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: context.appTheme.surface.withOpacity(0.94),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: url.isEmpty
-          ? const Icon(
-              Icons.account_balance_rounded,
-              color: Color(0xFF587043),
-              size: 31,
-            )
-          : Image.network(
-              url,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.account_balance_rounded,
-                color: Color(0xFF587043),
-                size: 31,
-              ),
-            ),
     );
   }
 }
@@ -2391,8 +2468,7 @@ class _SetupStepChip extends StatelessWidget {
                 Flexible(
                   child: Text(
                     step.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    softWrap: true,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: const Color(0xFF0F172A),
                       fontWeight: FontWeight.w800,

@@ -31,7 +31,10 @@ class _SchoolGalleryScreenState extends ConsumerState<SchoolGalleryScreen> {
   RepositoryState<List<Map<String, dynamic>>> get _state =>
       _stateController.state;
 
-  bool get _canManagePosts => ref.watch(currentRoleNameProvider) == 'principal';
+  bool get _canManagePosts => const {
+    'principal',
+    'coordinator',
+  }.contains(ref.watch(currentRoleNameProvider));
 
   String get _role => ref.watch(currentRoleNameProvider) ?? '';
 
@@ -190,6 +193,8 @@ class _SchoolGalleryScreenState extends ConsumerState<SchoolGalleryScreen> {
                                           canManage: _canManagePosts,
                                           onEdit: () => _openPostManager(post),
                                           onDelete: () => _deletePost(post),
+                                          onVisibility: () =>
+                                              _manageVisibility(post),
                                         );
                                       },
                                     );
@@ -269,6 +274,91 @@ class _SchoolGalleryScreenState extends ConsumerState<SchoolGalleryScreen> {
     if (mounted) await _loadGallery();
   }
 
+  Future<void> _manageVisibility(Map<String, dynamic> post) async {
+    const choices = {
+      'PARENTS_HOME': 'Parent Home',
+      'TEACHERS_HOME': 'Teacher Home',
+      'SCHOOL_GALLERY': 'School Gallery',
+      'SCHOOL_LANDING': 'Public Landing Page',
+    };
+    var publicGalleryVisible = post['public_gallery_visible'] == true;
+    final raw = post['destinations'];
+    final selected = raw is List
+        ? raw.map((v) => '$v').toSet()
+        : <String>{'SCHOOL_GALLERY'};
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('Manage visibility'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Choose where this post appears. Uncheck every option to hide it while retaining it in Manage.',
+                ),
+                for (final entry in choices.entries)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(entry.value),
+                    value: selected.contains(entry.key),
+                    onChanged: (value) => update(() {
+                      value == true
+                          ? selected.add(entry.key)
+                          : selected.remove(entry.key);
+                    }),
+                  ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Public website gallery'),
+                  value: publicGalleryVisible,
+                  onChanged: (value) =>
+                      update(() => publicGalleryVisible = value == true),
+                ),
+                const Text(
+                  'Public Landing Page and Public website gallery are visible to website visitors.',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accepted != true) return;
+    try {
+      await ref
+          .read(eventPostRepositoryProvider)
+          .updateVisibility(
+            '${post['id']}',
+            selected.toList(),
+            publicGalleryVisible: publicGalleryVisible,
+          );
+      await _loadGallery();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Post visibility updated.')),
+        );
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to update visibility: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> _deletePost(Map<String, dynamic> post) async {
     final id = (post['id'] ?? '').toString().trim();
     if (id.isEmpty) return;
@@ -321,12 +411,14 @@ class _GalleryPostCard extends StatelessWidget {
   final bool canManage;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onVisibility;
 
   const _GalleryPostCard({
     required this.post,
     this.canManage = false,
     this.onEdit,
     this.onDelete,
+    this.onVisibility,
   });
 
   @override
@@ -341,9 +433,11 @@ class _GalleryPostCard extends StatelessWidget {
       onTap: () => _showDetails(context),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
@@ -508,7 +602,7 @@ class _GalleryPostCard extends StatelessWidget {
                 top: 6,
                 right: 6,
                 child: Material(
-                  color: Colors.white.withOpacity(0.92),
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(20),
                   child: PopupMenuButton<String>(
                     tooltip: 'Manage school post',
@@ -516,11 +610,20 @@ class _GalleryPostCard extends StatelessWidget {
                     onSelected: (action) {
                       if (action == 'edit') {
                         onEdit?.call();
+                      } else if (action == 'visibility') {
+                        onVisibility?.call();
                       } else if (action == 'delete') {
                         onDelete?.call();
                       }
                     },
                     itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'visibility',
+                        child: ListTile(
+                          leading: Icon(Icons.visibility_outlined),
+                          title: Text('Manage visibility'),
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'edit',
                         child: ListTile(

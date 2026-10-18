@@ -33,7 +33,6 @@ class PrincipalDrawer extends StatefulWidget {
 class _PrincipalDrawerState extends State<PrincipalDrawer> {
   NotificationService? _notifService;
   final ChatUnreadService _chatUnreadService = ChatUnreadService.instance;
-  int _unreadCount = 0;
   int _unreadMessages = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Manage school details';
@@ -63,7 +62,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
     if (!mounted) return;
     setState(() {
       _notifService = svc;
-      _unreadCount = svc.getUnreadCountForRole(_leadershipRole);
     });
     svc.addListener(_onNotifChanged);
   }
@@ -80,7 +78,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
       final profile = results[1] as UserResponse;
       setState(() {
         _schoolName = safeText(
-          school['organization_name'] ?? school['name'],
+          school['display_name'] ?? school['name'],
           fallback: 'School',
         );
         _schoolSubtitle = safeText(
@@ -107,7 +105,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
   void _onNotifChanged() {
     if (!mounted) return;
     setState(() {
-      _unreadCount = _notifService?.getUnreadCountForRole(_leadershipRole) ?? 0;
     });
   }
 
@@ -349,19 +346,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           route: AppRoutes.globalSearch,
         ),
         SchoolDeskNavigationFooterAction(
-          icon: Icons.notifications_outlined,
-          label: SchoolDeskGlossary.notifications,
-          route: AppRoutes.notificationCenter,
-          arguments: _leadershipRole,
-          badgeCount: _unreadCount,
-        ),
-        SchoolDeskNavigationFooterAction(
-          icon: Icons.account_circle_outlined,
-          label: SchoolDeskGlossary.profile,
-          route: AppRoutes.profileScreen,
-          arguments: _leadershipRole,
-        ),
-        SchoolDeskNavigationFooterAction(
           icon: Icons.settings_outlined,
           label: SchoolDeskGlossary.settings,
           route: AppRoutes.settingsScreen,
@@ -510,10 +494,10 @@ class _PrincipalShellBottomBarState extends State<PrincipalShellBottomBar> {
         arguments: role,
       ),
       _PrincipalShellDestination(
-        label: SchoolDeskGlossary.profile,
-        icon: Icons.account_circle_outlined,
-        activeIcon: Icons.account_circle_rounded,
-        route: AppRoutes.profileScreen,
+        label: SchoolDeskGlossary.settings,
+        icon: Icons.settings_outlined,
+        activeIcon: Icons.settings_rounded,
+        route: AppRoutes.settingsScreen,
         arguments: role,
       ),
     ];
@@ -595,7 +579,6 @@ class SuperAdminDrawer extends StatefulWidget {
 
 class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
   NotificationService? _notifService;
-  int _unreadCount = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Manage school details';
   String _schoolLogo = '';
@@ -615,7 +598,6 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
     if (!mounted) return;
     setState(() {
       _notifService = svc;
-      _unreadCount = svc.getUnreadCountForRole('super_admin');
     });
     svc.addListener(_onNotifChanged);
   }
@@ -632,7 +614,7 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
       final profile = results[1] as UserResponse;
       setState(() {
         _schoolName = safeText(
-          school['organization_name'] ?? school['name'],
+          school['display_name'] ?? school['name'],
           fallback: 'School',
         );
         _schoolSubtitle = safeText(
@@ -659,7 +641,6 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
   void _onNotifChanged() {
     if (!mounted) return;
     setState(() {
-      _unreadCount = _notifService?.getUnreadCountForRole('super_admin') ?? 0;
     });
   }
 
@@ -765,19 +746,6 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
           icon: Icons.search_rounded,
           label: SchoolDeskGlossary.globalSearch,
           route: AppRoutes.globalSearch,
-        ),
-        SchoolDeskNavigationFooterAction(
-          icon: Icons.notifications_outlined,
-          label: SchoolDeskGlossary.notifications,
-          route: AppRoutes.notificationCenter,
-          arguments: 'super_admin',
-          badgeCount: _unreadCount,
-        ),
-        const SchoolDeskNavigationFooterAction(
-          icon: Icons.account_circle_outlined,
-          label: SchoolDeskGlossary.profile,
-          route: AppRoutes.profileScreen,
-          arguments: 'super_admin',
         ),
         const SchoolDeskNavigationFooterAction(
           icon: Icons.settings_outlined,
@@ -912,10 +880,10 @@ class _SuperAdminShellBottomBarState extends State<SuperAdminShellBottomBar> {
         arguments: 'super_admin',
       ),
       _SuperAdminShellDestination(
-        label: SchoolDeskGlossary.profile,
-        icon: Icons.account_circle_outlined,
-        activeIcon: Icons.account_circle_rounded,
-        route: AppRoutes.profileScreen,
+        label: SchoolDeskGlossary.settings,
+        icon: Icons.settings_outlined,
+        activeIcon: Icons.settings_rounded,
+        route: AppRoutes.settingsScreen,
         arguments: 'super_admin',
       ),
     ];

@@ -1,3 +1,4 @@
+import 'package:schooldesk1/core/utils/attendance_labels.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -305,13 +306,15 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
       children: [
         Positioned.fill(
           child: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  Color(0xFFFFFDF9), // Extremely soft warm cream
-                  Color(0xFFFFF4F4), // Extremely soft warm rose
-                  Color(0xFFF2F7FD), // Extremely soft clean blue
-                ],
+                colors: Theme.of(context).brightness == Brightness.dark
+                    ? [tokens.background, tokens.background, tokens.background]
+                    : const [
+                        Color(0xFFFFFDF9), // Extremely soft warm cream
+                        Color(0xFFFFF4F4), // Extremely soft warm rose
+                        Color(0xFFF2F7FD), // Extremely soft clean blue
+                      ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -1063,7 +1066,7 @@ void _showPostDetailsBottomSheet(
                       style: GoogleFonts.dmSans(
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
-                        color: const Color(0xFF1E293B),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     if (author.isNotEmpty) ...[
@@ -1107,7 +1110,7 @@ void _showPostDetailsBottomSheet(
                       style: GoogleFonts.dmSans(
                         fontSize: 15,
                         height: 1.6,
-                        color: const Color(0xFF334155),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -1287,9 +1290,9 @@ class _PostCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -1390,7 +1393,7 @@ class _ParentSummaryGrid extends StatelessWidget {
       _StatCard(
         icon: Icons.how_to_reg_rounded,
         label: 'Attendance',
-        value: _percentage(child['attendance_pct']),
+        value: attendanceTodayLabel(child),
         gradientColors: const [Color(0xFF0F766E), Color(0xFF14B8A6)],
         route: AppRoutes.parentAttendance,
       ),
@@ -1770,11 +1773,6 @@ String _number(dynamic value) {
 String _metricNumber(dynamic value) {
   if (value == null || _text(value).isEmpty) return '—';
   return _number(value);
-}
-
-String _percentage(dynamic value) {
-  if (value == null || _text(value).isEmpty) return 'Not marked';
-  return '${_number(value)}%';
 }
 
 String _money(dynamic value) {

@@ -95,7 +95,17 @@ void main() {
     for (final path in paths) {
       final source = File(path).readAsStringSync();
       expect(source, contains('RepositoryState<'), reason: path);
-      expect(source, contains('SchoolDeskRepositoryStateView<'), reason: path);
+      if (path.contains('/teacher_attendance_screen/')) {
+        expect(source, contains('if (_state.isLoading)'), reason: path);
+        expect(source, contains('if (_state.error != null)'), reason: path);
+        expect(source, contains('if (_state.hasData)'), reason: path);
+      } else {
+        expect(
+          source,
+          contains('SchoolDeskRepositoryStateView<'),
+          reason: path,
+        );
+      }
       expect(source, isNot(contains('bool _loading =')), reason: path);
       expect(source, isNot(contains('String? _error')), reason: path);
     }

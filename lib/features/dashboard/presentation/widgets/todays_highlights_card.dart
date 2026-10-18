@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/modules/communication/data/api_dashboard_highlights_repository.dart';
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:schooldesk1/core/services/notification_service.dart';
@@ -16,8 +18,17 @@ class TodaysHighlightsCard extends StatefulWidget {
   State<TodaysHighlightsCard> createState() => _TodaysHighlightsCardState();
 }
 
-class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
+class _TodaysHighlightsCardState extends State<TodaysHighlightsCard>
+    with WidgetsBindingObserver {
   NotificationService? _service;
+  List<AppNotification> _highlights = [];
+  String? _loadError;
+  DateTime? _highlightDate;
+  RealtimeRefreshSubscription? _refreshSubscription;
+  void _changed() {
+    if (mounted) _load();
+  }
+
   SharedPreferences? _prefs;
   bool _expanded = false;
   bool _stateReady = false;
@@ -26,25 +37,57 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    _refreshSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'today-highlights-${widget.role}',
+      modules: const {'notifications', 'health_reminders', 'students'},
+      onRefresh: () {
+        if (mounted) _load();
+      },
+    );
   }
 
-  static bool _alreadyRefreshedToday = false;
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshSubscription?.dispose();
+    _service?.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _load();
+  }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final svc = await NotificationService.getInstance();
-    // Only force-refresh notifications once per app session to avoid
-    // hammering the /notifications endpoint on every widget rebuild.
-    if (!_alreadyRefreshedToday) {
-      _alreadyRefreshedToday = true;
-      await svc.refresh();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final svc = await NotificationService.getInstance();
+      final result = await ApiDashboardHighlightsRepository().load();
+      if (!mounted) return;
+      _service?.removeListener(_changed);
+      svc.addListener(_changed);
+      setState(() {
+        _prefs = prefs;
+        _service = svc;
+        _loadError = null;
+        _highlightDate = DateTime.tryParse('${result['date'] ?? ''}');
+        _highlights = (result['items'] as List? ?? [])
+            .whereType<Map>()
+            .map(
+              (row) => AppNotification.fromJson(Map<String, dynamic>.from(row)),
+            )
+            .toList();
+      });
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _loadError = 'Unable to load today’s highlights';
+        });
+      }
     }
-    if (!mounted) return;
-    setState(() {
-      _prefs = prefs;
-      _service = svc;
-    });
   }
 
   @override
@@ -52,32 +95,28 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
 
-    final allNotifs = _service?.getNotificationsForRole(widget.role) ?? [];
-    final today = DateTime.now();
+    final allNotifs = _highlights;
+    final today = _highlightDate ?? DateTime.now();
 
     final birthdayNotifs = allNotifs.where((n) {
-      return n.category == NotificationCategory.birthday &&
-          _isSameDay(n.timestamp, today);
+      return n.category == NotificationCategory.birthday;
     }).toList();
 
     final healthNotifs = allNotifs.where((n) {
       return (n.category == NotificationCategory.health ||
-              n.category == NotificationCategory.healthAlert) &&
-          _isSameDay(n.timestamp, today);
+          n.category == NotificationCategory.healthAlert);
     }).toList();
 
     // Also check reference_type for birthday notifications from the backend
     final birthdayByRef = allNotifs.where((n) {
       return (n.referenceType.contains('birthday') ||
-              n.referenceType.contains('birthday_wish')) &&
-          _isSameDay(n.timestamp, today);
+          n.referenceType.contains('birthday_wish'));
     }).toList();
 
     // Also check reference_type for health reminders
     final healthByRef = allNotifs.where((n) {
       return (n.referenceType.contains('health_reminder') ||
-              n.referenceType.contains('health')) &&
-          _isSameDay(n.timestamp, today);
+          n.referenceType.contains('health'));
     }).toList();
 
     final combinedBirthdays = _mergeUnique([
@@ -89,6 +128,13 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     if (todaysHighlights.isEmpty) {
+      if (_loadError != null) {
+        return TextButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh),
+          label: Text(_loadError!),
+        );
+      }
       return const SizedBox.shrink();
     }
 
@@ -187,6 +233,11 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
                 notifications: combinedBirthdays.take(5).toList(),
                 onAcknowledge: (notifId) async {
                   await _service?.markAsRead(notifId);
+                  _highlights = _highlights
+                      .map(
+                        (n) => n.id == notifId ? n.copyWith(isRead: true) : n,
+                      )
+                      .toList();
                   if (mounted) setState(() {});
                 },
               ),
@@ -198,6 +249,11 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
                 notifications: combinedHealth.take(5).toList(),
                 onAcknowledge: (notifId) async {
                   await _service?.markAsRead(notifId);
+                  _highlights = _highlights
+                      .map(
+                        (n) => n.id == notifId ? n.copyWith(isRead: true) : n,
+                      )
+                      .toList();
                   if (mounted) setState(() {});
                 },
               ),
@@ -218,9 +274,6 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
     }
     return result;
   }
-
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
 
   String _storageKey(DateTime date) =>
       'todays_highlights_${widget.role}_${date.year}_${date.month}_${date.day}';

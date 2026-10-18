@@ -5,7 +5,9 @@ import 'dart:math';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' show BooleanExpressionOperators;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/offline/offline_database.dart';
@@ -39,7 +41,7 @@ class OfflineDioInterceptor extends Interceptor {
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     final sync = _engine;
     final request = response.requestOptions;
-    if (sync != null && _isCacheableRead(request)) {
+    if (sync != null && isCacheableRead(request)) {
       unawaited(sync.cacheResponse(request: request, response: response));
       // A successful network response is authoritative evidence that the API
       // is reachable. Clear a stale offline state without waiting for a
@@ -66,7 +68,7 @@ class OfflineDioInterceptor extends Interceptor {
     if (sync != null &&
         isTransportFailure &&
         request.method.toUpperCase() == 'GET' &&
-        _isCacheableRead(request)) {
+        isCacheableRead(request)) {
       final cached = await sync.readCachedResponse(request);
       if (cached != null) {
         handler.resolve(cached);
@@ -115,7 +117,20 @@ class OfflineDioInterceptor extends Interceptor {
     }
   }
 
-  bool _isCacheableRead(RequestOptions request) {
+  @visibleForTesting
+  static bool isCacheableRead(RequestOptions request) {
+    // Explicit refreshes must surface transport failures instead of silently
+    // substituting an older calendar, authorization scope, or register.
+    final noStore = request.headers.entries.any(
+      (entry) =>
+          entry.key.toLowerCase() == 'cache-control' &&
+          entry.value
+              .toString()
+              .toLowerCase()
+              .split(',')
+              .any((directive) => directive.trim() == 'no-store'),
+    );
+    if (noStore) return false;
     final clean = request.path.toLowerCase();
     if (clean.contains('/health') ||
         clean.contains('/uploads') ||
@@ -148,12 +163,21 @@ class OfflineDioInterceptor extends Interceptor {
 /// Connectivity events only trigger a sync attempt. A successful API request
 /// remains the source of truth because Wi-Fi/mobile connectivity does not
 /// guarantee that the Edge API is reachable.
-class OfflineSyncEngine extends ChangeNotifier {
+class OfflineSyncEngine extends ChangeNotifier with WidgetsBindingObserver {
   OfflineSyncEngine({
     required this.database,
     required this.api,
     Connectivity? connectivity,
-  }) : _connectivity = connectivity ?? Connectivity();
+    @visibleForTesting Timer Function(Duration, void Function())? retryTimer,
+  }) : _connectivity = connectivity ?? Connectivity(),
+       _newRetryTimer = retryTimer ?? Timer.new {
+    _retryScope = accountKey;
+    api.addListener(_retryAccountChanged);
+    WidgetsBinding.instance.addObserver(this);
+    _retryForeground =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.inactive;
+  }
 
   static OfflineSyncEngine? _instance;
 
@@ -182,7 +206,11 @@ class OfflineSyncEngine extends ChangeNotifier {
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   Future<void>? _syncFuture;
-  bool _started = false;
+  bool _started = false, _disposed = false, _retryForeground = true;
+  final Timer Function(Duration, void Function()) _newRetryTimer;
+  Timer? _chatRetryTimer;
+  String _retryScope = '';
+  int _retryGeneration = 0;
   OfflineConnectionState _state = OfflineConnectionState.unknown;
   int _pendingMutationCount = 0;
   DateTime? _lastSyncedAt;
@@ -239,6 +267,11 @@ class OfflineSyncEngine extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _cancelChatRetry();
+    api.removeListener(_retryAccountChanged);
+    WidgetsBinding.instance.removeObserver(this);
     if (identical(_instance, this)) _instance = null;
     unawaited(_connectivitySubscription?.cancel() ?? Future<void>.value());
     unawaited(database.close());
@@ -352,14 +385,102 @@ class OfflineSyncEngine extends ChangeNotifier {
     return true;
   }
 
-  Future<void> syncNow() {
+  Future<void> syncNow() => _syncNow();
+
+  Future<void> _syncNow() {
+    if (_disposed) return Future<void>.value();
     final running = _syncFuture;
     if (running != null) return running;
 
+    _cancelChatRetry();
+    final scope = accountKey;
     final future = _syncPendingMutations();
     _syncFuture = future;
-    return future.whenComplete(() {
+    return future.whenComplete(() async {
       if (identical(_syncFuture, future)) _syncFuture = null;
+      await _scheduleChatRetry(scope);
+    });
+  }
+
+  void _cancelChatRetry() {
+    ++_retryGeneration;
+    _chatRetryTimer?.cancel();
+    _chatRetryTimer = null;
+  }
+
+  void _retryAccountChanged() {
+    if (_retryScope == accountKey) return;
+    _retryScope = accountKey;
+    _cancelChatRetry();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_disposed) return;
+    if (state == AppLifecycleState.resumed) {
+      _retryForeground = true;
+      unawaited(_scheduleChatRetry(accountKey));
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _retryForeground = false;
+      _cancelChatRetry();
+    }
+  }
+
+  Future<void> _scheduleChatRetry(String scope) async {
+    final generation = _retryGeneration;
+    if (_disposed ||
+        !_retryForeground ||
+        !api.isAuthenticated ||
+        scope == 'anonymous' ||
+        scope != accountKey) {
+      return;
+    }
+    // Only chat adds foreground wakeups. Existing upload, attendance, and
+    // homework scheduling remains owned by their established triggers.
+    List<SyncOutboxEntry> rows;
+    try {
+      rows =
+          await (database.select(database.syncOutboxEntries)..where(
+                (row) =>
+                    row.accountKey.equals(scope) &
+                    row.operationType.equals('message.compose') &
+                    row.status.equals('pending') &
+                    row.nextAttemptAt.isNotNull(),
+              ))
+              .get();
+    } on Object {
+      // A concurrent dispose can close SQLite while the scheduling read waits.
+      // The durable row remains available to the next normal sync trigger.
+      return;
+    }
+    if (_disposed ||
+        !_retryForeground ||
+        generation != _retryGeneration ||
+        scope != accountKey ||
+        rows.isEmpty ||
+        _syncFuture != null) {
+      return;
+    }
+    final due = rows
+        .map((row) => row.nextAttemptAt!)
+        .reduce((left, right) => left.isBefore(right) ? left : right);
+    final wait = due.difference(DateTime.now());
+    final delay = Duration(
+      milliseconds: wait.inMilliseconds.clamp(1000, 300000),
+    );
+    _chatRetryTimer?.cancel();
+    _chatRetryTimer = _newRetryTimer(delay, () {
+      _chatRetryTimer = null;
+      if (_disposed ||
+          !_retryForeground ||
+          generation != _retryGeneration ||
+          scope != accountKey ||
+          !api.isAuthenticated) {
+        return;
+      }
+      unawaited(_syncNow());
     });
   }
 
@@ -386,7 +507,7 @@ class OfflineSyncEngine extends ChangeNotifier {
 
     final pending = await database.pendingMutations(accountKey);
     _pendingMutationCount = await database.pendingWorkCount(accountKey);
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     if (pending.isEmpty) {
       final outstanding = await database.pendingWorkCount(accountKey);
       if (outstanding == 0 && !await _probeBackend()) {
@@ -444,6 +565,10 @@ class OfflineSyncEngine extends ChangeNotifier {
         final resolvedPath =
             await _resolveQueuedReferences(mutation.path) as String;
         final resolvedRequestData = await _resolveQueuedReferences(requestData);
+        if (_disposed || syncAccountKey != api.offlineAccountKey) {
+          _lastError = 'Session scope changed while syncing offline work.';
+          break;
+        }
         if (_containsQueuedPlaceholder(resolvedPath) ||
             _containsQueuedPlaceholder(resolvedRequestData)) {
           throw StateError(
@@ -458,7 +583,10 @@ class OfflineSyncEngine extends ChangeNotifier {
           options: Options(
             method: mutation.method,
             headers: {'Idempotency-Key': mutation.idempotencyKey},
-            extra: const {'schooldeskOfflineReplay': true},
+            extra: {
+              'schooldeskOfflineReplay': true,
+              'schooldeskExpectedScope': syncAccountKey,
+            },
           ),
         );
         final localId = metadata is Map ? metadata['local_id'] : null;
@@ -587,7 +715,7 @@ class OfflineSyncEngine extends ChangeNotifier {
     } else {
       _pendingMutationCount = await database.pendingWorkCount(accountKey);
     }
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Future<OfflineQueuedUpload?> enqueueFileUpload({
@@ -852,6 +980,7 @@ class OfflineSyncEngine extends ChangeNotifier {
   }
 
   void _setState(OfflineConnectionState next) {
+    if (_disposed) return;
     if (_state == next) {
       notifyListeners();
       return;

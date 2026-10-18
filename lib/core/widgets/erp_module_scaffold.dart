@@ -69,8 +69,13 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
   String get _role =>
       BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
 
-  bool get _hasRoleShell =>
-      const {'principal', 'teacher', 'parent'}.contains(_role);
+  bool get _hasRoleShell => const {
+    'principal',
+    'coordinator',
+    'super_admin',
+    'teacher',
+    'parent',
+  }.contains(_role);
 
   @override
   void initState() {
@@ -995,15 +1000,17 @@ class _ModuleBottomActionBarState extends State<_ModuleBottomActionBar> {
         icon: Icons.notifications_none_rounded,
         activeIcon: Icons.notifications_rounded,
         route: notificationsRoute,
+        arguments: role,
         selected: currentRoute == notificationsRoute,
         badgeCount: widget.unreadCount,
       ),
       _BottomAction(
-        label: SchoolDeskGlossary.profile,
-        icon: Icons.account_circle_outlined,
-        activeIcon: Icons.account_circle_rounded,
-        route: AppRoutes.profileScreen,
-        selected: currentRoute == AppRoutes.profileScreen,
+        label: SchoolDeskGlossary.settings,
+        icon: Icons.settings_outlined,
+        activeIcon: Icons.settings_rounded,
+        route: AppRoutes.settingsScreen,
+        arguments: role,
+        selected: currentRoute == AppRoutes.settingsScreen,
       ),
     ];
   }

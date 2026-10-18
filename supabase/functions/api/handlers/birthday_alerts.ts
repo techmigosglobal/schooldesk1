@@ -1,3 +1,4 @@
+import { schoolDay } from "../lib/school_day.ts";
 // handlers/birthday_alerts.ts - daily DOB based birthday notification fan-out.
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
@@ -137,7 +138,7 @@ export async function handleBirthdayAlerts(
     return ok({ delivery_window: window, schools_processed: results.length });
   }
   if (!school) return fail("school_id required", 422);
-  const date = runDate(url, body);
+  const date = text(body.date ?? url.searchParams.get("date")) || (await schoolDay(svc, school)).date;
   const [, month, day] = date.split("-");
 
   const { data: students, error } = await svc.from("students")
@@ -169,10 +170,16 @@ export async function handleBirthdayAlerts(
     .eq("is_active", true);
   if (recipientError) return fail(recipientError.message);
 
+  const [{data: sections,error: sectionsError},{data: links,error: linksError}] = await Promise.all([
+    svc.from("sections").select("id,class_teacher_id,co_teacher_id").eq("school_id",school),
+    svc.from("parent_student_links").select("parent_user_id,student_id").eq("school_id",school),
+  ]);
+  if (sectionsError || linksError) return fail((sectionsError || linksError)!.message);
   type StudentInfo = {
     id: string;
     name: string;
     photo_url: string;
+    section_id: string;
   };
   type RecipientGroup = {
     role: "teacher" | "principal" | "coordinator" | "parent";
@@ -208,6 +215,7 @@ export async function handleBirthdayAlerts(
       id: text(student.id),
       name: studentName,
       photo_url: text(student.photo_url),
+      section_id: text(student.current_section_id),
     };
 
     const sectionId = text(student.current_section_id);
@@ -219,6 +227,11 @@ export async function handleBirthdayAlerts(
         targetRole !== "principal" &&
         targetRole !== "coordinator"
       ) continue;
+      if (targetRole === "teacher") {
+        const section = (sections ?? []).find(row=>text(row.id)===sectionId);
+        if (!section || ![text(section.class_teacher_id),text(section.co_teacher_id)].includes(text(recipient.linked_id))) continue;
+      }
+      if (targetRole === "parent" && !(links ?? []).some(row=>text(row.parent_user_id)===text(recipient.id) && text(row.student_id)===text(student.id))) continue;
       const userId = text(recipient.id);
       if (!userId) continue;
       addStudentToRecipient(
@@ -251,7 +264,7 @@ export async function handleBirthdayAlerts(
         route: "/notification-center-screen",
         priority: "high",
         student_id: student.id,
-        section_id: group.sectionId || null,
+        section_id: student.section_id || null,
         teacher_id: group.teacherId || null,
         is_read: false,
       });

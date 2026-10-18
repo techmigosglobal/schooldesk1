@@ -41,8 +41,8 @@ void main() {
       ),
     );
     expect(find.text('cached row'), findsOneWidget);
-    expect(find.text('Showing saved data'), findsOneWidget);
-    expect(find.text('Refresh'), findsOneWidget);
+    expect(find.text('Showing saved data. Reconnecting…'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
   });
 
   testWidgets('renders empty state with retry action', (tester) async {

@@ -256,8 +256,8 @@ class AcademicYearModel {
         id: json['id'] as String,
         schoolId: json['school_id'] as String,
         yearLabel: json['year_label'] as String,
-        startDate: json['start_date'] as String,
-        endDate: json['end_date'] as String,
+        startDate: '${json['start_date'] ?? ''}',
+        endDate: '${json['end_date'] ?? ''}',
         isCurrent: json['is_current'] as bool? ?? false,
         status: json['status'] as String? ?? 'upcoming',
       );
@@ -1461,23 +1461,23 @@ class AnnouncementModel {
     this.attachmentUrl,
   });
 
-  factory AnnouncementModel.fromJson(Map<String, dynamic> json) =>
-      AnnouncementModel(
-        id: '${json['id'] ?? ''}',
-        schoolId: '${json['school_id'] ?? ''}',
-        title: '${json['title'] ?? ''}',
-        // The API's persisted announcement shape uses `body` and `audience`;
-        // older clients and fixtures used the UI names below. Accept both so
-        // a nullable legacy column cannot crash the teacher dashboard.
-        content: '${json['content'] ?? json['body'] ?? ''}',
-        targetAudience:
-            '${json['target_audience'] ?? json['audience'] ?? 'all'}',
-        isUrgent: json['is_urgent'] as bool? ??
-            '${json['priority'] ?? ''}'.toLowerCase() == 'urgent',
-        createdBy: '${json['created_by'] ?? ''}',
-        publishedAt:
-            '${json['published_at'] ?? json['scheduled_at'] ?? json['created_at'] ?? ''}',
-        attachmentUrl:
-            (json['attachment_url'] ?? json['attachments'])?.toString(),
-      );
+  factory AnnouncementModel.fromJson(
+    Map<String, dynamic> json,
+  ) => AnnouncementModel(
+    id: '${json['id'] ?? ''}',
+    schoolId: '${json['school_id'] ?? ''}',
+    title: '${json['title'] ?? ''}',
+    // The API's persisted announcement shape uses `body` and `audience`;
+    // older clients and fixtures used the UI names below. Accept both so
+    // a nullable legacy column cannot crash the teacher dashboard.
+    content: '${json['content'] ?? json['body'] ?? ''}',
+    targetAudience: '${json['target_audience'] ?? json['audience'] ?? 'all'}',
+    isUrgent:
+        json['is_urgent'] as bool? ??
+        '${json['priority'] ?? ''}'.toLowerCase() == 'urgent',
+    createdBy: '${json['created_by'] ?? ''}',
+    publishedAt:
+        '${json['published_at'] ?? json['scheduled_at'] ?? json['created_at'] ?? ''}',
+    attachmentUrl: (json['attachment_url'] ?? json['attachments'])?.toString(),
+  );
 }

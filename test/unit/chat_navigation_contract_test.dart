@@ -33,7 +33,7 @@ void main() {
       );
       expect(source, contains("text: 'Monitor'"));
       expect(source, contains("text: 'Direct'"));
-    expect(source, contains("child: Text('All classes')"));
+      expect(source, contains("child: Text('All classes')"));
     },
   );
 }

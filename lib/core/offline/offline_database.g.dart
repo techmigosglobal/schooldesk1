@@ -6624,6 +6624,326 @@ class LocalHomeworkDraftsCompanion extends UpdateCompanion<LocalHomeworkDraft> {
   }
 }
 
+class $LocalChatDraftsTable extends LocalChatDrafts
+    with TableInfo<$LocalChatDraftsTable, LocalChatDraft> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalChatDraftsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountKeyMeta = const VerificationMeta(
+    'accountKey',
+  );
+  @override
+  late final GeneratedColumn<String> accountKey = GeneratedColumn<String>(
+    'account_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _threadKeyMeta = const VerificationMeta(
+    'threadKey',
+  );
+  @override
+  late final GeneratedColumn<String> threadKey = GeneratedColumn<String>(
+    'thread_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountKey,
+    threadKey,
+    body,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_chat_drafts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalChatDraft> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_key')) {
+      context.handle(
+        _accountKeyMeta,
+        accountKey.isAcceptableOrUnknown(data['account_key']!, _accountKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountKeyMeta);
+    }
+    if (data.containsKey('thread_key')) {
+      context.handle(
+        _threadKeyMeta,
+        threadKey.isAcceptableOrUnknown(data['thread_key']!, _threadKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_threadKeyMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountKey, threadKey};
+  @override
+  LocalChatDraft map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalChatDraft(
+      accountKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_key'],
+      )!,
+      threadKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}thread_key'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalChatDraftsTable createAlias(String alias) {
+    return $LocalChatDraftsTable(attachedDatabase, alias);
+  }
+}
+
+class LocalChatDraft extends DataClass implements Insertable<LocalChatDraft> {
+  final String accountKey;
+  final String threadKey;
+  final String body;
+  final DateTime updatedAt;
+  const LocalChatDraft({
+    required this.accountKey,
+    required this.threadKey,
+    required this.body,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_key'] = Variable<String>(accountKey);
+    map['thread_key'] = Variable<String>(threadKey);
+    map['body'] = Variable<String>(body);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LocalChatDraftsCompanion toCompanion(bool nullToAbsent) {
+    return LocalChatDraftsCompanion(
+      accountKey: Value(accountKey),
+      threadKey: Value(threadKey),
+      body: Value(body),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory LocalChatDraft.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalChatDraft(
+      accountKey: serializer.fromJson<String>(json['accountKey']),
+      threadKey: serializer.fromJson<String>(json['threadKey']),
+      body: serializer.fromJson<String>(json['body']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountKey': serializer.toJson<String>(accountKey),
+      'threadKey': serializer.toJson<String>(threadKey),
+      'body': serializer.toJson<String>(body),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  LocalChatDraft copyWith({
+    String? accountKey,
+    String? threadKey,
+    String? body,
+    DateTime? updatedAt,
+  }) => LocalChatDraft(
+    accountKey: accountKey ?? this.accountKey,
+    threadKey: threadKey ?? this.threadKey,
+    body: body ?? this.body,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  LocalChatDraft copyWithCompanion(LocalChatDraftsCompanion data) {
+    return LocalChatDraft(
+      accountKey: data.accountKey.present
+          ? data.accountKey.value
+          : this.accountKey,
+      threadKey: data.threadKey.present ? data.threadKey.value : this.threadKey,
+      body: data.body.present ? data.body.value : this.body,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalChatDraft(')
+          ..write('accountKey: $accountKey, ')
+          ..write('threadKey: $threadKey, ')
+          ..write('body: $body, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(accountKey, threadKey, body, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalChatDraft &&
+          other.accountKey == this.accountKey &&
+          other.threadKey == this.threadKey &&
+          other.body == this.body &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LocalChatDraftsCompanion extends UpdateCompanion<LocalChatDraft> {
+  final Value<String> accountKey;
+  final Value<String> threadKey;
+  final Value<String> body;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const LocalChatDraftsCompanion({
+    this.accountKey = const Value.absent(),
+    this.threadKey = const Value.absent(),
+    this.body = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalChatDraftsCompanion.insert({
+    required String accountKey,
+    required String threadKey,
+    required String body,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : accountKey = Value(accountKey),
+       threadKey = Value(threadKey),
+       body = Value(body),
+       updatedAt = Value(updatedAt);
+  static Insertable<LocalChatDraft> custom({
+    Expression<String>? accountKey,
+    Expression<String>? threadKey,
+    Expression<String>? body,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountKey != null) 'account_key': accountKey,
+      if (threadKey != null) 'thread_key': threadKey,
+      if (body != null) 'body': body,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalChatDraftsCompanion copyWith({
+    Value<String>? accountKey,
+    Value<String>? threadKey,
+    Value<String>? body,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return LocalChatDraftsCompanion(
+      accountKey: accountKey ?? this.accountKey,
+      threadKey: threadKey ?? this.threadKey,
+      body: body ?? this.body,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountKey.present) {
+      map['account_key'] = Variable<String>(accountKey.value);
+    }
+    if (threadKey.present) {
+      map['thread_key'] = Variable<String>(threadKey.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalChatDraftsCompanion(')
+          ..write('accountKey: $accountKey, ')
+          ..write('threadKey: $threadKey, ')
+          ..write('body: $body, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$OfflineDatabase extends GeneratedDatabase {
   _$OfflineDatabase(QueryExecutor e) : super(e);
   $OfflineDatabaseManager get managers => $OfflineDatabaseManager(this);
@@ -6644,6 +6964,9 @@ abstract class _$OfflineDatabase extends GeneratedDatabase {
   late final $LocalStudentsTable localStudents = $LocalStudentsTable(this);
   late final $LocalHomeworkDraftsTable localHomeworkDrafts =
       $LocalHomeworkDraftsTable(this);
+  late final $LocalChatDraftsTable localChatDrafts = $LocalChatDraftsTable(
+    this,
+  );
   late final Index syncOutboxAccountIdempotencyIdx = Index(
     'sync_outbox_account_idempotency_idx',
     'CREATE UNIQUE INDEX sync_outbox_account_idempotency_idx ON sync_outbox_entries (account_key, idempotency_key)',
@@ -6662,6 +6985,7 @@ abstract class _$OfflineDatabase extends GeneratedDatabase {
     localAttendanceSessions,
     localStudents,
     localHomeworkDrafts,
+    localChatDrafts,
     syncOutboxAccountIdempotencyIdx,
   ];
 }
@@ -9988,6 +10312,208 @@ typedef $$LocalHomeworkDraftsTableProcessedTableManager =
       LocalHomeworkDraft,
       PrefetchHooks Function()
     >;
+typedef $$LocalChatDraftsTableCreateCompanionBuilder =
+    LocalChatDraftsCompanion Function({
+      required String accountKey,
+      required String threadKey,
+      required String body,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$LocalChatDraftsTableUpdateCompanionBuilder =
+    LocalChatDraftsCompanion Function({
+      Value<String> accountKey,
+      Value<String> threadKey,
+      Value<String> body,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$LocalChatDraftsTableFilterComposer
+    extends Composer<_$OfflineDatabase, $LocalChatDraftsTable> {
+  $$LocalChatDraftsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get threadKey => $composableBuilder(
+    column: $table.threadKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LocalChatDraftsTableOrderingComposer
+    extends Composer<_$OfflineDatabase, $LocalChatDraftsTable> {
+  $$LocalChatDraftsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get threadKey => $composableBuilder(
+    column: $table.threadKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LocalChatDraftsTableAnnotationComposer
+    extends Composer<_$OfflineDatabase, $LocalChatDraftsTable> {
+  $$LocalChatDraftsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get threadKey =>
+      $composableBuilder(column: $table.threadKey, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$LocalChatDraftsTableTableManager
+    extends
+        RootTableManager<
+          _$OfflineDatabase,
+          $LocalChatDraftsTable,
+          LocalChatDraft,
+          $$LocalChatDraftsTableFilterComposer,
+          $$LocalChatDraftsTableOrderingComposer,
+          $$LocalChatDraftsTableAnnotationComposer,
+          $$LocalChatDraftsTableCreateCompanionBuilder,
+          $$LocalChatDraftsTableUpdateCompanionBuilder,
+          (
+            LocalChatDraft,
+            BaseReferences<
+              _$OfflineDatabase,
+              $LocalChatDraftsTable,
+              LocalChatDraft
+            >,
+          ),
+          LocalChatDraft,
+          PrefetchHooks Function()
+        > {
+  $$LocalChatDraftsTableTableManager(
+    _$OfflineDatabase db,
+    $LocalChatDraftsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalChatDraftsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalChatDraftsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalChatDraftsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> accountKey = const Value.absent(),
+                Value<String> threadKey = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalChatDraftsCompanion(
+                accountKey: accountKey,
+                threadKey: threadKey,
+                body: body,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountKey,
+                required String threadKey,
+                required String body,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LocalChatDraftsCompanion.insert(
+                accountKey: accountKey,
+                threadKey: threadKey,
+                body: body,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LocalChatDraftsTable, LocalChatDraft>(table),
+                  BaseReferences<
+                    _$OfflineDatabase,
+                    $LocalChatDraftsTable,
+                    LocalChatDraft
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LocalChatDraftsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$OfflineDatabase,
+      $LocalChatDraftsTable,
+      LocalChatDraft,
+      $$LocalChatDraftsTableFilterComposer,
+      $$LocalChatDraftsTableOrderingComposer,
+      $$LocalChatDraftsTableAnnotationComposer,
+      $$LocalChatDraftsTableCreateCompanionBuilder,
+      $$LocalChatDraftsTableUpdateCompanionBuilder,
+      (
+        LocalChatDraft,
+        BaseReferences<
+          _$OfflineDatabase,
+          $LocalChatDraftsTable,
+          LocalChatDraft
+        >,
+      ),
+      LocalChatDraft,
+      PrefetchHooks Function()
+    >;
 
 class $OfflineDatabaseManager {
   final _$OfflineDatabase _db;
@@ -10016,4 +10542,6 @@ class $OfflineDatabaseManager {
       $$LocalStudentsTableTableManager(_db, _db.localStudents);
   $$LocalHomeworkDraftsTableTableManager get localHomeworkDrafts =>
       $$LocalHomeworkDraftsTableTableManager(_db, _db.localHomeworkDrafts);
+  $$LocalChatDraftsTableTableManager get localChatDrafts =>
+      $$LocalChatDraftsTableTableManager(_db, _db.localChatDrafts);
 }

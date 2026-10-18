@@ -1,3 +1,4 @@
+import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -43,13 +44,14 @@ class ParentHomeworkScreen extends StatefulWidget {
 }
 
 class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   ParentHomeworkRepository get _repository =>
       widget.repository ?? ApiParentHomeworkRepository.legacyDefault;
 
   int _selectedNavIndex = ParentNav.homework;
   late TabController _tabController;
   int _activeChildIndex = 0;
+  RealtimeRefreshSubscription? _reviewSubscription;
 
   RepositoryState<_ParentHomeworkSnapshot> _state =
       const RepositoryState.loading();
@@ -83,8 +85,21 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _reviewSubscription = RealtimeRefreshService.instance.subscribe(
+      channelName: 'parent-diary-reviews',
+      modules: const {'homework', 'homework_submissions', 'notifications'},
+      onRefresh: () {
+        if (mounted) _loadData();
+      },
+    );
     _loadData();
     _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _loadData();
   }
 
   Future<void> _loadData() async {
@@ -211,6 +226,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _reviewSubscription?.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -693,7 +710,11 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
         homeworkId,
         studentId: studentId,
       );
-      if (result.isFailure) return row;
+      if (result.isFailure) {
+        throw StateError(
+          result.failureOrNull?.message ?? 'Unable to load submission status',
+        );
+      }
       final response = result.dataOrNull!;
       final submissions = response['submissions'];
       if (submissions is! List || submissions.isEmpty) return row;
@@ -713,8 +734,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
             ? 'pending'
             : 'submitted',
       };
-    } on Object catch (_) {
-      return row;
+    } on Object {
+      rethrow;
     }
   }
 
@@ -747,8 +768,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
           behavior: SnackBarBehavior.floating,
         ),
       );
-      await _loadData();
     }
+    await _loadData();
   }
 
   String _studentName(Map<String, dynamic> child) {

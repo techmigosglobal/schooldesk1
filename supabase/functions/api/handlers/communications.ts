@@ -1,3 +1,5 @@
+import { handleNotificationBroadcasts } from "./notification_broadcasts.ts";
+import { scopeNotificationQuery } from "./notification_scope.ts";
 // handlers/communications.ts — announcements, notifications, messages, diary
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import {
@@ -13,6 +15,7 @@ import {
 import {
   signedPrivateFileUrl,
   stableStorageReference,
+  storageLocationFromValue,
 } from "../storage_helpers.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -82,7 +85,135 @@ function normalizeChatMessage(
     attachment_url: row.attachment_url ?? "",
     sent_at: sentAt,
     is_read: readBy.includes(currentUserId),
+    read_by: readBy,
+    recipient_read: row.recipient_read === true,
+    sender_avatar_url: row.sender_avatar_url ?? "",
   };
+}
+
+const CHAT_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function validChatCursor(at: string, id: string) {
+  return CHAT_UUID.test(id) &&
+    /^\d{4}-\d{2}-\d{2}T[0-9:.]+(?:Z|[+-]\d{2}:\d{2})$/.test(at) &&
+    Number.isFinite(Date.parse(at));
+}
+
+// Never expose arbitrary HTTP avatar values or sign a different school's object.
+async function chatAvatar(svc: SupabaseClient, school: string, value: unknown) {
+  const raw = text(value);
+  if (!raw) return "";
+  const location = storageLocationFromValue(raw, "school-private-files");
+  if (/^https?:\/\//i.test(raw) && !location) return "";
+  const path = location?.path ??
+    raw.replace(/^r2:\/\/(?:private|public)\//, "");
+  if (!path.split("/").includes(school) || path.split("/").includes("..")) {
+    return "";
+  }
+  try {
+    return await signedPrivateFileUrl(svc, raw);
+  } catch {
+    return "";
+  }
+}
+
+async function chatAvatars(
+  svc: SupabaseClient,
+  school: string,
+  userIds: string[],
+  staffIds: string[] = [],
+) {
+  const ids = uniqueText(userIds);
+  const staff = uniqueText(staffIds);
+  const [byId, byStaff] = await Promise.all([
+    ids.length
+      ? svc.from("users").select("id,linked_id,avatar").eq("school_id", school)
+        .in("id", ids)
+      : Promise.resolve({ data: [] }),
+    staff.length
+      ? svc.from("users").select("id,linked_id,avatar").eq("school_id", school)
+        .in("linked_id", staff)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const accounts = [...(byId.data ?? []), ...(byStaff.data ?? [])];
+  const linked = uniqueText([...staff, ...accounts.map((a) => a.linked_id)]);
+  const { data: profiles } = linked.length
+    ? await svc.from("staff").select("id,photo_url").eq("school_id", school).in(
+      "id",
+      linked,
+    )
+    : { data: [] };
+  const photos = new Map(
+    (profiles ?? []).map((r) => [text(r.id), r.photo_url]),
+  );
+  const result = new Map<string, string>();
+  await Promise.all(accounts.map(async (a) => {
+    const url = await chatAvatar(svc, school, a.avatar) ||
+      await chatAvatar(svc, school, photos.get(text(a.linked_id)));
+    result.set(text(a.id), url);
+    if (a.linked_id) result.set(text(a.linked_id), url);
+  }));
+  await Promise.all(
+    staff.filter((id) => !result.has(id)).map(async (id) =>
+      result.set(id, await chatAvatar(svc, school, photos.get(id)))
+    ),
+  );
+  return result;
+}
+
+async function enrichChatContacts(
+  svc: SupabaseClient,
+  school: string,
+  contacts: Record<string, unknown>[],
+) {
+  const avatars = await chatAvatars(
+    svc,
+    school,
+    contacts.filter((c) => c.role !== "teacher").map((c) => text(c.id)),
+    contacts.filter((c) => c.role === "teacher").map((c) => text(c.id)),
+  );
+  return contacts.map((c) => ({
+    ...c,
+    avatar_url: avatars.get(text(c.id)) ?? "",
+  }));
+}
+
+async function enrichChatMessages(
+  svc: SupabaseClient,
+  school: string,
+  conversation: Record<string, unknown>,
+  rows: Record<string, unknown>[],
+  user: User,
+) {
+  const teacher = await teacherUserIdForStaff(
+    svc,
+    school,
+    text(conversation.teacher_id),
+  );
+  const recipients = text(conversation.type) === "parent_teacher"
+    ? uniqueText([conversation.parent_id, teacher])
+    : uniqueText([
+      conversation.parent_id,
+      teacher,
+      conversation.leader_id ?? conversation.created_by,
+    ]);
+  const avatars = await chatAvatars(
+    svc,
+    school,
+    uniqueText(rows.map((r) => r.sender_id)),
+  );
+  return rows.map((r) =>
+    normalizeChatMessage({
+      ...r,
+      sender_avatar_url: avatars.get(text(r.sender_id)) ?? "",
+      recipient_read: recipients.filter((id) =>
+            id !== text(r.sender_id)
+          ).length > 0 &&
+        recipients.filter((id) => id !== text(r.sender_id)).every((id) =>
+          readByList(r.read_by).includes(id)
+        ),
+    }, user.id)
+  );
 }
 
 function uniqueText(values: unknown[]) {
@@ -153,7 +284,7 @@ async function isSchoolLeaderId(
 }
 
 function canRunPushDiagnostics(user: User) {
-  return ["principal", "coordinator", "admin", "super_admin"].includes(
+  return ["principal", "super_admin"].includes(
     role(user),
   );
 }
@@ -323,6 +454,9 @@ async function validateChatConversationScope(
   parentId: string,
   studentId: string,
 ): Promise<string | null> {
+  if (
+    !["parent_teacher", "principal_parent", "principal_teacher"].includes(type)
+  ) return "invalid conversation type";
   if (type === "parent_teacher") {
     if (!studentId) {
       return "parent_teacher scope requires a linked student";
@@ -624,6 +758,7 @@ async function teacherChatContacts(
           addedKeys.add(key);
           contacts.push({
             id: p.id,
+            teacher_id: staffId,
             name: p.name || p.username || "Parent",
             role: "parent",
             ...context,
@@ -648,6 +783,7 @@ async function teacherChatContacts(
       addedKeys.add(key);
       contacts.push({
         id: p.id,
+        teacher_id: staffId,
         name: p.name || p.username ||
           (leaderRole === "coordinator" ? "Coordinator" : "Principal"),
         role: leaderRole,
@@ -840,6 +976,9 @@ async function canSendChatMessage(
   conversation: Record<string, unknown>,
   user: User,
 ): Promise<boolean> {
+  if (!await canReadChatConversation(svc, school, conversation, user)) {
+    return false;
+  }
   const userRole = role(user);
   const type = text(conversation.type) || "parent_teacher";
   if (type === "parent_teacher") {
@@ -917,17 +1056,22 @@ async function enrichChatConversations(
   const sectionsById = new Map<string, Record<string, unknown>>();
 
   if (teacherIds.length) {
-    const { data } = await svc.from("staff").select("*").eq("school_id", school)
+    const { data } = await svc.from("staff").select("id,first_name,last_name")
+      .eq("school_id", school)
       .in("id", teacherIds);
     for (const row of data ?? []) teachersById.set(`${row.id}`, row);
   }
   if (parentIds.length) {
-    const { data } = await svc.from("users").select("*").eq("school_id", school)
+    const { data } = await svc.from("users").select(
+      "id,name,username,role_name",
+    ).eq("school_id", school)
       .in("id", parentIds);
     for (const row of data ?? []) parentsById.set(`${row.id}`, row);
   }
   if (studentIds.length) {
-    const { data } = await svc.from("students").select("*").eq(
+    const { data } = await svc.from("students").select(
+      "id,first_name,last_name,current_section_id",
+    ).eq(
       "school_id",
       school,
     ).in("id", studentIds);
@@ -952,6 +1096,15 @@ async function enrichChatConversations(
     for (const row of data ?? []) leadersById.set(`${row.id}`, row);
   }
 
+  const avatars = await chatAvatars(
+    svc,
+    school,
+    [...parentIds, ...leaderIds],
+    teacherIds,
+  );
+  for (const [id, item] of [...teachersById, ...parentsById, ...leadersById]) {
+    item.avatar_url = avatars.get(id) ?? "";
+  }
   return rows.map((row) => {
     const student = studentsById.get(`${row.student_id ?? ""}`) ?? null;
     const section = sectionsById.get(
@@ -1524,6 +1677,161 @@ export async function handleCommunications(
   }
 
   // ── Unified WhatsApp-style chat ────────────────────────────
+  if (path === "/chat/messages" && method === "POST") {
+    const clientId = text(body.client_message_id);
+    const messageText = text(body.body);
+    if (!CHAT_UUID.test(clientId)) {
+      return fail("client_message_id UUID required");
+    }
+    if (!messageText || messageText.length > 10000) {
+      return fail("message body must contain 1 to 10000 characters");
+    }
+    let conversation: Record<string, unknown>;
+    const conversationId = text(body.conversation_id);
+    if (conversationId) {
+      if (!CHAT_UUID.test(conversationId)) {
+        return fail("invalid conversation_id");
+      }
+      const { data, error } = await svc.from("message_conversations").select(
+        "*",
+      ).eq("school_id", school).eq("id", conversationId).maybeSingle();
+      if (error) return fail(error.message);
+      if (!data) return fail("conversation not found", 404);
+      conversation = data;
+    } else {
+      const type = text(body.type) || "parent_teacher";
+      const teacherId = role(user) === "teacher"
+        ? linkedStaffId(user)
+        : text(body.teacher_id);
+      const parentId = role(user) === "parent" ? user.id : text(body.parent_id);
+      const studentId = text(body.student_id);
+      const leaderId = type === "parent_teacher"
+        ? ""
+        : canManageSchoolContent(user)
+        ? user.id
+        : text(body.leader_id);
+      if (
+        !canManageSchoolContent(user) &&
+        !["parent", "teacher"].includes(role(user))
+      ) return fail("forbidden", 403);
+      if (
+        type === "principal_parent" && role(user) === "teacher" ||
+        type === "principal_teacher" && role(user) === "parent"
+      ) return fail("forbidden", 403);
+      for (const id of [teacherId, parentId, studentId, leaderId]) {
+        if (id && !CHAT_UUID.test(id)) return fail("invalid participant ID");
+      }
+      if (
+        type !== "parent_teacher" &&
+        !await isSchoolLeaderId(svc, school, leaderId)
+      ) return fail("a school leader is required", 403);
+      const invalid = await validateChatConversationScope(
+        svc,
+        school,
+        type,
+        teacherId,
+        parentId,
+        studentId,
+      );
+      if (invalid) return fail(invalid, 403);
+      conversation = {
+        type,
+        teacher_id: type === "principal_parent" ? null : teacherId || null,
+        parent_id: type === "principal_teacher" ? null : parentId || null,
+        student_id: studentId || null,
+        leader_id: leaderId || null,
+        title: text(body.title).slice(0, 160),
+        created_by: user.id,
+        ...await chatConversationContext(svc, school, {
+          student_id: studentId,
+        }),
+      };
+    }
+    if (!await canSendChatMessage(svc, school, conversation, user)) {
+      return fail("forbidden", 403);
+    }
+    const targets = await chatNotificationTargets(
+      svc,
+      school,
+      conversation,
+      user,
+    );
+    if (
+      text(conversation.type) === "parent_teacher" &&
+      !canManageSchoolContent(user)
+    ) {
+      for (const id of await principalUserIdsForSchool(svc, school)) {
+        if (!targets.some((t) => t.id === id)) {
+          targets.push({ id, role: "all" });
+        }
+      }
+    }
+    const { data: profile } = await svc.from("users").select("name,username")
+      .eq("school_id", school).eq("id", user.id).maybeSingle();
+    const { data, error } = await svc.rpc("schooldesk_send_chat", {
+      p_school: school,
+      p_sender: user.id,
+      p_client: clientId,
+      p_body: messageText,
+      p_sender_role: role(user),
+      p_sender_name: text(profile?.name ?? profile?.username),
+      p_conversation: conversation,
+      p_targets: targets.map((t) => ({
+        ...t,
+        route: chatRouteForRole(t.role),
+      })),
+    });
+    if (error) return fail(error.message, error.code === "PT409" ? 409 : 500);
+    if (!await canReadChatConversation(svc, school, data.conversation, user)) {
+      return fail("forbidden", 403);
+    }
+    for (const id of data.event_ids ?? []) triggerPushProcessing(id);
+    const [enriched] = await enrichChatConversations(svc, school, [
+      data.conversation,
+    ]);
+    const [message] = await enrichChatMessages(svc, school, data.conversation, [
+      data.message,
+    ], user);
+    return ok({
+      conversation: normalizeChatConversation(enriched, user.id),
+      message,
+      duplicate: data.duplicate,
+    });
+  }
+
+  if (path === "/chat/unread-count" && method === "GET") {
+    let total = 0;
+    const next = new URL(url);
+    next.searchParams.delete("search");
+    next.searchParams.delete("type");
+    next.searchParams.delete("student_id");
+    next.searchParams.delete("teacher_id");
+    next.searchParams.delete("parent_id");
+    next.searchParams.delete("read_status");
+    next.searchParams.delete("section_id");
+    next.searchParams.set("page_size", "100");
+    for (let page = 1;; page++) {
+      next.searchParams.set("page", String(page));
+      const response = await handleCommunications(
+        req,
+        "/chat/conversations",
+        "GET",
+        next,
+        _client,
+        svc,
+        user,
+      );
+      if (!response.ok) return response;
+      const payload = await response.json();
+      const value = payload.data ?? payload;
+      for (const row of value.data ?? []) {
+        total += Number(row.unread_count ?? 0);
+      }
+      if (!value.has_more) break;
+    }
+    return ok({ unread_count: total });
+  }
+
   if (path === "/chat/contacts" && method === "GET") {
     const roleParam = text(url.searchParams.get("role")).toLowerCase();
     const studentId = text(url.searchParams.get("student_id"));
@@ -1534,16 +1842,16 @@ export async function handleCommunications(
     }
     if (roleParam === "parent") {
       const contacts = await parentChatContacts(svc, school, user, studentId);
-      return ok(contacts);
+      return ok(await enrichChatContacts(svc, school, contacts));
     } else if (roleParam === "teacher") {
       const contacts = await teacherChatContacts(svc, school, user);
-      return ok(contacts);
+      return ok(await enrichChatContacts(svc, school, contacts));
     } else if (
       ["principal", "coordinator"].includes(roleParam) &&
       (canManageSchoolContent(user) || isSuperAdmin)
     ) {
       const contacts = await principalChatContacts(svc, school);
-      return ok(contacts);
+      return ok(await enrichChatContacts(svc, school, contacts));
     }
     return fail("invalid role param");
   }
@@ -1573,19 +1881,12 @@ export async function handleCommunications(
     if (teacherId) q = q.eq("teacher_id", teacherId);
     if (parentId) q = q.eq("parent_id", parentId);
     if (studentId) q = q.eq("student_id", studentId);
-    if (search) {
-      const escaped = search.replace(/[%(),]/g, " ").trim();
-      if (escaped) {
-        q = q.or(
-          `title.ilike.%${escaped}%,last_message.ilike.%${escaped}%,class_label.ilike.%${escaped}%`,
-        );
-      }
-    }
     const needsParticipantCompatibilityScope = !canManageSchoolContent(user) ||
       !requestedMonitor;
     if (
       needsParticipantCompatibilityScope &&
-      !["teacher", "parent"].includes(userRole)
+      !["teacher", "parent", "principal", "coordinator", "admin", "super_admin"]
+        .includes(userRole)
     ) {
       return fail("forbidden", 403);
     }
@@ -1595,18 +1896,17 @@ export async function handleCommunications(
     // conversation and messages were still present. The compatibility scope
     // below accepts both representations before applying the section/student
     // authorization checks.
-    const shouldPaginateInDatabase = !needsParticipantCompatibilityScope;
     const orderedQuery = q.order("updated_at", { ascending: false }).order(
       "id",
       { ascending: false },
     );
-    const { data, error, count } = shouldPaginateInDatabase
-      ? await orderedQuery.range(
-        (page - 1) * pageSize,
-        page * pageSize - 1,
-      )
-      : await orderedQuery;
-    if (error) return fail(error.message);
+    const data: Record<string, unknown>[] = [];
+    for (let offset = 0;; offset += 500) {
+      const batch = await orderedQuery.range(offset, offset + 499);
+      if (batch.error) return fail(batch.error.message);
+      data.push(...batch.data ?? []);
+      if ((batch.data?.length ?? 0) < 500) break;
+    }
     let visible = data ?? [];
     if (userRole === "teacher" && needsParticipantCompatibilityScope) {
       const scope = await resolveActiveTeacherScope(
@@ -1662,35 +1962,60 @@ export async function handleCommunications(
         );
       });
     }
-    const totalVisible = shouldPaginateInDatabase
-      ? count ?? visible.length
-      : visible.length;
-    if (needsParticipantCompatibilityScope) {
-      const start = (page - 1) * pageSize;
-      visible = visible.slice(start, start + pageSize);
+    if (canManageSchoolContent(user) && !requestedMonitor) {
+      visible = visible.filter((c) =>
+        c.type !== "parent_teacher" &&
+        text(c.leader_id ?? c.created_by) === user.id
+      );
     }
-    const rows = await enrichChatConversations(svc, school, visible) as Record<
+    let rows = await enrichChatConversations(svc, school, visible) as Record<
       string,
       unknown
     >[];
-    const ids = rows.map((row) => text(row["id"])).filter(Boolean);
-    let unreadByConversation = new Map<string, number>();
-    if (ids.length) {
-      const { data: messages, error: unreadError } = await svc.from("messages")
-        .select("conversation_id,sender_id,read_by").eq("school_id", school)
-        .in("conversation_id", ids);
-      if (unreadError) return fail(unreadError.message);
-      unreadByConversation = new Map<string, number>();
-      for (const message of messages ?? []) {
-        if (`${message.sender_id ?? ""}` == user.id) continue;
-        if (readByList(message.read_by).includes(user.id)) continue;
-        const convId = `${message.conversation_id ?? ""}`;
+    const sectionFilter = text(url.searchParams.get("section_id"));
+    if (sectionFilter) {
+      rows = rows.filter((r) => text(r.section_id) === sectionFilter);
+    }
+    if (search) {
+      const needle = search.toLocaleLowerCase();
+      rows = rows.filter((r) =>
+        [
+          r.title,
+          r.last_message,
+          r.class_label,
+          r.student_name,
+          ...[r.teacher, r.parent, r.leader].flatMap((p) => {
+            const v = p as Record<string, unknown> | null;
+            return [v?.name, v?.username, v?.first_name, v?.last_name];
+          }),
+        ].some((v) => text(v).toLocaleLowerCase().includes(needle))
+      );
+    }
+    const unreadByConversation = new Map<string, number>();
+    // RPC aggregate is exact even when a conversation has >1000 messages.
+    for (let offset = 0; offset < rows.length; offset += 500) {
+      const { data: counts, error } = await svc.rpc("schooldesk_chat_unread", {
+        p_school: school,
+        p_user: user.id,
+        p_ids: rows.slice(offset, offset + 500).map((r) => r.id),
+      });
+      if (error) return fail(error.message);
+      for (const row of counts ?? []) {
         unreadByConversation.set(
-          convId,
-          (unreadByConversation.get(convId) ?? 0) + 1,
+          text(row.conversation_id),
+          Number(row.unread_count),
         );
       }
     }
+    const readStatus = text(url.searchParams.get("read_status"));
+    if (readStatus === "read" || readStatus === "unread") {
+      rows = rows.filter((r) =>
+        ((unreadByConversation.get(text(r.id)) ?? 0) > 0) ===
+          (readStatus === "unread")
+      );
+    }
+    const totalVisible = rows.length;
+    rows = rows.slice((page - 1) * pageSize, page * pageSize);
     const normalizedRows = rows.map((row) =>
       normalizeChatConversation({
         ...row,
@@ -1799,6 +2124,29 @@ export async function handleCommunications(
     return ok(normalizeChatConversation(data, user.id));
   }
 
+  const chatConversationMatch = path.match(/^\/chat\/conversations\/([^/]+)$/);
+  if (chatConversationMatch && method === "GET") {
+    const { data, error } = await svc.from("message_conversations").select("*")
+      .eq("school_id", school).eq("id", chatConversationMatch[1]).maybeSingle();
+    if (error) return fail(error.message);
+    if (!data) return fail("conversation not found", 404);
+    if (!await canReadChatConversation(svc, school, data, user)) {
+      return fail("forbidden", 403);
+    }
+    const [row] = await enrichChatConversations(svc, school, [data]);
+    const { data: counts, error: countError } = await svc.rpc(
+      "schooldesk_chat_unread",
+      { p_school: school, p_user: user.id, p_ids: [data.id] },
+    );
+    if (countError) return fail(countError.message);
+    return ok(
+      normalizeChatConversation({
+        ...row,
+        unread_count: Number(counts?.[0]?.unread_count ?? 0),
+      }, user.id),
+    );
+  }
+
   const chatMessagesMatch = path.match(
     /^\/chat\/conversations\/([^/]+)\/messages$/,
   );
@@ -1812,6 +2160,52 @@ export async function handleCommunications(
     if (!conversation) return fail("conversation not found", 404);
     if (!await canReadChatConversation(svc, school, conversation, user)) {
       return fail("forbidden", 403);
+    }
+    const cursorMode = text(url.searchParams.get("cursor_mode"));
+    if (cursorMode) {
+      if (!["latest", "before", "after"].includes(cursorMode)) {
+        return fail("invalid cursor_mode");
+      }
+      const size = Math.min(
+        Math.max(Number(url.searchParams.get("page_size")) || 50, 1),
+        100,
+      );
+      const at = text(url.searchParams.get("cursor_sent_at"));
+      const id = text(url.searchParams.get("cursor_id"));
+      if (cursorMode !== "latest" && !validChatCursor(at, id)) {
+        return fail("valid cursor_sent_at and cursor_id required");
+      }
+      let query = svc.from("messages").select("*").eq("school_id", school).eq(
+        "conversation_id",
+        conversationId,
+      );
+      if (cursorMode !== "latest") {
+        const op = cursorMode === "before" ? "lt" : "gt";
+        query = query.or(
+          `sent_at.${op}.${at},and(sent_at.eq.${at},id.${op}.${id})`,
+        );
+      }
+      const asc = cursorMode === "after";
+      const { data, error } = await query.order("sent_at", { ascending: asc })
+        .order("id", { ascending: asc }).limit(size + 1);
+      if (error) return fail(error.message);
+      const selected = (data ?? []).slice(0, size);
+      const boundary = selected.length ? selected[selected.length - 1] : null;
+      if (!asc) selected.reverse();
+      return ok({
+        data: await enrichChatMessages(
+          svc,
+          school,
+          conversation,
+          selected,
+          user,
+        ),
+        has_more: (data?.length ?? 0) > size,
+        next_cursor: boundary
+          ? { sent_at: boundary.sent_at, id: boundary.id }
+          : null,
+        page_size: size,
+      });
     }
     const page = Math.max(
       parseInt(url.searchParams.get("page") ?? "1") || 1,
@@ -1845,7 +2239,7 @@ export async function handleCommunications(
     );
     const total = count ?? rows.length;
     return ok({
-      data: rows,
+      data: await enrichChatMessages(svc, school, conversation, rows, user),
       total,
       page,
       page_size: pageSize,
@@ -1987,11 +2381,27 @@ export async function handleCommunications(
     if (!await canReadChatConversation(svc, school, conversation, user)) {
       return fail("forbidden", 403);
     }
-    // Single bulk UPDATE instead of an N+1 per-message loop.
-    const { error } = await svc.rpc("mark_conversation_read", {
-      p_conversation_id: conversationId,
-      p_school_id: school,
-      p_user_id: user.id,
+    const throughAt = text(body.through_sent_at);
+    const throughId = text(body.through_id);
+    if ((throughAt || throughId) && !validChatCursor(throughAt, throughId)) {
+      return fail("valid through_sent_at and through_id required");
+    }
+    if (throughAt) {
+      const { data: boundary } = await svc.from("messages").select("id").eq(
+        "school_id",
+        school,
+      ).eq("conversation_id", conversationId).eq("id", throughId).eq(
+        "sent_at",
+        throughAt,
+      ).maybeSingle();
+      if (!boundary) return fail("read boundary not found", 400);
+    }
+    const { error } = await svc.rpc("schooldesk_read_chat", {
+      p_conversation: conversationId,
+      p_school: school,
+      p_user: user.id,
+      p_through_at: throughAt || null,
+      p_through_id: throughId || null,
     });
     if (error) return fail(error.message);
     return ok({ success: true });
@@ -2199,6 +2609,20 @@ export async function handleCommunications(
     }
   }
 
+  if (
+    path === "/notifications/recipients" || path === "/notifications/broadcasts"
+  ) {
+    return handleNotificationBroadcasts(
+      req,
+      path,
+      method,
+      url,
+      svc,
+      user,
+      body,
+    );
+  }
+
   // ── Notifications ─────────────────────────────────────────
   if (path === "/notifications" && method === "GET") {
     const page = Math.max(
@@ -2213,28 +2637,41 @@ export async function handleCommunications(
     // Read one extra row so an exact page multiple does not create a phantom
     // empty page at the end of the notification history.
     const to = from + pageSize;
-    let notificationQuery = svc.from("notification_logs")
-      .select("*, student:students(photo_url)", { count: "exact" })
-      .eq("school_id", school)
-      .eq("user_id", user.id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
-    if (role(user) === "parent") {
-      const { data: links, error: linksError } = await svc
-        .from("parent_student_links")
-        .select("student_id")
-        .eq("school_id", school)
-        .eq("parent_user_id", user.id);
-      if (linksError) return fail(linksError.message);
-      const linkedStudentIds = (links ?? []).map((link) =>
-        text(link.student_id)
-      )
-        .filter(Boolean);
-      notificationQuery = linkedStudentIds.length === 0
-        ? notificationQuery.is("student_id", null)
-        : notificationQuery.or(
-          `student_id.is.null,student_id.in.(${linkedStudentIds.join(",")})`,
-        );
+    const { query: notificationQuery } = await scopeNotificationQuery(
+      svc.from("notification_logs")
+        .select("*, student:students(photo_url)", { count: "exact" })
+        .order("created_at", { ascending: false }).order("id", {
+          ascending: false,
+        }),
+      svc,
+      user,
+    );
+    const category = text(url.searchParams.get("category"));
+    const aliases: Record<string, string[]> = {
+      fee_due: [
+        "fee_due",
+        "fee_payment_approved",
+        "fee_payment_submitted",
+        "fee_payment_rejected",
+        "fee",
+      ],
+      pending_approval: [
+        "pending_approval",
+        "leave",
+        "leave_submitted",
+        "student_leave_submitted",
+      ],
+      academics: [
+        "homework",
+        "homework_feedback",
+        "attendance",
+        "lesson_planner",
+      ],
+    };
+    if (category) notificationQuery.in("type", aliases[category] || [category]);
+    const readFilter = url.searchParams.get("is_read");
+    if (readFilter === "true" || readFilter === "false") {
+      notificationQuery.eq("is_read", readFilter === "true");
     }
     const { data, error, count } = await notificationQuery.range(from, to);
     if (error) return fail(error.message);
@@ -2249,7 +2686,8 @@ export async function handleCommunications(
           notification_type: row.type ?? "general",
           // Keep the canonical notification columns when present. Older
           // rows used entity_type/entity_id, so retain those as fallbacks.
-          reference_type: row.reference_type ?? row.entity_type ?? row.type ?? "",
+          reference_type: row.reference_type ?? row.entity_type ?? row.type ??
+            "",
           reference_id: row.reference_id ?? row.entity_id ?? "",
           target_role: row.target_role ?? "all",
           target_user_id: row.user_id ?? "",
@@ -2300,7 +2738,8 @@ export async function handleCommunications(
     return ok({
       ...data,
       notification_type: data?.type ?? "general",
-      reference_type: data?.reference_type ?? data?.entity_type ?? data?.type ?? "",
+      reference_type: data?.reference_type ?? data?.entity_type ?? data?.type ??
+        "",
       reference_id: data?.reference_id ?? data?.entity_id ?? "",
       target_role: data?.target_role ?? "all",
       target_user_id: data?.user_id ?? "",
@@ -2327,45 +2766,30 @@ export async function handleCommunications(
       ].includes(requestedRole)
       ? requestedRole
       : "";
-    let update = svc.from("notification_logs").update({ is_read: true })
-      .eq("user_id", user.id)
-      .is("deleted_at", null);
-    if (targetRole) {
-      update = update.or(
-        `target_role.is.null,target_role.eq.all,target_role.eq.${targetRole}`,
-      );
-    }
-    if (role(user) === "parent") {
-      const { data: links, error: linksError } = await svc
-        .from("parent_student_links")
-        .select("student_id")
-        .eq("school_id", school)
-        .eq("parent_user_id", user.id);
-      if (linksError) return fail(linksError.message);
-      const linkedStudentIds = (links ?? []).map((link) => text(link.student_id))
-        .filter(Boolean);
-      update = linkedStudentIds.length === 0
-        ? update.is("student_id", null)
-        : update.or(
-          `student_id.is.null,student_id.in.(${linkedStudentIds.join(",")})`,
-        );
-    }
+    const { query: update } = await scopeNotificationQuery(
+      svc.from("notification_logs").update({ is_read: true }),
+      svc,
+      user,
+    );
     const { error } = await update;
     if (error) return fail(error.message);
     return ok({ success: true });
   }
   const notificationReadMatch = path.match(/^\/notifications\/([^/]+)\/read$/);
   if (notificationReadMatch && (method === "POST" || method === "PUT")) {
-    const { data, error } = await svc.from("notification_logs").update({
-      is_read: true,
-    }).eq("id", notificationReadMatch[1]).eq("user_id", user.id)
-      .is("deleted_at", null).select()
-      .single();
+    const { query: readQuery } = await scopeNotificationQuery(
+      svc.from("notification_logs").update({ is_read: true })
+        .eq("id", notificationReadMatch[1]),
+      svc,
+      user,
+    );
+    const { data, error } = await readQuery.select().single();
     if (error) return fail(error.message);
     return ok({
       ...data,
       notification_type: data?.type ?? "general",
-      reference_type: data?.reference_type ?? data?.entity_type ?? data?.type ?? "",
+      reference_type: data?.reference_type ?? data?.entity_type ?? data?.type ??
+        "",
       reference_id: data?.reference_id ?? data?.entity_id ?? "",
       target_role: data?.target_role ?? "all",
       target_user_id: data?.user_id ?? "",

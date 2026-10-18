@@ -1,3 +1,6 @@
+import 'package:schooldesk1/features/communication/presentation/screens/chat_workspace/chat_workspace_screen.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/features/communication/presentation/screens/principal_send_notification_screen/principal_send_notification_screen.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
@@ -109,6 +112,11 @@ class TypedAppRouteRegistry {
         (context, state) =>
             const SuperAdminDashboardRoute().build(context, state),
       ),
+      AppRoutes.principalSendNotification: _noArgs(
+        AppRoutes.principalSendNotification,
+        'principal_send_notification',
+        (_, __) => const PrincipalSendNotificationScreen(),
+      ),
       AppRoutes.notificationCenter: _sharedRole(
         AppRoutes.notificationCenter,
         'notification_center',
@@ -122,21 +130,28 @@ class TypedAppRouteRegistry {
       AppRoutes.profileScreen: _sharedRole(
         AppRoutes.profileScreen,
         'profile',
-        (role) => ProfileManagementScreen(role: role),
+        (role) => role == 'parent'
+            ? const AppSettingsScreen(role: 'parent')
+            : ProfileManagementScreen(role: role),
       ),
       AppRoutes.homeworkMessaging: TypedAppRoute<SharedRoleRouteArgs>(
         path: AppRoutes.homeworkMessaging,
         name: 'homework_messaging',
         parse: _sharedRoleArgs,
-        build: (context, state, args) =>
-            _frame(context, AppRoutes.homeworkMessaging, switch (args.role) {
-              SchoolDeskRole.parent => const ParentTeacherChatScreen(),
-              SchoolDeskRole.principal ||
-              SchoolDeskRole.coordinator ||
-              SchoolDeskRole.superAdmin =>
-                const PrincipalChatCommunicationsScreen(),
-              _ => const TeacherCommunicationScreen(),
-            }),
+        build: (context, state, args) => _frame(
+          context,
+          AppRoutes.homeworkMessaging,
+          args.role == SchoolDeskRole.superAdmin
+              ? const PrincipalChatCommunicationsScreen()
+              : ChatWorkspaceScreen(
+                  role: args.roleName,
+                  initialConversationId: _chatArgument(
+                    state,
+                    'conversation_id',
+                  ),
+                  initialStudentId: _chatArgument(state, 'student_id'),
+                ),
+        ),
       ),
       AppRoutes.staffForm: _typed<StaffFormArgs>(
         AppRoutes.staffForm,
@@ -363,10 +378,8 @@ class TypedAppRouteRegistry {
     AppRoutes.feePaymentConfig: (_, __) => const PrincipalPaymentConfig(),
     AppRoutes.principalPaymentRequests: (_, __) =>
         const PrincipalPaymentRequests(),
-    AppRoutes.communicationCenter: (_, __) =>
-        const PrincipalChatCommunicationsScreen(),
-    AppRoutes.principalChatCommunications: (_, __) =>
-        const PrincipalChatCommunicationsScreen(),
+    AppRoutes.communicationCenter: (_, state) => _leadershipChat(state),
+    AppRoutes.principalChatCommunications: (_, state) => _leadershipChat(state),
     AppRoutes.complaintManagement: (_, __) =>
         const IssueScreen(role: IssueScreenRole.principal),
     AppRoutes.eventsCalendar: (_, __) => const EventsCalendarScreen(),
@@ -409,8 +422,11 @@ class TypedAppRouteRegistry {
     AppRoutes.teacherAttendanceHistory: (_, __) =>
         const TeacherAttendanceHistoryScreen(),
     AppRoutes.teacherMyAttendance: (_, __) => const TeacherMyAttendanceScreen(),
-    AppRoutes.teacherCommunication: (_, __) =>
-        const TeacherCommunicationScreen(),
+    AppRoutes.teacherCommunication: (_, state) => ChatWorkspaceScreen(
+      role: 'teacher',
+      initialConversationId: _chatArgument(state, 'conversation_id'),
+      initialStudentId: _chatArgument(state, 'student_id'),
+    ),
     AppRoutes.teacherComplaints: (_, __) =>
         const IssueScreen(role: IssueScreenRole.teacher),
     AppRoutes.teacherLeave: (_, __) => const TeacherLeaveScreen(),
@@ -425,7 +441,11 @@ class TypedAppRouteRegistry {
     AppRoutes.kioskLogin: (_, __) => const AuthLoginScreen(),
     AppRoutes.parentAttendance: (_, __) => const ParentAttendanceScreen(),
     AppRoutes.parentHomework: (_, __) => const ParentHomeworkScreen(),
-    AppRoutes.parentTeacherChat: (_, __) => const ParentTeacherChatScreen(),
+    AppRoutes.parentTeacherChat: (_, state) => ChatWorkspaceScreen(
+      role: 'parent',
+      initialConversationId: _chatArgument(state, 'conversation_id'),
+      initialStudentId: _chatArgument(state, 'student_id'),
+    ),
     AppRoutes.parentComplaints: (_, __) =>
         const IssueScreen(role: IssueScreenRole.parent),
     AppRoutes.parentFees: (_, __) => const ParentFeeHub(),
@@ -441,6 +461,22 @@ class TypedAppRouteRegistry {
     AppRoutes.globalSearch: (_, __) => const GlobalSearchScreen(),
     AppRoutes.help: (_, __) => const HelpScreen(),
   };
+
+  static String _chatArgument(GoRouterState state, String key) =>
+      state.extra is Map
+      ? '${(state.extra as Map)[key] ?? state.uri.queryParameters[key] ?? ''}'
+      : state.uri.queryParameters[key] ?? '';
+
+  static Widget _leadershipChat(GoRouterState state) {
+    final role = BackendApiClient.instance.currentRoleName ?? 'principal';
+    return role == 'super_admin'
+        ? const PrincipalChatCommunicationsScreen()
+        : ChatWorkspaceScreen(
+            role: role == 'coordinator' ? 'coordinator' : 'principal',
+            initialConversationId: _chatArgument(state, 'conversation_id'),
+            initialStudentId: _chatArgument(state, 'student_id'),
+          );
+  }
 
   static TypedAppRoute<NoRouteArgs> _noArgs(
     String path,

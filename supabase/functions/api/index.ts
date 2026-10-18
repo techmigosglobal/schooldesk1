@@ -257,6 +257,22 @@ async function withIdempotency(
   const path = new URL(req.url).pathname
     .replace(/^\/functions\/v1\/api/, "")
     .replace(/^\/api\/v1/, "") || "/";
+  // Replays must obey current branch authorization, even after a successful
+  // request has been cached and the sender's membership has since changed.
+  if (method === "POST" && ["/notifications/broadcasts", "/api/notifications/broadcasts"].includes(path)) {
+    if (String(user.app_metadata?.role_name ?? user.app_metadata?.role ?? "").trim().toLowerCase() !== "principal") {
+      return fail("Principal access required", 403);
+    }
+    const access = await svc.rpc("notification_principal_has_branch_access", {
+      p_school: schoolId,
+      p_sender: user.id,
+    });
+    if (access.error) {
+      console.error("Notification sender authorization failed", access.error);
+      return fail("Notification access could not be verified. Try again.", 503);
+    }
+    if (access.data !== true) return fail("Principal access required", 403);
+  }
   const hash = await requestHash(req);
   const baseQuery = svc.from("api_idempotency_keys")
     .select(

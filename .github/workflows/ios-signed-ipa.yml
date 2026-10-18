@@ -159,6 +159,42 @@ jobs:
             printf 'IOS_BUNDLE_ID=%s\n' "$SCHOOLDESK_IOS_BUNDLE_ID"
           } >> "$GITHUB_ENV"
 
+      - name: Check App Store Connect build number
+        if: ${{ inputs.publish_to_testflight }}
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          RELEASE_BUILD_NUMBER: ${{ inputs.build_number }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node <<'NODE'
+          const crypto = require('node:crypto');
+          const enc = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+          const now = Math.floor(Date.now() / 1000);
+          const header = enc({ alg: 'ES256', kid: process.env.APP_STORE_CONNECT_KEY_ID, typ: 'JWT' });
+          const claims = enc({ iss: process.env.APP_STORE_CONNECT_ISSUER_ID, iat: now, exp: now + 600, aud: 'appstoreconnect-v1' });
+          const unsigned = header + '.' + claims;
+          const signature = crypto.sign('sha256', Buffer.from(unsigned), { key: process.env.APP_STORE_CONNECT_API_KEY, dsaEncoding: 'ieee-p1363' }).toString('base64url');
+          const jwt = unsigned + '.' + signature;
+          async function get(path) {
+            const response = await fetch('https://api.appstoreconnect.apple.com/v1/' + path, { headers: { Authorization: 'Bearer ' + jwt } });
+            if (!response.ok) throw new Error('App Store Connect read failed: HTTP ' + response.status);
+            return response.json();
+          }
+          (async () => {
+            const apps = await get('apps?filter[bundleId]=' + encodeURIComponent(process.env.IOS_BUNDLE_ID) + '&limit=1');
+            if (!apps.data?.length) throw new Error('Signed bundle ID is missing from App Store Connect');
+            const app = apps.data[0];
+            const builds = await get('builds?filter[app]=' + app.id + '&sort=-uploadedDate&limit=200');
+            const highest = Math.max(0, ...builds.data.map(build => Number.parseInt(build.attributes.version, 10) || 0));
+            const candidate = Number(process.env.RELEASE_BUILD_NUMBER);
+            if (!Number.isInteger(candidate) || candidate <= highest) throw new Error('Build number must exceed existing App Store Connect build ' + highest);
+            console.log('Verified App Store Connect app and build number: ' + candidate + ' > ' + highest);
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
+
       - name: Install Flutter dependencies
         run: |
           flutter pub get
@@ -177,7 +213,12 @@ jobs:
             test/unit/supabase_fees_contract_test.dart \
             test/unit/automatic_receipt_snapshot_contract_test.dart \
             test/unit/image_upload_optimizer_test.dart \
-            test/unit/image_media_url_contract_test.dart
+            test/unit/image_media_url_contract_test.dart \
+            test/widget/chip_contrast_rendering_test.dart \
+            test/widget/school_post_feed_test.dart \
+            test/widget/leadership_guidance_test.dart \
+            test/unit/school_branding_api_test.dart \
+            test/unit/school_post_feed_api_test.dart
 
       - name: Validate and archive signed app
         env:

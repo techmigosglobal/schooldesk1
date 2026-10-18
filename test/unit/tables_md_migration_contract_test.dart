@@ -68,9 +68,7 @@ void main() {
       File(
         'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
       ),
-      File(
-        'lib/shared/screens/school_gallery_screen.dart',
-      ),
+      File('lib/shared/screens/school_gallery_screen.dart'),
     ];
 
     for (final file in migratedUiFiles) {

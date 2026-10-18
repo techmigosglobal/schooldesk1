@@ -92,6 +92,7 @@ export async function handleSchools(
     // during the mobile rollout, but never write it back as a phantom column.
     return ok({
       ...profileSchool,
+      display_name: textDisplayName(school),
       registration_number:
         (profileSchool as Record<string, unknown>)?.registration_no ?? "",
       // The school row is the operational branch. Branch-only users see the
@@ -125,6 +126,9 @@ export async function handleSchools(
     ) {
       updates.registration_no = registration_number;
     }
+    for (const key of ["name", "school_type", "timezone", "currency"]) {
+      if (updates[key] !== undefined && !`${updates[key] ?? ""}`.trim()) delete updates[key];
+    }
     const { data: school, error } = await svc
       .from("schools")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -137,6 +141,8 @@ export async function handleSchools(
 
   // POST /schools/current/logo — multipart upload
   if (path === "/schools/current/logo" && method === "POST") {
+    const { data: { user: logoUser } } = await client.auth.getUser();
+    if (!logoUser || !isSchoolAdministrator(userContext)) return fail("forbidden", 403);
     const form = await req.formData();
     const file = form.get("logo") as File;
     if (!file) return fail("logo file required");
@@ -172,11 +178,13 @@ export async function handleSchools(
       publicUrl = svc.storage.from("school-assets").getPublicUrl(path2).data
         .publicUrl;
     }
-    await svc.from("schools").update({ logo_url: publicUrl }).eq(
-      "id",
-      schoolId,
-    );
-    return ok({ logo_url: publicUrl });
+    const { data: savedSchool, error: saveError } = await svc.from("schools")
+      .update({ logo_url: publicUrl, updated_at: new Date().toISOString() })
+      .eq("id", schoolId).select("id, logo_url").maybeSingle();
+    if (saveError || !savedSchool) {
+      return fail(saveError?.message ?? "school logo could not be saved", 500);
+    }
+    return ok({ logo_url: savedSchool.logo_url });
   }
 
   // POST /schools/current/signature — private principal authorization image
@@ -267,4 +275,8 @@ export async function handleSchools(
   }
 
   return fail("not found", 404);
+}
+
+function textDisplayName(school: Record<string, unknown>): string {
+  return `${school.display_name ?? ""}`.trim() || `${school.name ?? ""}`.trim() || "School";
 }

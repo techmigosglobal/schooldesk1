@@ -18,8 +18,23 @@ void main() {
 
     expect(coordinatorResponse, greaterThanOrEqualTo(0));
     expect(financeQueries, greaterThan(coordinatorResponse));
-    expect(handler, contains('isFinanceApproval(row.module, row.entity_type)'));
-    expect(handler, contains('const FINANCE_APPROVAL_MODULES = new Set'));
+    expect(
+      handler,
+      contains('pendingEventApprovals: pendingEvents.count ?? 0'),
+    );
+    expect(
+      handler,
+      contains('pendingAccessApprovals: pendingAccounts.count ?? 0'),
+    );
+    final approvals = File(
+      'supabase/functions/api/handlers/approvals.ts',
+    ).readAsStringSync();
+    expect(
+      approvals,
+      contains(
+        '!financeAuthorized && isFinanceApproval(row.module, row.entity_type)',
+      ),
+    );
     expect(
       handler,
       isNot(

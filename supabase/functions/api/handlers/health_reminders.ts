@@ -1,3 +1,5 @@
+import { resolveActiveTeacherScope } from "./teacher_scope.ts";
+import { wakeWorkflowDelivery } from "../lib/workflow_delivery.ts";
 // handlers/health_reminders.ts - day-specific parent health reminders.
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
@@ -368,6 +370,26 @@ export async function handleHealthReminders(
     let query = svc.from("health_reminders").select(
       "*, student:students(id, first_name, last_name, current_section_id), created_by:users!health_reminders_created_by_parent_user_id_fkey(id, name, role_name)",
     ).eq("school_id", school);
+    if (role(user) === "parent") {
+      const { data: links, error: linkError } = await svc.from("parent_student_links")
+        .select("student_id").eq("school_id", school).eq("parent_user_id", user.id);
+      if (linkError) return fail(linkError.message);
+      const ids = (links ?? []).map((row) => text(row.student_id)).filter(Boolean);
+      if (!ids.length) return ok([]);
+      query = query.in("student_id", ids);
+    } else if (role(user) === "teacher") {
+      const scope = await resolveActiveTeacherScope(svc, school, text(user.app_metadata?.linked_id));
+      const ids = [...scope.sections.keys()];
+      if (!ids.length) return ok([]);
+      const { data: students, error: studentError } = await svc.from("students").select("id")
+        .eq("school_id", school).in("current_section_id", ids);
+      if (studentError) return fail(studentError.message);
+      const studentIds = (students ?? []).map((row) => text(row.id));
+      if (!studentIds.length) return ok([]);
+      query = query.in("student_id", studentIds);
+    } else if (!["principal", "coordinator", "super_admin"].includes(role(user))) {
+      return fail("forbidden", 403);
+    }
     if (studentId) query = query.eq("student_id", studentId);
     const { data, error } = await query
       .order("reminder_date", { ascending: false })
@@ -407,26 +429,7 @@ export async function handleHealthReminders(
       .select("*").single();
     if (error) return fail(error.message);
 
-    // Always immediately deliver notifications for this specific new reminder
-    // so the class team and principal are notified right when it is created.
-    try {
-      const resolved = await resolveStudentRecipients(svc, school, studentId);
-      if (resolved) {
-        await notifyHealthRecipients(
-          svc,
-          school,
-          data as Record<string, unknown>,
-          resolved.studentName,
-          resolved.sectionId,
-          resolved.recipients,
-        );
-      }
-    } catch (deliveryError) {
-      console.error(
-        "immediate delivery failed",
-        deliveryError,
-      );
-    }
+    await wakeWorkflowDelivery(svc, school, text(data.id));
     return ok(normalize(data as Record<string, unknown>));
   }
 
@@ -493,28 +496,8 @@ export async function handleHealthReminders(
       ).select("*").single();
     if (error) return fail(error.message);
 
-    try {
-      await clearLogs();
-      if (data.is_active) {
-        const resolved = await resolveStudentRecipients(
-          svc,
-          school,
-          text(data.student_id),
-        );
-        if (resolved) {
-          await notifyHealthRecipients(
-            svc,
-            school,
-            data as Record<string, unknown>,
-            resolved.studentName,
-            resolved.sectionId,
-            resolved.recipients,
-          );
-        }
-      }
-    } catch (deliveryError) {
-      console.error("updated health reminder delivery failed", deliveryError);
-    }
+    if (!data.is_active) await clearLogs();
+    await wakeWorkflowDelivery(svc, school, text(data.id));
     return ok(normalize(data as Record<string, unknown>));
   }
 

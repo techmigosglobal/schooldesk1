@@ -36,8 +36,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       widget.repository ?? ApiParentFeePaymentRepository.legacyDefault;
 
   static const Duration _autoRefreshInterval = Duration(seconds: 120);
-  DateTime? _lastRefreshAt;
-  static const _refreshDebounce = Duration(seconds: 10);
+  Future<void>? _refreshFuture;
+  bool _refreshAgain = false;
+  int _childGeneration = 0;
   final int _selectedNavIndex = ParentNav.fees;
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
@@ -81,7 +82,6 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       channelName: 'parent-fees',
       modules: const {'fees'},
       onRefresh: () {
-        _lastRefreshAt = null;
         if (mounted) {
           unawaited(_loadData(forceRefresh: true, showSpinner: false));
         }
@@ -114,24 +114,27 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     final service = await NotificationService.getInstance();
     if (!mounted) return;
     _notificationService = service;
-    _lastNotificationSignal = service.notifications.isEmpty
-        ? ''
-        : service.notifications.first.id;
+    _lastNotificationSignal = _feeNotificationSignal(service);
     service.addListener(_onNotificationsChanged);
   }
 
+  String _feeNotificationSignal(NotificationService service) => service
+      .notifications
+      .where(
+        (item) =>
+            item.referenceType == 'fee' ||
+            item.category.contains('fee') ||
+            item.title.toLowerCase().contains('fee payment'),
+      )
+      .map((item) => '${item.id}:${item.timestamp}:${item.title}:${item.body}')
+      .join('|');
+
   void _onNotificationsChanged() {
     final service = _notificationService;
-    if (!mounted || service == null || service.notifications.isEmpty) return;
-    final latest = service.notifications.first;
-    if (latest.id == _lastNotificationSignal) return;
-    _lastNotificationSignal = latest.id;
-    final isFeeUpdate =
-        latest.referenceType == 'fee' ||
-        latest.category.contains('fee') ||
-        latest.title.toLowerCase().contains('fee payment');
-    if (!isFeeUpdate) return;
-    _lastRefreshAt = null;
+    if (!mounted || service == null) return;
+    final signal = _feeNotificationSignal(service);
+    if (signal == _lastNotificationSignal) return;
+    _lastNotificationSignal = signal;
     unawaited(_loadData(forceRefresh: true, showSpinner: false));
   }
 
@@ -139,11 +142,31 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     bool forceRefresh = false,
     bool showSpinner = true,
   }) async {
-    if (forceRefresh && _lastRefreshAt != null) {
-      final elapsed = DateTime.now().difference(_lastRefreshAt!);
-      if (elapsed < _refreshDebounce) return;
+    if (_refreshFuture != null) {
+      _refreshAgain = true;
+      return _refreshFuture!;
     }
-    _lastRefreshAt = DateTime.now();
+    final completer = Completer<void>();
+    _refreshFuture = completer.future;
+    try {
+      do {
+        _refreshAgain = false;
+        await _performLoad(
+          forceRefresh: forceRefresh,
+          showSpinner: showSpinner,
+        );
+      } while (_refreshAgain && mounted);
+    } finally {
+      _refreshFuture = null;
+      completer.complete();
+    }
+  }
+
+  Future<void> _performLoad({
+    required bool forceRefresh,
+    required bool showSpinner,
+  }) async {
+    final generation = _childGeneration;
     final previous = _state.data;
     if (showSpinner) {
       setState(() {
@@ -168,6 +191,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         children,
         fallback: _activeChildIndex,
       );
+      if (!mounted || generation != _childGeneration) return;
       _activeChildIndex = selectedIndex;
       var feeList = <Map<String, dynamic>>[];
       final historyList = <Map<String, dynamic>>[];
@@ -188,9 +212,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         final invoices = feeRows;
         final paymentRequests = studentId.isEmpty
             ? <Map<String, dynamic>>[]
-            : await _repository.loadPaymentRequests(
-                studentId: studentId,
-              );
+            : await _repository.loadPaymentRequests(studentId: studentId);
 
         feeList = feeRows.map((inv) {
           final balance =
@@ -203,6 +225,17 @@ class _ParentFeeHubState extends State<ParentFeeHub>
               (inv['total_amount'] as num?)?.toDouble() ??
               balance + paid;
           final feeType = _text(inv['fee_type']);
+          final awaitingReview =
+              balance > 0 &&
+              paymentRequests.any(
+                (request) =>
+                    '${request['invoice_id']}' == '${inv['id']}' &&
+                    const {
+                      'submitted',
+                      'pending_approval',
+                      'pending_verification',
+                    }.contains(_text(request['status']).toLowerCase()),
+              );
           return {
             'id': inv['id'],
             'invoiceNumber': inv['invoice_number'] ?? '',
@@ -215,7 +248,10 @@ class _ParentFeeHubState extends State<ParentFeeHub>
             'paidAmount': paid,
             'totalAmount': total,
             'dueDate': (inv['due_date'] ?? '').toString(),
-            'status': _statusFromFeeRow(inv),
+            'status': awaitingReview
+                ? 'Awaiting verification'
+                : _statusFromFeeRow(inv),
+            'awaitingReview': awaitingReview,
             'rejection_reason': inv['rejection_reason'],
             'items': _invoiceItems(inv),
             'student': inv['student'],
@@ -325,7 +361,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         );
       }
 
-      if (!mounted) return;
+      if (!mounted || generation != _childGeneration) return;
       setState(() {
         _childrenData = children;
         _feeStructure = feeList;
@@ -336,7 +372,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         );
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _childGeneration) return;
       setState(() {
         _state = previous == null
             ? RepositoryState.error(error: e)
@@ -366,7 +402,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       );
     }
 
-    if (_state.isError || _childrenData.isEmpty) {
+    if ((_state.isError && !_state.hasData) || _childrenData.isEmpty) {
       return SchoolDeskModuleScaffold(
         title: 'My Fees',
         subtitle: 'Fee overview, balances, and payment history',
@@ -412,6 +448,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: SchoolDeskRepositoryStateView<Object>(
         state: _state,
+        expandStaleContent: true,
         onRetry: () => _loadData(forceRefresh: true),
         data: (_) => DecoratedBox(
           decoration: const BoxDecoration(
@@ -488,6 +525,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       isLoading: _state.isLoading,
       onSelected: (index) {
         setState(() {
+          _childGeneration++;
           _activeChildIndex = index;
           _state = RepositoryState.loading(
             data: _state.data,
@@ -496,7 +534,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
           );
         });
         ParentChildSelectionService.saveIndex(_childrenData, index);
-        _loadData();
+        _loadData(forceRefresh: true);
       },
     );
   }
@@ -596,7 +634,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => _openPaymentFlow(nextFee),
+                onPressed: nextFee['awaitingReview'] == true
+                    ? null
+                    : () => _openPaymentFlow(nextFee),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: _headerColor,
@@ -607,7 +647,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                   elevation: 0,
                 ),
                 child: Text(
-                  'Pay Now — ${_money(nextFee['amount'])}',
+                  nextFee['awaitingReview'] == true
+                      ? 'Awaiting verification'
+                      : 'Pay Now — ${_money(nextFee['amount'])}',
                   style: GoogleFonts.ibmPlexSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -768,7 +810,8 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     if (status == 'Paid') {
       badgeColor = context.appTheme.success;
       badgeBg = context.appTheme.successContainer;
-    } else if (status.contains('Pending')) {
+    } else if (status.contains('Pending') ||
+        status == 'Awaiting verification') {
       badgeColor = context.appTheme.info;
       badgeBg = context.appTheme.infoContainer;
     } else if (status == 'Rejected' || status == 'Clarification Required') {
@@ -919,7 +962,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                   const SizedBox(width: 8),
                 ],
                 ElevatedButton(
-                  onPressed: () => _openPaymentFlow(fee),
+                  onPressed: fee['awaitingReview'] == true
+                      ? null
+                      : () => _openPaymentFlow(fee),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: accent,
                     foregroundColor: Colors.white,
@@ -936,7 +981,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Pay Now',
+                        fee['awaitingReview'] == true
+                            ? 'Awaiting verification'
+                            : 'Pay Now',
                         style: GoogleFonts.ibmPlexSans(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -1092,12 +1139,12 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     final student = _childrenData.isEmpty
         ? null
         : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
-    final result = await SchoolDeskNavigation.push(
+    await SchoolDeskNavigation.push(
       context,
       '/parent/payment-flow',
       arguments: ParentPaymentSelectionArgs(fees: [fee], student: student),
     );
-    if (result != null && mounted) {
+    if (mounted) {
       await _loadData(forceRefresh: true);
     }
   }
@@ -1119,7 +1166,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     final student = _childrenData.isEmpty
         ? null
         : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
-    final result = await SchoolDeskNavigation.push(
+    await SchoolDeskNavigation.push(
       context,
       '/parent/payment-flow',
       arguments: ParentPaymentSelectionArgs(
@@ -1128,7 +1175,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         paymentRequest: request,
       ),
     );
-    if (result != null && mounted) {
+    if (mounted) {
       await _loadData(forceRefresh: true);
     }
   }

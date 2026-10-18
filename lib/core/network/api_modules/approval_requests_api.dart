@@ -19,6 +19,7 @@ extension BackendApprovalRequestsApi on BackendApiClient {
     String search = '',
     int page = 1,
     int pageSize = 20,
+    bool forceRefresh = false,
   }) async {
     try {
       final query = <String, dynamic>{
@@ -28,7 +29,13 @@ extension BackendApprovalRequestsApi on BackendApiClient {
         if (type.trim().isNotEmpty) 'type': type.trim(),
         if (search.trim().isNotEmpty) 'search': search.trim(),
       };
-      final response = await _get('/approvals/feed', queryParameters: query);
+      final response = await _get(
+        '/approvals/feed',
+        queryParameters: query,
+        options: forceRefresh
+            ? Options(headers: const {'Cache-Control': 'no-store'})
+            : null,
+      );
       final payload = _asMap(response.data);
       if (payload['success'] == true) {
         return ApprovalFeedPage(
@@ -39,9 +46,9 @@ extension BackendApprovalRequestsApi on BackendApiClient {
             pageSize: _asInt(payload['page_size'], fallback: pageSize),
           ),
           pendingCount: _asInt(payload['pending_count']),
-          countsByType: _asMap(payload['counts_by_type']).map(
-            (key, value) => MapEntry(key, _asInt(value)),
-          ),
+          countsByType: _asMap(
+            payload['counts_by_type'],
+          ).map((key, value) => MapEntry(key, _asInt(value))),
         );
       }
       throw ServerException(

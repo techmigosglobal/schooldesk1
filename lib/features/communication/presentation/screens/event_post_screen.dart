@@ -1,3 +1,4 @@
+import 'school_post_feed_tab.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -71,6 +72,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       widget.repository ?? ApiEventPostRepository.legacyDefault;
 
   late TabController _tabController;
+  final _feedKey = GlobalKey<SchoolPostFeedTabState>();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _dateController = TextEditingController();
@@ -126,6 +128,8 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       case 'manage':
       case 'posts':
         return 2;
+      case 'feed':
+        return 3;
       case 'auto':
       default:
         return widget.args.referenceId.isNotEmpty ? 0 : 2;
@@ -142,6 +146,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       if (!mounted) return;
       unawaited(_loadPosts(showSpinner: false));
       if (widget.principalMode) {
+        _feedKey.currentState?.refresh();
         unawaited(_loadReviewPosts(showSpinner: false));
       }
     });
@@ -156,13 +161,18 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       _destSchoolGallery = true;
     }
     _tabController = TabController(
-      length: widget.principalMode ? 3 : 2,
+      length: widget.principalMode ? 4 : 2,
       initialIndex: widget.principalMode
           ? _initialPrincipalTabIndex(widget.args.initialTab)
           : 0,
       vsync: this,
     );
     _tabController.addListener(() {
+      if (widget.principalMode &&
+          _tabController.index == 3 &&
+          !_tabController.indexIsChanging) {
+        _feedKey.currentState?.refresh();
+      }
       if (_tabController.index == _manageTabIndex) {
         _loadPosts(showSpinner: false);
       }
@@ -711,6 +721,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
           onPressed: (_busy || _reviewRefreshing)
               ? null
               : () {
+                  _feedKey.currentState?.refresh();
                   _loadPosts(showSpinner: false);
                   _loadReviewPosts(showSpinner: false);
                 },
@@ -726,6 +737,8 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         children: [
           TabBar(
             controller: _tabController,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             labelColor: context.appTheme.primary,
             unselectedLabelColor: context.appTheme.onSurface.withOpacity(0.6),
             tabs: [
@@ -739,6 +752,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
               ),
               const Tab(text: 'Create', icon: Icon(Icons.add_box)),
               const Tab(text: 'Manage', icon: Icon(Icons.history)),
+              const Tab(text: 'Feed', icon: Icon(Icons.view_list_outlined)),
             ],
           ),
           Expanded(
@@ -748,6 +762,11 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                 _buildReviewList(),
                 _buildCreateForm(),
                 _buildStatusList(),
+                SchoolPostFeedTab(
+                  key: _feedKey,
+                  repository: _repository,
+                  onChanged: () => _loadPosts(showSpinner: false),
+                ),
               ],
             ),
           ),
