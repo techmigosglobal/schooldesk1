@@ -4,23 +4,33 @@ import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import type { PortalRole } from "@/lib/roles";
 import { visibleModules } from "@/lib/roles";
-import { modules, navMeta } from "@/components/portal/types";
+import { modules, navMeta, type Row } from "@/components/portal/types";
 import type { ToastItem } from "@/components/portal/Toast";
 import { ToastContainer } from "@/components/portal/Toast";
+import { PortalPageHeader } from "@/components/portal/PortalPageHeader";
 import { DashboardPanel } from "@/components/portal/DashboardPanel";
 import { ResourceModule } from "@/components/portal/ResourceModule";
 import { FeesWorkspace } from "@/components/portal/FeesWorkspace";
 import { WebsiteManager } from "@/components/portal/WebsiteManager";
-import { TickerManager } from "@/components/portal/TickerManager";
 import { AdmissionInquiriesWorkspace } from "@/components/portal/AdmissionInquiriesWorkspace";
 import { ReportsWorkspace } from "@/components/portal/ReportsWorkspace";
 import { PortalErrorBoundary } from "@/components/error-boundary";
 import { ChevronLeft, ChevronRight, Search } from "@/lib/lucide-react";
 import { QuickSearchModal } from "@/components/portal/QuickSearchModal";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
+import { PortalStateProvider, usePortalNavigation, clearPortalViewStorage, clearSavedFormMarkers } from "@/components/portal/PortalStateProvider";
+import { serializePortalTarget } from "@/lib/portal-navigation";
 
-export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole; initialBranchId?: string }) {
-  const [active, setActive] = useState("overview");
+type PortalProps = { role: PortalRole; initialBranchId?: string; sessionScope?: string; initialSchoolId?: string; initialSchoolName?: string };
+export function PortalClient(props: PortalProps) {
+  const [scopeBranch, setScopeBranch] = useState(props.role === "principal" ? props.initialBranchId ?? "" : props.initialSchoolId ?? "assigned");
+  const scope = `${props.sessionScope ?? "legacy"}:${props.role}:${scopeBranch}`;
+  return <PortalStateProvider key={scope} scope={scope} role={props.role}><PortalWorkspace {...props} initialBranchId={props.role === "principal" ? scopeBranch : ""} onBranchChanged={setScopeBranch} /></PortalStateProvider>;
+}
+function PortalWorkspace({ role, initialBranchId = "", initialSchoolName = "Assigned branch", onBranchChanged }: PortalProps & { onBranchChanged: (branch: string) => void }) {
+  const { target, navigate: navigateTarget, confirmLeave, ready, refresh, refreshing, canRefresh, refreshedAt, refreshError } = usePortalNavigation();
+  const active = target.module;
+  const [searchRecord, setSearchRecord] = useState<Row | undefined>();
   const [createToken, setCreateToken] = useState(0);
   const [dashboardRefresh, setDashboardRefresh] = useState(0);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -30,6 +40,7 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
   const [activeBranch, setActiveBranch] = useState(initialBranchId);
   const [branchSelected, setBranchSelected] = useState(role !== "principal" || Boolean(initialBranchId));
   const [branchesLoading, setBranchesLoading] = useState(role === "principal");
+  const [branchError, setBranchError] = useState("");
   const [switchingBranch, setSwitchingBranch] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -50,16 +61,20 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
   useEffect(() => {
     if (role !== "principal") return;
     fetch("/api/backend/branches")
-      .then((response) => response.json())
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load school branches. Refresh the page to retry.");
+        return response.json();
+      })
       .then((payload) => {
         const rows = Array.isArray(payload.data) ? payload.data : [];
         setBranches(rows.map((row: { id?: string; name?: string }) => ({ id: row.id ?? "", name: row.name ?? "Branch" })).filter((row: { id: string }) => Boolean(row.id)));
       })
-      .catch(() => setBranches([]))
+      .catch((error) => setBranchError(error instanceof Error ? error.message : "Unable to load school branches."))
       .finally(() => setBranchesLoading(false));
   }, [role]);
 
   async function changeBranch(branchId: string) {
+    if (!confirmLeave()) return;
     setSwitchingBranch(true);
     try {
       const response = await fetch("/api/branch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchId }) });
@@ -72,6 +87,8 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
         return;
       }
       setActiveBranch(branchId);
+      history.replaceState(history.state, "", `${location.pathname}${serializePortalTarget({ module: active, tab: target.tab }, role)}`);
+      onBranchChanged(branchId);
       setBranchSelected(true);
       setDashboardRefresh((value) => value + 1);
     } catch {
@@ -81,19 +98,16 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
     }
   }
 
-  const navigate = (target: string) => {
-    if (!(nav as readonly string[]).includes(target)) return;
-    setActive(target);
-    setCreateToken(0);
+  const navigate = (module: string, tab?: string) => {
+    if (!navigateTarget({ module, ...(tab ? { tab } : {}) })) return false;
+    setSearchRecord(undefined); setCreateToken(0); return true;
   };
-
-  const createInModule = (target: string) => {
-    if (!(nav as readonly string[]).includes(target)) return;
-    setActive(target);
-    setCreateToken(Date.now());
+  const createInModule = (module: string) => {
+    if (navigate(module)) setCreateToken(Date.now());
   };
 
   const notify = useCallback((message: string, type: "success" | "error" | "info" = "success") => {
+    if (type === "success") clearSavedFormMarkers();
     setToasts((prev) => [
       ...prev,
       { id: `${Date.now()}-${Math.random()}`, message, type },
@@ -105,9 +119,12 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
   }, []);
 
   async function logout() {
+    if (!confirmLeave()) return;
     setLoggingOut(true);
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error("Unable to sign out.");
+      clearPortalViewStorage();
       window.location.href = "/login";
     } catch {
       setLoggingOut(false);
@@ -154,14 +171,12 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
             const meta = navMeta[id];
             if (!meta) return null;
             const Icon = meta.icon;
-            const label = role === "coordinator" && id === "website" ? "Ticker" : meta.label;
+            const label = meta.label;
             return (
               <button
                 key={id}
-                onClick={() => {
-                  setActive(id);
-                  setCreateToken(0);
-                }}
+                onClick={() => navigate(id)}
+                aria-current={active === id ? "page" : undefined}
                 className={active === id ? "active" : ""}
                 title={label}
               >
@@ -172,25 +187,17 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
           })}
         </nav>
 
-        {!collapsed && role === "coordinator" && (
-          <p className="finance-note">Finance is safely managed by the Principal.</p>
-        )}
 
-        <div className="ops-sidebar-status" title="SchoolDesk connected">
+        <div className="ops-sidebar-status" title="SchoolDesk workspace">
           <i />
-          {!collapsed && <span>SchoolDesk connected</span>}
+          {!collapsed && <span>SchoolDesk workspace</span>}
         </div>
       </aside>
 
       {/* Main content */}
       <div className="portal-main">
         <header className="portal-topbar ops-topbar">
-          <div>
-            <p>{role === "principal" ? "Principal Portal" : "Coordinator Portal"}</p>
-            <h1>
-              {active === "overview" ? "Operations overview" : navMeta[active]?.label}
-            </h1>
-          </div>
+          <PortalPageHeader role={role} title={navMeta[active]?.label ?? "Overview"} />
           <div className="ops-topbar-actions">
             {role === "principal" && branches.length > 0 && (
               <label className="branch-select">
@@ -201,6 +208,7 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
                 </select>
               </label>
             )}
+            {role === "coordinator" && <span className="portal-branch-context">{initialSchoolName}</span>}
             <button
               className="secondary-button"
               onClick={() => setQuickSearchOpen(true)}
@@ -215,9 +223,12 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
             </button>
             <button
               className="secondary-button"
-              onClick={() => setDashboardRefresh((v) => v + 1)}
+              onClick={() => void refresh()}
+              disabled={!ready || !canRefresh || refreshing}
+              aria-busy={refreshing}
+              title={refreshedAt ? `Current view refreshed at ${refreshedAt}` : "Refresh current view"}
             >
-              Refresh data
+              {refreshing ? "Refreshing…" : "Refresh"}
             </button>
             <button className="secondary-button" onClick={() => void logout()} disabled={loggingOut} aria-busy={loggingOut}>
               {loggingOut ? <LoadingIndicator label="Signing out…" compact announce={false} /> : "Sign out"}
@@ -225,13 +236,15 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
           </div>
         </header>
 
+        {refreshError && <p className="ops-inline-error" role="alert">{refreshError}</p>}
         <section className="portal-content ops-content" aria-busy={branchesLoading || switchingBranch}>
-          {branchesLoading || switchingBranch ? (
+          {!ready || branchesLoading || switchingBranch ? (
             <PortalModuleSkeleton variant="cards" label={branchesLoading ? "Loading available school branches" : "Switching school branch"} />
           ) : role === "principal" && !branchSelected ? (
             <div className="ops-branch-gate">
               <h2>Select a branch to begin</h2>
               <p>School data is deliberately hidden until you choose the branch you want to manage.</p>
+              {branchError && <p role="alert" className="ops-inline-error">{branchError}</p>}
               <select value={activeBranch} onChange={(event) => void changeBranch(event.target.value)} disabled={switchingBranch}>
                 <option value="" disabled>Select branch</option>
                 {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
@@ -247,17 +260,16 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
               />
             ) : active === "reports" ? (
               <ReportsWorkspace role={role} onNotify={notify} />
-            ) : active === "website" && role === "principal" ? (
+            ) : active === "website" ? (
               <WebsiteManager onNotify={notify} />
-            ) : active === "website" && role === "coordinator" ? (
-              <TickerManager onNotify={notify} />
             ) : active === "admission_inquiries" ? (
               <AdmissionInquiriesWorkspace />
             ) : active === "fees" && role === "principal" ? (
-              <FeesWorkspace onNotify={notify} />
+              <FeesWorkspace onNotify={notify} initialRecord={searchRecord} />
             ) : selected ? (
               <ResourceModule
                 module={selected}
+                initialRecord={searchRecord}
                 createToken={createToken}
                 onSaved={() => setDashboardRefresh((v) => v + 1)}
                 onNotify={notify}
@@ -272,8 +284,10 @@ export function PortalClient({ role, initialBranchId = "" }: { role: PortalRole;
           role={role}
           onClose={() => setQuickSearchOpen(false)}
           onSelectResult={(item) => {
-            setQuickSearchOpen(false);
-            navigate(item.targetModule);
+            if (navigate(item.targetModule)) {
+              setQuickSearchOpen(false);
+              setSearchRecord(item.record ? { ...item.record } : undefined);
+            }
           }}
         />
       )}

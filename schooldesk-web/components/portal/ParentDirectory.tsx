@@ -1,21 +1,23 @@
 "use client";
 
+import { usePortalGuard, usePortalState } from "./PortalStateProvider";
+import { RecordActions } from "./RecordActions";
+
+import { usePortalRefresh } from "./use-portal-refresh";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CircleAlert,
   Eye,
-  HeartHandshake,
   Pencil,
   Plus,
-  RefreshCw,
   RotateCcw,
   ShieldCheck,
-  Trash2,
-  UserCog,
 } from "@/lib/lucide-react";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import {
+  apiAll,
   api,
   displayName,
   nested,
@@ -65,10 +67,12 @@ function studentClassLabel(student: Row) {
 }
 
 export function ParentDirectory({
+  initialRecord,
   createToken,
   onSaved,
   onNotify,
 }: {
+  initialRecord?: Row;
   createToken: number;
   onSaved: () => void;
   onNotify: (message: string) => void;
@@ -76,12 +80,11 @@ export function ParentDirectory({
   const [parents, setParents] = useState<Row[]>([]);
   const [students, setStudents] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [linkFilter, setLinkFilter] = useState("all");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = usePortalState("parents.search", "");
+  const [statusFilter, setStatusFilter] = usePortalState("parents.statusFilter", "all");
+  const [linkFilter, setLinkFilter] = usePortalState("parents.linkFilter", "all");
+  const [page, setPage] = usePortalState("parents.page", 1);
   const [dialog, setDialog] = useState<ParentDialogState>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -93,15 +96,15 @@ export function ParentDirectory({
   const [linkStudentId, setLinkStudentId] = useState("");
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState("");
+  usePortalGuard(false, resetting || linking || deleting);
 
   const load = useCallback(async (manual = false) => {
-    if (manual) setRefreshing(true);
-    else setLoading(true);
+    if (!manual) setLoading(true);
     setError("");
     try {
       const [parentData, studentData] = await Promise.all([
-        api("users?role=parent&page=1&page_size=100"),
-        api("students?page=1&page_size=100"),
+        apiAll("users?role=parent&page=1&page_size=100"),
+        apiAll("students?page=1&page_size=100"),
       ]);
       setParents(rowsFrom(parentData));
       setStudents(rowsFrom(studentData));
@@ -109,9 +112,12 @@ export function ParentDirectory({
       setError(event instanceof Error ? event.message : "Unable to load parent records");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
+
+  useEffect(() => { if (initialRecord) setDialog({ open: true, row: initialRecord, readOnly: true }); }, [initialRecord]);
+
+  usePortalRefresh(load);
 
   useEffect(() => {
     void load();
@@ -160,10 +166,9 @@ export function ParentDirectory({
     [filteredParents, page]
   );
 
-  useEffect(() => setPage(1), [search, statusFilter, linkFilter]);
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+    if (!loading && !error && (!Number.isInteger(page) || page < 1 || page > totalPages)) setPage(Number.isInteger(page) ? Math.max(1, Math.min(page, totalPages)) : 1);
+  }, [page, totalPages, loading, error, setPage]);
 
   async function resetCredentials() {
     if (!resetTarget) return;
@@ -219,44 +224,28 @@ export function ParentDirectory({
 
   return (
     <section className="ops-module parent-directory">
-      <div className="ops-module-heading">
-        <div>
-          <div className="ops-module-icon gold">
-            <HeartHandshake size={20} />
-          </div>
-          <div>
-            <p className="ops-kicker">Resource management</p>
-            <h2>Parents</h2>
-            <p>Parent portal accounts, family contacts, and linked learner profiles.</p>
-          </div>
-        </div>
-        <div className="ops-actions">
-          <button className="secondary-button" onClick={() => void load(true)} disabled={refreshing}>
-            <RefreshCw size={16} className={refreshing ? "spin" : ""} /> Refresh
-          </button>
-          <button className="primary-button" onClick={() => setDialog({ open: true, readOnly: false })}>
-            <Plus size={16} /> Add parent
-          </button>
-        </div>
-      </div>
+      <div className="directory-context-bar"><p>Parent accounts, family contacts, and linked student profiles.</p><button type="button" className="primary-button" onClick={() => setDialog({ open: true, readOnly: false })}><Plus size={16} /> Add parent</button></div>
 
       <div className="student-directory-toolbar">
         <input
           className="search-input"
+          type="search"
+          aria-label="Search parent accounts"
           placeholder="Search parent name, username, email, phone, or child name…"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => { setSearch(event.target.value); setPage(1); }}
         />
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter by account status">
+        <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }} aria-label="Filter by account status">
           <option value="all">All account statuses</option>
           <option value="active">Active accounts</option>
           <option value="inactive">Inactive accounts</option>
         </select>
-        <select value={linkFilter} onChange={(event) => setLinkFilter(event.target.value)} aria-label="Filter by linked children">
+        <select value={linkFilter} onChange={(event) => { setLinkFilter(event.target.value); setPage(1); }} aria-label="Filter by linked children">
           <option value="all">All parents</option>
           <option value="linked">With linked children</option>
           <option value="unlinked">Unlinked accounts</option>
         </select>
+        {(search || statusFilter !== "all" || linkFilter !== "all") && <button type="button" className="secondary-button directory-reset" onClick={() => { setSearch(""); setStatusFilter("all"); setLinkFilter("all"); setPage(1); }}>Reset filters</button>}
         <span className="ops-count">
           Showing <b>{filteredParents.length}</b> parent{filteredParents.length === 1 ? "" : "s"}
         </span>
@@ -277,10 +266,8 @@ export function ParentDirectory({
             <table className="data-table student-directory-table">
               <thead>
                 <tr>
-                  <th>Parent</th>
-                  <th>Login Credentials</th>
-                  <th>Contact Details</th>
-                  <th>Linked Students</th>
+                  <th>Parent / contact</th>
+                  <th>Linked children</th>
                   <th>Status</th>
                   <th aria-label="Parent actions" style={{ textAlign: "right" }}>Actions</th>
                 </tr>
@@ -299,32 +286,14 @@ export function ParentDirectory({
                           </span>
                           <div>
                             <b>{stringValue(parent.name || parent.username)}</b>
-                            <small>ID: {parentId.slice(0, 8)}…</small>
+                            <small>@{stringValue(parent.username || "—")}</small><small>{stringValue(parent.phone || "Phone not set")}</small><small>{stringValue(parent.email || "Email not set")}</small>
                           </div>
-                        </div>
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                          <span className="status-pill" style={{ background: "#eef5fc", color: "#0c5496", width: "fit-content" }}>
-                            @{stringValue(parent.username || "—")}
-                          </span>
-                          <span style={{ fontSize: "0.72rem", color: "#95a5b2" }}>
-                            {parent.password_reset_at
-                              ? `Last reset: ${stringValue(parent.password_reset_at).slice(0, 10)}`
-                              : "Password not yet reset"}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <div>
-                          <b>{stringValue(parent.phone || "Phone not set")}</b>
-                          <small style={{ color: "#637887", display: "block" }}>{stringValue(parent.email || "Email not set")}</small>
                         </div>
                       </td>
                       <td>
                         {children.length > 0 ? (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                            {children.map((child) => {
+                            {children.slice(0, 2).map((child) => {
                               const cClass = studentClassLabel(child);
                               return (
                                 <span
@@ -346,6 +315,7 @@ export function ParentDirectory({
                                 </span>
                               );
                             })}
+                            {children.length > 2 && <button type="button" className="directory-detail-link" onClick={() => setDialog({ open: true, row: parent, readOnly: true })}>View all {children.length} children</button>}
                           </div>
                         ) : (
                           <span style={{ color: "#95a5b2", fontSize: "0.78rem" }}>No linked students</span>
@@ -359,39 +329,23 @@ export function ParentDirectory({
                       <td className="actions-cell" style={{ textAlign: "right" }}>
                         <button
                           className="icon-button"
-                          title="Link / unlink students"
-                          onClick={() => { setLinkTarget(parent); setLinkStudentId(""); setLinkError(""); }}
-                        >
-                          <UserCog size={15} />
-                        </button>
-                        <button
-                          className="icon-button"
-                          title="Reset login credentials"
-                          onClick={() => { setResetTarget(parent); setResetError(""); }}
-                        >
-                          <RotateCcw size={15} />
-                        </button>
-                        <button
-                          className="icon-button"
                           title="View parent details"
                           onClick={() => setDialog({ open: true, row: parent, readOnly: true })}
                         >
-                          <Eye size={15} />
+                          <Eye size={15} /><span>View</span>
                         </button>
                         <button
                           className="icon-button"
                           title="Edit parent account"
                           onClick={() => setDialog({ open: true, row: parent, readOnly: false })}
                         >
-                          <Pencil size={15} />
+                          <Pencil size={15} /><span>Edit</span>
                         </button>
-                        <button
-                          className="icon-button danger"
-                          title="Delete parent account"
-                          onClick={() => setDeleteTarget(parent)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        <RecordActions label={`More actions for ${stringValue(parent.name || parent.username)}`} actions={[
+                          { label: "Link children", onSelect: () => { setLinkTarget(parent); setLinkStudentId(""); setLinkError(""); } },
+                          { label: "Reset credentials", onSelect: () => { setResetTarget(parent); setResetError(""); } },
+                          { label: "Delete parent account", danger: true, onSelect: () => setDeleteTarget(parent) },
+                        ]} />
                       </td>
                     </tr>
                   );
@@ -448,7 +402,7 @@ export function ParentDirectory({
             <button className="secondary-button" type="button" disabled={deleting} onClick={() => setDeleteTarget(null)}>
               Cancel
             </button>
-            <button className="danger-button" type="button" disabled={deleting} onClick={() => void deleteParent()}>
+            <button className="danger-button" type="button" disabled={deleting} aria-busy={deleting} onClick={() => void deleteParent()}>
               {deleting ? <LoadingIndicator label="Deleting…" compact announce={false} /> : "Delete parent"}
             </button>
           </div>
@@ -507,6 +461,7 @@ export function ParentDirectory({
                     className="primary-button"
                     type="button"
                     disabled={!linkStudentId || linking}
+                    aria-busy={linking}
                     onClick={() => void linkStudent()}
                     style={{ whiteSpace: "nowrap" }}
                   >
@@ -524,7 +479,7 @@ export function ParentDirectory({
               </div>
             </div>
             <div className="dialog-footer">
-              <button className="secondary-button" type="button" onClick={() => setLinkTarget(null)}>
+              <button className="secondary-button" type="button" disabled={linking} onClick={() => !linking && setLinkTarget(null)}>
                 Done
               </button>
             </div>
@@ -550,7 +505,7 @@ export function ParentDirectory({
             <button className="secondary-button" type="button" disabled={resetting} onClick={() => setResetTarget(null)}>
               Cancel
             </button>
-            <button className="primary-button" type="button" disabled={resetting} onClick={() => void resetCredentials()}>
+            <button className="primary-button" type="button" disabled={resetting} aria-busy={resetting} onClick={() => void resetCredentials()}>
               {resetting ? <LoadingIndicator label="Resetting…" compact announce={false} /> : <><RotateCcw size={14} /> Reset password</>}
             </button>
           </div>

@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePortalRefresh } from "./use-portal-refresh";
+import { usePortalState, usePortalTab, usePortalNavigation, usePortalGuard } from "./PortalStateProvider";
+import { readFeeSummary, type FeeSummary } from "@/lib/fee-summary";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,13 +13,12 @@ import {
   FileText,
   Plus,
   ReceiptIndianRupee,
-  RefreshCw,
   Trash2,
-  WalletCards,
 } from "@/lib/lucide-react";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { FeeState, Row } from "./types";
 import {
+  apiAll,
   api,
   displayName,
   downloadCsv,
@@ -82,7 +85,7 @@ function FinanceTable({
 }
 
 function StructuresAccordion({ structures, onNew }: { structures: Row[]; onNew: () => void }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = usePortalState<string[]>("fees.structures.expanded", []);
 
   // Group by gradeId + sectionId key → parent row
   const groups = useMemo(() => {
@@ -128,16 +131,14 @@ function StructuresAccordion({ structures, onNew }: { structures: Row[]; onNew: 
       </div>
       <div className="fee-struct-accordion">
         {groups.map(([key, group]) => {
-          const isOpen = expanded.has(key);
+          const isOpen = expanded.includes(key);
           return (
             <div key={key} className={`fee-struct-group${isOpen ? " open" : ""}`}>
               {/* Parent row — summary */}
               <button
                 className="fee-struct-parent"
                 onClick={() => setExpanded((prev) => {
-                  const next = new Set(prev);
-                  isOpen ? next.delete(key) : next.add(key);
-                  return next;
+                  return isOpen ? prev.filter((item) => item !== key) : [...prev, key];
                 })}
               >
                 <span className="fee-struct-chevron">
@@ -204,30 +205,42 @@ function printReceipt(r: Row, stName: string, school: Row, invoice?: Row) {
 type SecondaryTab = "structures" | "collections" | "requests" | "concessions" | "reports";
 
 export function FeesWorkspace({
+  initialRecord,
   onNotify,
 }: {
+  initialRecord?: Row;
   onNotify: (message: string, type?: "success" | "error" | "info") => void;
 }) {
   // "main" = 3-step fee workflow; secondary tabs are utility views
-  const [view, setView] = useState<"main" | SecondaryTab>("main");
+  const [view, setView] = usePortalTab<"main" | SecondaryTab>("fees", "main");
+  const { navigate } = usePortalNavigation();
+  const [summary, setSummary] = useState<FeeSummary | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [confirmFines, setConfirmFines] = useState(false);
+  const [configDirty, setConfigDirty] = useState(false);
+  const [configRevision, setConfigRevision] = useState(0);
+  const configFormRef = useRef<HTMLFormElement | null>(null);
+  const [outstandingOpen, setOutstandingOpen] = usePortalState("fees.outstandingOpen", false);
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState("");
   const [notice, setNotice] = useState("");
 
   // 3-step navigation state
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = usePortalState<string | null>("fees.sectionId", null);
+  const [selectedStudentId, setSelectedStudentId] = usePortalState<string | null>("fees.studentId", null);
 
   // Search (used in step 2)
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = usePortalState("fees.search", "");
 
   // selected invoice inside step 3 (derived from selectedStudentId — user picks which invoice if many)
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [selectedInvoiceId, setSelectedInvoiceId] = usePortalState<string | null>("fees.invoiceId", null);
 
   // Dialog state — payment/concession opened from step 3; structure from secondary tab
   const [dialog, setDialog] = useState<"structure" | "payment" | "concession" | false>(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
   const [confirmDeletePaymentId, setConfirmDeletePaymentId] = useState<string | null>(null);
+  usePortalGuard(configDirty, Boolean(busyAction) || Boolean(deletingPaymentId));
+  const handledInitialRecord = useRef<Row | undefined>(undefined);
 
   const [state, setState] = useState<FeeState>({
     structures: [],
@@ -261,21 +274,27 @@ export function FeesWorkspace({
         config,
         allStudents,
         currentSchool,
+        summaryData,
       ] = await Promise.all([
-        api("fees/structures").catch(() => []),
-        api("fees/invoices?page=1&page_size=2000").catch(() => []),
-        api("fees/payments?page=1&page_size=1000").catch(() => []),
-        api("fees/payment-requests").catch(() => []),
-        api("fees/concessions").catch(() => []),
-        api("fees/categories").catch(() => []),
-        api("academic-years").catch(() => []),
-        api("grades").catch(() => []),
-        api("sections?page=1&page_size=100").catch(() => []),
-        api("fees/payment-config").catch(() => ({})),
-        api("students?page=1&page_size=500").catch(() => []),
-        api("schools/current").catch(() => ({})),
+        apiAll("fees/structures"),
+        apiAll("fees/invoices?page=1&page_size=2000"),
+        apiAll("fees/payments?page=1&page_size=1000"),
+        apiAll("fees/payment-requests"),
+        apiAll("fees/concessions"),
+        apiAll("fees/categories"),
+        apiAll("academic-years"),
+        apiAll("grades"),
+        apiAll("sections?page=1&page_size=100"),
+        api("fees/payment-config"),
+        apiAll("students?page=1&page_size=500"),
+        api("schools/current"),
+        api("fees/summary").then(readFeeSummary),
       ]);
 
+      setSummary(summaryData);
+      setConfigDirty(false);
+      setConfigRevision((value) => value + 1);
+      setHasLoaded(true);
       setState({
         structures: rowsFrom(structures),
         invoices: rowsFrom(invoices),
@@ -298,7 +317,20 @@ export function FeesWorkspace({
     }
   }, []);
 
+  useEffect(() => { if (view !== "reports") setConfigDirty(false); }, [view]);
+
+  usePortalRefresh(load);
+
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!hasLoaded) return;
+    if (selectedSectionId && !state.sections.some((row) => stringValue(row.id) === selectedSectionId)) {
+      setSelectedSectionId(null); setSelectedStudentId(null); setSelectedInvoiceId(null);
+    } else if (selectedStudentId && !students.some((row) => stringValue(row.id) === selectedStudentId && (!selectedSectionId || stringValue(row.current_section_id) === selectedSectionId))) {
+      setSelectedStudentId(null); setSelectedInvoiceId(null);
+    } else if (selectedInvoiceId && !state.invoices.some((row) => stringValue(row.id) === selectedInvoiceId && stringValue(row.student_id ?? nested(row, "student").id) === selectedStudentId)) setSelectedInvoiceId(null);
+  }, [hasLoaded, state.sections, state.invoices, students, selectedSectionId, selectedStudentId, selectedInvoiceId, setSelectedSectionId, setSelectedStudentId, setSelectedInvoiceId]);
 
   // ── Computed maps ──────────────────────────────────────────────────────────
 
@@ -363,6 +395,16 @@ export function FeesWorkspace({
     return map;
   }, [students]);
 
+  useEffect(() => {
+    if (!initialRecord || loading || handledInitialRecord.current === initialRecord) return;
+    handledInitialRecord.current = initialRecord;
+    const studentId = stringValue(initialRecord.student_id);
+    setView("main");
+    setSelectedSectionId(studentSectionMap.get(studentId) ?? null);
+    setSelectedStudentId(studentId || null);
+    setSelectedInvoiceId(stringValue(initialRecord.id) || null);
+  }, [initialRecord, loading, studentSectionMap]);
+
   // Count unique students per section for class card badges
   const sectionStudentCount = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -399,61 +441,21 @@ export function FeesWorkspace({
 
   // ── KPI totals ──────────────────────────────────────────────────────────────
 
-  const totalBilled = operationalInvoices.reduce((s, r) => s + Number(r.net_amount || r.total_amount || 0), 0);
-  const totalPaid = state.payments.reduce((s, r) => s + Number(r.amount_paid ?? r.amount ?? 0), 0);
-  const totalOutstanding = operationalInvoices.reduce((s, r) => s + Number(r.balance || 0), 0);
-  const collectionRate = totalBilled > 0 ? Math.min(100, Math.round((totalPaid / totalBilled) * 100)) : 0;
-  const pendingRequestsCount = state.requests.filter((r) => {
-    const s = stringValue(r.status).toLowerCase();
-    return s === "pending" || s === "pending_verification" || s === "resubmitted";
-  }).length;
-  const overdueInvoices = operationalInvoices.filter(
-    (r) => Number(r.balance || 0) > 0 && stringValue(r.status).toLowerCase() !== "paid"
-  );
+  const totalBilled = summary?.billed;
+  const totalPaid = summary?.collected;
+  const totalOutstanding = summary?.outstanding;
+  const collectionRate = summary?.collectionPercent;
+  const pendingRequestsCount = summary?.pendingRequestCount ?? 0;
+  const outstandingInvoices = operationalInvoices.filter((r) => Number(r.balance || 0) > 0);
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
-  async function requestFinanceExport(reportType: string, title: string) {
-    setBusyAction(`export:${reportType}`);
-    try {
-      const result = (await api("fees/reports/exports", {
-        method: "POST",
-        body: JSON.stringify({
-          report_title: title,
-          report_type: reportType,
-          format: "pdf",
-          parameters: {
-            invoice_count: state.invoices.length,
-            payment_count: state.payments.length,
-            concession_count: state.concessions.length,
-          },
-        }),
-      })) as Row;
-      if (stringValue(result.download_url)) {
-        const response = await fetch(stringValue(result.download_url));
-        if (!response.ok) throw new Error("The fee export could not be downloaded.");
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${title.toLowerCase().replaceAll(/\s+/g, "_")}.pdf`;
-        link.click();
-        URL.revokeObjectURL(url);
-        onNotify(`${title} downloaded.`);
-        return;
-      }
-      onNotify(`${title} export requested.`, "info");
-    } catch (event) {
-      setNotice(event instanceof Error ? event.message : "Unable to export finance report");
-    } finally {
-      setBusyAction("");
-    }
-  }
-
   async function applyFines() {
+    if (busyAction) return;
     setBusyAction("fines");
     try {
       const res = (await api("fees/invoices/late-fines/apply", { method: "POST" })) as Row;
+      setConfirmFines(false);
       onNotify(`Late fines applied. Updated ${stringValue(res.updated || 0)} invoices.`);
       void load();
     } catch (event) {
@@ -486,8 +488,10 @@ export function FeesWorkspace({
         method: "PUT",
         body: JSON.stringify(Object.fromEntries(form)),
       });
-      onNotify("Bank and UPI gateway settings saved.");
-      void load();
+      setConfigDirty(false);
+      configFormRef.current?.removeAttribute("data-portal-dirty");
+      onNotify("Bank and UPI payment settings saved.");
+      await load();
     } catch (event) {
       setNotice(event instanceof Error ? event.message : "Save failed");
     } finally {
@@ -501,8 +505,10 @@ export function FeesWorkspace({
     try {
       await api(`fees/payments/${paymentId}`, { method: "DELETE" });
       // Silent refresh — re-fetch only invoices so navigation state is preserved
-      const fresh = await api("fees/invoices?page=1&page_size=2000").catch(() => null);
-      if (fresh) setState((prev) => ({ ...prev, invoices: rowsFrom(fresh) }));
+      setState((previous) => ({ ...previous, payments: previous.payments.filter((item) => stringValue(item.id) !== paymentId) }));
+      const [invoices, payments, updatedSummary] = await Promise.all([apiAll("fees/invoices"), apiAll("fees/payments"), api("fees/summary").then(readFeeSummary)]);
+      setSummary(updatedSummary);
+      setState((previous) => ({ ...previous, invoices, payments }));
       onNotify("Payment deleted. Invoice totals updated.");
     } catch (event) {
       onNotify(event instanceof Error ? event.message : "Unable to delete payment");
@@ -553,48 +559,24 @@ export function FeesWorkspace({
 
   return (
     <section className="ops-module fees-workspace">
-      {/* ── Module heading ── */}
-      <div className="ops-module-heading">
-        <div>
-          <div className="ops-module-icon gold" style={{ background: "#fff4d7", color: "#9a6b00" }}>
-            <WalletCards size={20} />
-          </div>
-          <div>
-            <p className="ops-kicker">Principal ledger</p>
-            <h2>Fee Operations &amp; Accounting</h2>
-            <p>Select a class to view and manage student fees, record payments, and apply concessions.</p>
-          </div>
-        </div>
+      <div className="fees-context-toolbar">
+        <p>Current branch · All academic years</p>
         <div className="ops-actions">
-          <button className="secondary-button" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh
-          </button>
-          <button
-            className="secondary-button"
-            onClick={() => void applyFines()}
-            disabled={Boolean(busyAction)}
-            aria-busy={busyAction === "fines"}
-          >
-            {busyAction === "fines"
-              ? <LoadingIndicator label="Applying fines…" compact announce={false} />
-              : <><ReceiptIndianRupee size={16} /> Apply late fines</>}
-          </button>
-          <button className="primary-button" onClick={() => setDialog("structure")}>
-            <Plus size={16} /> New fee structure
-          </button>
+          <button type="button" className="secondary-button" onClick={() => navigate({ module: "reports", tab: "finance" })}><FileText size={16} /> Finance reports</button>
+          <details className="fee-secondary-actions"><summary>More actions</summary><button type="button" className="secondary-button" disabled={Boolean(busyAction) || configDirty} title={configDirty ? "Save payment settings before applying late fines" : undefined} onClick={() => setConfirmFines(true)}><ReceiptIndianRupee size={16} /> Apply late fines</button></details>
         </div>
       </div>
 
       {notice && (
         <div className="ops-inline-error">
           <CircleAlert size={16} />
-          {notice}
+          {notice}{hasLoaded && " Previously loaded fee records and totals may be stale. Use Refresh to retry."}
         </div>
       )}
 
-      {loading ? (
+      {loading && !hasLoaded ? (
         <PortalModuleSkeleton variant="finance" label="Loading fee operations and accounting" />
-      ) : (
+      ) : hasLoaded && (
         <>
           {/* ── KPI summary ── */}
           <div className="finance-summary">
@@ -604,7 +586,7 @@ export function FeesWorkspace({
             </article>
             <article>
               <small>Total Collections</small>
-              <b style={{ color: "#188038" }}>{money(totalPaid)} <span style={{ fontSize: ".8rem", fontWeight: 600 }}>({collectionRate}%)</span></b>
+              <b style={{ color: "#188038" }}>{money(totalPaid)} <span style={{ fontSize: ".8rem", fontWeight: 600 }}>({collectionRate === null ? "No collection target" : `${collectionRate}%`})</span></b>
             </article>
             <article>
               <small>Outstanding Balance</small>
@@ -620,12 +602,12 @@ export function FeesWorkspace({
           <nav className="finance-tabs" aria-label="Fee workspace sections" style={{ marginBottom: "1.25rem" }}>
             {(
               [
-                ["main", "Student Fees"],
-                ["structures", "Fee Structures"],
+                ["main", "Student fees"],
                 ["collections", `Payments (${state.payments.length})`],
-                ["requests", `Verification Queue${pendingRequestsCount > 0 ? ` (${pendingRequestsCount})` : ""}`],
+                ["requests", `Verification${pendingRequestsCount > 0 ? ` (${pendingRequestsCount})` : ""}`],
+                ["structures", "Fee structures"],
                 ["concessions", "Concessions"],
-                ["reports", "Gateway Config"],
+                ["reports", "Payment settings"],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -633,7 +615,6 @@ export function FeesWorkspace({
                 className={view === key ? "active" : ""}
                 onClick={() => {
                   setView(key);
-                  if (key === "main") goToClasses();
                 }}
               >
                 {label}
@@ -646,6 +627,13 @@ export function FeesWorkspace({
           ════════════════════════════════════════════════════════════════ */}
           {view === "main" && (
             <div className="fees-main-view">
+              <p className="fees-breadcrumb">Student fees{activeSection ? ` / ${rowText(activeSection, "grade_name")} ${stringValue(activeSection.section_name ?? activeSection.name)}` : " / All classes"}{activeStudentName ? ` / ${activeStudentName}` : ""}</p>
+              <details className="fee-outstanding-list surface" open={outstandingOpen} onToggle={(event) => setOutstandingOpen(event.currentTarget.open)}>
+                <summary>Outstanding balances ({outstandingInvoices.length} invoices)</summary>
+                <p>Invoices with a remaining balance. An outstanding balance does not necessarily mean the invoice is overdue.</p>
+                <button type="button" className="secondary-button" onClick={() => downloadCsv(`outstanding_balances_${new Date().toISOString().slice(0, 10)}.csv`, outstandingInvoices.map((inv) => ({ invoice_number: inv.invoice_number, student: displayName(nested(inv, "student")), balance: inv.balance, due_date: inv.due_date, status: inv.status })))}>Export outstanding follow-up CSV</button>
+                {outstandingInvoices.length ? <ul>{outstandingInvoices.map((inv) => <li key={stringValue(inv.id)}><b>{stringValue(inv.invoice_number)}</b> · {displayName(nested(inv, "student"))} · {money(inv.balance)} · {stringValue(inv.status) || "Status unavailable"}{inv.due_date ? ` · Due ${stringValue(inv.due_date).slice(0, 10)}` : " · No due date"}</li>)}</ul> : <p>No outstanding balances.</p>}
+              </details>
 
               {/* Step 1 — Class selection grid */}
               {!selectedSectionId && !selectedStudentId && (
@@ -1026,7 +1014,7 @@ export function FeesWorkspace({
 
               {view === "collections" && (
                 <FinanceTable
-                  headers={["Receipt #", "Student", "Amount Paid", "Date", "Mode", "Transaction Ref", ""]}
+                  headers={["Receipt #", "Student", "Amount paid", "Date", "Mode", "Status", "Transaction ref", ""]}
                   rows={state.payments}
                   emptyText="No payments recorded."
                   renderRow={(r) => {
@@ -1061,6 +1049,7 @@ export function FeesWorkspace({
                             {payMode || "—"}
                           </span>
                         </td>
+                        <td>{stringValue(r.status) || "Status unavailable"}</td>
                         <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{txnRef || "—"}</td>
                         <td>
                           <button
@@ -1152,84 +1141,17 @@ export function FeesWorkspace({
               )}
 
               {view === "reports" && (
-                <form action={saveConfig} className="finance-report-grid" style={{ padding: "1.2rem" }}>
+                <form ref={configFormRef} key={configRevision} onSubmit={(event) => { event.preventDefault(); if (!busyAction) void saveConfig(new FormData(event.currentTarget)); }} aria-busy={busyAction === "config"} onChange={() => setConfigDirty(true)} className="fee-payment-settings" style={{ padding: "1.2rem" }}>
                   <section className="surface ops-form-surface">
                     <h3>UPI &amp; Bank Account Settings</h3>
                     <p>Parents see these payment details when making online transfers.</p>
-                    <label className="field">UPI VPA / Handle<input name="upi_id" defaultValue={stringValue(state.config.upi_id)} placeholder="e.g. arishville@icici" /></label>
-                    <label className="field">Account Holder Name<input name="account_name" defaultValue={stringValue(state.config.account_name)} /></label>
-                    <label className="field">Bank Name<input name="bank_name" defaultValue={stringValue(state.config.bank_name)} /></label>
-                    <label className="field">Account Number<input name="account_number" defaultValue={stringValue(state.config.account_number)} /></label>
-                    <label className="field">IFSC Code<input name="ifsc_code" defaultValue={stringValue(state.config.ifsc_code)} /></label>
+                    <label className="field">UPI VPA / Handle<input disabled={busyAction === "config"} name="upi_id" defaultValue={stringValue(state.config.upi_id)} placeholder="e.g. arishville@icici" /></label>
+                    <label className="field">Account Holder Name<input disabled={busyAction === "config"} name="account_name" defaultValue={stringValue(state.config.account_name)} /></label>
+                    <label className="field">Bank Name<input disabled={busyAction === "config"} name="bank_name" defaultValue={stringValue(state.config.bank_name)} /></label>
+                    <label className="field">Account Number<input disabled={busyAction === "config"} name="account_number" defaultValue={stringValue(state.config.account_number)} /></label>
+                    <label className="field">IFSC Code<input disabled={busyAction === "config"} name="ifsc_code" defaultValue={stringValue(state.config.ifsc_code)} /></label>
                     <button className="primary-button" style={{ marginTop: "0.5rem" }} disabled={busyAction === "config"} aria-busy={busyAction === "config"}>
                       {busyAction === "config" ? <LoadingIndicator label="Saving…" compact announce={false} /> : "Save bank configuration"}
-                    </button>
-                  </section>
-                  <section className="finance-report-card surface">
-                    <FileText size={24} />
-                    <h3>Ledger Export</h3>
-                    <p>Download full transaction history, audit trails, and student fee statements.</p>
-                    <div className="ops-stack">
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={Boolean(busyAction)}
-                        aria-busy={busyAction === "export:fee_outstanding_report"}
-                        onClick={() => void requestFinanceExport("fee_outstanding_report", "Fee outstanding report")}
-                      >
-                        {busyAction === "export:fee_outstanding_report"
-                          ? <LoadingIndicator label="Preparing…" compact announce={false} />
-                          : <><Download size={16} /> Export outstanding report</>}
-                      </button>
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={() =>
-                          downloadCsv(
-                            `fee_receipt_register_${new Date().toISOString().slice(0, 10)}.csv`,
-                            state.payments.map((p) => ({
-                              receipt_number: p.receipt_number,
-                              invoice_id: p.invoice_id,
-                              amount_paid: p.amount_paid,
-                              payment_mode: p.payment_mode,
-                              payment_date: p.payment_date,
-                              transaction_id: p.transaction_id,
-                            }))
-                          )
-                        }
-                      >
-                        <FileText size={16} /> Receipt register CSV
-                      </button>
-                    </div>
-                  </section>
-                  <section className="finance-report-card surface">
-                    <ReceiptIndianRupee size={24} />
-                    <h3>Overdue follow-up</h3>
-                    <p>{overdueInvoices.length} invoices currently have an outstanding balance.</p>
-                    <div className="ops-chip-cloud">
-                      {overdueInvoices.slice(0, 6).map((inv) => (
-                        <span key={stringValue(inv.id)} className="ops-chip">
-                          {stringValue(inv.invoice_number)} · {money(inv.balance)}
-                        </span>
-                      ))}
-                      {!overdueInvoices.length && <span className="ops-chip success">No overdue invoices</span>}
-                    </div>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() =>
-                        downloadCsv(
-                          `overdue_follow_up_${new Date().toISOString().slice(0, 10)}.csv`,
-                          overdueInvoices.map((inv) => ({
-                            invoice_number: inv.invoice_number,
-                            student: displayName(nested(inv, "student")),
-                            balance: inv.balance,
-                            status: inv.status,
-                          }))
-                        )
-                      }
-                    >
-                      Export overdue follow-up list
                     </button>
                   </section>
                 </form>
@@ -1238,6 +1160,11 @@ export function FeesWorkspace({
           )}
         </>
       )}
+
+      {confirmFines && <Dialog kicker="Branch-wide action" title="Apply late fines?" onClose={() => !busyAction && setConfirmFines(false)}>
+        <p>Apply configured late fines to all eligible outstanding invoices in {stringValue(schoolProfile.school_name || schoolProfile.name) || "the current branch"}, across all academic years. This action uses the server's current run date and is not limited to a selected student, class or invoice.</p>
+        <div className="dialog-footer"><button type="button" className="secondary-button" disabled={Boolean(busyAction)} onClick={() => setConfirmFines(false)}>Cancel</button><button type="button" className="primary-button" disabled={Boolean(busyAction)} aria-busy={busyAction === "fines"} onClick={() => void applyFines()}>{busyAction === "fines" ? "Applying fines…" : "Apply branch late fines"}</button></div>
+      </Dialog>}
 
       {/* ── Dialogs ── */}
       {dialog === "structure" && (

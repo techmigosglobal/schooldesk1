@@ -14,10 +14,11 @@ import {
   WalletCards,
   X,
 } from "@/lib/lucide-react";
-import type { PortalRole } from "@/lib/roles";
+import { visibleModules, type PortalRole } from "@/lib/roles";
+import { navMeta } from "./types";
 import { LoadingIndicator } from "@/components/loading-skeletons";
 import type { Row } from "./types";
-import { api, displayName, nested, rowsFrom, stringValue } from "./utils";
+import { apiAll, api, displayName, nested, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
 
 export type SearchResultItem = {
@@ -55,17 +56,19 @@ export function QuickSearchModal({
     invoices: [],
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setError("");
     try {
       const [stRes, pRes, tRes, cRes, invRes] = await Promise.all([
-        api("students?page=1&page_size=100").catch(() => []),
-        api("users?role=parent&page=1&page_size=100").catch(() => []),
-        api("staff?page=1&page_size=100").catch(() => []),
-        api("principal/classes").catch(() => []),
-        role === "principal" ? api("fees/invoices?page=1&page_size=100").catch(() => []) : Promise.resolve([]),
+        apiAll("students?page=1&page_size=100"),
+        apiAll("users?role=parent&page=1&page_size=100"),
+        apiAll("staff?page=1&page_size=100"),
+        api("principal/classes"),
+        role === "principal" ? apiAll("fees/invoices?page=1&page_size=100") : Promise.resolve([]),
       ]);
 
       setData({
@@ -75,8 +78,8 @@ export function QuickSearchModal({
         classes: rowsFrom(cRes),
         invoices: rowsFrom(invRes),
       });
-    } catch {
-      // Ignore load errors for search modal
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to load school records. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -88,24 +91,10 @@ export function QuickSearchModal({
     return () => clearTimeout(timer);
   }, [loadData]);
 
-  const navItems: SearchResultItem[] = useMemo(() => {
-    const list: SearchResultItem[] = [
-      { id: "nav-overview", category: "navigation", title: "Overview Dashboard", subtitle: "Operations metrics & system health", badge: "Module", targetModule: "overview" },
-      { id: "nav-students", category: "navigation", title: "Students Directory", subtitle: "Admissions & learner profiles", badge: "Module", targetModule: "students" },
-      { id: "nav-parents", category: "navigation", title: "Parents Directory", subtitle: "Family contacts & portal accounts", badge: "Module", targetModule: "parents" },
-      { id: "nav-teachers", category: "navigation", title: "Teachers Directory", subtitle: "Educator profiles & assignments", badge: "Module", targetModule: "teachers" },
-      { id: "nav-classes", category: "navigation", title: "Classes & Subjects", subtitle: "Grade sections & curriculum mapping", badge: "Module", targetModule: "classes" },
-      { id: "nav-timetable", category: "navigation", title: "Timetables", subtitle: "Class schedules & auto-generator", badge: "Module", targetModule: "timetable" },
-    ];
-    if (role === "principal") {
-      list.push({ id: "nav-fees", category: "navigation", title: "Fees & Ledger", subtitle: "Invoicing, payments & late fines", badge: "Module", targetModule: "fees" });
-    }
-    list.push({ id: "nav-reports", category: "navigation", title: "Reports & Exports", subtitle: "Analytics & CSV/PDF exports", badge: "Module", targetModule: "reports" });
-    if (role === "principal") {
-      list.push({ id: "nav-website", category: "navigation", title: "Gallery & Public Website", subtitle: "Curated photos & homepage copy", badge: "Module", targetModule: "website" });
-    }
-    return list;
-  }, [role]);
+  const navItems: SearchResultItem[] = useMemo(() => visibleModules(role).map(id => ({
+    id: `nav-${id}`, category: "navigation" as const, title: navMeta[id].label,
+    subtitle: "Open workspace", badge: "Module", targetModule: id,
+  })), [role]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -244,6 +233,7 @@ export function QuickSearchModal({
       }
     } else if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       onClose();
     }
   }
@@ -261,8 +251,8 @@ export function QuickSearchModal({
   }
 
   return (
-    <Dialog kicker="Spotlight search" title="" onClose={onClose}>
-      <form
+    <Dialog kicker="Spotlight search" title="Quick Search" onClose={onClose}>
+      <form data-portal-transient="true"
         onSubmit={(e) => {
           e.preventDefault();
           if (results[selectedIndex]) onSelectResult(results[selectedIndex]);
@@ -324,6 +314,7 @@ export function QuickSearchModal({
           </span>
         </div>
 
+        {error && <p role="alert" className="ops-inline-error">{error}</p>}
         <div style={{ marginTop: "1rem", maxHeight: "380px", overflowY: "auto", paddingRight: "0.2rem" }}>
           {loading ? (
             <div className="skeleton-container" style={{ padding: "0.5rem" }}>

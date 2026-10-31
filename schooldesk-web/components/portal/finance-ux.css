@@ -1,0 +1,49 @@
+/* Isolated desktop overview and finance/report workspace styles. */
+.ops-portal .daily-overview { display: grid; gap: 1rem; }
+.ops-portal .overview-intro { margin: 0; color: #526572; }
+.ops-portal .overview-daily-actions, .ops-portal .fees-context-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.ops-portal .overview-daily-actions { justify-content: flex-start; }
+.ops-portal .overview-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+.ops-portal .overview-counts > button { display: flex; align-items: center; text-align: left; gap: .65rem; min-width: 0; border: 1px solid #dbe5e8; border-radius: 12px; background: #fff; color: #153b42; padding: 1rem; cursor: pointer; }
+.ops-portal .overview-counts > button > span { display: grid; gap: .25rem; flex: 1; }
+.ops-portal .overview-counts small { font-size: .8rem; color: #526572; }
+.ops-portal .overview-counts b { font-size: 1.6rem; line-height: 1.15; }
+.ops-portal .overview-directory-link { font-size: .9rem; text-decoration: underline; }
+.ops-portal .overview-work-grid { display: grid; gap: 1rem; }
+.ops-portal .overview-work-grid.with-finance { grid-template-columns: 1fr 1fr; }
+.ops-portal .overview-pending, .ops-portal .overview-fee-summary { padding: 1.1rem; }
+.ops-portal .overview-work-grid h2 { margin: 0 0 .75rem; font-size: 1rem; }
+.ops-portal .overview-work-grid p { margin: .5rem 0 .85rem; color: #526572; font-size: .85rem; }
+.ops-portal .overview-attention-row { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; padding: .8rem .2rem; border: 0; border-top: 1px solid #e3e9eb; background: transparent; color: #153b42; cursor: pointer; }
+.ops-portal .overview-attention-row span { display: grid; gap: .3rem; }
+.ops-portal .overview-attention-row small { color: #526572; }
+.ops-portal .overview-attention-row.informational b { font-weight: 550; }
+.ops-portal .overview-fee-summary dl { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: .9rem 0; }
+.ops-portal .overview-fee-summary dt { font-size: .8rem; color: #526572; }
+.ops-portal .overview-fee-summary dd { margin: .3rem 0 0; font-size: 1.4rem; font-weight: 650; color: #153b42; }
+.ops-portal .fees-context-toolbar > p, .ops-portal .fees-breadcrumb { margin: 0; font-size: .85rem; color: #526572; }
+.ops-portal .fee-secondary-actions { position: relative; }
+.ops-portal .fee-secondary-actions summary { cursor: pointer; padding: .65rem .8rem; border: 1px solid #dbe5e8; border-radius: 8px; font-size: .85rem; }
+.ops-portal .fee-secondary-actions[open] > button { position: absolute; right: 0; top: calc(100% + .25rem); white-space: nowrap; z-index: 4; box-shadow: 0 5px 18px #122f4020; background: white; }
+.ops-portal .fee-outstanding-list { margin: .8rem 0 1rem; padding: .85rem 1rem; }
+.ops-portal .fee-outstanding-list summary { font-size: .9rem; font-weight: 600; cursor: pointer; }
+.ops-portal .fee-outstanding-list p { font-size: .85rem; color: #526572; }
+.ops-portal .fee-outstanding-list ul { max-height: 18rem; overflow: auto; padding-left: 1.2rem; font-size: .85rem; line-height: 1.8; }
+.ops-portal .fee-payment-settings { max-width: 640px; }
+.ops-portal .fee-payment-settings h3 { margin-top: 0; }
+.ops-portal .report-group > h2 { font-size: 1.1rem; margin: .2rem 0 1rem; }
+.ops-portal .leadership-reports .leadership-report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ops-portal .leadership-reports .leadership-report-grid article { padding: 1rem; }
+.ops-portal .leadership-reports .leadership-report-grid h3 { font-size: .95rem; }
+.ops-portal .finance-scope-note { padding: .8rem 1rem; border: 1px solid #dbe5e8; border-radius: 10px; font-size: .85rem; line-height: 1.6; }
+.ops-portal .finance-report-tools { margin-top: 1rem; padding: 1rem; border: 1px solid #dbe5e8; border-radius: 12px; }
+.ops-portal .finance-report-tools h3 { margin-top: 0; font-size: 1rem; }
+.ops-portal .finance-report-tools p { color: #526572; font-size: .85rem; }
+.ops-portal .report-history-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; padding-top: 1rem; flex-wrap: wrap; }
+.ops-portal .report-history-pagination span { font-size: .85rem; color: #526572; }
+.ops-portal .leadership-export-history h2 { font-size: 1.1rem; }
+.ops-portal .overview-counts button:focus-visible, .ops-portal .overview-attention-row:focus-visible, .ops-portal .fee-secondary-actions summary:focus-visible, .ops-portal .fee-outstanding-list summary:focus-visible { outline: 3px solid #477fca; outline-offset: 3px; }
+@media (max-width: 1050px) {
+  .ops-portal .overview-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ops-portal .overview-work-grid.with-finance, .ops-portal .leadership-reports .leadership-report-grid { grid-template-columns: 1fr; }
+}

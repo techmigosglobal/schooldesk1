@@ -4,8 +4,8 @@ import { PublicPage } from "@/components/public-site";
 import { getPublicWebsite } from "@/lib/public-website";
 
 export const metadata: Metadata = {
-  title: "Play-led Preschool for Little Learners",
-  description: "Discover Arish Ville Preschool: a joyful, caring place for children to explore, create, make friends, and grow with confidence.",
+  title: { absolute: "Arish Ville (ArishVille) Preschool in Miyapur, Hyderabad" },
+  description: "Discover Arish Ville, also known as ArishVille, in Miyapur, Hyderabad. Explore Daycare, Playgroup, Nursery, PP1 and PP2, and enquire about admissions.",
   alternates: { canonical: "/" },
 };
 

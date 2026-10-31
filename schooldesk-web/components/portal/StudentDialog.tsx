@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { studentSchema } from "@/lib/schemas";
 import type { Row } from "./types";
-import { api, rowsFrom, rowText, stringValue, splitName, displayName, nested } from "./utils";
+import { apiAll, api, rowsFrom, rowText, stringValue, splitName, displayName, nested } from "./utils";
 import { LoadingIndicator } from "@/components/loading-skeletons";
 import { Dialog } from "./Dialog";
 import { FormActions } from "./FormActions";
@@ -52,6 +52,8 @@ export function StudentDialog({
   const [createParent, setCreateParent] = useState(false);
   const [loadingRefs, setLoadingRefs] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savedStudentId, setSavedStudentId] = useState(() => stringValue(row?.id));
+  const [savedParentId, setSavedParentId] = useState("");
   const [error, setError] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState("");
@@ -60,8 +62,8 @@ export function StudentDialog({
 
   useEffect(() => {
     void Promise.all([
-      api("sections?page=1&page_size=100"),
-      api("users?role=parent&page=1&page_size=100"),
+      apiAll("sections?page=1&page_size=100"),
+      apiAll("users?role=parent&page=1&page_size=100"),
     ])
       .then(([sections, parents]) =>
         setRefs({ sections: rowsFrom(sections), parents: rowsFrom(parents) })
@@ -107,6 +109,7 @@ export function StudentDialog({
     if (readOnly || saving) return;
     setSaving(true);
     setError("");
+    let persistedId = savedStudentId;
     try {
       if (createParent && stringValue(form.get("parent_password")).length < 8) {
         throw new Error("Parent login password must be at least 8 characters.");
@@ -142,15 +145,17 @@ export function StudentDialog({
         status: stringValue(form.get("status")) || "active",
       };
 
-      const saved = (await api(row ? `students/${row.id}` : "students", {
-        method: row ? "PUT" : "POST",
+      const saved = (await api(savedStudentId ? `students/${savedStudentId}` : "students", {
+        method: savedStudentId ? "PUT" : "POST",
         body: JSON.stringify(payload),
       })) as Row;
 
-      const studentId = stringValue(saved.id || row?.id);
-      let selectedParentId = parentId || stringValue(form.get("parent_user_id"));
+      const studentId = stringValue(saved.id || savedStudentId);
+      persistedId = studentId;
+      setSavedStudentId(studentId);
+      let selectedParentId = savedParentId || parentId || stringValue(form.get("parent_user_id"));
 
-      if (createParent) {
+      if (createParent && !savedParentId) {
         const password = stringValue(form.get("parent_password"));
         const parent = (await api("users", {
           method: "POST",
@@ -165,6 +170,7 @@ export function StudentDialog({
           }),
         })) as Row;
         selectedParentId = stringValue(parent.id);
+        setSavedParentId(selectedParentId);
       }
 
       if (studentId && (row || selectedParentId)) {
@@ -186,7 +192,7 @@ export function StudentDialog({
       onSaved();
       onClose();
     } catch (event) {
-      setError(event instanceof Error ? event.message : "Unable to save student");
+      setError(`${persistedId ? "Student profile saved. Complete the remaining parent or photo step and retry; the existing student will be updated. " : ""}${event instanceof Error ? event.message : "Unable to save student"}`);
     } finally {
       setSaving(false);
     }

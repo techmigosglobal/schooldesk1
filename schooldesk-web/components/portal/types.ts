@@ -147,13 +147,13 @@ export interface FeeState {
 export const navMeta: Record<string, { icon: ComponentType<any>; label: string }> = {
   overview: { icon: LayoutDashboard, label: "Overview" },
   students: { icon: GraduationCap, label: "Students" },
-  parents: { icon: HeartHandshake, label: "Parents" },
-  teachers: { icon: UserCog, label: "Teachers" },
-  classes: { icon: Building2, label: "Classes & Subjects" },
+  parents: { icon: HeartHandshake, label: "Parent accounts" },
+  teachers: { icon: UserCog, label: "Teachers & staff" },
+  classes: { icon: Building2, label: "Classes & subjects" },
   timetable: { icon: CalendarClock, label: "Timetables" },
   fees: { icon: WalletCards, label: "Fees" },
   reports: { icon: ChartNoAxesCombined, label: "Reports" },
-  admission_inquiries: { icon: MessageSquareMore, label: "Admission Inquiries" },
+  admission_inquiries: { icon: MessageSquareMore, label: "Admission inquiries" },
   website: { icon: Images, label: "Public Website" },
 };
 
@@ -176,7 +176,7 @@ export const modules: Module[] = [
   },
   {
     id: "parents",
-    label: "Parents",
+    label: "Parent accounts",
     endpoint: "users?role=parent&page=1&page_size=50",
     description: "Manage parent portal accounts and family details.",
     create: "users",
@@ -198,7 +198,7 @@ export const modules: Module[] = [
   },
   {
     id: "teachers",
-    label: "Teachers",
+    label: "Teachers & staff",
     endpoint: "staff?page=1&page_size=50",
     description: "Teacher and coordinator profiles.",
     create: "staff",
@@ -214,7 +214,7 @@ export const modules: Module[] = [
   },
   {
     id: "classes",
-    label: "Classes & Subjects",
+    label: "Classes & subjects",
     endpoint: "principal/classes",
     description: "Set up class sections, teaching assignments, capacity, and subject mapping.",
     create: "principal/classes",

@@ -1,6 +1,7 @@
 // handlers/students.ts — CRUD, photo, documents, enrollments
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok } from "../index.ts";
+import { studentAttendanceHistory } from "../lib/student_attendance_history.ts";
 import {
   canManageGuardians,
   canManageStudents,
@@ -918,17 +919,9 @@ export async function handleStudents(
   }
 
   if (id && sub === "attendance" && method === "GET") {
-    let q = svc.from("student_attendances").select(
-      "*, session:attendance_sessions!inner(*)",
-    ).eq("student_id", id).eq("session.school_id", school);
-    const year = url.searchParams.get("year");
-    const month = url.searchParams.get("month");
-    if (year && month) {
-      const from = `${year}-${month}-01`;
-      const to = `${year}-${month}-31`;
-      q = q.gte("created_at", from).lte("created_at", to);
-    }
-    const { data, error } = await q.order("created_at", { ascending: false });
+    const { data, error } = await studentAttendanceHistory(
+      svc, school, id, url.searchParams.get("year"), url.searchParams.get("month"),
+    );
     if (error) return fail(error.message);
     const mapped = (data ?? []).map((row: any) => ({
       ...row,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Row } from "./types";
-import { api, rowsFrom, stringValue } from "./utils";
+import { apiAll, api, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
 import { FormActions } from "./FormActions";
 
@@ -27,7 +27,7 @@ export function TimetableGeneratorDialog({
   useEffect(() => {
     void Promise.all([
       api("principal/classes").catch(() => []),
-      api("academic-years").catch(() => []),
+      apiAll("academic-years").catch(() => []),
     ])
       .then(([cRes, yRes]) => {
         const cList = rowsFrom(cRes);

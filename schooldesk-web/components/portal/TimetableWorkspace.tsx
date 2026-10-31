@@ -1,18 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePortalState, usePortalNavigation, usePortalGuard } from "./PortalStateProvider";
+import { usePortalRefresh } from "./use-portal-refresh";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
   CircleAlert,
   Info,
   Minus,
   Plus,
-  RefreshCw,
   X,
 } from "@/lib/lucide-react";
 import { PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
-import { api, nested, rowsFrom, stringValue } from "./utils";
+import { apiAll, api, nested, rowsFrom, stringValue } from "./utils";
 
 const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5, 6];
 const DAYS = [
@@ -78,8 +80,12 @@ export function TimetableWorkspace({
   onSaved: () => void;
   onNotify: (message: string) => void;
 }) {
+  const { target, navigate } = usePortalNavigation();
+  const slotsRequest = useRef(0);
+  const [editorBaseline, setEditorBaseline] = useState("");
   const [classes, setClasses] = useState<Row[]>([]);
-  const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [classesLoaded, setClassesLoaded] = useState(false);
+  const [selectedSectionId, setSelectedSectionId] = usePortalState("timetable.sectionId", target.sectionId || "");
   const [slots, setSlots] = useState<Row[]>([]);
   const [workingDays, setWorkingDays] = useState<number[]>(DEFAULT_WORKING_DAYS);
   const [refs, setRefs] = useState<References>({
@@ -91,9 +97,16 @@ export function TimetableWorkspace({
   const [selectedDays, setSelectedDays] = useState<number[]>(DAYS.map((day) => day.value));
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const dirty = editorOpen && editorBaseline !== JSON.stringify({ rows, selectedDays });
+  usePortalGuard(dirty, saving);
+
+  function closeEditor() {
+    if (saving || (dirty && !window.confirm("Discard unsaved timetable changes?"))) return;
+    setEditorOpen(false);
+  }
 
   const currentClass = useMemo(
     () => classes.find((row) => classId(row) === selectedSectionId),
@@ -103,7 +116,7 @@ export function TimetableWorkspace({
 
   const loadReferences = useCallback(async () => {
     const [subjects, gradeSubjects, staffSubjects] = await Promise.all([
-      api("subjects").catch(() => []),
+      apiAll("subjects").catch(() => []),
       api("grade-subjects?page_size=500").catch(() => []),
       api("staff-subjects?page_size=500").catch(() => []),
     ]);
@@ -118,6 +131,7 @@ export function TimetableWorkspace({
     const response = await api("principal/classes");
     const list = rowsFrom(response);
     setClasses(list);
+    setClassesLoaded(true);
     if (!list.length) setLoading(false);
     setSelectedSectionId((current) =>
       list.some((row) => classId(row) === current) ? current : classId(list[0] || {}),
@@ -142,24 +156,25 @@ export function TimetableWorkspace({
 
   const loadSlots = useCallback(async (sectionId: string, manual = false) => {
     if (!sectionId) return;
-    if (manual) setRefreshing(true);
-    else setLoading(true);
+    const request = ++slotsRequest.current;
+    if (!manual) { setLoading(true); setSlots([]); }
     setError("");
     try {
       const row = classes.find((item) => classId(item) === sectionId);
       const query = new URLSearchParams({ section_id: sectionId });
       const year = text(row?.academic_year_id);
       if (year) query.set("academic_year_id", year);
-      setSlots(rowsFrom(await api(`timetable/slots?${query.toString()}`)));
+      const loadedSlots = rowsFrom(await api(`timetable/slots?${query.toString()}`));
+      if (request === slotsRequest.current) setSlots(loadedSlots);
     } catch (event) {
-      setError(event instanceof Error ? event.message : "Unable to load timetable slots");
+      if (request === slotsRequest.current) setError(event instanceof Error ? event.message : "Unable to load timetable slots");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (request === slotsRequest.current) { setLoading(false); }
     }
   }, [classes]);
 
   const loadAll = useCallback(async () => {
+    ++slotsRequest.current;
     setLoading(true);
     setError("");
     try {
@@ -170,13 +185,31 @@ export function TimetableWorkspace({
     }
   }, [loadClasses, loadReferences, loadWorkingDays]);
 
+  const refresh = useCallback(async () => {
+    setEditorOpen(false);
+    if (!selectedSectionId || !currentClass || error) await loadAll();
+    else await loadSlots(selectedSectionId, true);
+  }, [selectedSectionId, currentClass, error, loadAll, loadSlots]);
+  usePortalRefresh(refresh);
+
+  useEffect(() => {
+    if (!classesLoaded || !target.sectionId) return;
+    if (classes.some((row) => classId(row) === target.sectionId)) {
+      setSelectedSectionId(target.sectionId);
+    } else {
+      navigate({ module: "timetable" }, true);
+    }
+  }, [classesLoaded, classes, target.sectionId, setSelectedSectionId, navigate]);
+
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
 
+  useEffect(() => { setEditorOpen(false); }, [selectedSectionId]);
+
   useEffect(() => {
-    if (selectedSectionId) void loadSlots(selectedSectionId);
-  }, [selectedSectionId, loadSlots]);
+    if (classes.some((row) => classId(row) === selectedSectionId) && (!target.sectionId || target.sectionId === selectedSectionId)) void loadSlots(selectedSectionId);
+  }, [selectedSectionId, loadSlots, classes, target.sectionId]);
 
   useEffect(() => {
     if (createToken > 0 && selectedSectionId) openEditor(slots);
@@ -236,8 +269,11 @@ export function TimetableWorkspace({
   function openEditor(source: Row[]) {
     const firstDay = DAYS.find((day) => source.some((slot) => Number(slot.day_of_week) === day.value))?.value || 1;
     const existingRows = rowsForDay(firstDay, source);
-    setRows(existingRows.length ? existingRows : [newRow(), newRow(), newRow()]);
-    setSelectedDays([...workingDays]);
+    const draftRows = existingRows.length ? existingRows : [newRow(), newRow(), newRow()];
+    const days = [...workingDays];
+    setRows(draftRows);
+    setSelectedDays(days);
+    setEditorBaseline(JSON.stringify({ rows: draftRows, selectedDays: days }));
     setEditorOpen(true);
   }
 
@@ -332,26 +368,12 @@ export function TimetableWorkspace({
 
   return (
     <section className="ops-module timetable-workspace">
-      <div className="ops-module-heading">
-        <div>
-          <div className="ops-module-icon teal" style={{ background: "#e7f1fa", color: "#0e5ea8" }}>
-            <CalendarClock size={20} />
-          </div>
-          <div>
-            <p className="ops-kicker">Class schedule</p>
-            <h2>Timetables</h2>
-            <p>Enter one timetable template and apply it to selected days.</p>
-          </div>
-        </div>
-        <button type="button" className="secondary-button" onClick={() => void loadSlots(selectedSectionId, true)} disabled={refreshing || !selectedSectionId}>
-          <RefreshCw size={16} className={refreshing ? "spin" : ""} /> Refresh
-        </button>
-      </div>
+      <div className="directory-context-bar"><p>Enter one timetable template and apply it to selected days.</p></div>
 
       <div className="student-directory-toolbar" style={{ flexWrap: "wrap", gap: "0.8rem" }}>
         <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 650, color: "#193c59" }}>
           Select Class:
-          <select value={selectedSectionId} onChange={(event) => { setSelectedSectionId(event.target.value); setEditorOpen(false); }} disabled={!classes.length || saving} aria-label="Select timetable class section">
+          <select value={selectedSectionId} onChange={(event) => { if (navigate({ module: "timetable", sectionId: event.target.value })) { setSelectedSectionId(event.target.value); setEditorOpen(false); } }} disabled={!classes.length || saving} aria-label="Select timetable class section">
             {classes.map((row) => <option key={classId(row)} value={classId(row)}>{classLabel(row)}</option>)}
           </select>
         </label>
@@ -372,7 +394,7 @@ export function TimetableWorkspace({
                 <h3 style={{ margin: 0 }}>{classLabel(currentClass || {})}</h3>
                 <p style={{ margin: "0.35rem 0 0", color: "#637887", fontSize: "0.85rem" }}>Select days, then edit the shared two-column timetable.</p>
               </div>
-              <button type="button" className="icon-button" title="Close editor" aria-label="Close editor" onClick={() => setEditorOpen(false)} disabled={saving}><X size={17} /></button>
+              <button type="button" className="icon-button" title="Close editor" aria-label="Close editor" onClick={closeEditor} disabled={saving}><X size={17} /></button>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", flexWrap: "wrap", marginTop: "1rem" }}>
               <strong style={{ color: "#193c59" }}>Apply to days</strong>
@@ -422,7 +444,7 @@ export function TimetableWorkspace({
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.7rem", marginTop: "1rem" }}>
-            <button type="button" className="secondary-button" onClick={() => setEditorOpen(false)} disabled={saving}>Cancel</button>
+            <button type="button" className="secondary-button" onClick={closeEditor} disabled={saving}>Cancel</button>
             <button type="button" className="primary-button" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save timetable"}</button>
           </div>
         </div>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { PublicPage } from "@/components/public-site";
 
-export const metadata: Metadata = { title: "About Us", description: "Meet Arish Ville Preschool, a warm and playful early-learning community built for big beginnings.", alternates: { canonical: "/about-us" } };
+export const metadata: Metadata = { title: "About Us", description: "Meet Arish Ville Preschool, a warm and playful early-learning community built for big beginnings.", openGraph: { title: "About Us | Arish Ville Preschool", url: "/about-us" }, alternates: { canonical: "/about-us" } };
 
 export default function AboutUsPage() {
   return <PublicPage>

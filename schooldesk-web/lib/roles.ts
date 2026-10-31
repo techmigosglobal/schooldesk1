@@ -10,6 +10,8 @@ export function portalRoleFromPath(pathname: string): PortalRole | null {
   return isPortalRole(role) ? role : null;
 }
 
+export function canManageFinance(role: PortalRole): boolean { return role === "principal"; }
+
 export function isFinancePath(path: string) {
   const normalized = path.replace(/^\/+/, "").toLowerCase();
   return normalized.startsWith("fees") || normalized.startsWith("fee-") ||

@@ -1,20 +1,23 @@
 "use client";
 
+import { usePortalGuard, usePortalState } from "./PortalStateProvider";
+import { RecordActions } from "./RecordActions";
+
+import { usePortalRefresh } from "./use-portal-refresh";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CircleAlert,
   Eye,
   Pencil,
   Plus,
-  RefreshCw,
   Search,
-  Trash2,
-  UserCog,
   X,
 } from "@/lib/lucide-react";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import {
+  apiAll,
   api,
   displayName,
   nested,
@@ -107,10 +110,12 @@ function uniqueSections(classes: Row[]) {
 }
 
 export function TeacherDirectory({
+  initialRecord,
   createToken,
   onSaved,
   onNotify,
 }: {
+  initialRecord?: Row;
   createToken: number;
   onSaved: () => void;
   onNotify: (message: string) => void;
@@ -118,25 +123,24 @@ export function TeacherDirectory({
   const [teachers, setTeachers] = useState<Row[]>([]);
   const [classes, setClasses] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [designationFilter, setDesignationFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = usePortalState("teachers.search", "");
+  const [designationFilter, setDesignationFilter] = usePortalState("teachers.designationFilter", "all");
+  const [statusFilter, setStatusFilter] = usePortalState("teachers.statusFilter", "all");
+  const [page, setPage] = usePortalState("teachers.page", 1);
   const [dialog, setDialog] = useState<TeacherDialogState>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
+  usePortalGuard(false, deleting);
 
   const load = useCallback(async (manual = false) => {
-    if (manual) setRefreshing(true);
-    else setLoading(true);
+    if (!manual) setLoading(true);
     setError("");
     try {
       const [staffData, classData] = await Promise.all([
-        api("staff?page=1&page_size=100"),
-        api("principal/classes").catch(() => []),
+        apiAll("staff?page=1&page_size=100"),
+        api("principal/classes"),
       ]);
       setTeachers(rowsFrom(staffData));
       setClasses(rowsFrom(classData));
@@ -144,9 +148,12 @@ export function TeacherDirectory({
       setError(event instanceof Error ? event.message : "Unable to load teacher records");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
+
+  useEffect(() => { if (initialRecord) void openTeacher(initialRecord, true); }, [initialRecord]);
+
+  usePortalRefresh(load);
 
   useEffect(() => {
     void load();
@@ -161,6 +168,10 @@ export function TeacherDirectory({
     [teachers]
   );
   const sectionOptions = useMemo(() => uniqueSections(classes), [classes]);
+
+  useEffect(() => {
+    if (!loading && !error && designationFilter !== "all" && !designationOptions.includes(designationFilter)) { setDesignationFilter("all"); setPage(1); }
+  }, [loading, error, designationFilter, designationOptions, setDesignationFilter, setPage]);
 
   const filteredTeachers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -198,10 +209,9 @@ export function TeacherDirectory({
     [filteredTeachers, page]
   );
 
-  useEffect(() => setPage(1), [search, designationFilter, statusFilter]);
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+    if (!loading && !error && (!Number.isInteger(page) || page < 1 || page > totalPages)) setPage(Number.isInteger(page) ? Math.max(1, Math.min(page, totalPages)) : 1);
+  }, [page, totalPages, loading, error, setPage]);
 
   async function openTeacher(row: Row, readOnly: boolean) {
     setLoadingStaff(true);
@@ -235,26 +245,7 @@ export function TeacherDirectory({
 
   return (
     <section className="ops-module teacher-directory">
-      <div className="ops-module-heading">
-        <div>
-          <div className="ops-module-icon green">
-            <UserCog size={20} />
-          </div>
-          <div>
-            <p className="ops-kicker">Resource management</p>
-            <h2>Teachers</h2>
-            <p>Educator and coordinator profiles, staff credentials, and teaching assignments.</p>
-          </div>
-        </div>
-        <div className="ops-actions">
-          <button className="secondary-button" onClick={() => void load(true)} disabled={refreshing}>
-            <RefreshCw size={16} className={refreshing ? "spin" : ""} /> Refresh
-          </button>
-          <button className="primary-button" onClick={() => setDialog({ open: true, readOnly: false })}>
-            <Plus size={16} /> Add teacher
-          </button>
-        </div>
-      </div>
+      <div className="directory-context-bar"><p>Staff profiles, credentials, and teaching assignments.</p><button type="button" className="primary-button" onClick={() => setDialog({ open: true, readOnly: false })}><Plus size={16} /> Add staff</button></div>
 
       <div className="student-directory-toolbar">
         <div className="directory-search" role="search">
@@ -264,7 +255,7 @@ export function TeacherDirectory({
             placeholder="Search educator name, employee ID, username, email, or designation…"
             aria-label="Search teachers"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
           />
           {search && (
             <button type="button" className="directory-search-clear" aria-label="Clear teacher search" onClick={() => setSearch("")}>
@@ -272,17 +263,18 @@ export function TeacherDirectory({
             </button>
           )}
         </div>
-        <select value={designationFilter} onChange={(event) => setDesignationFilter(event.target.value)} aria-label="Filter by designation">
+        <select value={designationFilter} onChange={(event) => { setDesignationFilter(event.target.value); setPage(1); }} aria-label="Filter by designation">
           <option value="all">All designations</option>
           {designationOptions.map((opt) => (
             <option key={opt} value={opt}>{opt}</option>
           ))}
         </select>
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter by status">
+        <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }} aria-label="Filter by status">
           <option value="all">All statuses</option>
           <option value="active">Active staff</option>
           <option value="inactive">Inactive staff</option>
         </select>
+        {(search || designationFilter !== "all" || statusFilter !== "all") && <button type="button" className="secondary-button directory-reset" onClick={() => { setSearch(""); setDesignationFilter("all"); setStatusFilter("all"); setPage(1); }}>Reset filters</button>}
         <span className="ops-count">
           Showing <b>{filteredTeachers.length}</b> educator{filteredTeachers.length === 1 ? "" : "s"}
         </span>
@@ -303,8 +295,7 @@ export function TeacherDirectory({
             <table className="data-table student-directory-table">
               <thead>
                 <tr>
-                  <th>Educator</th>
-                  <th>Designation</th>
+                  <th>Staff / designation</th>
                   <th>Contact Details</th>
                   <th>Class Assignments</th>
                   <th>Status</th>
@@ -328,24 +319,9 @@ export function TeacherDirectory({
                           </span>
                           <div>
                             <b>{displayName(teacher)}</b>
-                            <small>Emp ID: {staffCode || "—"} {teacher.username ? `· @${teacher.username}` : ""}</small>
+                            <small>{designation}</small><small>Emp ID: {staffCode || "—"}</small>
                           </div>
                         </div>
-                      </td>
-                      <td>
-                        <span
-                          className="status-pill"
-                          style={{
-                            background: designation.toLowerCase().includes("coordinator")
-                              ? "#fff4d7"
-                              : "#e7f1fa",
-                            color: designation.toLowerCase().includes("coordinator")
-                              ? "#8a6100"
-                              : "#0b477e",
-                          }}
-                        >
-                          {designation}
-                        </span>
                       </td>
                       <td>
                         <div>
@@ -356,7 +332,7 @@ export function TeacherDirectory({
                       <td>
                         {assignments.length > 0 ? (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                            {assignments.map((item, idx) => (
+                            {assignments.slice(0, 2).map((item, idx) => (
                               <span
                                 key={idx}
                                 style={{
@@ -375,6 +351,7 @@ export function TeacherDirectory({
                                 {item.role}: {item.label}
                               </span>
                             ))}
+                            {assignments.length > 2 && <button type="button" className="directory-detail-link" onClick={() => void openTeacher(teacher, true)}>View all {assignments.length} assignments</button>}
                           </div>
                         ) : (
                           <span style={{ color: "#95a5b2", fontSize: "0.78rem" }}>General staff</span>
@@ -393,7 +370,7 @@ export function TeacherDirectory({
                           disabled={loadingStaff}
                           aria-busy={loadingStaff}
                         >
-                          {loadingStaff ? <span className="activity-spinner" aria-hidden="true" /> : <Eye size={15} />}
+                          {loadingStaff ? <span className="activity-spinner" aria-hidden="true" /> : <Eye size={15} />}<span>View</span>
                         </button>
                         <button
                           className="icon-button"
@@ -402,15 +379,9 @@ export function TeacherDirectory({
                           disabled={loadingStaff}
                           aria-busy={loadingStaff}
                         >
-                          {loadingStaff ? <span className="activity-spinner" aria-hidden="true" /> : <Pencil size={15} />}
+                          {loadingStaff ? <span className="activity-spinner" aria-hidden="true" /> : <Pencil size={15} />}<span>Edit</span>
                         </button>
-                        <button
-                          className="icon-button danger"
-                          title="Delete staff account"
-                          onClick={() => setDeleteTarget(teacher)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        <RecordActions label={`More actions for ${displayName(teacher)}`} actions={[{ label: "Delete staff account", danger: true, onSelect: () => setDeleteTarget(teacher) }]} />
                       </td>
                     </tr>
                   );
@@ -468,7 +439,7 @@ export function TeacherDirectory({
             <button className="secondary-button" type="button" disabled={deleting} onClick={() => setDeleteTarget(null)}>
               Cancel
             </button>
-            <button className="danger-button" type="button" disabled={deleting} onClick={() => void deleteTeacher()}>
+            <button className="danger-button" type="button" disabled={deleting} aria-busy={deleting} onClick={() => void deleteTeacher()}>
               {deleting ? <LoadingIndicator label="Deleting…" compact announce={false} /> : "Delete staff account"}
             </button>
           </div>

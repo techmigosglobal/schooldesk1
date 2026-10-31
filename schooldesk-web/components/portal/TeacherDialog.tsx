@@ -79,6 +79,7 @@ export function TeacherDialog({
   onSaved: () => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [savedStaffId, setSavedStaffId] = useState(() => stringValue(row?.id));
   const [error, setError] = useState("");
   const [designation, setDesignation] = useState(
     stringValue(row?.designation) || "Teacher"
@@ -103,6 +104,7 @@ export function TeacherDialog({
     if (readOnly || saving) return;
     setSaving(true);
     setError("");
+    let persistedId = savedStaffId;
     try {
       const parsed = teacherSchema.safeParse({
         full_name: stringValue(form.get("full_name")),
@@ -137,12 +139,14 @@ export function TeacherDialog({
 
       if (parsed.data.password) payload.password = parsed.data.password;
 
-      const saved = (await api(row ? `staff/${row.id}` : "staff", {
-        method: row ? "PUT" : "POST",
+      const saved = (await api(savedStaffId ? `staff/${savedStaffId}` : "staff", {
+        method: savedStaffId ? "PUT" : "POST",
         body: JSON.stringify(payload),
       })) as Row;
 
-      const savedId = stringValue(saved.id ?? row?.id);
+      const savedId = stringValue(saved.id ?? savedStaffId);
+      persistedId = savedId;
+      setSavedStaffId(savedId);
       if (savedId) {
         await Promise.all(
           classes.flatMap((item) => {
@@ -192,7 +196,7 @@ export function TeacherDialog({
       onSaved();
       onClose();
     } catch (event) {
-      setError(event instanceof Error ? event.message : "Unable to save teacher");
+      setError(`${persistedId ? "Staff profile saved. Review the class assignments and retry; the existing profile will be updated. " : ""}${event instanceof Error ? event.message : "Unable to save teacher"}`);
     } finally {
       setSaving(false);
     }

@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: http: https:",
@@ -18,7 +18,7 @@ const csp = [
       /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin)
     )
     .join(" ")}`,
-  "connect-src 'self'",
+  "connect-src 'self' https://cloudflareinsights.com",
   "worker-src 'self' blob:",
   "frame-src 'self' https://www.google.com https://www.google.co.in https://maps.google.com",
   "frame-ancestors 'none'",
@@ -44,6 +44,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
+  images: { remotePatterns: [{ protocol: "https", hostname: "api.arishville.com", pathname: "/storage/v1/object/**" }] },
   output: "standalone",
   turbopack: { root: process.cwd() },
   async headers() {

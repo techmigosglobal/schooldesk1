@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Row } from "./types";
-import { api, displayName, rowsFrom, stringValue } from "./utils";
+import { apiAll, api, displayName, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
 import { FormActions } from "./FormActions";
 
@@ -63,9 +63,9 @@ export function TimetableSlotDialog({
   useEffect(() => {
     void Promise.all([
       api("principal/classes").catch(() => []),
-      api("subjects").catch(() => []),
-      api("staff?page=1&page_size=100").catch(() => []),
-      api("academic-years").catch(() => []),
+      apiAll("subjects").catch(() => []),
+      apiAll("staff?page=1&page_size=100").catch(() => []),
+      apiAll("academic-years").catch(() => []),
       api("grade-subjects?page_size=500").catch(() => []),
       api("staff-subjects?page_size=500").catch(() => []),
     ])

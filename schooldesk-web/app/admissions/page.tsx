@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicPage } from "@/components/public-site";
-export const metadata: Metadata = { title: "Admissions", description: "Ask about preschool admissions, programs, and a campus visit at Arish Ville Preschool in Miyapur, Hyderabad.", alternates: { canonical: "/admissions" } };
+export const metadata: Metadata = { title: "Admissions", description: "Ask about preschool admissions, programs, and a campus visit at Arish Ville Preschool in Miyapur, Hyderabad.", openGraph: { title: "Admissions | Arish Ville Preschool", url: "/admissions" }, alternates: { canonical: "/admissions" } };
 export default function AdmissionsPage() {
   const faqs = [
     ["Which preschool programs does Arish Ville offer?", "Arish Ville offers Daycare for ages 1.5–6, Playgroup for 2–3, Nursery for 3–4, PP1 for 4–5, and PP2 for 5–6 years."],

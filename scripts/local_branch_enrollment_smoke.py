@@ -116,7 +116,9 @@ try:
     request('PRINCIPAL', '/students/' + sid, {'status': 'active', 'current_section_id': SECTION}, 'PATCH')
     assert enrollment(sid) == initial
     request('PRINCIPAL', '/students/' + sid, {'current_section_id': NEXT_SECTION}, 'PATCH')
-    assert enrollment(sid) == initial, 'Transfer history must remain untouched'
+    transferred = enrollment(sid)
+    assert len(transferred) == 2 and initial[0] in transferred, 'Original membership must remain untouched'
+    assert any(e['section'] == NEXT_SECTION and e['effective'] == DATES['today'] for e in transferred), 'Transfer requires a dated membership in the new class'
     undated = create_student(admission_date=None)
     assert enrollment(undated)[0]['effective'] == DATES['today']
     earlier = create_student(admission_date='2020-01-01')
@@ -129,14 +131,16 @@ try:
     request('PRINCIPAL', '/students/' + later, {'status': 'inactive'}, 'PATCH')
     dated = enrollment(later)
     request('PRINCIPAL', '/students/' + later, {'status': 'active', 'current_section_id': NEXT_SECTION}, 'PATCH')
-    assert enrollment(later) == dated
+    reactivated = enrollment(later)
+    assert len(reactivated) == len(dated) + 1 and all(e in reactivated for e in dated)
+    assert any(e['section'] == NEXT_SECTION and e['effective'] == DATES['today'] for e in reactivated)
     # Invalid assignment and an injected enrollment failure must roll back student writes.
     bad = str(uuid.uuid4()); STUDENTS.append(bad)
     foreign_section = sql(f"select id from sections where school_id<>'{SCHOOL}' limit 1;")
-    sql(f"insert into students(id,school_id,first_name,last_name,current_section_id) values('{bad}','{SCHOOL}','{PREFIX}','Invalid','{foreign_section}');", 'Initial active class assignment requires')
+    sql(f"insert into students(id,school_id,first_name,last_name,current_section_id) values('{bad}','{SCHOOL}','{PREFIX}','Invalid','{foreign_section}');", 'class assignment requires')
     assert sql(f"select count(*) from students where id='{bad}';") == '0'
     invalid_year = str(uuid.uuid4()); STUDENTS.append(invalid_year)
-    sql(f"begin; update academic_years set is_current=false where id='{YEAR}'; insert into students(id,school_id,first_name,last_name,current_section_id) values('{invalid_year}','{SCHOOL}','{PREFIX}','Invalid year','{SECTION}');", 'Initial active class assignment requires')
+    sql(f"begin; update academic_years set is_current=false where id='{YEAR}'; insert into students(id,school_id,first_name,last_name,current_section_id) values('{invalid_year}','{SCHOOL}','{PREFIX}','Invalid year','{SECTION}');", 'class assignment requires')
     assert sql(f"select count(*) from students where id='{invalid_year}';") == '0'
     assert sql(f"select is_current from academic_years where id='{YEAR}';") == 't'
     # Year configuration must not prevent an ordinary save of an existing learner.

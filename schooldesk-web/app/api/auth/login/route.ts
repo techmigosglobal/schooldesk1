@@ -69,6 +69,8 @@ export async function POST(request: NextRequest) {
     }
 
     const response = NextResponse.json({ success: true });
+    response.cookies.set(cookieNames.ui, crypto.randomUUID(), { ...secureCookie, maxAge: 60 * 60 * 24 * 14 });
+    response.cookies.set(cookieNames.branch, "", { ...secureCookie, maxAge: 0 });
     response.cookies.set(cookieNames.access, data.access_token, {
       ...secureCookie,
       maxAge: 60 * 55,

@@ -1,6 +1,7 @@
 import { backendHeaders, configuredBackend } from "@/lib/backend";
 import { env } from "@/lib/env";
 import type { GalleryItem } from "@/lib/gallery";
+import { publicMediaUrl } from "@/lib/media-urls";
 
 export type { GalleryItem } from "@/lib/gallery";
 export { isPublicGalleryImage, isPublicGalleryMedia, isPublicGalleryVideo, uniqueGalleryItems } from "@/lib/gallery";
@@ -13,17 +14,7 @@ export type PublicWebsite = {
 };
 
 export function publicWebsiteMediaUrl(value: string, publicApiOrigin: string): string {
-  try {
-    const url = new URL(value);
-    if (url.hostname !== "supabase-kong" || url.port !== "8000") return value;
-    const publicOrigin = new URL(publicApiOrigin);
-    url.protocol = publicOrigin.protocol;
-    url.host = publicOrigin.host;
-    url.port = publicOrigin.port;
-    return url.toString();
-  } catch {
-    return value;
-  }
+  return publicMediaUrl(value, publicApiOrigin);
 }
 
 export async function getPublicWebsite(): Promise<PublicWebsite> {

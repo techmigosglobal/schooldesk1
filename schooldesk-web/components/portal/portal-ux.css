@@ -1,0 +1,25 @@
+/* Shared desktop operations chrome. Public pages keep their existing styles. */
+.ops-portal .ops-sidebar { position:sticky; top:0; height:100vh; min-height:0; box-sizing:border-box; overflow-y:auto; }
+.ops-portal .ops-topbar { position:sticky; top:0; z-index:30; min-height:78px; gap:1rem; }
+.ops-portal .ops-topbar h1 { font:700 1.5rem/1.2 var(--font-body,Arial,sans-serif); margin:0; }
+.ops-portal .ops-topbar p { font-size:.68rem; }
+.ops-portal .ops-topbar-actions { align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+.ops-portal .ops-topbar-actions button { white-space:nowrap; }
+.ops-portal .portal-branch-context { font-size:.8rem; font-weight:650; color:#193f5c; max-width:180px; }
+.ops-portal .ops-content { width:100%; min-width:0; box-sizing:border-box; }
+.ops-portal :is(button,a,select,input,textarea):focus-visible { outline:3px solid #1a6dab; outline-offset:3px; }
+.ops-portal .side-nav button { min-height:44px; }
+.ops-portal .branch-select select { max-width:190px; }
+.ops-portal .portal-main { min-width:0; }
+@media (min-width:1100px) and (max-width:1440px) {
+ .ops-portal .ops-topbar { padding:1rem 1.5rem; }
+ .ops-portal .ops-content { padding:1.5rem; }
+ .ops-portal .ops-topbar-actions { gap:.5rem; }
+ .ops-portal .ops-topbar-actions .secondary-button { padding:.65rem .8rem; }
+}
+@media (min-width:1100px) and (max-height:800px) {
+ .ops-portal .ops-sidebar { padding-top:.9rem; padding-bottom:.7rem; }
+ .ops-portal .ops-brand-row { margin-bottom:.9rem; }
+ .ops-portal .ops-role-chip { margin-bottom:.65rem; }
+ .ops-portal .ops-sidebar .side-nav button { padding:.6rem .78rem; }
+}

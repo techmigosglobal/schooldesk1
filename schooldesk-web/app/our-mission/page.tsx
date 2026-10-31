@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PublicPage } from "@/components/public-site";
 import { defaultWebsiteCopy, getPublicWebsite } from "@/lib/public-website";
 
-export const metadata: Metadata = { title: "Our Mission", description: "Learn how Arish Ville Preschool nurtures joyful discovery, kind confidence, and a strong partnership with families.", alternates: { canonical: "/our-mission" } };
+export const metadata: Metadata = { title: "Our Mission", description: "Learn how Arish Ville Preschool nurtures joyful discovery, kind confidence, and a strong partnership with families.", openGraph: { title: "Our Mission | Arish Ville Preschool", url: "/our-mission" }, alternates: { canonical: "/our-mission" } };
 
 export default async function MissionPage() {
   const content = (await getPublicWebsite()).content ?? {};

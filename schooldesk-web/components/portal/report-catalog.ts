@@ -36,3 +36,11 @@ export function reportsForRole(role: PortalRole): PortalReportDefinition[] {
 export function isFinanceReport(report: PortalReportDefinition): boolean {
   return report.endpoint === "fees/reports/exports";
 }
+
+/** Existing ledger export is reachable from history without adding a seventh finance card. */
+export function reportDefinitionForHistory(role: PortalRole, reportType: string): PortalReportDefinition | undefined {
+  return reportsForRole(role).find((report) => report.id === reportType) ??
+    (role === "principal" && reportType === "fee_outstanding_report"
+      ? { id: "fee_outstanding_report", title: "Fee outstanding report", description: "Outstanding invoice balances.", endpoint: "fees/reports/exports" }
+      : undefined);
+}

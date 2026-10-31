@@ -1,4 +1,13 @@
 import type { Row } from "./types";
+import { collectPages } from "@/lib/pagination";
+
+export async function apiAll(path: string): Promise<Row[]> {
+  return collectPages(path, async (pagePath) => {
+    const response = await apiRaw(pagePath);
+    if (!response.ok) throw new Error(response.body.error || "Unable to load all records");
+    return response.body;
+  });
+}
 
 export async function api(path: string, init: RequestInit = {}) {
   const response = await fetch(`/api/backend/${path}`, {
@@ -10,7 +19,7 @@ export async function api(path: string, init: RequestInit = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok || body.success === false) {
-    throw new Error(body.error || "Request failed");
+    throw new Error(response.status === 401 ? "Your session has expired. Please sign in again." : body.error || "Request failed");
   }
   return body.data;
 }

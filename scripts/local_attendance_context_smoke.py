@@ -26,10 +26,10 @@ def sql(statement):
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()
 
-def request(role, path, body=None, expected=200):
+def request(role, path, body=None, expected=200, method=None):
     headers = {'Content-Type': 'application/json', 'x-forwarded-for': IP}
     if role: headers['Authorization'] = 'Bearer ' + TOKENS[role]
-    req = urllib.request.Request(API + path, data=None if body is None else json.dumps(body).encode(), headers=headers)
+    req = urllib.request.Request(API + path, data=None if body is None else json.dumps(body).encode(), headers=headers, method=method)
     try: response = urllib.request.urlopen(req, timeout=60)
     except urllib.error.HTTPError as error: response = error
     with response:
@@ -93,6 +93,18 @@ try:
         request(role, f"/attendance/sessions/{session['id']}/mark", {'attendances': [mark], 'finalize': True})
         request(role, f"/attendance/sessions/{session['id']}/mark", {'attendances': [mark], 'finalize': False}, expected=409)
         assert sql(f"select count(*) from student_attendances where session_id='{session['id']}' and student_id='{STUDENT}' and enrollment_id='{roster[0]['active_enrollment_id']}' and status='present';") == '1'
+    original_marks = sql(f"select md5(string_agg(to_jsonb(a)::text,',' order by id)) from student_attendances a where student_id='{STUDENT}';")
+    request('PRINCIPAL', '/students/' + STUDENT, {'current_section_id': BASE_SECTION}, method='PATCH')
+    assert any(s['id'] == STUDENT for s in request('TEACHER', f'/attendance/roster?section_id={BASE_SECTION}&date={today}')['items'])
+    for route in [f'/students/{STUDENT}/attendance', f'/attendance/students/{STUDENT}']:
+        history = request('TEACHER', route)
+        assert len(history) == 2 and {r['session']['section_id'] for r in history} == {SECTION}
+        assert all(r['session']['section']['section_name'] == PREFIX and r['session']['academic_year']['id'] == YEAR for r in history)
+    assert len(request('TEACHER', f'/students/{STUDENT}/attendance?year={today[:4]}&month={int(today[5:7])}')) == 2
+    request('CO_TEACHER', f'/students/{STUDENT}/attendance', expected=404)
+    request('SECOND_SCHOOL_TEACHER', f'/attendance/students/{STUDENT}', expected=403)
+    assert sql(f"select md5(string_agg(to_jsonb(a)::text,',' order by id)) from student_attendances a where student_id='{STUDENT}';") == original_marks
+    print('PASS transferred student appears in new roster; full labelled history follows student through both routes; former/foreign teacher denied and saved marks unchanged', flush=True)
     request('TEACHER', '/attendance/sessions', {'section_id': SECTION, 'academic_year_id': YEAR, 'date': future}, expected=422)
     request('CO_TEACHER', '/attendance/sessions', {'section_id': SECTION, 'academic_year_id': YEAR, 'date': '2026-02-30'}, expected=422)
     print('PASS teacher and co-teacher historical/current draft and final saves, exact enrollment, competing claim/finalized protection and future/invalid-date rejection', flush=True)

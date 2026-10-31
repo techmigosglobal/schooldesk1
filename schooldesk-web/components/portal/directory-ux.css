@@ -1,0 +1,38 @@
+/* Desktop directory density: scoped so public pages and other tables retain their layout. */
+.directory-context-bar { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+.directory-context-bar p { margin:0; color:#526b7b; font-size:.9rem; }
+.directory-context-bar .primary-button { flex-shrink:0; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-directory-table { min-width:0; width:100%; table-layout:fixed; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-directory-table :is(th,td) { white-space:normal; overflow-wrap:anywhere; padding:.7rem .65rem; vertical-align:top; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-directory-table th:first-child { width:27%; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-directory-table th:last-child { width:208px; }
+.student-directory .student-directory-table th:nth-child(2) { width:14%; }
+.student-directory .student-directory-table th:nth-child(4) { width:90px; }
+.parent-directory .student-directory-table th:first-child { width:34%; }
+.parent-directory .student-directory-table th:nth-child(3) { width:90px; }
+.teacher-directory .student-directory-table th:nth-child(4) { width:90px; }
+.classes-workspace .student-directory-table th:nth-child(2) { width:20%; }
+.classes-workspace .student-directory-table th:nth-child(4) { width:12%; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-cell { min-width:0; align-items:flex-start; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-cell b { white-space:normal; max-width:none; overflow:visible; font-size:.85rem; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-cell small,
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-directory-table td > small { font-size:.76rem; color:#526b7b; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-avatar { flex-shrink:0; width:34px; height:34px; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .actions-cell { text-align:right; white-space:normal; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .actions-cell .icon-button { display:inline-flex; width:auto; gap:.25rem; padding:.35rem; margin:0 .1rem .3rem 0; font-size:.78rem; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-directory-toolbar { flex-wrap:wrap; gap:.6rem; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-directory-toolbar :is(.directory-search,.search-input) { flex:1 1 260px; min-width:0; }
+:is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-directory-table :is(.status-pill,.student-status) { max-width:100%; white-space:normal; }
+.directory-detail-link { border:0; background:transparent; color:#155786; text-decoration:underline; cursor:pointer; padding:.25rem 0; font:inherit; }
+.record-actions-trigger { display:inline-flex; gap:.2rem; padding:.35rem .5rem; min-height:32px; font-size:.78rem; }
+.record-actions-menu { position:fixed; z-index:1400; width:224px; max-height:calc(100vh - 16px); overflow:auto; padding:.35rem; border:1px solid #cbd8e2; border-radius:10px; background:#fff; box-shadow:0 10px 35px #183d5626; }
+.record-actions-menu button { display:block; width:100%; border:0; border-radius:6px; background:transparent; text-align:left; padding:.7rem; font:inherit; font-size:.85rem; color:#234b67; cursor:pointer; }
+.record-actions-menu button:hover,.record-actions-menu button:focus-visible { background:#edf4f9; }
+.record-actions-menu button.danger { color:#a42c22; }
+.record-actions-menu button:disabled { opacity:.5; cursor:default; }
+.record-actions-menu button:focus-visible,.record-actions-trigger:focus-visible,.directory-detail-link:focus-visible { outline:2px solid #176ca3; outline-offset:2px; }
+.admission-inquiries .ops-inquiry-detail :is(dd,h2) { overflow-wrap:anywhere; }
+@media(max-width:800px) {
+  .directory-context-bar { align-items:flex-start; flex-wrap:wrap; }
+  :is(.student-directory,.parent-directory,.teacher-directory,.classes-workspace) .student-directory-table { min-width:720px; }
+}

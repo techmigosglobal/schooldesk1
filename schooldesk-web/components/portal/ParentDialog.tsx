@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Row } from "./types";
-import { api, rowsFrom, rowText, stringValue, displayName, nested } from "./utils";
+import { apiAll, api, rowsFrom, rowText, stringValue, displayName, nested } from "./utils";
 import { Dialog } from "./Dialog";
 import { FormActions } from "./FormActions";
 
@@ -23,7 +23,7 @@ export function ParentDialog({
   const [linkedStudents, setLinkedStudents] = useState<Row[]>([]);
 
   useEffect(() => {
-    void api("students?page=1&page_size=100")
+    void apiAll("students?page=1&page_size=100")
       .then((res) => {
         const list = rowsFrom(res);
         setStudents(list);

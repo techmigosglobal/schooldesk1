@@ -1,4 +1,5 @@
 import { attendanceDateContext, schoolDay, validateTeacherAttendanceDate } from "../lib/school_day.ts";
+import { studentAttendanceHistory } from "../lib/student_attendance_history.ts";
 // handlers/attendance.ts — sessions, mark, summary, staff, QR, corrections
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
@@ -1506,25 +1507,9 @@ export async function handleAttendance(
         requestedStudentId,
       )) return fail("forbidden", 403);
     }
-    let q = svc.from("student_attendances").select(
-      "*, session:attendance_sessions!inner(*)",
-    ).eq("student_id", studentAttendanceMatch[1]).eq(
-      "session.school_id",
-      school,
+    const { data, error } = await studentAttendanceHistory(
+      svc, school, requestedStudentId, url.searchParams.get("year"), url.searchParams.get("month"),
     );
-    const year = url.searchParams.get("year");
-    const month = url.searchParams.get("month");
-    if (year && month) {
-      const yyyy = Number(year);
-      const mm = Number(month);
-      const from = `${yyyy}-${String(mm).padStart(2, "0")}-01`;
-      // Last day of month: day 0 of the next month equals the last day of the
-      // requested month, which keeps February (and 30-day months) valid.
-      const lastDay = new Date(yyyy, mm, 0).getDate();
-      const to = `${yyyy}-${String(mm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-      q = q.gte("session.date", from).lte("session.date", to);
-    }
-    const { data, error } = await q.order("created_at", { ascending: false });
     if (error) return fail(error.message);
     return ok(data ?? []);
   }

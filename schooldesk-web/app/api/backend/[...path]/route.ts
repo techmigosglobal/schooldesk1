@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { backendFetch, unwrap } from "@/lib/backend";
+import { backendFetch, configuredBackend } from "@/lib/backend";
+import { normalizeMediaUrls } from "@/lib/media-urls";
 import { cookieNames, secureCookie } from "@/lib/session";
 import { isFinancePath } from "@/lib/roles";
 
-type RefreshedSession = { access_token: string; refresh_token: string };
+import { refreshSession, type RefreshedSession } from "@/lib/refresh-session";
 
 function copyUpstream(upstream: Response) {
   const headers = new Headers();
@@ -56,13 +57,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   let token = access;
   let refreshedSession: RefreshedSession | null = null;
   if (!token && refresh) {
-    const refreshResponse = await backendFetch("auth/refresh", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refresh }),
-    });
-    if (refreshResponse.ok) {
-      refreshedSession = unwrap<RefreshedSession>(await refreshResponse.json());
+    refreshedSession = await refreshSession(refresh);
+    if (refreshedSession) {
       token = refreshedSession.access_token;
     }
   }
@@ -70,22 +66,21 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
 
   let upstream = await forward(token);
   if (upstream.status === 401 && refresh && !refreshedSession) {
-    const refreshResponse = await backendFetch("auth/refresh", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refresh }),
-    });
-    if (refreshResponse.ok) {
-      refreshedSession = unwrap<RefreshedSession>(await refreshResponse.json());
+    refreshedSession = await refreshSession(refresh);
+    if (refreshedSession) {
       token = refreshedSession.access_token;
       upstream = await forward(token);
     }
   }
 
-  if (upstream.ok && joined.startsWith("website/")) {
+  if (upstream.ok && request.method !== "GET" && joined.startsWith("website/")) {
     revalidateTag("school-public-website", "max");
   }
-  const response = new NextResponse(upstream.body, {
+  const contentType = upstream.headers.get("content-type") ?? "";
+  const responseBody = contentType.includes("application/json")
+    ? JSON.stringify(normalizeMediaUrls(await upstream.json(), new URL(configuredBackend()).origin))
+    : upstream.body;
+  const response = new NextResponse(responseBody, {
     status: upstream.status,
     headers: copyUpstream(upstream),
   });

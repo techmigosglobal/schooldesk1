@@ -48,3 +48,11 @@ authenticate through the SchoolDesk API. Configure `arishville.com` and
 `www.arishville.com` on the Coolify application only during the approved DNS
 cutover. Until then, use Coolify's preview hostname and leave the Vercel
 production deployment and DNS records in place for rollback.
+
+## Web data and desktop verification
+
+- List screens follow the API's `has_more` / `total` pagination instead of assuming a requested page size is honored. A failed page is reported rather than returning an incomplete ledger.
+- Authenticated media URLs are normalized at the web proxy. Report downloads are resolved from the user's branch-scoped export history and fetched through the web server; missing legacy files must be regenerated using the existing report controls.
+- Keep `NEXT_PUBLIC_SITE_URL=https://arishville.com` in production. Deployment aliases are not canonical school URLs. Public metadata includes the spaced and unspaced brand names; login and portal routes are marked `noindex`.
+- Run `bun test`, `npm run typecheck`, and `npm run build` from this directory. Verify the production build in a desktop browser, including complete fee counts, a downloaded receipt CSV, Quick Search, current-module refresh, keyboard dialogs, and session refresh.
+- Exercise failure/retry and form-submission checks with intercepted browser requests or an isolated test backend. Do not create financial transactions or publish school content merely to smoke-test a production connection.

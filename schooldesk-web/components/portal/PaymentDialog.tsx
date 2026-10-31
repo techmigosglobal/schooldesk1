@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { paymentSchema } from "@/lib/schemas";
 import type { Row } from "./types";
 import { api, stringValue, money, displayName, nested } from "./utils";
@@ -20,6 +20,7 @@ export function PaymentDialog({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const replay = useRef({ body: "", key: "" });
 
   const pendingInvoices = invoices.filter(
     (row) => Number(row.balance ?? row.net_amount ?? 0) > 0
@@ -53,9 +54,12 @@ export function PaymentDialog({
         );
       }
 
+      const body = JSON.stringify({ ...parsed.data, reference_number: payload.reference_number, transaction_ref: payload.transaction_ref });
+      if (replay.current.body !== body) replay.current = { body, key: crypto.randomUUID() };
       await api("fees/payments", {
         method: "POST",
-        body: JSON.stringify({ ...parsed.data, reference_number: payload.reference_number, transaction_ref: payload.transaction_ref }),
+        headers: { "Idempotency-Key": replay.current.key },
+        body,
       });
 
       onSaved();

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Row } from "./types";
-import { api, displayName, nested, rowsFrom, stringValue } from "./utils";
+import { apiAll, api, displayName, nested, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
 import { FormActions } from "./FormActions";
 
@@ -48,9 +48,9 @@ export function ClassDialog({
 
   useEffect(() => {
     void Promise.all([
-      api("academic-years").catch(() => []),
-      api("staff?page=1&page_size=100").catch(() => []),
-      api("subjects").catch(() => []),
+      apiAll("academic-years").catch(() => []),
+      apiAll("staff?page=1&page_size=100").catch(() => []),
+      apiAll("subjects").catch(() => []),
     ])
       .then(([years, staffRes, subjectRes]) => {
         setRefs({

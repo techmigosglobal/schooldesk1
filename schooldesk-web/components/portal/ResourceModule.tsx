@@ -1,5 +1,7 @@
 "use client";
 
+import { usePortalRefresh } from "./use-portal-refresh";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CircleAlert,
@@ -22,11 +24,13 @@ import { ClassesWorkspace } from "./ClassesWorkspace";
 import { TimetableWorkspace } from "./TimetableWorkspace";
 
 export function ResourceModule({
+  initialRecord,
   module,
   createToken,
   onSaved,
   onNotify,
 }: {
+  initialRecord?: Row;
   module: Module;
   createToken: number;
   onSaved: () => void;
@@ -35,6 +39,7 @@ export function ResourceModule({
   if (module.id === "students") {
     return (
       <StudentDirectory
+        initialRecord={initialRecord}
         createToken={createToken}
         onSaved={onSaved}
         onNotify={onNotify}
@@ -45,6 +50,7 @@ export function ResourceModule({
   if (module.id === "parents") {
     return (
       <ParentDirectory
+        initialRecord={initialRecord}
         createToken={createToken}
         onSaved={onSaved}
         onNotify={onNotify}
@@ -55,6 +61,7 @@ export function ResourceModule({
   if (module.id === "teachers") {
     return (
       <TeacherDirectory
+        initialRecord={initialRecord}
         createToken={createToken}
         onSaved={onSaved}
         onNotify={onNotify}
@@ -65,6 +72,7 @@ export function ResourceModule({
   if (module.id === "classes") {
     return (
       <ClassesWorkspace
+        initialRecord={initialRecord}
         createToken={createToken}
         onSaved={onSaved}
         onNotify={onNotify}
@@ -132,6 +140,8 @@ function GenericResourceModule({
     },
     [module.endpoint]
   );
+
+  usePortalRefresh(load);
 
   useEffect(() => {
     void load();

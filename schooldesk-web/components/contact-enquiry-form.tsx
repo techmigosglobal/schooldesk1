@@ -6,15 +6,17 @@ export function ContactEnquiryForm() {
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (state === "sending") return;
+    const form = event.currentTarget;
     setState("sending");
     try {
       const response = await fetch("/api/admission-inquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))),
+        body: JSON.stringify(Object.fromEntries(new FormData(form))),
       });
       setState(response.ok ? "sent" : "error");
-      if (response.ok) event.currentTarget.reset();
+      if (response.ok) form.reset();
     } catch { setState("error"); }
   }
   if (state === "sent") return <div className="contact-form-success"><b>Thank you.</b><p>Our admissions team will contact you shortly.</p></div>;

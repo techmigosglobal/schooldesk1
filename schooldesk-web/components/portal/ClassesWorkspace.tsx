@@ -1,19 +1,21 @@
 "use client";
 
+import { usePortalGuard, usePortalState, usePortalTab } from "./PortalStateProvider";
+import { RecordActions } from "./RecordActions";
+
+import { usePortalRefresh } from "./use-portal-refresh";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Building2,
   CheckCircle2,
   CircleAlert,
   Eye,
   Pencil,
   Plus,
-  RefreshCw,
-  Trash2,
 } from "@/lib/lucide-react";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
-import { api, displayName, nested, rowsFrom, stringValue } from "./utils";
+import { apiAll, api, displayName, nested, rowsFrom, stringValue } from "./utils";
 import { Dialog } from "./Dialog";
 import { ClassDialog } from "./ClassDialog";
 import { SubjectDialog } from "./SubjectDialog";
@@ -38,24 +40,25 @@ function educatorName(raw: unknown) {
 }
 
 export function ClassesWorkspace({
+  initialRecord,
   createToken,
   onSaved,
   onNotify,
 }: {
+  initialRecord?: Row;
   createToken: number;
   onSaved: () => void;
   onNotify: (message: string) => void;
 }) {
-  const [mode, setMode] = useState<"classes" | "subjects">("classes");
+  const [mode, setMode] = usePortalTab<"classes" | "subjects">("classes", "classes");
   const [classes, setClasses] = useState<Row[]>([]);
   const [subjects, setSubjects] = useState<Row[]>([]);
   const [staff, setStaff] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [gradeFilter, setGradeFilter] = useState("all");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = usePortalState("classes.search", "");
+  const [gradeFilter, setGradeFilter] = usePortalState("classes.gradeFilter", "all");
+  const [page, setPage] = usePortalState("classes.page", 1);
 
   const [classDialog, setClassDialog] = useState<ClassDialogState>({ open: false });
   const [subjectDialogOpen, setSubjectDialogOpen] = useState(false);
@@ -64,16 +67,16 @@ export function ClassesWorkspace({
   const [subjectDeleting, setSubjectDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
+  usePortalGuard(false, deleting || subjectDeleting);
 
   const load = useCallback(async (manual = false) => {
-    if (manual) setRefreshing(true);
-    else setLoading(true);
+    if (!manual) setLoading(true);
     setError("");
     try {
       const [classData, subjectData, staffData] = await Promise.all([
-        api("principal/classes").catch(() => []),
-        api("subjects").catch(() => []),
-        api("staff?page=1&page_size=100").catch(() => []),
+        api("principal/classes"),
+        apiAll("subjects"),
+        apiAll("staff?page=1&page_size=100"),
       ]);
       setClasses(rowsFrom(classData));
       setSubjects(rowsFrom(subjectData));
@@ -82,9 +85,12 @@ export function ClassesWorkspace({
       setError(event instanceof Error ? event.message : "Unable to load class section data");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
+
+  useEffect(() => { if (initialRecord) setClassDialog({ open: true, row: initialRecord, readOnly: true }); }, [initialRecord]);
+
+  usePortalRefresh(load);
 
   useEffect(() => {
     void load();
@@ -100,6 +106,10 @@ export function ClassesWorkspace({
     () => Array.from(new Set(classes.map((c) => stringValue(c.grade_name)))).filter(Boolean).sort(),
     [classes]
   );
+
+  useEffect(() => {
+    if (!loading && !error && gradeFilter !== "all" && !gradeOptions.includes(gradeFilter)) { setGradeFilter("all"); setPage(1); }
+  }, [loading, error, gradeFilter, gradeOptions, setGradeFilter, setPage]);
 
   const filteredClasses = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -139,7 +149,10 @@ export function ClassesWorkspace({
     [filteredClasses, page]
   );
 
-  useEffect(() => setPage(1), [search, gradeFilter, mode]);
+
+  useEffect(() => {
+    if (!loading && !error && (!Number.isInteger(page) || page < 1 || page > totalPages)) setPage(Number.isInteger(page) ? Math.max(1, Math.min(page, totalPages)) : 1);
+  }, [page, totalPages, loading, error, setPage]);
 
   async function deleteClass() {
     if (!deleteTarget) return;
@@ -176,29 +189,7 @@ export function ClassesWorkspace({
 
   return (
     <section className="ops-module classes-workspace">
-      <div className="ops-module-heading">
-        <div>
-          <div className="ops-module-icon violet">
-            <Building2 size={20} />
-          </div>
-          <div>
-            <p className="ops-kicker">Resource management</p>
-            <h2>Classes &amp; Subjects</h2>
-            <p>Manage class sections, capacity limits, class teachers, co-teachers, and subject curriculum.</p>
-          </div>
-        </div>
-        <div className="ops-actions">
-          <button className="secondary-button" onClick={() => void load(true)} disabled={refreshing}>
-            <RefreshCw size={16} className={refreshing ? "spin" : ""} /> Refresh
-          </button>
-          <button className="secondary-button" onClick={() => setSubjectDialogOpen(true)}>
-            <Plus size={16} /> Add subject
-          </button>
-          <button className="primary-button" onClick={() => setClassDialog({ open: true, readOnly: false })}>
-            <Plus size={16} /> Add class section
-          </button>
-        </div>
-      </div>
+      <div className="directory-context-bar"><p>Manage sections, capacity, teacher assignments, and subjects.</p>{mode === "classes" ? <button type="button" className="primary-button" onClick={() => setClassDialog({ open: true, readOnly: false })}><Plus size={16} /> Add class section</button> : <button type="button" className="primary-button" onClick={() => setSubjectDialogOpen(true)}><Plus size={16} /> Add subject</button>}</div>
 
       <div className="finance-tabs" style={{ marginBottom: "1.2rem" }}>
         <button
@@ -222,16 +213,18 @@ export function ClassesWorkspace({
           <div className="student-directory-toolbar">
             <input
               className="search-input"
+              aria-label="Search class sections"
               placeholder="Search grade, section, class teacher, co-teacher, or room…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
-            <select value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} aria-label="Filter by grade">
+            <select value={gradeFilter} onChange={(e) => { setGradeFilter(e.target.value); setPage(1); }} aria-label="Filter by grade">
               <option value="all">All grade levels</option>
               {gradeOptions.map((g) => (
                 <option key={g} value={g}>{g}</option>
               ))}
             </select>
+        {(search || gradeFilter !== "all") && <button type="button" className="secondary-button directory-reset" onClick={() => { setSearch(""); setGradeFilter("all"); setPage(1); }}>Reset filters</button>}
             <span className="ops-count">
               Showing <b>{filteredClasses.length}</b> section{filteredClasses.length === 1 ? "" : "s"}
             </span>
@@ -254,8 +247,7 @@ export function ClassesWorkspace({
                     <tr>
                       <th>Class &amp; Section</th>
                       <th>Enrollment &amp; Capacity</th>
-                      <th>Class Teacher</th>
-                      <th>Co-Teacher</th>
+                      <th>Teacher assignments</th>
                       <th>Room</th>
                       <th aria-label="Class actions" style={{ textAlign: "right" }}>Actions</th>
                     </tr>
@@ -285,7 +277,7 @@ export function ClassesWorkspace({
                             </div>
                           </td>
                           <td>
-                            <div style={{ minWidth: "140px" }}>
+                            <div className="directory-enrollment">
                               <b style={{ fontSize: "0.86rem", color: count === 0 ? "#95a5b2" : "#193852" }}>
                                 {count} / {cap} students ({pct}%)
                               </b>
@@ -317,16 +309,7 @@ export function ClassesWorkspace({
                               )}
                             </div>
                           </td>
-                          <td>
-                            <span className="status-pill" style={{ background: "#f0f6fc", color: "#0d5b9e" }}>
-                              {cTeacher}
-                            </span>
-                          </td>
-                          <td>
-                            <span className="status-pill" style={{ background: "#f6f8fa", color: "#546573" }}>
-                              {coTeach}
-                            </span>
-                          </td>
+                          <td><b>{cTeacher}</b><small>Co-teacher: {coTeach}</small></td>
                           <td>
                             <b>{stringValue(cls.room_number || "Unassigned")}</b>
                           </td>
@@ -336,22 +319,16 @@ export function ClassesWorkspace({
                               title="View class setup"
                               onClick={() => setClassDialog({ open: true, row: cls, readOnly: true })}
                             >
-                              <Eye size={15} />
+                              <Eye size={15} /><span>View</span>
                             </button>
                             <button
                               className="icon-button"
                               title="Edit class section"
                               onClick={() => setClassDialog({ open: true, row: cls, readOnly: false })}
                             >
-                              <Pencil size={15} />
+                              <Pencil size={15} /><span>Edit</span>
                             </button>
-                            <button
-                              className="icon-button danger"
-                              title="Delete class section"
-                              onClick={() => setDeleteTarget(cls)}
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                            <RecordActions label={`More actions for ${gradeName} ${sectionName}`} actions={[{ label: "Delete class section", danger: true, onSelect: () => setDeleteTarget(cls) }]} />
                           </td>
                         </tr>
                       );
@@ -388,10 +365,13 @@ export function ClassesWorkspace({
           <div className="student-directory-toolbar">
             <input
               className="search-input"
+              type="search"
+              aria-label="Search subjects"
               placeholder="Search subject name, code, or department…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
+            {search && <button type="button" className="secondary-button" onClick={() => { setSearch(""); setPage(1); }}>Reset filters</button>}
             <span className="ops-count">
               Showing <b>{filteredSubjects.length}</b> subject{filteredSubjects.length === 1 ? "" : "s"}
             </span>
@@ -485,16 +465,9 @@ export function ClassesWorkspace({
                                   onClick={() => setSubjectEditTarget(sub)}
                                   style={{ padding: "0.25rem" }}
                                 >
-                                  <Pencil size={13} />
+                                  <Pencil size={13} /><span>Edit</span>
                                 </button>
-                                <button
-                                  className="icon-button danger"
-                                  title="Delete subject"
-                                  onClick={() => setSubjectDeleteTarget(sub)}
-                                  style={{ padding: "0.25rem" }}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                                <RecordActions label={`More actions for ${name}`} actions={[{ label: "Delete subject", danger: true, onSelect: () => setSubjectDeleteTarget(sub) }]} />
                               </div>
                             </div>
                           );
@@ -546,7 +519,7 @@ export function ClassesWorkspace({
             <button className="secondary-button" type="button" disabled={subjectDeleting} onClick={() => setSubjectDeleteTarget(null)}>
               Cancel
             </button>
-            <button className="danger-button" type="button" disabled={subjectDeleting} onClick={() => void deleteSubject()}>
+            <button className="danger-button" type="button" disabled={subjectDeleting} aria-busy={subjectDeleting} onClick={() => void deleteSubject()}>
               {subjectDeleting ? <LoadingIndicator label="Removing…" compact announce={false} /> : "Remove subject"}
             </button>
           </div>
@@ -565,7 +538,7 @@ export function ClassesWorkspace({
             <button className="secondary-button" type="button" disabled={deleting} onClick={() => setDeleteTarget(null)}>
               Cancel
             </button>
-            <button className="danger-button" type="button" disabled={deleting} onClick={() => void deleteClass()}>
+            <button className="danger-button" type="button" disabled={deleting} aria-busy={deleting} onClick={() => void deleteClass()}>
               {deleting ? <LoadingIndicator label="Deleting…" compact announce={false} /> : "Delete class section"}
             </button>
           </div>

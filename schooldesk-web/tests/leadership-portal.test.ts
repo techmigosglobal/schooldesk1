@@ -78,12 +78,12 @@ test("student and teacher directories retain accessible live search", () => {
   expect(students).toContain('aria-label="Search students"');
   expect(students).toContain("displayName(student)");
   expect(students).toContain("parentDetails(student).phone");
-  expect(students).toContain("useEffect(() => setPage(1), [search, classFilter, statusFilter])");
+  expect(students).toContain('usePortalState("students.search", "")');
 
   expect(teachers).toContain('type="search"');
   expect(teachers).toContain('aria-label="Search teachers"');
   expect(teachers).toContain("[name, staffCode, username, email, phone, designation]");
-  expect(teachers).toContain("useEffect(() => setPage(1), [search, designationFilter, statusFilter])");
+  expect(teachers).toContain('usePortalState("teachers.search", "")');
 });
 
 test("student status controls use the backend canonical values", () => {
@@ -117,7 +117,7 @@ test("Arish Ville palette and loading skeletons cover login and portal transitio
   expect(styles).toContain("animation:spin .9s linear infinite !important");
   expect(loginForm).toContain('className="login-auth-progress"');
   expect(loginForm).toContain("Verifying your account and preparing the portal");
-  expect(dashboard).toContain("DashboardLoadingState");
+  expect(dashboard).toContain('<LoadingIndicator label={dashboard ? "Refreshing overview…" : "Loading overview…"}');
   expect(loginLoading).toContain("<LoginSkeleton />");
   expect(roleLoginLoading).toContain("<LoginSkeleton />");
   expect(portalLoading).toContain("<PortalSkeleton />");
@@ -238,7 +238,7 @@ test("record forms expose immediate save progress and duplicate-submit guards", 
   expect(studentDialog).toContain("Loading classes and parent accounts");
 });
 
-test("website-facing school name is Arish Ville", () => {
+test("website-facing school name retains Arish Ville and its requested ArishVille alias", () => {
   const sources = [
     source("../app/layout.tsx"),
     source("../app/page.tsx"),
@@ -250,5 +250,5 @@ test("website-facing school name is Arish Ville", () => {
 
   expect(sources).toContain("Arish Ville");
   expect(sources).not.toContain("Little Ville");
-  expect(sources).not.toContain("ArishVille");
+  expect(sources).toContain("ArishVille");
 });

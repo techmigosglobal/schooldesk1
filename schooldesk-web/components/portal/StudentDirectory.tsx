@@ -1,23 +1,25 @@
 "use client";
 
+import { usePortalGuard, usePortalState } from "./PortalStateProvider";
+import { RecordActions } from "./RecordActions";
+
+import { usePortalRefresh } from "./use-portal-refresh";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CircleAlert,
   Eye,
   Pencil,
   Plus,
-  RefreshCw,
   Search,
-  Trash2,
-  UsersRound,
   X,
 } from "@/lib/lucide-react";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import type { Row } from "./types";
 import {
+  apiAll,
   api,
   displayName,
-  formatDate,
   nested,
   rowsFrom,
   stringValue,
@@ -100,41 +102,45 @@ function StudentAvatar({ student }: { student: Row }) {
 }
 
 export function StudentDirectory({
+  initialRecord,
   createToken,
   onSaved,
   onNotify,
 }: {
+  initialRecord?: Row;
   createToken: number;
   onSaved: () => void;
   onNotify: (message: string) => void;
 }) {
   const [students, setStudents] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [loadingStudent, setLoadingStudent] = useState(false);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [classFilter, setClassFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = usePortalState("students.search", "");
+  const [classFilter, setClassFilter] = usePortalState("students.classFilter", "all");
+  const [statusFilter, setStatusFilter] = usePortalState("students.statusFilter", "all");
+  const [page, setPage] = usePortalState("students.page", 1);
   const [dialog, setDialog] = useState<StudentDialogState>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
+  usePortalGuard(false, deleting);
 
   const load = useCallback(async (manual = false) => {
-    if (manual) setRefreshing(true);
-    else setLoading(true);
+    if (!manual) setLoading(true);
     setError("");
     try {
-      const payload = await api("students?page=1&page_size=100");
+      const payload = await apiAll("students?page=1&page_size=100");
       setStudents(rowsFrom(payload));
     } catch (event) {
       setError(event instanceof Error ? event.message : "Unable to load the student directory");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
+
+  useEffect(() => { if (initialRecord) void openStudent(initialRecord, true); }, [initialRecord]);
+
+  usePortalRefresh(load);
 
   useEffect(() => {
     void load();
@@ -148,6 +154,10 @@ export function StudentDirectory({
     () => Array.from(new Set(students.map(classLabel))).filter(Boolean).sort(),
     [students],
   );
+  useEffect(() => {
+    if (!loading && !error && classFilter !== "all" && !classOptions.includes(classFilter)) { setClassFilter("all"); setPage(1); }
+  }, [loading, error, classFilter, classOptions, setClassFilter, setPage]);
+
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLowerCase();
     return students.filter((student) => {
@@ -173,10 +183,9 @@ export function StudentDirectory({
     [filteredStudents, page],
   );
 
-  useEffect(() => setPage(1), [search, classFilter, statusFilter]);
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+    if (!loading && !error && (!Number.isInteger(page) || page < 1 || page > totalPages)) setPage(Number.isInteger(page) ? Math.max(1, Math.min(page, totalPages)) : 1);
+  }, [page, totalPages, loading, error, setPage]);
 
   async function openStudent(row: Row, readOnly: boolean) {
     setLoadingStudent(true);
@@ -210,24 +219,7 @@ export function StudentDirectory({
 
   return (
     <section className="ops-module student-directory">
-      <div className="ops-module-heading">
-        <div>
-          <div className="ops-module-icon blue"><UsersRound size={20} /></div>
-          <div>
-            <p className="ops-kicker">Resource management</p>
-            <h2>Students &amp; Parents</h2>
-            <p>Live student records shared with the SchoolDesk Flutter directory.</p>
-          </div>
-        </div>
-        <div className="ops-actions">
-          <button className="secondary-button" onClick={() => void load(true)} disabled={refreshing}>
-            <RefreshCw size={16} className={refreshing ? "spin" : ""} /> Refresh
-          </button>
-          <button className="primary-button" onClick={() => setDialog({ open: true, readOnly: false })}>
-            <Plus size={16} /> Add student
-          </button>
-        </div>
-      </div>
+      <div className="directory-context-bar"><p>Live student records and linked family contacts.</p><button type="button" className="primary-button" onClick={() => setDialog({ open: true, readOnly: false })}><Plus size={16} /> Add student</button></div>
 
       <div className="student-directory-toolbar">
         <div className="directory-search" role="search">
@@ -237,7 +229,7 @@ export function StudentDirectory({
             placeholder="Search name, student ID, admission number, parent, or phone…"
             aria-label="Search students"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
           />
           {search && (
             <button type="button" className="directory-search-clear" aria-label="Clear student search" onClick={() => setSearch("")}>
@@ -245,17 +237,18 @@ export function StudentDirectory({
             </button>
           )}
         </div>
-        <select value={classFilter} onChange={(event) => setClassFilter(event.target.value)} aria-label="Filter by class">
+        <select value={classFilter} onChange={(event) => { setClassFilter(event.target.value); setPage(1); }} aria-label="Filter by class">
           <option value="all">All classes</option>
           {classOptions.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter by status">
+        <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }} aria-label="Filter by status">
           <option value="all">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="transfer">Transferred</option>
           <option value="pending">Pending</option>
         </select>
+        {(search || classFilter !== "all" || statusFilter !== "all") && <button type="button" className="secondary-button directory-reset" onClick={() => { setSearch(""); setClassFilter("all"); setStatusFilter("all"); setPage(1); }}>Reset filters</button>}
         <span className="ops-count"><b>{filteredStudents.length}</b> student{filteredStudents.length === 1 ? "" : "s"}</span>
       </div>
 
@@ -269,14 +262,11 @@ export function StudentDirectory({
             <table className="data-table student-directory-table">
               <thead>
                 <tr>
-                  <th>Student</th>
-                  <th>Admission</th>
+                  <th>Student / admission</th>
                   <th>Class / section</th>
-                  <th>Parent / guardian</th>
-                  <th>Contact</th>
-                  <th>Profile</th>
+                  <th>Parent / contact</th>
                   <th>Status</th>
-                  <th aria-label="Student actions" />
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -290,26 +280,17 @@ export function StudentDirectory({
                           <StudentAvatar student={student} />
                           <div>
                             <b>{displayName(student)}</b>
-                            <small>ID: {studentId(student) || "—"}</small>
+                            <small>Admission: {stringValue(student.admission_number) || "—"}</small>
                           </div>
                         </div>
                       </td>
-                      <td>
-                        <b>{stringValue(student.admission_number) || "—"}</b>
-                        <small>{formatDate(student.admission_date, "Admission date not set")}</small>
-                      </td>
                       <td>{classLabel(student)}</td>
-                      <td>{parent.name}</td>
-                      <td>{parent.phone}</td>
-                      <td>
-                        <span>{stringValue(student.gender) || "—"}</span>
-                        <small>DOB: {formatDate(student.date_of_birth)}</small>
-                      </td>
+                      <td><b>{parent.name}</b><small>{parent.phone}</small></td>
                       <td><span className={`student-status ${status}`}>{statusLabel(status)}</span></td>
                       <td className="actions-cell">
-                        <button className="icon-button" title="View student profile" onClick={() => void openStudent(student, true)} disabled={loadingStudent} aria-busy={loadingStudent}>{loadingStudent ? <span className="activity-spinner" aria-hidden="true" /> : <Eye size={15} />}</button>
-                        <button className="icon-button" title="Edit student" onClick={() => void openStudent(student, false)} disabled={loadingStudent} aria-busy={loadingStudent}>{loadingStudent ? <span className="activity-spinner" aria-hidden="true" /> : <Pencil size={15} />}</button>
-                        <button className="icon-button danger" title="Delete student" onClick={() => setDeleteTarget(student)}><Trash2 size={15} /></button>
+                        <button className="icon-button" title="View student profile" onClick={() => void openStudent(student, true)} disabled={loadingStudent} aria-busy={loadingStudent}>{loadingStudent ? <span className="activity-spinner" aria-hidden="true" /> : <Eye size={15} />}<span>View</span></button>
+                        <button className="icon-button" title="Edit student" onClick={() => void openStudent(student, false)} disabled={loadingStudent} aria-busy={loadingStudent}>{loadingStudent ? <span className="activity-spinner" aria-hidden="true" /> : <Pencil size={15} />}<span>Edit</span></button>
+                        <RecordActions label={`More actions for ${displayName(student)}`} actions={[{ label: "Delete student", danger: true, onSelect: () => setDeleteTarget(student) }]} />
                       </td>
                     </tr>
                   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmFormClose } from "./PortalStateProvider";
 import { LoadingIndicator } from "@/components/loading-skeletons";
 
 export function FormActions({
@@ -19,7 +20,7 @@ export function FormActions({
         </div>
       )}
       <div className="dialog-footer">
-        <button className="secondary-button" type="button" onClick={onClose} disabled={saving}>
+        <button className="secondary-button" type="button" onClick={(event) => { if (confirmFormClose(event.currentTarget.closest<HTMLElement>('[role="dialog"]'))) onClose(); }} disabled={saving}>
           Cancel
         </button>
         <button className="primary-button" type="submit" disabled={saving} aria-busy={saving}>

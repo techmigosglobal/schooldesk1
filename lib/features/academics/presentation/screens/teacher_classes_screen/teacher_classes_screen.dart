@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/features/attendance/presentation/widgets/teacher_student_attendance_history_sheet.dart';
 
 import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
@@ -79,6 +81,22 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
   List<Map<String, dynamic>> _studentsForClass(String sectionId) => _students
       .where((student) => teacherFlowText(student['class_id']) == sectionId)
       .toList();
+
+  void _showAttendanceHistory(Map<String, dynamic> student) {
+    final studentId = teacherFlowText(student['id'] ?? student['student_id']);
+    if (studentId.isEmpty) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => TeacherStudentAttendanceHistorySheet(
+        studentId: studentId,
+        studentName: teacherFlowText(student['name'], fallback: 'Student'),
+        loadHistory: (id) => BackendApiClient.instance
+            .getStudentAttendanceRecords(id, forceRefresh: true),
+      ),
+    );
+  }
 
   String _assignmentRole(Map<String, dynamic> assignment) {
     if (assignment['is_class_teacher'] == true) return 'Class teacher';
@@ -195,6 +213,14 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
                     status: teacherFlowText(
                       student['class'],
                       fallback: classLabel,
+                    ),
+                    body: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => _showAttendanceHistory(student),
+                        icon: const Icon(Icons.history_rounded),
+                        label: const Text('Attendance history'),
+                      ),
                     ),
                   ),
                 ),

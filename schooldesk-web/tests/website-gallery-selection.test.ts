@@ -14,7 +14,9 @@ test("public gallery selection is separate from the in-app School Gallery", () =
   expect(manager).toContain("public_gallery_visible");
   expect(manager).toContain("Display on the public website");
   expect(manager).toContain("These controls do not change in-app visibility.");
-  expect(manager).toContain("media-visibility-summary");
+  expect(manager).toContain("media-filter-row");
+  expect(manager).not.toContain("media-visibility-summary");
+  expect(manager).not.toContain("media-state-pill");
   expect(manager).toContain("Displayed on website");
   expect(manager).toContain("Hidden from website");
   expect(manager).toContain('aria-pressed={filter === key}');
