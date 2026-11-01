@@ -7,7 +7,10 @@ export const siteDescription = "Arish Ville (ArishVille) Preschool in Miyapur, H
 export function canonicalSiteUrl(configured: string) {
   const url = new URL(configured);
   // The Vercel deployment alias must never replace the school's public domain.
-  return url.hostname.endsWith(".vercel.app") ? "https://arishville.com" : url.origin;
+  return url.hostname.endsWith(".vercel.app") ||
+      url.hostname.toLowerCase() === "www.arishville.com"
+    ? "https://arishville.com"
+    : url.origin;
 }
 
 export const siteUrl = canonicalSiteUrl(env.NEXT_PUBLIC_SITE_URL);

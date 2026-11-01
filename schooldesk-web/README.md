@@ -15,7 +15,7 @@ SCHOOLDESK_API_BASE_URL=https://api.arishville.com/functions/v1/api
 SCHOOLDESK_API_ANON_KEY=<VPS Supabase anon JWT>
 SCHOOLDESK_PUBLIC_SCHOOL_ID=<restored Arish Ville school UUID>
 NEXT_PUBLIC_SITE_URL=https://arishville.com
-SCHOOLDESK_MEDIA_CSP_ORIGINS=https://api.arishville.com
+SCHOOLDESK_MEDIA_CSP_ORIGINS=https://api.arishville.com https://media.arishville.com
 ```
 
 Set these for Production and Preview. The Supabase API gateway requires the anon key in `apikey` and `Authorization` headers, including for the public website endpoint and login. Keep the key server-side; never use a service-role key. Do not prefix `SCHOOLDESK_API_BASE_URL` or `SCHOOLDESK_API_ANON_KEY` with `NEXT_PUBLIC_`: browser requests go through Next.js server routes. Redeploy after saving environment variables because Vercel applies them to new deployments.
@@ -38,7 +38,7 @@ SCHOOLDESK_API_BASE_URL=https://api.arishville.com/functions/v1/api
 SCHOOLDESK_API_ANON_KEY=<VPS Supabase anon JWT>
 SCHOOLDESK_PUBLIC_SCHOOL_ID=<restored Arish Ville school UUID>
 NEXT_PUBLIC_SITE_URL=https://arishville.com
-SCHOOLDESK_MEDIA_CSP_ORIGINS=https://api.arishville.com
+SCHOOLDESK_MEDIA_CSP_ORIGINS=https://api.arishville.com https://media.arishville.com
 ```
 
 The first four values are required at build time and runtime. The media CSP

@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { BreakingNewsTicker } from "@/components/breaking-news-ticker";
+import { JsonLd, publicPageSchema, type PublicPageSchemaOptions } from "@/lib/seo";
 
 const navigation = [
   ["/", "Home"], ["/about-us", "About"], ["/programs", "Programs"],
@@ -43,6 +44,10 @@ export function PublicFooter() {
   </footer>;
 }
 
-export function PublicPage({ children, showBreakingNews = false }: { children: ReactNode; showBreakingNews?: boolean }) {
-  return <main id="top" className="public-site"><PublicHeader />{showBreakingNews && <BreakingNewsTicker />}{children}<PublicFooter /></main>;
+export function PublicPage({ children, showBreakingNews = false, schema }: { children: ReactNode; showBreakingNews?: boolean; schema?: PublicPageSchemaOptions | unknown }) {
+  const structuredData = schema && "name" in Object(schema) && "description" in Object(schema) && "path" in Object(schema)
+    ? publicPageSchema(schema as PublicPageSchemaOptions)
+    : schema;
+  const hasStructuredData = structuredData !== undefined && structuredData !== null;
+  return <main id="top" className="public-site">{hasStructuredData && <JsonLd data={structuredData} />}<PublicHeader />{showBreakingNews && <BreakingNewsTicker />}{children}<PublicFooter /></main>;
 }

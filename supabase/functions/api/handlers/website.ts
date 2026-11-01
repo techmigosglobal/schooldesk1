@@ -1,16 +1,18 @@
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok, triggerPushProcessing } from "../index.ts";
 import {
+  copyR2File,
   deleteR2File,
   legacyR2Reference,
   legacyStorageWritesEnabled,
   publicR2FileReference,
   publicR2FileUrl,
+  r2ReferenceInfo,
   uploadPublicToR2,
 } from "../lib/r2_storage.ts";
 import {
   deleteStoredObject,
-  signedPrivateFileUrl,
+  storageLocationFromValue,
 } from "../storage_helpers.ts";
 
 const bucket = "school-public-media";
@@ -44,6 +46,143 @@ function publicUrl(svc: SupabaseClient, path: string) {
   const r2Url = migratedPublicUrl(path);
   if (r2Url) return r2Url;
   return svc.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+}
+
+function eventMediaValue(item: unknown): string {
+  if (item && typeof item === "object") {
+    const value = item as Record<string, unknown>;
+    return text(
+      value.storage_ref ?? value.storageRef ?? value.url ?? value.media_url ??
+        value.mediaUrl,
+    );
+  }
+  return text(item);
+}
+
+function eventMediaFileName(item: unknown, fallback: string): string {
+  if (item && typeof item === "object") {
+    const value = item as Record<string, unknown>;
+    const name = text(value.name ?? value.filename ?? value.file_name);
+    if (name) return name;
+  }
+  const raw = eventMediaValue(item).split("?")[0];
+  return raw.split("/").pop() || fallback;
+}
+
+function eventMediaContentType(item: unknown): string {
+  if (item && typeof item === "object") {
+    const value = item as Record<string, unknown>;
+    const mime = text(
+      value.mime_type ?? value.mimeType ?? value.content_type ??
+        value.media_type,
+    );
+    if (mime) return mime;
+  }
+  const name = eventMediaFileName(item, "media.bin").toLowerCase();
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".gif")) return "image/gif";
+  if (name.endsWith(".mp4")) return "video/mp4";
+  if (name.endsWith(".webm")) return "video/webm";
+  if (name.endsWith(".mov")) return "video/quicktime";
+  return "image/jpeg";
+}
+
+function isStableExternalMediaUrl(value: string): boolean {
+  if (!/^https?:\/\//i.test(value)) return false;
+  if (/\/storage\/v1\/object\/(?:sign|authenticated)\//i.test(value)) {
+    return false;
+  }
+  return !/(?:school-assets|school-private-files)/i.test(value);
+}
+
+async function downloadLegacyEventMedia(
+  svc: SupabaseClient,
+  value: string,
+): Promise<Uint8Array | null> {
+  const location = storageLocationFromValue(value, "school-assets");
+  if (location) {
+    const { data, error } = await svc.storage.from(location.bucket).download(
+      location.path,
+    );
+    if (!error && data) return new Uint8Array(await data.arrayBuffer());
+  }
+  return null;
+}
+
+/**
+ * Existing approved posts can predate the public-media promotion workflow.
+ * Repair them lazily and idempotently when the public website reads them.
+ * The response never falls back to a short-lived private signed URL.
+ */
+async function promotePublicEventMedia(
+  svc: SupabaseClient,
+  school: string,
+  postId: string,
+  rawMedia: unknown,
+): Promise<unknown[]> {
+  const media = eventMediaItems(rawMedia);
+  const promoted: unknown[] = [];
+  for (let index = 0; index < media.length; index++) {
+    const item = media[index];
+    const stored = eventMediaValue(item);
+    if (!stored) continue;
+    if (isStableExternalMediaUrl(stored)) {
+      promoted.push(item);
+      continue;
+    }
+
+    const existing = r2ReferenceInfo(stored);
+    const location = storageLocationFromValue(stored, "school-assets");
+    let destination = "";
+    if (
+      existing?.visibility === "public" ||
+      location?.bucket === "schooldesk-public-media" ||
+      location?.bucket === "school-public-media"
+    ) {
+      destination = stored;
+    } else {
+      const fileName = eventMediaFileName(item, `media-${index}.bin`)
+        .replace(/[^a-zA-Z0-9._-]/g, "-");
+      const destinationKey =
+        `event-posts/${school}/${postId}/${index}-${fileName}`;
+      if (existing?.visibility === "private" && !location) {
+        const copied = await copyR2File(stored, destinationKey, "public");
+        if (copied) destination = copied.reference;
+      }
+      if (!destination) {
+        const bytes = await downloadLegacyEventMedia(svc, stored);
+        if (!bytes) continue;
+        const uploaded = await uploadPublicToR2(
+          destinationKey,
+          bytes,
+          eventMediaContentType(item),
+        );
+        if (uploaded) {
+          destination = uploaded.reference;
+        } else {
+          const { error } = await svc.storage.from("schooldesk-public-media")
+            .upload(destinationKey, bytes, {
+              contentType: eventMediaContentType(item),
+              cacheControl: "31536000",
+              upsert: true,
+            });
+          if (!error) destination = `schooldesk-public-media/${destinationKey}`;
+        }
+      }
+    }
+    if (!destination) continue;
+    if (item && typeof item === "object") {
+      promoted.push({
+        ...(item as Record<string, unknown>),
+        url: destination,
+        storage_ref: destination,
+      });
+    } else {
+      promoted.push({ url: destination, storage_ref: destination });
+    }
+  }
+  return promoted;
 }
 
 function galleryRow(svc: SupabaseClient, row: Record<string, unknown>) {
@@ -83,8 +222,7 @@ async function eventGalleryRows(
       object.url ?? object.media_url ?? object.mediaUrl ?? object.secure_url,
     );
     const mediaUrl = migratedPublicUrl(storedMedia) ||
-      await signedPrivateFileUrl(svc, storedMedia, 10 * 60, "school-assets") ||
-      (storedMedia.startsWith("r2://") ? "" : storedMedia);
+      (isStableExternalMediaUrl(storedMedia) ? storedMedia : "");
     return {
       id: `event:${text(row.id)}:${index}`,
       source: "event_post",
@@ -152,8 +290,35 @@ export async function handleWebsitePublic(
   if (sectionsError) return fail(sectionsError.message);
   if (entriesError) return fail(entriesError.message);
   const publicGallery = (gallery ?? []).map((row) => galleryRow(svc, row));
+  const repairedEventPosts = await Promise.all(
+    (eventPosts ?? []).map(async (row) => {
+      const originalMedia = row.media_urls;
+      let media: unknown[];
+      try {
+        media = await promotePublicEventMedia(
+          svc,
+          school,
+          text(row.id),
+          originalMedia,
+        );
+      } catch {
+        // A single missing object must not take down the public website. Keep
+        // the durable row untouched and omit its unusable media for this read.
+        return { ...row, media_urls: [] };
+      }
+      if (JSON.stringify(media) !== JSON.stringify(originalMedia)) {
+        // This is an idempotent repair for rows that were already marked
+        // public before the promotion workflow existed. A failed update does
+        // not make the public response unsafe; it simply remains repaired for
+        // this request and will retry on the next read.
+        await svc.from("event_posts").update({ media_urls: media })
+          .eq("id", text(row.id)).eq("school_id", school);
+      }
+      return { ...row, media_urls: media };
+    }),
+  );
   const mobileGallery = (await Promise.all(
-    (eventPosts ?? []).map((row) =>
+    repairedEventPosts.map((row) =>
       eventGalleryRows(svc, row as Record<string, unknown>)
     ),
   )).flat();

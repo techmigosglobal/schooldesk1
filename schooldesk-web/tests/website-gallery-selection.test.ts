@@ -26,7 +26,9 @@ test("public gallery selection is separate from the in-app School Gallery", () =
   expect(manager).toContain("event-posts/${stringValue(item.event_post_id)}");
   expect(websiteHandler).toContain('.eq("public_gallery_visible", true)');
   expect(websiteHandler).toContain("publicR2FileUrl");
-  expect(websiteHandler).toContain('storedMedia.startsWith("r2://") ? "" : storedMedia');
+  expect(websiteHandler).toContain("promotePublicEventMedia");
+  expect(websiteHandler).toContain("isStableExternalMediaUrl");
+  expect(websiteHandler).not.toContain("signedPrivateFileUrl(svc, storedMedia");
   expect(webEnv).not.toMatch(/R2_|SOURCE_S3|AWS_ACCESS_KEY|AWS_SECRET/);
   expect(webBackend).toContain("SCHOOLDESK_API_BASE_URL");
   expect(webBackend).not.toMatch(/R2_|SOURCE_S3|AWS_ACCESS_KEY|AWS_SECRET/);
