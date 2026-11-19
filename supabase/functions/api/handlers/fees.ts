@@ -78,8 +78,13 @@ const reviewablePaymentRequestStatuses = new Set([
   "submitted",
 ]);
 
-function isReviewablePaymentRequestStatus(value: unknown) {
-  return reviewablePaymentRequestStatuses.has(text(value).toLowerCase());
+function isEditablePaymentProof(
+  request: Record<string, unknown>,
+  { allowInitialSubmission = false } = {},
+) {
+  return !request.payment_id && !request.receipt_id &&
+    (request.status === "clarification_required" ||
+      (allowInitialSubmission && request.status === "initiated"));
 }
 
 function nonNegativeInteger(value: unknown, fallback = 0): number {
@@ -958,7 +963,7 @@ async function uploadPrivatePaymentProof(
   requestId: string,
   file: File,
 ) {
-  const path = `${school}/${requestId}/${Date.now()}-${file.name}`;
+  const path = `${school}/${requestId}/${crypto.randomUUID()}-${file.name}`;
   const r2Upload = await uploadToR2(
     `private/payment-proofs/${path}`,
     file,
@@ -991,6 +996,26 @@ async function removePrivatePaymentProof(
 ) {
   if (!text(proofUrl)) return;
   await deleteStoredObject(svc, proofUrl, "payment-proofs");
+}
+
+function updateEditablePaymentProof(
+  svc: SupabaseClient,
+  school: string,
+  request: Record<string, unknown>,
+  changes: Record<string, unknown>,
+) {
+  // PostgreSQL rechecks this version predicate after any concurrent writer.
+  const query = svc.from("parent_payment_requests").update(changes)
+    .eq("school_id", school)
+    .eq("id", request.id)
+    .eq("status", request.status)
+    .eq("updated_at", request.updated_at)
+    .is("payment_id", null)
+    .is("receipt_id", null);
+  const ownedQuery = request.parent_user_id
+    ? query.eq("parent_user_id", request.parent_user_id)
+    : query.is("parent_user_id", null);
+  return ownedQuery.select().maybeSingle();
 }
 
 async function ensureReceiptSnapshot(
@@ -2878,6 +2903,9 @@ export async function handleFees(
         const { data, error } = await requestQuery.maybeSingle();
         if (error) return fail(error.message);
         if (!data) return fail("Payment intent not found", 404);
+        if (!isEditablePaymentProof(data, { allowInitialSubmission: true })) {
+          return fail("This payment proof can no longer be submitted", 409);
+        }
         existingRequest = data as Record<string, unknown>;
       }
       const effectiveInvoiceId = text(existingRequest?.invoice_id, invoiceId);
@@ -2928,6 +2956,17 @@ export async function handleFees(
           }`,
         );
       }
+      let submittedPaymentDate = "";
+      try {
+        submittedPaymentDate = validatedManualPaymentDate(
+          form.get("payment_date"),
+        );
+      } catch (error) {
+        return fail(
+          error instanceof Error ? error.message : "invalid payment_date",
+          400,
+        );
+      }
       let proofUrl = "";
       if (screenshot) {
         try {
@@ -2943,22 +2982,15 @@ export async function handleFees(
           );
         }
       }
-      let submittedPaymentDate = "";
-      try {
-        submittedPaymentDate = validatedManualPaymentDate(
-          form.get("payment_date"),
-        );
-      } catch (error) {
-        return fail(
-          error instanceof Error ? error.message : "invalid payment_date",
-          400,
-        );
-      }
       const payload = {
         school_id: school,
         student_id: invoice.student_id,
         invoice_id: invoice.id,
-        parent_user_id: isAdminOrPrincipal(user) ? null : user.id,
+        parent_user_id: existingRequest
+          ? existingRequest.parent_user_id
+          : isAdminOrPrincipal(user)
+          ? null
+          : user.id,
         amount: expectedAmount,
         payment_method: `${form.get("payment_method") ?? ""}` || "upi",
         request_reference: requestReference ||
@@ -2983,13 +3015,22 @@ export async function handleFees(
         updated_at: new Date().toISOString(),
       };
       const { data, error } = existingRequest
-        ? await svc.from("parent_payment_requests").update(payload).eq(
-          "id",
-          existingRequest.id,
-        ).eq("school_id", school).select().single()
+        ? await updateEditablePaymentProof(
+          svc,
+          school,
+          existingRequest,
+          payload,
+        )
         : await svc.from("parent_payment_requests").insert(payload).select()
           .single();
       if (error) return fail(error.message);
+      if (!data) {
+        await removePrivatePaymentProof(svc, proofUrl).catch(() => undefined);
+        return fail(
+          "Payment proof changed. Refresh before submitting again.",
+          409,
+        );
+      }
       // Notify principals/admins about the new payment proof submission
       try {
         const { data: principals } = await svc.from("users")
@@ -3094,6 +3135,39 @@ export async function handleFees(
       if (!form) return fail("multipart form required");
       const screenshot = form.get("screenshot") as File | null;
       const paymentId = normalized.split("/").filter(Boolean)[0];
+      const { data: request, error: lookupError } = await svc
+        .from("parent_payment_requests")
+        .select(
+          "id, student_id, parent_user_id, status, payment_id, receipt_id, updated_at",
+        )
+        .eq("id", paymentId).eq("school_id", school)
+        .eq("parent_user_id", user.id).maybeSingle();
+      if (lookupError) return fail(lookupError.message);
+      if (!request) return fail("Payment request not found", 404);
+      if (!isEditablePaymentProof(request)) {
+        return fail(
+          "Only payment proofs needing clarification can be resubmitted",
+          409,
+        );
+      }
+      try {
+        if (
+          !await parentCanAccessStudent(
+            svc,
+            school,
+            user,
+            text(request.student_id),
+          )
+        ) {
+          return fail("Student does not belong to a linked child", 403);
+        }
+      } catch (error) {
+        return fail(
+          error instanceof Error
+            ? error.message
+            : "failed to verify parent access",
+        );
+      }
       let proofUrl: string | null = null;
       if (screenshot) {
         try {
@@ -3109,25 +3183,31 @@ export async function handleFees(
           );
         }
       }
-      const { data, error } = await svc.from("parent_payment_requests").update({
-        transaction_ref: text(
-          form.get("transaction_ref") ?? form.get("transaction_id"),
-        ),
-        transaction_id: text(
-          form.get("transaction_ref") ?? form.get("transaction_id"),
-        ),
-        proof_url: proofUrl ?? undefined,
-        proof_file_name: screenshot?.name ?? undefined,
-        proof_content_type: screenshot?.type ?? undefined,
-        proof_size: screenshot?.size ?? undefined,
-        remarks: `${form.get("remarks") ?? ""}`,
-        status: "pending_verification",
-        updated_at: new Date().toISOString(),
-      }).eq("id", paymentId).eq("school_id", school).eq(
-        "parent_user_id",
-        user.id,
-      ).select().single();
+      const { data, error } = await updateEditablePaymentProof(
+        svc,
+        school,
+        request,
+        {
+          transaction_ref: text(
+            form.get("transaction_ref") ?? form.get("transaction_id"),
+          ),
+          transaction_id: text(
+            form.get("transaction_ref") ?? form.get("transaction_id"),
+          ),
+          proof_url: proofUrl ?? undefined,
+          proof_file_name: screenshot?.name ?? undefined,
+          proof_content_type: screenshot?.type ?? undefined,
+          proof_size: screenshot?.size ?? undefined,
+          remarks: `${form.get("remarks") ?? ""}`,
+          status: "pending_verification",
+          updated_at: new Date().toISOString(),
+        },
+      );
       if (error) return fail(error.message);
+      if (!data) {
+        await removePrivatePaymentProof(svc, proofUrl).catch(() => undefined);
+        return fail("Payment proof changed. Refresh before resubmitting.", 409);
+      }
       try {
         return ok(
           (await attachPaymentRequestRelations(svc, school, [data]))[0],
@@ -3489,7 +3569,9 @@ export async function handleFees(
           | null;
         if (
           existingRequest &&
-          isReviewablePaymentRequestStatus(existingRequest.status)
+          !isEditablePaymentProof(existingRequest, {
+            allowInitialSubmission: true,
+          })
         ) {
           return fail("A payment proof is already awaiting review", 409);
         }
@@ -3535,18 +3617,29 @@ export async function handleFees(
             `proof:${requestId}`,
         };
         const mutation = existingRequest
-          ? await svc.from("parent_payment_requests").update(payload)
-            .eq("id", requestId)
-            .eq("school_id", school)
-            .select()
-            .single()
+          ? await updateEditablePaymentProof(
+            svc,
+            school,
+            existingRequest,
+            payload,
+          )
           : await svc.from("parent_payment_requests").insert({
             id: requestId,
             ...payload,
           }).select().single();
         if (mutation.error) {
           await removePrivatePaymentProof(svc, proofUrl).catch(() => undefined);
-          return fail(mutation.error.message);
+          return fail(
+            mutation.error.message,
+            mutation.error.code === "23505" ? 409 : 400,
+          );
+        }
+        if (!mutation.data) {
+          await removePrivatePaymentProof(svc, proofUrl).catch(() => undefined);
+          return fail(
+            "Payment proof changed. Refresh before submitting again.",
+            409,
+          );
         }
         try {
           const { data: principals } = await svc.from("users")
@@ -3671,7 +3764,7 @@ export async function handleFees(
       if (!isAdminOrPrincipal(user)) {
         return fail("admin or principal access required", 403);
       }
-      const status = text(body.status).toLowerCase();
+      const status = text(body?.status).toLowerCase();
       if (
         !["approved", "rejected", "clarification_required"].includes(status)
       ) {
@@ -3680,98 +3773,54 @@ export async function handleFees(
           400,
         );
       }
-      const { data: existing, error: existingError } = await svc.from(
-        "parent_payment_requests",
-      )
-        .select("*")
-        .eq("id", seg)
-        .eq("school_id", school)
-        .maybeSingle();
-      if (existingError) return fail(existingError.message);
-      if (!existing) return fail("not found", 404);
-      if (!isReviewablePaymentRequestStatus(existing.status)) {
-        return fail(
-          "Only pending, submitted, pending_verification, or resubmitted payment requests can be decided",
-          409,
-        );
+      if (
+        body.admin_remarks != null && typeof body.admin_remarks !== "string"
+      ) {
+        return fail("admin_remarks must be a string", 400);
       }
-      let paymentId: string | null = null;
-      let receiptId: string | null = null;
-      if (status === "approved") {
-        const { data: invoice } = await svc.from("fee_invoices").select("*")
-          .eq("id", existing.invoice_id)
-          .eq("school_id", school)
-          .maybeSingle();
-        if (!invoice) return fail("Invoice not found", 404);
-        let selection;
-        try {
-          selection = validateInvoicePaymentAmount(
-            invoice as Record<string, unknown>,
-            existing.amount,
-          );
-        } catch (validationError) {
-          return fail(
-            validationError instanceof Error
-              ? validationError.message
-              : "failed to validate approved payment amount",
-          );
-        }
-        const paymentResponse = await svc.rpc("record_fee_payment", {
+      const adminRemarks = body.admin_remarks ?? null;
+      const { data: result, error } = await svc.rpc(
+        "decide_parent_payment_request",
+        {
           p_school_id: school,
-          p_invoice_id: existing.invoice_id,
-          p_student_id: existing.student_id,
-          p_amount: existing.amount,
-          p_payment_method: existing.payment_method ?? "upi",
-          p_reference_number: existing.transaction_ref ??
-            existing.transaction_id ?? existing.request_reference,
-          p_paid_at: existing.payment_date ?? new Date().toISOString(),
-          p_notes: existing.remarks ?? "",
-          p_created_by: user.id,
           p_request_id: seg,
-          p_idempotency_key: `request:${seg}`,
-        }).single();
-        const { data: payment, error: paymentError } = paymentResponse;
-        if (paymentError) return fail(paymentError.message);
-        const atomicPayment = payment as Record<string, unknown>;
-        paymentId = text(atomicPayment.payment_id);
-        receiptId = text(atomicPayment.receipt_id);
-        try {
-          const receipt = await ensureReceiptSnapshot(svc, school, receiptId);
-          receiptId = text(receipt.id);
-        } catch (snapshotError) {
-          return fail(
-            snapshotError instanceof Error
-              ? snapshotError.message
-              : "Receipt snapshot was not generated",
-          );
+          p_status: status,
+          p_admin_remarks: adminRemarks,
+          p_reviewed_by: user.id,
+        },
+      );
+      if (error) {
+        if (error.code === "PT409") return fail(error.message, 409);
+        if (error.code === "PT404") return fail(error.message, 404);
+        if (["PT400", "P0001", "22P02"].includes(error.code)) {
+          return fail(error.message, 400);
         }
+        console.error("Payment proof decision failed", error);
+        return fail("Unable to save the payment decision. Try again.", 500);
       }
-      const { data, error } = await svc.from("parent_payment_requests").update({
-        status,
-        admin_remarks: body.admin_remarks ?? null,
-        reviewed_by: user.id,
-        reviewed_at: new Date().toISOString(),
-        payment_id: paymentId ?? existing.payment_id ?? null,
-        receipt_id: receiptId ?? existing.receipt_id ?? null,
-        updated_at: new Date().toISOString(),
-      }).eq("id", seg).eq("school_id", school).eq("status", existing.status)
-        .select().single();
-      if (error) return fail(error.message);
-      // Notify the parent about the approval/rejection decision
+      const decision = result as {
+        request: Record<string, unknown>;
+        replayed: boolean;
+      } | null;
+      if (!decision?.request || typeof decision.replayed !== "boolean") {
+        return fail("Unable to confirm the payment decision. Try again.", 500);
+      }
+      const data = decision.request;
+      // Only the committed transition sends a notification.
       try {
-        const parentUserId = text(existing.parent_user_id);
-        if (parentUserId) {
+        const parentUserId = text(data.parent_user_id);
+        if (!decision.replayed && parentUserId) {
           const isApproved = status === "approved";
           const statusLabel = isApproved
             ? "approved"
             : (status === "clarification_required"
               ? "requires clarification"
               : "rejected");
-          const amountLabel = `INR ${money(existing.amount).toFixed(0)}`;
+          const amountLabel = `INR ${money(data.amount).toFixed(0)}`;
           const approvalBody = isApproved
             ? `Your ${amountLabel} payment has been verified and approved. Receipt is now available.`
             : `Your ${amountLabel} payment was ${statusLabel}.${
-              body.admin_remarks ? ` Remark: ${text(body.admin_remarks)}` : ""
+              adminRemarks ? ` Remark: ${text(adminRemarks)}` : ""
             }`;
           const { error: logError } = await svc.from("notification_logs")
             .insert({
@@ -3789,7 +3838,7 @@ export async function handleFees(
               reference_id: seg,
               action: isApproved ? "payment_approved" : "payment_rejected",
               route: "/parent-fees-screen",
-              student_id: text(existing.student_id),
+              student_id: text(data.student_id),
               is_read: false,
             });
           if (logError) {
@@ -3808,16 +3857,16 @@ export async function handleFees(
               : "fee_payment_rejected",
             event_data: {
               payment_request_id: seg,
-              invoice_id: existing.invoice_id,
-              amount: money(existing.amount),
+              invoice_id: data.invoice_id,
+              amount: money(data.amount),
               status: status,
-              admin_remarks: text(body.admin_remarks),
+              admin_remarks: text(adminRemarks),
               message: approvalBody,
               reference_type: "fee",
               reference_id: seg,
               action: isApproved ? "payment_approved" : "payment_rejected",
               route: "/parent-fees-screen",
-              student_id: text(existing.student_id),
+              student_id: text(data.student_id),
             },
             processed: false,
           }).select("id").maybeSingle();

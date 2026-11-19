@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_preview.dart';
@@ -22,6 +23,8 @@ class ParentDashboardDesktopBody extends StatelessWidget {
   final List<dynamic> eventPosts;
   final String? feedError;
   final bool feedStale;
+  final bool feedLoading;
+  final Widget? status;
   final VoidCallback? onFeedRetry;
   final ValueChanged<int> onChildSelected;
 
@@ -33,6 +36,8 @@ class ParentDashboardDesktopBody extends StatelessWidget {
     required this.eventPosts,
     this.feedError,
     this.feedStale = false,
+    this.feedLoading = false,
+    this.status,
     this.onFeedRetry,
     required this.onChildSelected,
   });
@@ -58,6 +63,18 @@ class ParentDashboardDesktopBody extends StatelessWidget {
         final sidebarWidth = isWide ? 360.0 : 300.0;
         final isNarrow = !useTwoPane;
 
+        final feed = feedLoading && _feedPosts.isEmpty
+            ? Semantics(
+                label: 'Loading school updates',
+                child: const LoadingSkeletonWidget(height: 168),
+              )
+            : SchoolFeedPreview(
+                posts: _feedPosts,
+                accentColor: parentColor,
+                isStale: feedStale,
+                errorMessage: feedError,
+                onRetry: onFeedRetry,
+              );
         final childContent = isNarrow
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -77,15 +94,9 @@ class ParentDashboardDesktopBody extends StatelessWidget {
                     ),
                     SizedBox(height: tokens.spacing.lg),
                   ],
-                  SchoolFeedPreview(
-                    posts: _feedPosts,
-                    accentColor: parentColor,
-                    isStale: feedStale,
-                    errorMessage: feedError,
-                    onRetry: onFeedRetry,
-                  ),
+                  feed,
                   SizedBox(height: tokens.spacing.lg),
-                  const TodaysHighlightsCard(role: 'parent'),
+                  const ParentHighlightsPanel(),
                   SizedBox(height: tokens.spacing.lg),
                   _ParentQuickAccessDesktopPanel(parentColor: parentColor),
                 ],
@@ -98,15 +109,9 @@ class ParentDashboardDesktopBody extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SchoolFeedPreview(
-                          posts: _feedPosts,
-                          accentColor: parentColor,
-                          isStale: feedStale,
-                          errorMessage: feedError,
-                          onRetry: onFeedRetry,
-                        ),
+                        feed,
                         SizedBox(height: tokens.spacing.lg),
-                        const TodaysHighlightsCard(role: 'parent'),
+                        const ParentHighlightsPanel(),
                         SizedBox(height: tokens.spacing.lg),
                         _ParentQuickAccessDesktopPanel(
                           parentColor: parentColor,
@@ -148,7 +153,16 @@ class ParentDashboardDesktopBody extends StatelessWidget {
             tokens.spacing.xl,
             tokens.spacing.xxl,
           ),
-          child: childContent,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (status case final notice?) ...[
+                notice,
+                SizedBox(height: tokens.spacing.md),
+              ],
+              childContent,
+            ],
+          ),
         );
       },
     );
@@ -826,6 +840,21 @@ class _PanelHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Open on demand so the dashboard's optional alert request stays out of the
+/// first screen's data requirements.
+class ParentHighlightsPanel extends StatelessWidget {
+  const ParentHighlightsPanel({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const ExpansionTile(
+      leading: Icon(Icons.auto_awesome_outlined),
+      title: Text('Today’s highlights'),
+      children: [TodaysHighlightsCard(role: 'parent')],
     );
   }
 }

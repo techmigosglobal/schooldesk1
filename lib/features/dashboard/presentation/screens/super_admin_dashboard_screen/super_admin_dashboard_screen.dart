@@ -17,6 +17,7 @@ import 'package:schooldesk1/roles/super_admin/data/api_super_admin_dashboard_rep
 import 'package:schooldesk1/roles/super_admin/domain/super_admin_dashboard_repository.dart';
 import 'package:schooldesk1/roles/super_admin/domain/super_admin_dashboard_snapshot.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
+import 'package:schooldesk1/core/widgets/role_home_ready.dart';
 
 import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
@@ -207,6 +208,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                           children: [
                             StaggeredFadeIn(
                               children: [
+                                if (_repositoryState.hasData)
+                                  const RoleHomeReady(
+                                    role: 'super_admin',
+                                    child: SizedBox.shrink(),
+                                  ),
                                 _buildHeader(context),
                                 const SizedBox(height: 12),
                                 if (_repositoryState.isOffline)

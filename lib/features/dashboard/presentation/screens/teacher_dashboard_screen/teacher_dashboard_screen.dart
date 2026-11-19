@@ -19,6 +19,7 @@ import 'package:schooldesk1/roles/teacher/domain/teacher_dashboard_repository.da
 import 'package:schooldesk1/roles/teacher/domain/teacher_dashboard_snapshot.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
+import 'package:schooldesk1/core/widgets/role_home_ready.dart';
 
 import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 
@@ -256,138 +257,142 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         onRetry: () => _loadDashboardData(forceRefresh: true),
         emptyTitle: 'No dashboard data',
         emptyMessage: 'Teacher dashboard data is not available offline.',
-        data: (_) => isDesktop
-            ? TeacherDashboardDesktopBody(
-                teacherName: _teacherName,
-                assignedClass: _assignedClass,
-                assignedSubject: _assignedSubject,
-                timetable: _timetable,
-                announcements: _announcements,
-                eventPosts: _eventPosts,
-                attendancePending: _attendancePending,
-                roleScopeLoaded: _roleScopeLoaded,
-                hasStaffLink: RoleAccessService.hasTeacherStaffLink,
-                hasAssignedClasses: RoleAccessService.hasAssignedClasses,
-                myAttendance: _myAttendance,
-                feedError: _feedError,
-                feedStale: _feedStale,
-                onFeedRetry: () => _loadDashboardData(forceRefresh: true),
-                onRefresh: () => _loadDashboardData(forceRefresh: true),
-              )
-            : TeacherFlowScrollView(
-                children: [
-                  if (_roleScopeLoaded &&
-                      !RoleAccessService.hasTeacherStaffLink)
-                    const TeacherFlowCard(
-                      icon: Icons.badge_outlined,
-                      title:
-                          'Your teacher account is not linked to a staff profile.',
-                      subtitle: 'Please contact Admin/Principal.',
-                    )
-                  else if (_roleScopeLoaded &&
-                      !RoleAccessService.hasAssignedClasses)
-                    const TeacherFlowCard(
-                      icon: Icons.class_outlined,
-                      title: 'No classes assigned yet.',
-                      subtitle:
-                          'Your classes, timetable, and attendance workflow will appear after assignment.',
-                    )
-                  else
-                    TeacherCurrentClassCard(
-                      greeting: 'Hello, $shortName',
-                      classLabel: _currentClassTitle,
-                      subject: _currentSubject,
-                      timeLabel: _currentTimeLabel,
-                      avatar: RoleAccessService.teacherAvatarUrl,
-                      actions: [
-                        TeacherFlowAction(
-                          label: 'My Login',
-                          icon: Icons.qr_code_scanner_rounded,
-                          filled: true,
-                          onTap: _openMyAttendance,
-                        ),
-                      ],
-                    ),
-                  if (_timetable.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      '$_currentSubject - $_currentClassTitle',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: teacherFlowInk,
+        data: (_) => RoleHomeReady(
+          role: 'teacher',
+          child: isDesktop
+              ? TeacherDashboardDesktopBody(
+                  teacherName: _teacherName,
+                  assignedClass: _assignedClass,
+                  assignedSubject: _assignedSubject,
+                  timetable: _timetable,
+                  announcements: _announcements,
+                  eventPosts: _eventPosts,
+                  attendancePending: _attendancePending,
+                  roleScopeLoaded: _roleScopeLoaded,
+                  hasStaffLink: RoleAccessService.hasTeacherStaffLink,
+                  hasAssignedClasses: RoleAccessService.hasAssignedClasses,
+                  myAttendance: _myAttendance,
+                  feedError: _feedError,
+                  feedStale: _feedStale,
+                  onFeedRetry: () => _loadDashboardData(forceRefresh: true),
+                  onRefresh: () => _loadDashboardData(forceRefresh: true),
+                )
+              : TeacherFlowScrollView(
+                  children: [
+                    if (_roleScopeLoaded &&
+                        !RoleAccessService.hasTeacherStaffLink)
+                      const TeacherFlowCard(
+                        icon: Icons.badge_outlined,
+                        title:
+                            'Your teacher account is not linked to a staff profile.',
+                        subtitle: 'Please contact Admin/Principal.',
+                      )
+                    else if (_roleScopeLoaded &&
+                        !RoleAccessService.hasAssignedClasses)
+                      const TeacherFlowCard(
+                        icon: Icons.class_outlined,
+                        title: 'No classes assigned yet.',
+                        subtitle:
+                            'Your classes, timetable, and attendance workflow will appear after assignment.',
+                      )
+                    else
+                      TeacherCurrentClassCard(
+                        greeting: 'Hello, $shortName',
+                        classLabel: _currentClassTitle,
+                        subject: _currentSubject,
+                        timeLabel: _currentTimeLabel,
+                        avatar: RoleAccessService.teacherAvatarUrl,
+                        actions: [
+                          TeacherFlowAction(
+                            label: 'My Login',
+                            icon: Icons.qr_code_scanner_rounded,
+                            filled: true,
+                            onTap: _openMyAttendance,
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  const TodaysHighlightsCard(role: 'teacher'),
-                  const SizedBox(height: 18),
-                  SchoolFeedPreview(
-                    posts: _eventPosts,
-                    accentColor: teacherFlowAccent,
-                    showParentVisibility: true,
-                    audienceLabel: 'Staff & school updates',
-                    isStale: _feedStale,
-                    errorMessage: _feedError,
-                    onRetry: () => _loadDashboardData(forceRefresh: true),
-                    actionLabel: 'Manage',
-                    onAction: () => SchoolDeskNavigation.push(
-                      context,
-                      AppRoutes.teacherEventPosts,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  const TeacherFlowSectionHeader(title: 'Quick Actions'),
-                  const SizedBox(height: 10),
-                  _TeacherQuickActionGrid(),
-                  const SizedBox(height: 18),
-                  TeacherFlowSectionHeader(
-                    title: 'Today Action Queue',
-                    actionLabel: 'Refresh',
-                    onAction: () => _loadDashboardData(forceRefresh: true),
-                  ),
-                  const SizedBox(height: 10),
-                  ..._teacherActionQueue(context),
-                  const SizedBox(height: 18),
-                  TeacherFlowSectionHeader(
-                    title: 'Today Feed',
-                    actionLabel: 'Classes',
-                    onAction: () => SchoolDeskNavigation.push(
-                      context,
-                      AppRoutes.teacherClasses,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ..._todayFeed(context),
-                  if (_announcements.isNotEmpty) ...[
+                    if (_timetable.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        '$_currentSubject - $_currentClassTitle',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: teacherFlowInk,
+                            ),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    const TodaysHighlightsCard(role: 'teacher'),
                     const SizedBox(height: 18),
-                    TeacherFlowSectionHeader(
-                      title: 'School Notices',
-                      actionLabel: 'Open',
+                    SchoolFeedPreview(
+                      posts: _eventPosts,
+                      accentColor: teacherFlowAccent,
+                      showParentVisibility: true,
+                      audienceLabel: 'Staff & school updates',
+                      isStale: _feedStale,
+                      errorMessage: _feedError,
+                      onRetry: () => _loadDashboardData(forceRefresh: true),
+                      actionLabel: 'Manage',
                       onAction: () => SchoolDeskNavigation.push(
                         context,
-                        AppRoutes.teacherCommunication,
+                        AppRoutes.teacherEventPosts,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const TeacherFlowSectionHeader(title: 'Quick Actions'),
+                    const SizedBox(height: 10),
+                    _TeacherQuickActionGrid(),
+                    const SizedBox(height: 18),
+                    TeacherFlowSectionHeader(
+                      title: 'Today Action Queue',
+                      actionLabel: 'Refresh',
+                      onAction: () => _loadDashboardData(forceRefresh: true),
+                    ),
+                    const SizedBox(height: 10),
+                    ..._teacherActionQueue(context),
+                    const SizedBox(height: 18),
+                    TeacherFlowSectionHeader(
+                      title: 'Today Feed',
+                      actionLabel: 'Classes',
+                      onAction: () => SchoolDeskNavigation.push(
+                        context,
+                        AppRoutes.teacherClasses,
                       ),
                     ),
                     const SizedBox(height: 10),
-                    ..._announcements
-                        .take(3)
-                        .map(
-                          (notice) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: TeacherFlowCard(
-                              icon: Icons.campaign_rounded,
-                              title: notice.title,
-                              subtitle: notice.content,
-                              status: notice.isUrgent ? 'Urgent' : 'Notice',
-                              statusColor: notice.isUrgent
-                                  ? context.appTheme.error
-                                  : teacherFlowAccent,
+                    ..._todayFeed(context),
+                    if (_announcements.isNotEmpty) ...[
+                      const SizedBox(height: 18),
+                      TeacherFlowSectionHeader(
+                        title: 'School Notices',
+                        actionLabel: 'Open',
+                        onAction: () => SchoolDeskNavigation.push(
+                          context,
+                          AppRoutes.teacherCommunication,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ..._announcements
+                          .take(3)
+                          .map(
+                            (notice) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: TeacherFlowCard(
+                                icon: Icons.campaign_rounded,
+                                title: notice.title,
+                                subtitle: notice.content,
+                                status: notice.isUrgent ? 'Urgent' : 'Notice',
+                                statusColor: notice.isUrgent
+                                    ? context.appTheme.error
+                                    : teacherFlowAccent,
+                              ),
                             ),
                           ),
-                        ),
+                    ],
                   ],
-                ],
-              ),
+                ),
+        ),
       ),
     );
   }

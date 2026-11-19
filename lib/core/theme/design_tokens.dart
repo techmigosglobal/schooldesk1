@@ -594,7 +594,7 @@ extension SchoolDeskThemeLookup on ThemeData {
 class SchoolDeskResponsive {
   SchoolDeskResponsive._();
 
-  static const double maxSupportedTextScale = 1.3;
+  static const double maxSupportedTextScale = 2.0;
 
   static double effectiveTextScale(double textScale) {
     return textScale.clamp(1.0, maxSupportedTextScale).toDouble();

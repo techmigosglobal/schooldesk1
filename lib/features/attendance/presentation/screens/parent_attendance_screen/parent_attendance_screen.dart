@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:schooldesk1/core/offline/offline_sync_engine.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,7 +16,6 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_child_selector.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/roles/parent/data/api_parent_attendance_repository.dart';
 import 'package:schooldesk1/roles/parent/domain/parent_attendance_repository.dart';
 
@@ -48,6 +49,12 @@ class ParentAttendanceScreen extends StatefulWidget {
 
 class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  static const _loadTimeout = Duration(seconds: 8);
+  final _api = BackendApiClient.instance;
+  late int _scope;
+  Future<void>? _childrenRead;
+  Future<void>? _attendanceRead;
+  String _attendanceReadChild = '';
   int _selectedNavIndex = ParentNav.attendance;
   int _activeChildIndex = 0;
 
@@ -77,6 +84,8 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   @override
   void initState() {
     super.initState();
+    _scope = _api.sessionScopeVersion;
+    _api.addListener(_onScopeChanged);
     WidgetsBinding.instance.addObserver(this);
     try {
       _connection = OfflineSyncEngine.instance;
@@ -85,7 +94,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     } on StateError {
       /* optional in isolated tests */
     }
-    _loadData();
+    unawaited(_loadData());
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'parent-attendance',
       modules: const {'attendance'},
@@ -122,13 +131,43 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _api.removeListener(_onScopeChanged);
     _connection?.removeListener(_onConnectionChanged);
     _recoveryTimer?.cancel();
     _realtimeSubscription?.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData({bool forceRefresh = false}) async {
+  bool _isCurrent(int scope) => mounted && scope == _api.sessionScopeVersion;
+
+  void _onScopeChanged() {
+    if (_scope == _api.sessionScopeVersion) return;
+    _scope = _api.sessionScopeVersion;
+    _childrenRead = null;
+    _attendanceRead = null;
+    _attendanceReadChild = '';
+    _childrenRequestToken++;
+    _attendanceRequestToken++;
+    _recoveryTimer?.cancel();
+    _lastRecoveryAttempt = null;
+    setState(() {
+      _activeChildIndex = 0;
+      _loadedStudentId = '';
+      _state = const RepositoryState.loading();
+    });
+    if (_api.currentRoleName == 'parent') unawaited(_loadData());
+  }
+
+  Future<void> _loadData({bool forceRefresh = false}) {
+    final scope = _scope;
+    return _childrenRead ??= _readChildren(scope, forceRefresh).whenComplete(
+      () {
+        if (_isCurrent(scope)) _childrenRead = null;
+      },
+    );
+  }
+
+  Future<void> _readChildren(int scope, bool forceRefresh) async {
     final token = ++_childrenRequestToken;
     final previous = _state.data;
     setState(() {
@@ -139,15 +178,16 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             : RepositorySource.cache,
         isStale: previous != null,
         isRefreshing: previous != null,
+        lastUpdated: _state.lastUpdated,
       );
     });
 
     try {
       final repository =
           widget.repository ?? ApiParentAttendanceRepository.legacyDefault;
-      final childrenResult = await repository.getChildren(
-        forceRefresh: forceRefresh,
-      );
+      final childrenResult = await repository
+          .getChildren(forceRefresh: forceRefresh)
+          .timeout(_loadTimeout);
       if (childrenResult.isFailure) {
         throw StateError(
           childrenResult.failureOrNull?.message ??
@@ -164,7 +204,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         fallback: _activeChildIndex,
       );
 
-      if (!mounted || token != _childrenRequestToken) return;
+      if (!_isCurrent(scope) || token != _childrenRequestToken) return;
       final sameStudent =
           childRows.isNotEmpty &&
           _childId(childRows[selectedIndex]) == _loadedStudentId;
@@ -189,6 +229,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           source: RepositorySource.cache,
           isStale: true,
           isRefreshing: true,
+          lastUpdated: sameStudent ? _state.lastUpdated : null,
         );
       });
       if (_childRows.isNotEmpty) {
@@ -197,7 +238,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         setState(() => _state = const RepositoryState.empty());
       }
     } on Object catch (e) {
-      if (!mounted || token != _childrenRequestToken) return;
+      if (!_isCurrent(scope) || token != _childrenRequestToken) return;
       setState(() {
         _state = previous == null
             ? RepositoryState.error(error: e)
@@ -215,35 +256,40 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   Future<void> _loadChildAttendance(
     int childIndex, {
     bool forceRefresh = false,
-  }) async {
+  }) {
     if (childIndex < 0 || childIndex >= _childRows.length) {
-      if (mounted) {
-        setState(
-          () => _state = RepositoryState.error(
-            error: StateError('Child is not available'),
-          ),
-        );
-      }
-      return;
+      return Future.value();
     }
-    final requestToken = ++_attendanceRequestToken;
     final studentId = _childId(_childRows[childIndex]);
-    if (studentId.isEmpty) {
-      if (mounted) {
-        setState(
-          () => _state = RepositoryState.error(
-            error: StateError('Student is not available'),
-          ),
-        );
-      }
-      return;
+    if (studentId.isEmpty) return Future.value();
+    if (_attendanceReadChild == studentId && _attendanceRead != null) {
+      return _attendanceRead!;
     }
+    final scope = _scope;
+    _attendanceReadChild = studentId;
+    final read = _readChild(scope, childIndex, studentId, forceRefresh);
+    _attendanceRead = read;
+    return read.whenComplete(() {
+      if (identical(_attendanceRead, read)) {
+        _attendanceRead = null;
+        _attendanceReadChild = '';
+      }
+    });
+  }
 
+  Future<void> _readChild(
+    int scope,
+    int childIndex,
+    String studentId,
+    bool forceRefresh,
+  ) async {
+    final requestToken = ++_attendanceRequestToken;
     try {
       final snapshot =
           await (widget.repository ??
                   ApiParentAttendanceRepository.legacyDefault)
-              .loadChild(studentId: studentId, forceRefresh: forceRefresh);
+              .loadChild(studentId: studentId, forceRefresh: forceRefresh)
+              .timeout(_loadTimeout);
       if (snapshot.isFailure) {
         throw StateError(
           snapshot.failureOrNull?.message ?? 'Unable to load attendance',
@@ -269,7 +315,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           : periodRows;
       final attendanceDayStatus = _dayStatusFromPeriodRows(preservedRows);
 
-      if (!mounted ||
+      if (!_isCurrent(scope) ||
           requestToken != _attendanceRequestToken ||
           childIndex != _activeChildIndex ||
           studentId != _activeChildId) {
@@ -295,13 +341,18 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
               attendanceSnapshot.fromCache ||
               attendanceSnapshot.partialError != null,
           error: attendanceSnapshot.partialError,
-          lastUpdated: DateTime.now().toUtc(),
+          lastUpdated:
+              attendanceSnapshot.fromCache ||
+                  attendanceSnapshot.partialError != null
+              ? attendanceSnapshot.cacheStoredAt ?? _state.lastUpdated
+              : DateTime.now().toUtc(),
         );
       });
     } on Object catch (e) {
-      if (mounted &&
+      if (_isCurrent(scope) &&
           requestToken == _attendanceRequestToken &&
-          childIndex == _activeChildIndex) {
+          childIndex == _activeChildIndex &&
+          studentId == _activeChildId) {
         final previous = _state.data;
         setState(() {
           _state = previous == null
@@ -357,11 +408,28 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
               if (_partialError != null) _buildPartialBanner(),
               _buildChildSelector(),
               const SizedBox(height: 16),
-              _buildAttendanceSummary(),
-              const SizedBox(height: 16),
-              _buildMonthlyCalendar(),
-              const SizedBox(height: 16),
-              _buildHistoryList(),
+              if (_loadedStudentId != _activeChildId && _state.isLoading)
+                Semantics(
+                  label: 'Loading selected child attendance',
+                  child: const LoadingSkeletonWidget(height: 168),
+                )
+              else if (_loadedStudentId != _activeChildId && _state.isError)
+                _statusBanner(
+                  icon: Icons.error_outline_rounded,
+                  message:
+                      'Unable to load attendance for the selected student.',
+                  action: () => _loadChildAttendance(
+                    _activeChildIndex,
+                    forceRefresh: true,
+                  ),
+                )
+              else ...[
+                _buildAttendanceSummary(),
+                const SizedBox(height: 16),
+                _buildMonthlyCalendar(),
+                const SizedBox(height: 16),
+                _buildHistoryList(),
+              ],
             ],
           ),
         ),
@@ -396,52 +464,34 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     );
   }
 
-  Widget _buildChildSelector() {
-    if (_childRows.isEmpty) {
-      final tokens = Theme.of(context).schoolDesk;
-      return Container(
-        padding: EdgeInsets.all(tokens.spacing.md),
-        decoration: BoxDecoration(
-          color: context.appTheme.surface,
-          borderRadius: BorderRadius.circular(tokens.radius.card),
-          border: Border.all(color: context.appTheme.outlineVariant),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.family_restroom_rounded, color: context.appTheme.muted),
-            SizedBox(width: tokens.spacing.sm),
-            Expanded(
-              child: Text(
-                'No linked students found for this parent account.',
-                style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  color: context.appTheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    return ParentChildSelector(
-      children: _childRows,
-      selectedIndex: _activeChildIndex,
-      isLoading: _state.isLoading || _state.isRefreshing,
-      onSelected: (index) {
-        setState(() {
-          _activeChildIndex = index;
-          _state = RepositoryState.loading(
-            data: _state.data,
-            source: RepositorySource.cache,
-            isStale: true,
-            isRefreshing: true,
-          );
-        });
-        ParentChildSelectionService.saveIndex(_childRows, index);
-        _loadChildAttendance(index);
-      },
-    );
-  }
+  Widget _buildChildSelector() => ParentChildSelector(
+    children: _childRows,
+    selectedIndex: _activeChildIndex,
+    onSelected: (index) {
+      final children = _childRows;
+      _childrenRequestToken++;
+      _childrenRead = null;
+      _attendanceRequestToken++;
+      _attendanceRead = null;
+      _attendanceReadChild = '';
+      setState(() {
+        _activeChildIndex = index;
+        _loadedStudentId = '';
+        _state = RepositoryState.loading(
+          data: _ParentAttendanceSnapshot(
+            childRows: children,
+            attendanceHistory: const [],
+            attendanceSummary: const {},
+            attendanceDayStatus: const {},
+            periodRowsByDay: const {},
+          ),
+          isRefreshing: true,
+        );
+      });
+      unawaited(ParentChildSelectionService.saveIndex(children, index));
+      unawaited(_loadChildAttendance(index));
+    },
+  );
 
   Widget _buildAttendanceSummary() {
     final current = _attendanceSummary;
@@ -460,7 +510,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 3,
+      crossAxisCount: MediaQuery.textScalerOf(context).scale(14) > 21 ? 2 : 3,
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
       childAspectRatio: 1.3,

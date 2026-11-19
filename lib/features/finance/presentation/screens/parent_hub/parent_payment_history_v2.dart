@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
@@ -42,6 +46,10 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
   RepositoryState<_ParentPaymentHistorySnapshot> _state =
       const RepositoryState.loading();
   int _activeChildIndex = 0;
+  int _requestVersion = 0;
+  final _api = BackendApiClient.instance;
+  late int _scope;
+  String? _partialError;
 
   List<Map<String, dynamic>> get _childrenData =>
       _state.data?.children ?? const [];
@@ -51,11 +59,37 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
   @override
   void initState() {
     super.initState();
-    _loadHistory();
+    _scope = _api.sessionScopeVersion;
+    _api.addListener(_onScopeChanged);
+    unawaited(_loadHistory());
   }
 
-  Future<void> _loadHistory() async {
-    final previous = _state.data;
+  @override
+  void dispose() {
+    _api.removeListener(_onScopeChanged);
+    super.dispose();
+  }
+
+  void _onScopeChanged() {
+    if (_scope == _api.sessionScopeVersion) return;
+    _scope = _api.sessionScopeVersion;
+    _requestVersion++;
+    setState(() {
+      _activeChildIndex = 0;
+      _partialError = null;
+      _state = const RepositoryState.loading();
+    });
+    if (_api.currentRoleName == 'parent') unawaited(_loadHistory());
+  }
+
+  Future<void> _loadHistory({bool keepPrevious = true}) async {
+    final scope = _scope;
+    final version = ++_requestVersion;
+    bool isCurrent() =>
+        mounted &&
+        scope == _api.sessionScopeVersion &&
+        version == _requestVersion;
+    final previous = keepPrevious ? _state.data : null;
     setState(() {
       _state = RepositoryState.loading(
         data: previous,
@@ -64,10 +98,14 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
             : RepositorySource.cache,
         isStale: previous != null,
         isRefreshing: previous != null,
+        lastUpdated: keepPrevious ? _state.lastUpdated : null,
       );
     });
     try {
-      final children = await _repository.loadChildren();
+      final children = await _repository.loadChildren().timeout(
+        const Duration(seconds: 8),
+      );
+      if (!isCurrent()) return;
       if (children.isEmpty) {
         setState(() => _state = const RepositoryState.empty());
         return;
@@ -77,24 +115,44 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         children,
         fallback: _activeChildIndex,
       );
-      _activeChildIndex = selectedIndex;
-      final child = children[_activeChildIndex];
+      if (!isCurrent()) return;
+      final child = children[selectedIndex];
       final studentId = (child['id'] ?? child['student_id'] ?? '').toString();
 
       // Payment history must use the same linked-child scope as My Fees. The
       // global invoice list is a principal-only finance endpoint.
-      final invoices = studentId.isEmpty
-          ? <Map<String, dynamic>>[]
-          : await _repository.loadStudentFees(studentId);
-      final paymentRequests = studentId.isEmpty
-          ? <Map<String, dynamic>>[]
-          : await _repository.loadPaymentRequests(
-              studentId: studentId,
-            );
+      var cache = const CacheMetadata(isStale: false);
+      var receiptsFailed = false;
+      var proofsFailed = false;
+      final reads = await Future.wait([
+        _repository
+            .loadStudentFees(
+              studentId,
+              onCacheMetadata: (value) => cache = value,
+            )
+            .timeout(const Duration(seconds: 8))
+            .onError((_, _) {
+              receiptsFailed = true;
+              return <Map<String, dynamic>>[];
+            }),
+        _repository
+            .loadPaymentRequests(studentId: studentId)
+            .timeout(const Duration(seconds: 8))
+            .onError((_, _) {
+              proofsFailed = true;
+              return <Map<String, dynamic>>[];
+            }),
+      ]);
+      if (!isCurrent()) return;
+      if (receiptsFailed && proofsFailed) {
+        throw StateError('Payment history is temporarily unavailable.');
+      }
+      final invoices = reads[0];
+      final paymentRequests = reads[1];
 
       final List<Map<String, dynamic>> historyList = [];
       final completedPaymentIds = <String>{};
-      final completedPaymentSignatures = <String>{};
+      final receiptIds = <String>{};
 
       for (final inv in invoices) {
         final payments = inv['payments'];
@@ -113,18 +171,14 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
                 (payment['amount_paid'] as num?)?.toDouble() ??
                 0.0;
             final paymentId = _text(payment['id']);
-            final invoiceId = _text(inv['id']);
-            final signature = '$invoiceId:${amount.toStringAsFixed(2)}';
             if (paymentId.isNotEmpty && !completedPaymentIds.add(paymentId)) {
               continue;
             }
-            // Separate successful installments may legitimately have the same
-            // amount. Keep every distinct payment, but remember the signature
-            // so its approved proof request is not rendered a second time.
-            completedPaymentSignatures.add(signature);
             final receipt = payment['receipt'] is Map
                 ? Map<String, dynamic>.from(payment['receipt'] as Map)
                 : const <String, dynamic>{};
+            final receiptId = _text(receipt['id']);
+            if (receiptId.isNotEmpty) receiptIds.add(receiptId);
             historyList.add({
               'id': payment['id'] ?? '',
               'invoiceId': inv['id'] ?? '',
@@ -178,11 +232,11 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         }
         final linkedPaymentId = _text(request['payment_id']);
         final amount = (request['amount'] as num?)?.toDouble() ?? 0.0;
-        final signature =
-            '${_text(request['invoice_id'])}:${amount.toStringAsFixed(2)}';
+        final linkedReceiptId = _text(request['receipt_id']);
         if ((linkedPaymentId.isNotEmpty &&
                 completedPaymentIds.contains(linkedPaymentId)) ||
-            completedPaymentSignatures.contains(signature)) {
+            (linkedReceiptId.isNotEmpty &&
+                receiptIds.contains(linkedReceiptId))) {
           continue;
         }
         final invoice = request['invoice'] is Map
@@ -230,20 +284,26 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       );
 
       setState(() {
+        _activeChildIndex = selectedIndex;
+        _partialError = proofsFailed
+            ? 'Live proof status is unavailable. Receipts are still shown.'
+            : receiptsFailed
+            ? 'Receipts are unavailable. Proof status is still shown.'
+            : null;
         _state = RepositoryState(
           data: _ParentPaymentHistorySnapshot(
             children: children,
             payments: historyList,
           ),
-          source: RepositorySource.remote,
-          phase: historyList.isEmpty
-              ? RepositoryPhase.empty
-              : RepositoryPhase.ready,
-          lastUpdated: DateTime.now().toUtc(),
+          source: cache.isStale
+              ? RepositorySource.cache
+              : RepositorySource.remote,
+          isStale: cache.isStale,
+          lastUpdated: cache.isStale ? cache.storedAt : DateTime.now().toUtc(),
         );
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!isCurrent()) return;
       setState(() {
         _state = previous == null
             ? RepositoryState.error(error: e)
@@ -282,11 +342,20 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (_childrenData.length > 1) ...[
+              if (_childrenData.isNotEmpty) ...[
                 _buildChildSelector(),
                 const SizedBox(height: 16),
               ],
-              if (_paymentHistory.isEmpty)
+              if (_partialError case final message?)
+                ListTile(
+                  leading: const Icon(Icons.info_outline_rounded),
+                  title: Text(message),
+                  trailing: TextButton(
+                    onPressed: _loadHistory,
+                    child: const Text('Retry'),
+                  ),
+                ),
+              if (_paymentHistory.isEmpty && _partialError == null)
                 _buildEmptyState()
               else
                 ..._paymentHistory.map((item) => _buildHistoryCard(item)),
@@ -302,10 +371,22 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       children: _childrenData,
       selectedIndex: _activeChildIndex,
       isLoading: _state.isLoading || _state.isRefreshing,
-      onSelected: (index) {
-        setState(() => _activeChildIndex = index);
-        ParentChildSelectionService.saveIndex(_childrenData, index);
-        _loadHistory();
+      onSelected: (index) async {
+        final children = _childrenData;
+        final scope = _scope;
+        final version = ++_requestVersion;
+        setState(() {
+          _activeChildIndex = index;
+          _partialError = null;
+          _state = const RepositoryState.loading();
+        });
+        await ParentChildSelectionService.saveIndex(children, index);
+        if (!mounted ||
+            scope != _api.sessionScopeVersion ||
+            version != _requestVersion) {
+          return;
+        }
+        await _loadHistory(keepPrevious: false);
       },
     );
   }
@@ -350,9 +431,11 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
     final reference = _text(item['receiptNo']);
     final method = _text(item['method'], fallback: 'UPI');
     final hasLinkedReceipt = _hasLinkedReceipt(item);
-    final isFinalized = const {'completed', 'approved', 'paid'}.contains(
-      rawStatus,
-    );
+    final isFinalized = const {
+      'completed',
+      'approved',
+      'paid',
+    }.contains(rawStatus);
 
     Color statusColor = context.appTheme.warning;
     Color statusBg = context.appTheme.warningContainer;
@@ -546,16 +629,18 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
   }
 
   String _paymentStatusLabel(dynamic raw) {
+    if (FeePaymentRequestStatus.isPrincipalPending(raw)) return 'Under review';
     switch ('${raw ?? ''}'.toLowerCase()) {
       case 'initiated':
       case 'payment_app_opened':
         return 'Initiated';
       case 'pending_verification':
       case 'submitted':
-        return 'Pending Verification';
+        return 'Under review';
       case 'clarification_required':
-        return 'Clarification Required';
+        return 'Action needed';
       case 'approved':
+        return 'Approved';
       case 'completed':
       case 'paid':
         return 'Paid';

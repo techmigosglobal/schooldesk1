@@ -10,33 +10,31 @@ class ApiParentDashboardRepository implements ParentDashboardRepository {
   final BackendApiClient _api;
 
   @override
-  Future<Result<ParentDashboardSnapshot>> load({
-    bool forceRefresh = false,
-    bool includeFeedPosts = true,
-  }) {
+  Future<ParentDashboardSnapshot?> readCached() async {
+    final saved = await _api.readCachedDashboard('parent');
+    if (saved == null) return null;
+    return ParentDashboardSnapshot(
+      dashboard: saved.data,
+      cache: saved.metadata,
+    );
+  }
+
+  @override
+  Future<Result<ParentDashboardSnapshot>> load() {
     return guardApi(() async {
+      var cache = const CacheMetadata(isStale: false);
       final dashboard = await _api.getDashboard(
         'parent',
-        forceRefresh: forceRefresh,
+        refreshNetwork: true,
+        onCacheMetadata: (value) => cache = value,
       );
-
-      PaginatedList<Map<String, dynamic>>? feed;
-      Object? feedError;
-      if (includeFeedPosts) {
-        try {
-          feed = await _api.getHomeFeedEventPostsPage(page: 1, pageSize: 10);
-        } on Object catch (error) {
-          feedError = error;
-        }
-      }
-
-      return ParentDashboardSnapshot(
-        dashboard: Map<String, dynamic>.from(dashboard),
-        feed: feed,
-        feedError: feedError,
-      );
+      return ParentDashboardSnapshot(dashboard: dashboard, cache: cache);
     });
   }
+
+  @override
+  Future<Result<PaginatedList<Map<String, dynamic>>>> loadFeed() =>
+      guardApi(() => _api.getHomeFeedEventPostsPage(page: 1, pageSize: 10));
 
   /// Legacy route fallback until all route entry points receive overrides.
   static ApiParentDashboardRepository get legacyDefault =>

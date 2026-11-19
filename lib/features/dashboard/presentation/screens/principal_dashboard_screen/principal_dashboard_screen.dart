@@ -5,18 +5,20 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
-import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/branch_switcher.dart';
 import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
+import 'package:schooldesk1/core/widgets/role_home_ready.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -41,8 +43,18 @@ class PrincipalDashboardScreen extends StatefulWidget {
 }
 
 class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
+  final _api = BackendApiClient.instance;
+  late String _scope;
+  Future<void>? _dashboardLoad;
+  LeadershipDashboardIdentity? _identity;
+  LeadershipDashboardOptionalSnapshot? _setup;
+  bool _setupOpened = false;
   bool _setupLoading = false;
   int _loadGeneration = 0;
+  bool _identityFailed = false;
+  bool _attentionFailed = false;
+  bool _staffAttendanceFailed = false;
+  int _unreadNotifications = 0;
   String? _setupError;
   DateTime? _lastBackPressedAt;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
@@ -63,9 +75,17 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     return 'principal';
   }
 
+  String get _currentScope =>
+      '${_api.offlineAccountKey}|${_api.sessionScopeVersion}';
+
+  LeadershipDashboardRepository get _repository =>
+      widget.dashboardRepository ??
+      ApiLeadershipDashboardRepository.legacyDefault;
+
   @override
   void initState() {
     super.initState();
+    _scope = _currentScope;
     // Defensive guard: redirect super_admin to their own dashboard.
     final role = RoleAccessService.currentRoleName;
     if (role == 'super_admin') {
@@ -77,6 +97,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       });
       return;
     }
+    _api.addListener(_scopeChanged);
     _loadDashboard();
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'principal-dashboard',
@@ -104,162 +125,221 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   @override
   void dispose() {
+    _api.removeListener(_scopeChanged);
     _realtimeSubscription?.dispose();
     super.dispose();
   }
 
-  Future<void> _loadDashboard() async {
-    final generation = ++_loadGeneration;
-    final previous = _criticalState;
+  void _scopeChanged() {
+    if (_scope == _currentScope) return;
     setState(() {
-      _criticalState =
-          RepositoryState<LeadershipDashboardCriticalSnapshot>.loading(
-            data: previous.data,
-            source: previous.source,
-            isStale: previous.isStale,
-            isRefreshing: previous.hasData,
-            lastUpdated: previous.lastUpdated,
-          );
+      _scope = _currentScope;
+      _loadGeneration++;
+      _dashboardLoad = null;
+      _criticalState = const RepositoryState.loading();
+      _data = _PrincipalHomeData.empty();
+      _identity = null;
+      _identityFailed = false;
+      _attentionCounts = const {};
+      _attentionFailed = false;
+      _staffAttendanceSummary = const {};
+      _staffAttendanceFailed = false;
+      _unreadNotifications = 0;
+      _setup = null;
+      _setupOpened = false;
+      _setupLoading = false;
+      _setupError = null;
     });
+    if (const {
+      'principal',
+      'coordinator',
+      'admin',
+    }.contains(RoleAccessService.currentRoleName)) {
+      unawaited(_loadDashboard());
+    }
+  }
 
+  bool _isCurrent(int generation) =>
+      mounted && generation == _loadGeneration && _scope == _currentScope;
+
+  Future<void> _loadDashboard() {
+    final active = _dashboardLoad;
+    if (active != null) return active;
+    late final Future<void> load;
+    load = _refreshDashboard().whenComplete(() {
+      if (_scope == _currentScope && identical(_dashboardLoad, load)) {
+        _dashboardLoad = null;
+      }
+    });
+    _dashboardLoad = load;
+    return load;
+  }
+
+  Future<void> _refreshDashboard() async {
+    final generation = ++_loadGeneration;
+    _setupLoading = false;
+    final role = _leadershipRole;
+    final repository = _repository;
+    if (!_criticalState.hasData) {
+      setState(() => _criticalState = const RepositoryState.loading());
+      unawaited(_showCachedDashboard(repository, role, generation));
+    }
     try {
-      // ── Phase 1: Critical data ──────────────────────────────────────────────
-      // Only 3 calls needed to paint the dashboard. Render immediately.
-      final repository =
-          widget.dashboardRepository ??
-          ApiLeadershipDashboardRepository.legacyDefault;
-      final criticalResult = await repository
-          .loadCritical(role: _leadershipRole)
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () => throw TimeoutException(
-              'Dashboard data took too long. Check your connection.',
-            ),
-          );
-      if (criticalResult.isFailure) {
-        final state =
-            RepositoryState.fromResult<LeadershipDashboardCriticalSnapshot>(
-              criticalResult,
-              previous: previous.hasData ? previous : null,
-            );
-        if (!mounted || generation != _loadGeneration) return;
+      final result = await repository
+          .loadCritical(role: role)
+          .timeout(const Duration(seconds: 8));
+      if (!_isCurrent(generation)) return;
+      final dashboard = result.dataOrNull;
+      if (dashboard == null) {
         setState(() {
-          _criticalState = state;
+          _criticalState = RepositoryState.fromResult(
+            result,
+            previous: _criticalState,
+          );
         });
         return;
       }
-      final critical = criticalResult.dataOrNull!;
-      final dashboard = critical.dashboard;
-      final school = critical.school;
-      final profile = critical.profile;
-
-      if (!mounted || generation != _loadGeneration) return;
+      _showDashboard(dashboard);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_isCurrent(generation)) return;
+        unawaited(_loadIdentity(generation));
+        unawaited(_loadAttention(generation));
+        unawaited(_loadStaffAttendance(generation));
+        unawaited(_loadNotifications(generation));
+        if (_setupOpened) unawaited(_loadSetup(generation));
+      });
+    } on Object {
+      if (!_isCurrent(generation)) return;
       setState(() {
-        _criticalState =
-            RepositoryState.fromResult<LeadershipDashboardCriticalSnapshot>(
-              criticalResult,
-              previous: previous.hasData ? previous : null,
-            );
-        _data = _PrincipalHomeData.fromCritical(
-          dashboard: dashboard,
-          school: school,
-          profile: profile,
+        _criticalState = RepositoryState.error(
+          error:
+              'Dashboard data could not be refreshed. Check your connection and try again.',
+          data: _criticalState.data,
+          source: _criticalState.hasData
+              ? RepositorySource.cache
+              : RepositorySource.empty,
+          isStale: _criticalState.hasData,
+          lastUpdated: _criticalState.lastUpdated,
         );
-        _setupError = null;
-        _setupLoading =
-            true; // Setup section shows a spinner until phase 2 is done
-      });
-
-      // ── Phase 2: Optional data ──────────────────────────────────────────────
-      // Fires in background after the UI is visible. Does not block rendering.
-      _loadSetupData(repository, dashboard, school, generation);
-    } on TimeoutException catch (error) {
-      if (!mounted || generation != _loadGeneration) return;
-      setState(() {
-        _criticalState =
-            RepositoryState<LeadershipDashboardCriticalSnapshot>.error(
-              error: error.message ?? 'Dashboard data took too long.',
-              data: previous.data,
-              source: previous.source,
-              isStale: previous.hasData,
-              lastUpdated: previous.lastUpdated,
-            );
-      });
-    } on Object catch (e) {
-      if (!mounted || generation != _loadGeneration) return;
-      setState(() {
-        _criticalState =
-            RepositoryState<LeadershipDashboardCriticalSnapshot>.error(
-              error: '$e',
-              data: previous.data,
-              source: previous.source,
-              isStale: previous.hasData,
-              lastUpdated: previous.lastUpdated,
-            );
       });
     }
   }
 
-  Future<void> _loadSetupData(
+  Future<void> _showCachedDashboard(
     LeadershipDashboardRepository repository,
-    Map<String, dynamic> dashboard,
-    Map<String, dynamic> school,
+    String role,
     int generation,
   ) async {
     try {
-      final optionalResult = await repository.loadOptional(
-        role: _leadershipRole,
-        dashboard: dashboard,
-      );
-      if (optionalResult.isFailure) {
-        throw StateError(
-          optionalResult.failureOrNull?.message ?? 'Optional data failed',
-        );
+      final cached = await repository.readCachedDashboard(role: role);
+      if (!_isCurrent(generation) || _criticalState.hasData || cached == null) {
+        return;
       }
-      final optional = optionalResult.dataOrNull!;
-
-      if (!mounted || generation != _loadGeneration) return;
-
-      final academicYears = optional.academicYears;
-      final grades = optional.grades;
-      final sections = optional.sections;
-      final subjects = optional.subjects;
-      final staff = optional.staff;
-      final students = optional.students;
-      final feeStructures = optional.feeStructures;
-      final notifications = optional.notifications;
-      final staffAttendanceSummary = optional.staffAttendanceSummary;
-
-      setState(() {
-        _data = _data.withSetupData(
-          dashboard: dashboard,
-          school: school,
-          academicYears: academicYears,
-          grades: grades,
-          sections: sections,
-          subjects: subjects,
-          staffTotal: staff.total,
-          studentsTotal: students.total,
-          feeStructures: feeStructures,
-          unreadNotifications: notifications.where((row) {
-            if (row['is_read'] == true) return false;
-            final targetRole = '${row['role'] ?? row['target_role'] ?? 'all'}'
-                .trim()
-                .toLowerCase();
-            return targetRole == 'all' || targetRole == _leadershipRole;
-          }).length,
-        );
-        _attentionCounts = optional.attentionCounts;
-        _staffAttendanceSummary = staffAttendanceSummary;
-        _setupLoading = false;
-      });
-    } on Object catch (_) {
-      if (!mounted || generation != _loadGeneration) return;
-      setState(() {
-        _setupLoading = false;
-        _setupError = 'Some school data couldn\'t be loaded.';
-      });
+      _showDashboard(cached);
+    } on Object {
+      // Continue with the network read if local cache is unavailable.
     }
+  }
+
+  void _showDashboard(LeadershipDashboardCriticalSnapshot snapshot) {
+    final cache = snapshot.cacheMetadata;
+    setState(() {
+      _criticalState = RepositoryState(
+        data: snapshot,
+        source: cache.isStale
+            ? RepositorySource.cache
+            : RepositorySource.remote,
+        isStale: cache.isStale,
+        lastUpdated:
+            cache.storedAt ?? (cache.isStale ? null : DateTime.now().toUtc()),
+      );
+      _updateDisplay();
+    });
+  }
+
+  void _updateDisplay() {
+    final snapshot = _criticalState.data;
+    if (snapshot == null) return;
+    final school = _identity?.school ?? snapshot.school;
+    _data = _PrincipalHomeData.fromCritical(
+      dashboard: snapshot.dashboard,
+      school: school,
+      profile: _identity?.profile ?? snapshot.profile,
+      unreadNotifications: _unreadNotifications,
+    );
+    final setup = _setup;
+    if (setup == null || school.isEmpty) return;
+    _data = _data.withSetupData(
+      school: school,
+      academicYears: setup.academicYears,
+      grades: setup.grades,
+      sections: setup.sections,
+      subjects: setup.subjects,
+      feeStructures: setup.feeStructures,
+    );
+  }
+
+  Future<void> _loadIdentity(int generation) async {
+    final result = await _repository.loadIdentity();
+    if (!_isCurrent(generation)) return;
+    setState(() {
+      _identityFailed = result.isFailure;
+      _identity = result.dataOrNull ?? _identity;
+      _updateDisplay();
+    });
+  }
+
+  Future<void> _loadAttention(int generation) async {
+    final result = await _repository.loadAttention();
+    if (!_isCurrent(generation)) return;
+    setState(() {
+      _attentionFailed = result.isFailure;
+      _attentionCounts = result.dataOrNull ?? _attentionCounts;
+    });
+  }
+
+  Future<void> _loadStaffAttendance(int generation) async {
+    final result = await _repository.loadStaffAttendance();
+    if (!_isCurrent(generation)) return;
+    setState(() {
+      _staffAttendanceFailed = result.isFailure;
+      _staffAttendanceSummary = result.dataOrNull ?? _staffAttendanceSummary;
+    });
+  }
+
+  Future<void> _loadNotifications(int generation) async {
+    final result = await _repository.loadNotifications();
+    if (!_isCurrent(generation) || result.isFailure) return;
+    final unread = result.dataOrNull!.where((row) {
+      final target = '${row['role'] ?? row['target_role'] ?? 'all'}'
+          .trim()
+          .toLowerCase();
+      return row['is_read'] != true &&
+          (target == 'all' || target == _leadershipRole);
+    }).length;
+    setState(() {
+      _unreadNotifications = unread;
+      _updateDisplay();
+    });
+  }
+
+  Future<void> _loadSetup(int generation) async {
+    if (!_isCurrent(generation) || _setupLoading) return;
+    setState(() {
+      _setupOpened = true;
+      _setupLoading = true;
+      _setupError = null;
+    });
+    final result = await _repository.loadOptional(role: _leadershipRole);
+    if (!_isCurrent(generation)) return;
+    setState(() {
+      _setupLoading = false;
+      _setupError = result.isFailure
+          ? 'School setup could not be loaded.'
+          : null;
+      _setup = result.dataOrNull ?? _setup;
+      _updateDisplay();
+    });
   }
 
   @override
@@ -278,7 +358,10 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             backgroundColor: Colors.transparent,
             body: AppBackground(
               accent: const Color(0xFF0E5EA8),
-              child: SafeArea(bottom: false, child: _buildDesktopBody(context)),
+              child: SafeArea(
+                bottom: false,
+                child: _readyBody(_buildDesktopBody(context)),
+              ),
             ),
           );
         }
@@ -307,7 +390,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 460),
-                    child: _buildBody(context),
+                    child: _readyBody(_buildBody(context)),
                   ),
                 ),
               ),
@@ -317,6 +400,11 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         );
       },
     );
+  }
+
+  Widget _readyBody(Widget child) {
+    if (!_criticalState.hasData || _scope != _currentScope) return child;
+    return RoleHomeReady(role: _leadershipRole, child: child);
   }
 
   void _handleDashboardBack() {
@@ -340,7 +428,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   }
 
   Widget _buildDesktopBody(BuildContext context) {
-    if (_criticalState.isLoading && !_criticalState.hasData) {
+    if (_scope != _currentScope ||
+        (_criticalState.isLoading && !_criticalState.hasData)) {
       return const SchoolDeskPageSkeleton(cardCount: 6);
     }
 
@@ -351,11 +440,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       );
     }
 
-    final completedSetup = _data.setupSteps
-        .where((step) => step.isComplete)
-        .length;
-    final setupTotal = _data.setupSteps.isEmpty ? 1 : _data.setupSteps.length;
-
     return PrincipalDashboardDesktopBody(
       header: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -365,13 +449,10 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             onNotifications: () =>
                 _open(AppRoutes.notificationCenter, arguments: _leadershipRole),
           ),
-          if (_criticalState.isOffline)
-            SchoolDeskStatusPanel.stale(
-              message: 'Showing saved dashboard data while offline.',
-              onAction: _loadDashboard,
-            ),
+          _homeStatus(),
           const SizedBox(height: 12),
           if (!_isCoordinator) BranchSwitcher(onChanged: _loadDashboard),
+          _financeShortcuts(),
         ],
       ),
       searchBar: _DashboardSearchBar(
@@ -515,72 +596,13 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         onTap: (item) => _open(item.route),
       ),
       highlights: _leadershipHighlights(),
-      setupSection: _setupLoading
-          ? const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          : _setupError != null
-          ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Material(
-                color: const Color(0xFFFFF7ED),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.info_outline_rounded,
-                        size: 18,
-                        color: Color(0xFF92400E),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _setupError!,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF92400E),
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          setState(() => _setupError = null);
-                          _loadDashboard();
-                        },
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          : _SetupPreviewPanel(
-              progress: completedSetup / setupTotal,
-              completed: completedSetup,
-              total: setupTotal,
-              steps: _data.setupSteps,
-              onStepTap: (step) {
-                if (step.route == null) {
-                  _showGoLiveStatus();
-                  return;
-                }
-                _open(step.route!);
-              },
-            ),
+      setupSection: _setupSection(),
     );
   }
 
   Widget _buildBody(BuildContext context) {
-    if (_criticalState.isLoading && !_criticalState.hasData) {
+    if (_scope != _currentScope ||
+        (_criticalState.isLoading && !_criticalState.hasData)) {
       return const SchoolDeskPageSkeleton(cardCount: 6);
     }
 
@@ -590,11 +612,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         onRetry: _loadDashboard,
       );
     }
-
-    final completedSetup = _data.setupSteps
-        .where((step) => step.isComplete)
-        .length;
-    final setupTotal = _data.setupSteps.isEmpty ? 1 : _data.setupSteps.length;
 
     return Stack(
       children: [
@@ -612,12 +629,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                   arguments: _leadershipRole,
                 ),
               ),
-              if (_criticalState.isOffline)
-                SchoolDeskStatusPanel.stale(
-                  message: 'Showing saved dashboard data while offline.',
-                  onAction: _loadDashboard,
-                ),
+              _homeStatus(),
               if (!_isCoordinator) BranchSwitcher(onChanged: _loadDashboard),
+              _financeShortcuts(),
               const SizedBox(height: 18),
               _DashboardSearchBar(
                 onTap: () =>
@@ -783,72 +797,118 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               const SizedBox(height: 22),
               const _SectionTitle('School Setup'),
               const SizedBox(height: 10),
-              if (_setupLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                )
-              else if (_setupError != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Material(
-                    color: const Color(0xFFFFF7ED),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.info_outline_rounded,
-                            size: 18,
-                            color: Color(0xFF92400E),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _setupError!,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFF92400E),
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() => _setupError = null);
-                              _loadDashboard();
-                            },
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                )
-              else
-                _SetupPreviewPanel(
-                  progress: completedSetup / setupTotal,
-                  completed: completedSetup,
-                  total: setupTotal,
-                  steps: _data.setupSteps,
-                  onStepTap: (step) {
-                    if (step.route == null) {
-                      _showGoLiveStatus();
-                      return;
-                    }
-                    _open(step.route!);
-                  },
-                ),
+              _setupSection(),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _homeStatus() {
+    if (_criticalState.isOffline) {
+      final updated = _criticalState.lastUpdated;
+      return SchoolDeskStatusPanel.stale(
+        message: updated == null
+            ? 'Showing saved dashboard data.'
+            : 'Showing saved dashboard data. Updated ${DateFormat.yMMMd().add_jm().format(updated.toLocal())}.',
+        onAction: _loadDashboard,
+      );
+    }
+    if (!_identityFailed) return const SizedBox.shrink();
+    return _secondaryRetry(
+      'School details could not be loaded.',
+      () => _loadIdentity(_loadGeneration),
+    );
+  }
+
+  Widget _financeShortcuts() {
+    final summary = _criticalState.data?.dashboard;
+    final balance = summary?['pending_fee_balance'];
+    final amount = balance is num
+        ? balance
+        : num.tryParse(balance?.toString() ?? '');
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      child: Column(
+        children: [
+          if (!_isCoordinator) ...[
+            ListTile(
+              leading: const Icon(Icons.pending_actions_outlined),
+              title: const Text('Review payment proofs'),
+              subtitle: Text(
+                _data.pendingFeeRequests == 1
+                    ? '1 request awaiting verification'
+                    : '${_data.pendingFeeRequests} requests awaiting verification',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _open(AppRoutes.principalPaymentRequests),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.account_balance_wallet_outlined),
+              title: const Text('Fee summary'),
+              subtitle: amount == null
+                  ? null
+                  : Text(
+                      '${NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: amount == amount.round() ? 0 : 2).format(amount)} outstanding',
+                    ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _open(AppRoutes.feeMonitoring),
+            ),
+            const Divider(height: 1),
+          ],
+          ListTile(
+            leading: const Icon(Icons.assessment_outlined),
+            title: const Text('Open reports'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => _open(AppRoutes.reportsAnalytics),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _setupSection() {
+    if (_setupLoading && _data.setupSteps.isEmpty) {
+      return const SchoolDeskPageSkeleton(cardCount: 1);
+    }
+    final error = _setupError;
+    if (error != null) {
+      return _secondaryRetry(error, () => _loadSetup(_loadGeneration));
+    }
+    if (_data.setupSteps.isEmpty) {
+      return Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: OutlinedButton.icon(
+          onPressed: () => _loadSetup(_loadGeneration),
+          icon: const Icon(Icons.checklist_outlined),
+          label: const Text('Show school setup checklist'),
+        ),
+      );
+    }
+    final completed = _data.setupSteps.where((step) => step.isComplete).length;
+    return _SetupPreviewPanel(
+      progress: completed / _data.setupSteps.length,
+      completed: completed,
+      total: _data.setupSteps.length,
+      steps: _data.setupSteps,
+      onStepTap: (step) {
+        final route = step.route;
+        if (route == null) {
+          _showGoLiveStatus();
+          return;
+        }
+        _open(route);
+      },
+    );
+  }
+
+  Widget _secondaryRetry(String message, VoidCallback onRetry) {
+    return SchoolDeskStatusPanel.error(
+      title: 'Unable to refresh',
+      message: message,
+      onAction: onRetry,
     );
   }
 
@@ -866,32 +926,38 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Material(
-          color: const Color(0xFFF0FDF9),
-          borderRadius: BorderRadius.circular(18),
-          child: InkWell(
+        if (_staffAttendanceFailed)
+          _secondaryRetry(
+            'Staff attendance could not be loaded.',
+            () => _loadStaffAttendance(_loadGeneration),
+          )
+        else if (_staffAttendanceSummary.isNotEmpty)
+          Material(
+            color: const Color(0xFFF0FDF9),
             borderRadius: BorderRadius.circular(18),
-            onTap: () => _open(AppRoutes.principalAttendance),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  const Icon(Icons.badge_rounded, color: Color(0xFF54A9E8)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      expected == 0
-                          ? 'Today\'s teacher arrivals are loading'
-                          : '$checkedIn of $expected staff checked in · $onSite currently on-site',
-                      style: Theme.of(context).textTheme.titleSmall,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => _open(AppRoutes.principalAttendance),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.badge_rounded, color: Color(0xFF54A9E8)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        expected == 0
+                            ? 'No staff attendance expected today'
+                            : '$checkedIn of $expected staff checked in · $onSite currently on-site',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
                     ),
-                  ),
-                  const Icon(Icons.chevron_right_rounded),
-                ],
+                    const Icon(Icons.chevron_right_rounded),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
         const SizedBox(height: 12),
         _attentionGuidance(),
         const SizedBox(height: 12),
@@ -901,20 +967,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   }
 
   Widget _attentionGuidance() {
-    if (_setupLoading) return const SizedBox.shrink();
-    if (_setupError != null) {
-      return ListTile(
-        leading: const Icon(Icons.info_outline),
-        title: const Text('School guidance unavailable'),
-        subtitle: const Text(
-          'Setup and pending requests could not be refreshed.',
-        ),
-        trailing: TextButton(
-          onPressed: _loadDashboard,
-          child: const Text('Retry'),
-        ),
-      );
-    }
     const labels = {
       'account': 'Account and access requests',
       'event': 'School posts awaiting review',
@@ -934,12 +986,21 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       'communication': 'Communication requests',
     };
     final pending = _attentionCounts.entries
-        .where((entry) => entry.value > 0)
+        .where(
+          (entry) =>
+              entry.value > 0 &&
+              (!_isCoordinator || !entry.key.startsWith('fee')),
+        )
         .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_data.schoolLogoUrl.isEmpty)
+        if (_attentionFailed)
+          _secondaryRetry(
+            'School guidance unavailable',
+            () => _loadAttention(_loadGeneration),
+          ),
+        if (_identity != null && _data.schoolLogoUrl.isEmpty)
           Card(
             child: ListTile(
               leading: const Icon(Icons.add_photo_alternate_outlined),
@@ -964,14 +1025,18 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                       '${item.value} · ${labels[item.key] ?? item.key.replaceAll('_', ' ')}',
                     ),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _open(
-                      item.key == 'event'
-                          ? AppRoutes.principalEventApprovals
-                          : AppRoutes.approvalCenter,
-                      arguments: {
-                        'initialTab': item.key == 'event' ? 'review' : item.key,
-                      },
-                    ),
+                    onTap: () => item.key == 'fee_payment_proof'
+                        ? _open(AppRoutes.principalPaymentRequests)
+                        : _open(
+                            item.key == 'event'
+                                ? AppRoutes.principalEventApprovals
+                                : AppRoutes.approvalCenter,
+                            arguments: {
+                              'initialTab': item.key == 'event'
+                                  ? 'review'
+                                  : item.key,
+                            },
+                          ),
                   ),
               ],
             ),
@@ -1147,12 +1212,11 @@ class _PrincipalHomeData {
     );
   }
 
-  /// Builds essential dashboard data from the 3 fast critical API calls.
-  /// Does not include setup steps — those are loaded separately.
   factory _PrincipalHomeData.fromCritical({
     required Map<String, dynamic> dashboard,
     required Map<String, dynamic> school,
-    required UserResponse profile,
+    required UserResponse? profile,
+    required int unreadNotifications,
   }) {
     final metrics = Map<String, dynamic>.from(
       dashboard['metrics'] as Map? ?? {},
@@ -1160,16 +1224,19 @@ class _PrincipalHomeData {
     final attendance = Map<String, dynamic>.from(
       dashboard['today_attendance'] as Map? ?? {},
     );
-    final schoolName = _text(school['name']);
+    final schoolName = _text(school['name'] ?? dashboard['school_name']);
+    final profileName = profile?.name.trim() ?? '';
     final board = _schoolDescriptor(
       _text(school['affiliation_board']),
       _text(school['school_type']),
     );
 
     return _PrincipalHomeData(
-      principalName: profile.name.trim().isEmpty
-          ? 'School Principal'
-          : profile.name.trim(),
+      principalName: profileName.isEmpty
+          ? (RoleAccessService.currentRoleName == 'coordinator'
+                ? 'School Coordinator'
+                : 'School Principal')
+          : profileName,
       schoolName: schoolName,
       schoolBoard: board.isEmpty ? 'School setup' : board,
       schoolLogoUrl: _assetUrl(_text(school['logo_url'])),
@@ -1188,7 +1255,7 @@ class _PrincipalHomeData {
       pendingApprovals: _intValue(metrics['pending_event_approvals'], 0),
       attendancePresent: _doubleValue(attendance['present']).round(),
       attendanceMarked: _doubleValue(attendance['marked']).round(),
-      unreadNotifications: 0,
+      unreadNotifications: unreadNotifications,
       pendingFeeRequests: _intValue(metrics['pending_fee_requests'], 0),
       pendingAccessApprovals: _intValue(metrics['pending_access_approvals'], 0),
       setupSteps: const [],
@@ -1197,16 +1264,12 @@ class _PrincipalHomeData {
 
   /// Merges in background setup data and returns a new instance.
   _PrincipalHomeData withSetupData({
-    required Map<String, dynamic> dashboard,
     required Map<String, dynamic> school,
     required List<AcademicYearModel> academicYears,
     required List<GradeModel> grades,
     required List<SectionModel> sections,
     required List<Map<String, dynamic>> subjects,
-    required int staffTotal,
-    required int studentsTotal,
     required List<Map<String, dynamic>> feeStructures,
-    required int unreadNotifications,
   }) {
     final schoolName = _text(school['name']);
     final registered =
@@ -1230,23 +1293,11 @@ class _PrincipalHomeData {
         .where((section) => section.classTeacherId.trim().isEmpty)
         .length;
     final hasSubjects = subjects.isNotEmpty;
-    final hasTeachers = staffTotal > 0;
-    final hasStudents = studentsTotal > 0;
+    final hasTeachers = totalStaff > 0;
+    final hasStudents = totalStudents + activeUnassignedStudents > 0;
     final hasFees = feeStructures.isNotEmpty;
     final isCoordinator = RoleAccessService.currentRoleName == 'coordinator';
-    final metrics = Map<String, dynamic>.from(
-      dashboard['metrics'] as Map? ?? {},
-    );
-
-    final unassignedStudents = _intValue(
-      metrics['active_unassigned_students'],
-      0,
-    );
-    final pendingFeeRequests = _intValue(metrics['pending_fee_requests'], 0);
-    final pendingAccessApprovals = _intValue(
-      metrics['pending_access_approvals'],
-      0,
-    );
+    final unassignedStudents = activeUnassignedStudents;
 
     return _PrincipalHomeData(
       principalName: principalName,
@@ -1254,13 +1305,10 @@ class _PrincipalHomeData {
       schoolBoard: schoolBoard,
       schoolLogoUrl: schoolLogoUrl,
       schoolBannerUrl: schoolBannerUrl,
-      totalStudents: _intValue(metrics['total_students'], studentsTotal),
-      activeUnassignedStudents: _intValue(
-        metrics['active_unassigned_students'],
-        0,
-      ),
-      totalStaff: _intValue(metrics['total_staff'], staffTotal),
-      totalClasses: _intValue(metrics['total_classes'], sections.length),
+      totalStudents: totalStudents,
+      activeUnassignedStudents: activeUnassignedStudents,
+      totalStaff: totalStaff,
+      totalClasses: totalClasses,
       pendingApprovals: pendingApprovals,
       attendancePresent: attendancePresent,
       attendanceMarked: attendanceMarked,

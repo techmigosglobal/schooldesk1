@@ -4,6 +4,7 @@ class ParentAttendanceSnapshot {
   final List<Map<String, dynamic>> leaveRequests;
   final String? partialError;
   final bool fromCache;
+  final DateTime? cacheStoredAt;
   final Set<String> failedSections;
 
   const ParentAttendanceSnapshot({
@@ -12,6 +13,7 @@ class ParentAttendanceSnapshot {
     required this.leaveRequests,
     this.partialError,
     this.fromCache = false,
+    this.cacheStoredAt,
     this.failedSections = const {},
   });
 }

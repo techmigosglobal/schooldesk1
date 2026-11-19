@@ -8,11 +8,10 @@ abstract interface class ParentFeePaymentRepository {
   Future<List<Map<String, dynamic>>> loadStudentFees(
     String studentId, {
     int? refreshNonce,
+    void Function(CacheMetadata)? onCacheMetadata,
   });
 
-  Future<List<Map<String, dynamic>>> loadPaymentRequests({
-    String? studentId,
-  });
+  Future<List<Map<String, dynamic>>> loadPaymentRequests({String? studentId});
 
   Future<Map<String, dynamic>> loadReceiptPayload(String receiptId);
 

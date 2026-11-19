@@ -24,6 +24,7 @@ import 'package:schooldesk1/core/services/error_reporting_service.dart';
 import 'package:schooldesk1/core/services/android_update_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/theme_provider.dart';
+import 'package:schooldesk1/core/services/mobile_loading_trace.dart';
 import 'package:schooldesk1/core/widgets/custom_error_widget.dart';
 
 SemanticsHandle? _appSemanticsHandle;
@@ -45,6 +46,7 @@ void main() async {
   // If this throws in production it means the APK/AAB was built without the
   // required --dart-define-from-file=env.supabase.json flag.
   EnvConfig.validate();
+  MobileLoadingTrace.mark('schooldesk.app_start');
 
   final offlineSync = await OfflineSyncEngine.initialize();
   BackendApiClient.instance.attachOfflineSync(offlineSync);
@@ -89,7 +91,7 @@ void main() async {
       name: 'BackendApiClient',
     );
   }
-  await ErrorReportingService.instance.initialize();
+  unawaited(ErrorReportingService.instance.initialize());
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     unawaited(ErrorReportingService.instance.recordFlutterError(details));
@@ -105,8 +107,10 @@ void main() async {
   await DesktopWindowManager.init();
 
   // Initialize theme provider
-  final themeProvider = await ThemeProvider.create();
-  final appSettingsProvider = await AppSettingsProvider.create();
+  final (themeProvider, appSettingsProvider) = await (
+    ThemeProvider.create(),
+    AppSettingsProvider.create(),
+  ).wait;
 
   // Never hide a framework error. A blank screen makes failures impossible for
   // a user to report and prevents the error boundary's retry action from being
@@ -136,6 +140,7 @@ Widget buildSchoolDeskErrorWidget(FlutterErrorDetails details) =>
 
 void _deferStartupServices() {
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    MobileLoadingTrace.mark('schooldesk.first_flutter_frame');
     unawaited(_checkAndroidUpdate());
     unawaited(_initializeDeferredStartupServices());
   });

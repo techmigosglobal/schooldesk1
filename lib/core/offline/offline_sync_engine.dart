@@ -142,6 +142,7 @@ class OfflineDioInterceptor extends Interceptor {
         // keep those out of the generic cache. Historical payment/receipt
         // reads remain cacheable and are explicitly offline-capable.
         clean.contains('/payment-requests') ||
+        clean.contains('/fees/payment-config') ||
         clean.contains('/attendance/staff/qr-token') ||
         (clean.contains('/auth/') && !clean.contains('/auth/profile'))) {
       return false;
@@ -283,15 +284,18 @@ class OfflineSyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     required Response<dynamic> response,
   }) async {
     final requestScope = request.extra['schooldeskScope']?.toString();
-    if (!api.isAuthenticated || accountKey == 'anonymous') return;
-    if (requestScope != null && requestScope != accountKey) return;
+    final scope = accountKey;
+    final version = api.sessionScopeVersion;
+    final branchId = api.activeBranchId;
+    if (!api.isAuthenticated || scope == 'anonymous') return;
+    if (requestScope != null && requestScope != scope) return;
     if (request.method.toUpperCase() != 'GET') return;
     if (!_isJsonValue(response.data)) return;
 
     final expiresAt = DateTime.now().toUtc().add(_ttlForPath(request.path));
     await database.saveCachedResponse(
       cacheKey: api.cacheKeyForRequest(request),
-      accountKey: accountKey,
+      accountKey: scope,
       method: request.method.toUpperCase(),
       path: request.path,
       queryParameters: request.queryParameters,
@@ -300,8 +304,13 @@ class OfflineSyncEngine extends ChangeNotifier with WidgetsBindingObserver {
       storedAt: DateTime.now().toUtc(),
       expiresAt: expiresAt,
     );
-    if (_isStudentRead(request.path)) {
-      await _cacheStudentRows(response.data);
+    if (_isStudentRead(request.path) && version == api.sessionScopeVersion) {
+      await _cacheStudentRows(
+        response.data,
+        scope: scope,
+        branchId: branchId,
+        scopeVersion: version,
+      );
     }
   }
 
@@ -315,17 +324,23 @@ class OfflineSyncEngine extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> clearAccountData(String scope) =>
       database.clearAccountData(scope);
 
-  Future<Response<dynamic>?> readCachedResponse(RequestOptions request) async {
+  Future<Response<dynamic>?> readCachedResponse(
+    RequestOptions request, {
+    bool markOffline = true,
+  }) async {
     if (!api.isAuthenticated || accountKey == 'anonymous') return null;
+    final version = api.sessionScopeVersion;
+    final requestedScope = request.extra['schooldeskScope'];
+    if (requestedScope != null && requestedScope != accountKey) return null;
     final cached = await database.findCachedResponse(
       api.cacheKeyForRequest(request),
     );
-    if (cached == null) return null;
+    if (cached == null || version != api.sessionScopeVersion) return null;
 
     // A cache hit is useful data, but it is also evidence that the current
     // request did not reach the backend. Keep the status surface honest even
     // when there is no mutation waiting in the outbox.
-    _setState(OfflineConnectionState.offline);
+    if (markOffline) _setState(OfflineConnectionState.offline);
     Object? body;
     try {
       body = jsonDecode(cached.bodyJson);
@@ -916,9 +931,15 @@ class OfflineSyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     return '';
   }
 
-  Future<void> _cacheStudentRows(Object? value) async {
+  Future<void> _cacheStudentRows(
+    Object? value, {
+    required String scope,
+    required String? branchId,
+    required int scopeVersion,
+  }) async {
     final rows = _listFromEnvelope(value);
     for (final row in rows) {
+      if (scopeVersion != api.sessionScopeVersion) return;
       final id = '${row['id'] ?? row['student_id'] ?? ''}'.trim();
       if (id.isEmpty) continue;
       final section = row['section'] is Map
@@ -938,9 +959,9 @@ class OfflineSyncEngine extends ChangeNotifier with WidgetsBindingObserver {
           ? (row['server_version'] as num).toInt()
           : int.tryParse('${row['server_version'] ?? ''}');
       await database.saveStudentSnapshot(
-        accountKey: accountKey,
+        accountKey: scope,
         serverId: id,
-        schoolId: api.activeBranchId,
+        schoolId: branchId,
         fullName: name,
         sectionId: '${row['section_id'] ?? section['id'] ?? ''}'.trim(),
         className: '${row['class'] ?? row['grade_name'] ?? ''}'.trim(),

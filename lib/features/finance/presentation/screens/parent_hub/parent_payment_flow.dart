@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/errors/exceptions.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
@@ -33,7 +35,11 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   RepositoryState<Object> _configState = const RepositoryState.loading();
   RepositoryState<Object> _submitState = const RepositoryState.empty();
 
+  final _api = BackendApiClient.instance;
+  late final int _scope;
+  String? _submitError;
   bool get _submitting => _submitState.isRefreshing;
+  bool get _sameScope => _scope == _api.sessionScopeVersion;
 
   Map<String, dynamic> _paymentConfig = const {};
   Map<String, dynamic>? _paymentIntent;
@@ -81,8 +87,8 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
 
   String _absoluteUrl(String value) {
     final trimmed = value.trim();
-    final absolute = trimmed.startsWith('http://') ||
-            trimmed.startsWith('https://')
+    final absolute =
+        trimmed.startsWith('http://') || trimmed.startsWith('https://')
         ? trimmed
         : trimmed.startsWith('/')
         ? '${EnvConfig.apiOrigin}$trimmed'
@@ -104,6 +110,8 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   @override
   void initState() {
     super.initState();
+    _scope = _api.sessionScopeVersion;
+    _api.addListener(_onScopeChanged);
     if (_isClarificationResubmit) {
       _utrController.text = _text(_resubmissionRequest['transaction_id']);
       _currentStep = 2; // Jump to payment step for clarification resubmission
@@ -114,10 +122,15 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
 
   @override
   void dispose() {
+    _api.removeListener(_onScopeChanged);
     _amountController.dispose();
     _remarksController.dispose();
     _utrController.dispose();
     super.dispose();
+  }
+
+  void _onScopeChanged() {
+    if (!_sameScope) setState(() {});
   }
 
   void _seedPaymentAmount() {
@@ -146,7 +159,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
             ? DateTime.now().millisecondsSinceEpoch
             : null,
       );
-      if (!mounted) return;
+      if (!mounted || !_sameScope) return;
       final upiId = _text(config['upi_id']);
       final qrImageUrl = _text(config['qr_image_url']);
       final isEnabled = config['upi_enabled'] != false;
@@ -162,7 +175,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         );
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || !_sameScope) return;
       setState(() {
         _configState = previous.hasData
             ? RepositoryState<Object>(
@@ -222,6 +235,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           image,
           preset: ImageUploadPreset.content,
         );
+        if (!mounted || !_sameScope) return;
         setState(() {
           _proofName = optimized.filename;
           _proofPath = image.path;
@@ -239,6 +253,14 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   }
 
   Future<void> _submitPaymentProof() async {
+    if (_submitting || !_sameScope) return;
+    if (_api.offlineSync?.isOffline ?? false) {
+      setState(() {
+        _submitError =
+            'Reconnect to send your proof. Your details are still on this screen.';
+      });
+      return;
+    }
     if (_proofPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -257,6 +279,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
     }
 
     setState(() {
+      _submitError = null;
       _submitState = const RepositoryState<Object>.loading(
         data: Object(),
         source: RepositorySource.localMutation,
@@ -287,7 +310,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           remarks: _remarksController.text.trim(),
         );
       }
-      if (!mounted) return;
+      if (!mounted || !_sameScope) return;
       setState(() {
         _paymentIntent = submittedRequest;
         _submitState = const RepositoryState<Object>(
@@ -296,23 +319,27 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         );
         _currentStep = 3;
       });
-    } on Object catch (e) {
-      if (mounted) {
-        setState(() {
-          _submitState = RepositoryState<Object>.error(error: e);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Submission failed: $e'),
-            backgroundColor: context.appTheme.error,
-          ),
-        );
-      }
+    } on Object catch (error) {
+      if (!mounted || !_sameScope) return;
+      setState(() {
+        _submitState = RepositoryState<Object>.error(error: error);
+        _submitError = error is NetworkException
+            ? 'We couldn’t confirm submission. Reconnect, check Payment History, and retry if the proof is missing. Your details are still on this screen.'
+            : error is ServerException
+            ? error.message
+            : 'Couldn’t submit proof. Check your connection and try again.';
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_sameScope) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Payment')),
+        body: const Center(child: Text('Reopen Fees for the current account.')),
+      );
+    }
     return Scaffold(
       backgroundColor: context.appTheme.surface,
       appBar: AppBar(
@@ -882,7 +909,17 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
             ),
           ),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
+        if (_submitError case final message?) ...[
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              message,
+              style: TextStyle(color: context.appTheme.error),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(

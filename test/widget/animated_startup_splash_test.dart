@@ -26,4 +26,20 @@ void main() {
     expect(find.byKey(AnimatedStartupSplash.overlayKey), findsNothing);
     expect(find.text('Home ready'), findsOneWidget);
   });
+
+  testWidgets('startup logo respects reduced motion', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(disableAnimations: true),
+          child: AnimatedStartupSplash(
+            child: Scaffold(body: Text('Home ready')),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Home ready'), findsOneWidget);
+    expect(find.byKey(AnimatedStartupSplash.overlayKey), findsNothing);
+  });
 }

@@ -30,9 +30,16 @@ class ApiParentAttendanceRepository implements ParentAttendanceRepository {
     return guardApi(() async {
       Object? partialError;
       var fromCache = false;
+      DateTime? cacheStoredAt;
       final failedSections = <String>{};
       void cache(CacheMetadata value) {
-        fromCache = fromCache || value.isStale;
+        if (!value.isStale) return;
+        fromCache = true;
+        final storedAt = value.storedAt;
+        if (storedAt != null &&
+            (cacheStoredAt == null || storedAt.isBefore(cacheStoredAt!))) {
+          cacheStoredAt = storedAt;
+        }
       }
 
       Future<Map<String, dynamic>> loadSummary() async {
@@ -89,6 +96,7 @@ class ApiParentAttendanceRepository implements ParentAttendanceRepository {
         leaveRequests: List<Map<String, dynamic>>.from(results[2] as List),
         partialError: partialError?.toString(),
         fromCache: fromCache,
+        cacheStoredAt: cacheStoredAt,
         failedSections: failedSections,
       );
     });

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,12 +15,13 @@ import 'package:schooldesk1/roles/parent/domain/parent_dashboard_snapshot.dart';
 class _Dashboard implements ParentDashboardRepository {
   final String? status;
   final bool finalized;
-  const _Dashboard(this.status, this.finalized);
+  final Future<void>? delayedFeed;
+  const _Dashboard(this.status, this.finalized, {this.delayedFeed});
   @override
-  Future<Result<ParentDashboardSnapshot>> load({
-    bool forceRefresh = false,
-    bool includeFeedPosts = true,
-  }) async => Result.ok(
+  Future<ParentDashboardSnapshot?> readCached() async => null;
+
+  @override
+  Future<Result<ParentDashboardSnapshot>> load() async => Result.ok(
     ParentDashboardSnapshot(
       dashboard: {
         'school_name': 'ArishVille PreSchool',
@@ -34,9 +37,14 @@ class _Dashboard implements ParentDashboardRepository {
           },
         ],
       },
-      feed: null,
     ),
   );
+
+  @override
+  Future<Result<PaginatedList<Map<String, dynamic>>>> loadFeed() async {
+    await delayedFeed;
+    return Result.ok(PaginatedList(data: [], total: 0, page: 1, pageSize: 10));
+  }
 }
 
 void main() {
@@ -78,6 +86,32 @@ void main() {
       },
     );
   }
+  testWidgets(
+    'parent can see attendance and fees before the school feed returns',
+    (tester) async {
+      final feed = Completer<void>();
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: ParentDashboardScreen(
+              dashboardRepository: _Dashboard(
+                'present',
+                true,
+                delayedFeed: feed.future,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Present'), findsOneWidget);
+      expect(find.text('Fees Due'), findsOneWidget);
+      feed.complete();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   testWidgets('unsubmitted attendance is distinguished from absence', (
     tester,
   ) async {

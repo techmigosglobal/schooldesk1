@@ -11,75 +11,95 @@ class ApiLeadershipDashboardRepository
   final BackendApiClient _api;
 
   @override
+  Future<LeadershipDashboardCriticalSnapshot?> readCachedDashboard({
+    required String role,
+  }) async {
+    final cached = await _api.readCachedDashboard(role);
+    if (cached == null) return null;
+    return LeadershipDashboardCriticalSnapshot(
+      dashboard: cached.data,
+      profile: _api.cachedProfile,
+      cacheMetadata: cached.metadata,
+    );
+  }
+
+  @override
   Future<Result<LeadershipDashboardCriticalSnapshot>> loadCritical({
     required String role,
   }) {
     return guardApi(() async {
-      final results = await Future.wait<Object>([
-        _api.getDashboard(role, forceRefresh: true),
-        _api.getCurrentSchool(forceRefresh: true),
-        _api.getProfile(),
-      ]);
+      var cache = const CacheMetadata(isStale: false);
+      final dashboard = await _api.getDashboard(
+        role,
+        refreshNetwork: true,
+        onCacheMetadata: (metadata) => cache = metadata,
+      );
       return LeadershipDashboardCriticalSnapshot(
-        dashboard: Map<String, dynamic>.from(results[0] as Map),
-        school: Map<String, dynamic>.from(results[1] as Map),
-        profile: results[2] as UserResponse,
+        dashboard: dashboard,
+        profile: _api.cachedProfile,
+        cacheMetadata: cache,
       );
     });
   }
 
   @override
+  Future<Result<LeadershipDashboardIdentity>> loadIdentity() {
+    return guardApi(() async {
+      final school = _api.getCurrentSchool();
+      final profile = _api.cachedProfile;
+      if (profile != null) return (school: await school, profile: profile);
+      final details = await Future.wait<Object>([school, _api.getProfile()]);
+      return (
+        school: details[0] as Map<String, dynamic>,
+        profile: details[1] as UserResponse,
+      );
+    });
+  }
+
+  @override
+  Future<Result<Map<String, int>>> loadAttention() {
+    return guardApi(() async {
+      final page = await _api.getApprovalFeed(status: 'pending', pageSize: 1);
+      return page.countsByType;
+    });
+  }
+
+  @override
+  Future<Result<Map<String, dynamic>>> loadStaffAttendance() {
+    return guardApi(_api.getStaffDailyAttendanceSummary);
+  }
+
+  @override
+  Future<Result<List<Map<String, dynamic>>>> loadNotifications() {
+    return guardApi(_api.getNotifications);
+  }
+
+  @override
   Future<Result<LeadershipDashboardOptionalSnapshot>> loadOptional({
     required String role,
-    required Map<String, dynamic> dashboard,
   }) {
     return guardApi(() async {
-      // Missing setup data is unknown, not an incomplete configuration. Let
-      // required reads fail so the dashboard shows its retry state instead of
-      // telling the school to create records that may already exist.
+      // Setup checks describe missing configuration only after all required
+      // reads succeed. Opening Home does not need any of these full lists.
       final values = await Future.wait<Object>([
         _api.getAcademicYears(),
         _api.getGrades(),
         _api.getSections(),
         _api.getRawList('/subjects'),
-        _api.getStaff(page: 1, pageSize: 1),
-        _api.getStudents(page: 1, pageSize: 1),
         role == 'coordinator'
             ? Future.value(<Map<String, dynamic>>[])
             : _api.getFeeStructures(),
-        _try(() => _api.getNotifications(), <Map<String, dynamic>>[]),
-        _try(() => _api.getStaffDailyAttendanceSummary(), <String, dynamic>{}),
-        _api.getApprovalFeed(
-          status: 'pending',
-          pageSize: 1,
-          forceRefresh: true,
-        ),
-      ]).timeout(const Duration(seconds: 45));
-
+      ]);
       return LeadershipDashboardOptionalSnapshot(
         academicYears: values[0] as List<AcademicYearModel>,
         grades: values[1] as List<GradeModel>,
         sections: values[2] as List<SectionModel>,
         subjects: values[3] as List<Map<String, dynamic>>,
-        staff: values[4] as PaginatedList<StaffModel>,
-        students: values[5] as PaginatedList<StudentModel>,
-        feeStructures: values[6] as List<Map<String, dynamic>>,
-        notifications: values[7] as List<Map<String, dynamic>>,
-        staffAttendanceSummary: values[8] as Map<String, dynamic>,
-        attentionCounts: (values[9] as ApprovalFeedPage).countsByType,
+        feeStructures: values[4] as List<Map<String, dynamic>>,
       );
     });
   }
 
-  Future<T> _try<T>(Future<T> Function() read, T fallback) async {
-    try {
-      return await read();
-    } on Object {
-      return fallback;
-    }
-  }
-
-  /// Legacy route fallback until all route entry points receive overrides.
   static ApiLeadershipDashboardRepository get legacyDefault =>
       ApiLeadershipDashboardRepository(BackendApiClient.instance);
 }

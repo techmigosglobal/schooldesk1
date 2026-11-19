@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -51,7 +52,12 @@ class _AdminPaymentRequestsScreenState
   ApprovalRepository get _repository =>
       widget.repository ?? ApiApprovalRepository.legacyDefault;
 
+  final _api = BackendApiClient.instance;
+  late final int _scopeVersion;
+  int _requestGeneration = 0;
+  bool _refreshing = false;
   bool _loadingMore = false;
+  bool get _scopeChanged => _scopeVersion != _api.sessionScopeVersion;
   RepositoryState<_PaymentRequestsSnapshot> _state =
       const RepositoryState.loading();
   String _statusFilter = 'pending';
@@ -65,14 +71,30 @@ class _AdminPaymentRequestsScreenState
   @override
   void initState() {
     super.initState();
+    _scopeVersion = _api.sessionScopeVersion;
+    _api.addListener(_onScopeChanged);
     _loadRequests();
+  }
+
+  void _onScopeChanged() {
+    if (_scopeChanged) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _api.removeListener(_onScopeChanged);
+    super.dispose();
   }
 
   Future<void> _loadRequests({
     bool showSpinner = true,
     bool resetPage = true,
   }) async {
+    if (_scopeChanged || (!resetPage && (_loadingMore || _refreshing))) return;
+    final generation = ++_requestGeneration;
+    final filter = _statusFilter;
     final previous = _state.data;
+    _refreshing = resetPage;
     if (showSpinner) {
       setState(() {
         _state = resetPage
@@ -92,14 +114,14 @@ class _AdminPaymentRequestsScreenState
     }
     try {
       final response = await _repository.loadPaymentRequests(
-        status: _statusFilter == 'all' ? null : _statusFilter,
+        status: filter == 'all' ? null : filter,
         page: resetPage ? 1 : _page + 1,
         pageSize: 20,
       );
       final rows = response.data
           .where((row) => FeePaymentRequestStatus.isReviewRecord(row['status']))
           .toList();
-      if (!mounted) return;
+      if (!mounted || _scopeChanged || generation != _requestGeneration) return;
       final existingIds = _requests.map((row) => _text(row['id'])).toSet();
       final additions = resetPage
           ? rows
@@ -118,11 +140,13 @@ class _AdminPaymentRequestsScreenState
           lastUpdated: DateTime.now().toUtc(),
         );
         _loadingMore = false;
+        _refreshing = false;
       });
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!mounted || _scopeChanged || generation != _requestGeneration) return;
       setState(() {
         _loadingMore = false;
+        _refreshing = false;
         _state = previous == null
             ? RepositoryState.error(error: error)
             : RepositoryState(
@@ -138,6 +162,14 @@ class _AdminPaymentRequestsScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_scopeChanged) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Payment Requests')),
+        body: const Center(
+          child: Text('Reopen Payment Requests for your current branch.'),
+        ),
+      );
+    }
     final isDesktop = DesktopBreakpoints.isDesktopWidth(
       MediaQuery.sizeOf(context).width,
     );
@@ -332,7 +364,10 @@ class _AdminPaymentRequestsScreenState
               selected: selected,
               label: Text(filter.$2),
               onSelected: (_) {
-                setState(() => _statusFilter = filter.$1);
+                setState(() {
+                  _statusFilter = filter.$1;
+                  _state = const RepositoryState.loading();
+                });
                 _loadRequests();
               },
             ),

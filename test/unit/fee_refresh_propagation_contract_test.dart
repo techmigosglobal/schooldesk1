@@ -25,18 +25,8 @@ void main() {
       studentsApi,
       contains("if (refreshNonce != null) 'refresh_nonce': refreshNonce"),
     );
-    expect(
-      parentFees,
-      contains(
-        '_repository.loadChildren(\n        refreshNonce: refreshNonce,',
-      ),
-    );
-    expect(
-      parentDashboardRepository,
-      contains(
-        "_api.getDashboard(\n        'parent',\n        forceRefresh: forceRefresh,",
-      ),
-    );
+    expect(parentFees, contains('.loadChildren(refreshNonce: refreshNonce)'));
+    expect(parentDashboardRepository, contains('refreshNetwork: true'));
     // Parent dashboard children are returned by its role-scoped DTO. The
     // fee hub owns its own refreshable child request, so the dashboard must
     // not issue a second child-list call.
@@ -80,11 +70,8 @@ void main() {
           '_api.getPrincipalClassesOverview(forceRefresh: forceRefresh)',
         ),
       );
-      expect(leadershipRepository, contains('_api.getDashboard(role'));
-      expect(
-        principalDashboard,
-        contains('loadCritical(role: _leadershipRole)'),
-      );
+      expect(leadershipRepository, contains('refreshNetwork: true'));
+      expect(principalDashboard, contains('loadCritical(role: role)'));
     },
   );
 }

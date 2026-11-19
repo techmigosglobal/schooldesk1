@@ -8,17 +8,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
+import 'package:schooldesk1/core/widgets/role_home_ready.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
-import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/parent_dashboard_desktop_shell.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/school_feed_preview.dart';
@@ -41,12 +42,23 @@ class ParentDashboardScreen extends StatefulWidget {
 class _ParentDashboardScreenState extends State<ParentDashboardScreen>
     with WidgetsBindingObserver {
   static const Duration _autoRefreshInterval = Duration(seconds: 120);
+  static const Duration _loadTimeout = Duration(seconds: 8);
+  final _api = BackendApiClient.instance;
+  ParentDashboardRepository get _repository =>
+      widget.dashboardRepository ?? ApiParentDashboardRepository.legacyDefault;
+
+  late int _scope;
+  int _selectionVersion = 0;
+  Future<void>? _dashboardRead;
+  Future<void>? _feedRead;
+  bool _includeFeed = false;
+  bool _feedLoading = false;
   DateTime? _lastRefreshAt;
   int _selectedNavIndex = 0;
   int _activeChildIndex = 0;
   Map<String, dynamic> _dashboard = const {};
   List<Map<String, dynamic>> _children = const [];
-  List<dynamic> _eventPosts = [];
+  List<dynamic> _eventPosts = const [];
   String? _feedError;
   bool _feedStale = false;
   RepositoryState<ParentDashboardSnapshot> _repositoryState =
@@ -58,119 +70,222 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
   @override
   void initState() {
     super.initState();
+    _scope = _api.sessionScopeVersion;
+    _api.addListener(_onScopeChanged);
     WidgetsBinding.instance.addObserver(this);
-    _loadDashboardData();
+    unawaited(_loadDashboardData());
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'parent-dashboard',
       modules: const {'announcements', 'event_posts', 'attendance', 'fees'},
       onRefresh: () {
-        if (mounted) {
-          unawaited(_loadDashboardData(forceRefresh: true, showSpinner: false));
+        if (mounted && _isForeground) {
+          unawaited(_loadDashboardData(showSpinner: false));
         }
       },
     );
-    _autoRefreshTimer = Timer.periodic(
-      _autoRefreshInterval,
-      (_) => _loadDashboardData(
-        forceRefresh: true,
-        showSpinner: false,
-        includeFeedPosts: false,
-      ),
-    );
+    _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) {
+      if (_isForeground) {
+        unawaited(
+          _loadDashboardData(showSpinner: false, includeFeedPosts: false),
+        );
+      }
+    });
+  }
+
+  bool get _isForeground =>
+      WidgetsBinding.instance.lifecycleState == null ||
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  bool _isCurrent(int scope) => mounted && scope == _api.sessionScopeVersion;
+
+  void _onScopeChanged() {
+    if (_scope == _api.sessionScopeVersion) return;
+    _scope = _api.sessionScopeVersion;
+    _dashboardRead = null;
+    _feedRead = null;
+    _includeFeed = false;
+    _lastRefreshAt = null;
+    setState(() {
+      _repositoryState = const RepositoryState.loading();
+      _dashboard = const {};
+      _children = const [];
+      _eventPosts = const [];
+      _schoolName = 'School';
+      _activeChildIndex = 0;
+      _feedError = null;
+      _feedStale = false;
+      _feedLoading = false;
+    });
+    if (_api.currentRoleName == 'parent') unawaited(_loadDashboardData());
   }
 
   Future<void> _loadDashboardData({
-    bool forceRefresh = false,
     bool showSpinner = true,
     bool includeFeedPosts = true,
-  }) async {
-    final now = DateTime.now();
-    if (showSpinner &&
-        _lastRefreshAt != null &&
-        now.difference(_lastRefreshAt!) < const Duration(seconds: 10)) {
-      return;
-    }
-    _lastRefreshAt = now;
-    final previous = _repositoryState;
+  }) {
+    _includeFeed = _includeFeed || includeFeedPosts;
+    return _dashboardRead ??= _refreshDashboard(_scope, showSpinner);
+  }
+
+  Future<void> _refreshDashboard(int scope, bool showSpinner) async {
+    // Yield once so the in-flight slot exists even when a mock returns
+    // synchronously, and let a scope switch discard this refresh.
+    await Future<void>.value();
+    if (!_isCurrent(scope)) return;
+    _lastRefreshAt = DateTime.now();
+    final repository = _repository;
     if (showSpinner) {
       setState(() {
-        _repositoryState = RepositoryState<ParentDashboardSnapshot>.loading(
-          data: previous.data,
-          source: previous.source,
-          isStale: previous.isStale,
-          isRefreshing: previous.hasData,
-          lastUpdated: previous.lastUpdated,
+        _repositoryState = _repositoryState.copyWith(
+          phase: RepositoryPhase.loading,
+          isRefreshing: _repositoryState.hasData,
+          error: null,
         );
       });
     }
     try {
-      final result =
-          await (widget.dashboardRepository ??
-                  ApiParentDashboardRepository.legacyDefault)
-              .load(
-                forceRefresh: forceRefresh,
-                includeFeedPosts: includeFeedPosts,
-              );
-      if (result.isFailure) {
-        final state = RepositoryState.fromResult<ParentDashboardSnapshot>(
-          result,
-          previous: previous.hasData ? previous : null,
-        );
-        if (!mounted) return;
-        setState(() {
-          _repositoryState = state;
-        });
+      if (!_repositoryState.hasData) {
+        final cached = await repository.readCached();
+        if (!_isCurrent(scope)) return;
+        if (cached != null) await _showSnapshot(cached, scope);
+      }
+      if (!_isCurrent(scope)) return;
+      final result = await repository.load().timeout(_loadTimeout);
+      if (!_isCurrent(scope)) return;
+      final snapshot = result.dataOrNull;
+      if (snapshot == null) {
+        _showDashboardError(result.failureOrNull!.message);
         return;
       }
-      final snapshot = result.dataOrNull!;
-      if (!mounted) return;
-      final dashboard = snapshot.dashboard;
-      // The backend dashboard DTO is the single authorized family scope. Do
-      // not issue a second child-list request that could drift from the
-      // dashboard's tenant/parent checks.
-      final rawChildren = dashboard['children'];
-      final dashboardChildren = (rawChildren is List ? rawChildren : const [])
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList();
-      final selectedChildIndex = await ParentChildSelectionService.indexFor(
-        dashboardChildren,
-        fallback: _activeChildIndex,
-      );
-      final feedItems = snapshot.feed == null
-          ? _eventPosts
-                .whereType<Map>()
-                .map((row) => Map<String, dynamic>.from(row))
-                .toList()
-          : _mapFeedItems(snapshot.feed!.data);
-      setState(() {
-        _repositoryState = RepositoryState.fromResult<ParentDashboardSnapshot>(
-          result,
-          previous: previous.hasData ? previous : null,
-        );
-        _dashboard = dashboard;
-        _children = dashboardChildren;
-        _eventPosts = feedItems;
-        _feedError = snapshot.feedError?.toString();
-        _feedStale = snapshot.feedIsStale;
-        _schoolName = (dashboard['school_name'] ?? _schoolName)
-            .toString()
-            .trim();
-        _activeChildIndex = selectedChildIndex;
-      });
+      await _showSnapshot(snapshot, scope);
+    } on TimeoutException {
+      if (_isCurrent(scope)) {
+        _showDashboardError('The school took too long to respond.');
+      }
     } on Object {
-      if (!mounted) return;
-      setState(() {
-        _repositoryState = RepositoryState<ParentDashboardSnapshot>.error(
-          error: 'Unable to load parent dashboard.',
-          data: previous.data,
-          source: previous.source,
-          isStale: previous.hasData,
-          lastUpdated: previous.lastUpdated,
-        );
-      });
+      if (_isCurrent(scope)) {
+        _showDashboardError('Unable to load parent dashboard.');
+      }
+    } finally {
+      if (_isCurrent(scope)) {
+        _dashboardRead = null;
+        final loadFeed = _includeFeed;
+        _includeFeed = false;
+        if (loadFeed && _children.isNotEmpty) {
+          // Let the summary lay out before starting the lower-priority feed.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_isCurrent(scope)) unawaited(_loadFeed());
+          });
+          WidgetsBinding.instance.ensureVisualUpdate();
+        }
+      }
     }
   }
+
+  void _showDashboardError(String message) {
+    final previous = _repositoryState;
+    setState(() {
+      _repositoryState = previous.hasData
+          ? previous.copyWith(
+              phase: RepositoryPhase.ready,
+              isStale: true,
+              isRefreshing: false,
+              error: message,
+            )
+          : RepositoryState.error(error: message);
+    });
+  }
+
+  Future<void> _showSnapshot(
+    ParentDashboardSnapshot snapshot,
+    int scope,
+  ) async {
+    final dashboard = snapshot.dashboard;
+    final rawChildren = dashboard['children'];
+    final dashboardChildren = (rawChildren is List ? rawChildren : const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => _childId(row).isNotEmpty)
+        .toList();
+    final selectionVersion = _selectionVersion;
+    final storedIndex = await ParentChildSelectionService.indexFor(
+      dashboardChildren,
+      fallback: _activeChildIndex,
+    );
+    if (!_isCurrent(scope)) return;
+    final selectedId = _children.isEmpty
+        ? ''
+        : _childId(_children[_activeChildIndex]);
+    final currentIndex = dashboardChildren.indexWhere(
+      (child) => _childId(child) == selectedId,
+    );
+    setState(() {
+      _repositoryState = RepositoryState(
+        data: snapshot,
+        source: snapshot.cache.isStale
+            ? RepositorySource.cache
+            : RepositorySource.remote,
+        isStale: snapshot.cache.isStale,
+        lastUpdated: snapshot.cache.isStale
+            ? snapshot.cache.storedAt
+            : DateTime.now().toUtc(),
+      );
+      _dashboard = dashboard;
+      _children = dashboardChildren;
+      _schoolName = (dashboard['school_name'] ?? _schoolName).toString().trim();
+      _activeChildIndex =
+          selectionVersion != _selectionVersion && currentIndex >= 0
+          ? currentIndex
+          : storedIndex;
+      if (_children.isEmpty) {
+        _eventPosts = const [];
+        _feedError = null;
+        _feedStale = false;
+      }
+    });
+  }
+
+  Future<void> _loadFeed() {
+    final scope = _scope;
+    return _feedRead ??= _refreshFeed(scope).whenComplete(() {
+      if (_isCurrent(scope)) _feedRead = null;
+    });
+  }
+
+  Future<void> _refreshFeed(int scope) async {
+    if (!_isCurrent(scope) || _children.isEmpty) return;
+    setState(() {
+      _feedLoading = true;
+      _feedError = null;
+    });
+    try {
+      final result = await _repository.loadFeed().timeout(_loadTimeout);
+      if (!_isCurrent(scope) || _children.isEmpty) return;
+      final feed = result.dataOrNull;
+      if (feed == null) {
+        _showFeedError();
+        return;
+      }
+      setState(() {
+        _eventPosts = _mapFeedItems(feed.data);
+        _feedStale = feed.isStale;
+      });
+    } on Object {
+      if (_isCurrent(scope) && _children.isNotEmpty) _showFeedError();
+    } finally {
+      if (_isCurrent(scope)) setState(() => _feedLoading = false);
+    }
+  }
+
+  void _showFeedError() {
+    setState(() {
+      _feedError = 'School updates are temporarily unavailable.';
+      _feedStale = _eventPosts.isNotEmpty;
+    });
+  }
+
+  String _childId(Map<String, dynamic> child) =>
+      '${child['id'] ?? child['student_id'] ?? ''}'.trim();
 
   List<Map<String, dynamic>> _mapFeedItems(List<dynamic> rows) {
     final rawEvents = rows.whereType<Map<String, dynamic>>();
@@ -224,7 +339,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         IconButton(
           tooltip: 'Refresh',
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: () => _loadDashboardData(forceRefresh: true),
+          onPressed: _loadDashboardData,
         ),
       ],
       bodyIsScrollable: !isDesktop,
@@ -234,15 +349,13 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
 
   Widget _buildDesktopBody() {
     if (_repositoryState.isLoading && !_repositoryState.hasData) {
-      return const SchoolDeskStatusPanel.loading(
-        message: 'Loading parent dashboard…',
-      );
+      return const _ParentDashboardSkeleton();
     }
     if (_repositoryState.isError && !_repositoryState.hasData) {
       return SchoolDeskStatusPanel.error(
         title: 'Dashboard unavailable',
         message: '${_repositoryState.error}',
-        onAction: () => _loadDashboardData(forceRefresh: true),
+        onAction: _loadDashboardData,
       );
     }
     if (_children.isEmpty) {
@@ -253,15 +366,34 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
       );
     }
 
-    return ParentDashboardDesktopBody(
+    final dashboard = ParentDashboardDesktopBody(
       children: _children,
       dashboard: _dashboard,
       activeChildIndex: _activeChildIndex,
       eventPosts: _eventPosts,
       feedError: _feedError,
-      feedStale: _feedStale || _repositoryState.isOffline,
-      onFeedRetry: () => _loadDashboardData(forceRefresh: true),
+      feedStale: _feedStale,
+      onFeedRetry: _loadFeed,
+      feedLoading: _feedLoading,
       onChildSelected: _selectChild,
+      status: _savedSummaryNotice(),
+    );
+    return RoleHomeReady(
+      key: ValueKey(_scope),
+      role: 'parent',
+      child: dashboard,
+    );
+  }
+
+  Widget? _savedSummaryNotice() {
+    if (!_repositoryState.hasData || !_repositoryState.isStale) return null;
+    final updatedAt = _repositoryState.lastUpdated;
+    return SchoolDeskStatusPanel.stale(
+      title: 'Showing saved information',
+      message: updatedAt == null
+          ? 'Refresh when you have a connection.'
+          : 'Last updated ${DateFormat.MMMd().add_jm().format(updatedAt.toLocal())}.',
+      onAction: _loadDashboardData,
     );
   }
 
@@ -274,9 +406,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
 
     Widget child;
     if (_repositoryState.isLoading && !_repositoryState.hasData) {
-      child = const SchoolDeskStatusPanel.loading(
-        message: 'Loading parent dashboard…',
-      );
+      child = const _ParentDashboardSkeleton();
     } else if (_repositoryState.isError && !_repositoryState.hasData) {
       child = SchoolDeskStatusPanel.error(
         title: 'Dashboard unavailable',
@@ -290,15 +420,28 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
             'Ask the school admin to link students to this parent account.',
       );
     } else {
-      child = _ParentFeedView(
-        children: _children,
-        dashboard: _dashboard,
-        activeChildIndex: _activeChildIndex,
-        onChildSelected: _selectChild,
-        eventPosts: _eventPosts,
-        feedError: _feedError,
-        feedStale: _feedStale || _repositoryState.isOffline,
-        onFeedRetry: () => _loadDashboardData(forceRefresh: true),
+      final status = _savedSummaryNotice();
+      child = RoleHomeReady(
+        key: ValueKey(_scope),
+        role: 'parent',
+        child: Column(
+          children: [
+            if (status != null) ...[
+              status,
+              SizedBox(height: tokens.spacing.md),
+            ],
+            _ParentFeedView(
+              children: _children,
+              dashboard: _dashboard,
+              activeChildIndex: _activeChildIndex,
+              eventPosts: _eventPosts,
+              feedError: _feedError,
+              feedStale: _feedStale,
+              onFeedRetry: _loadFeed,
+              feedLoading: _feedLoading,
+            ),
+          ],
+        ),
       );
     }
 
@@ -329,15 +472,21 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
             horizontal,
             tokens.spacing.xxl,
           ),
-          child: AnimatedSwitcher(duration: tokens.motion.normal, child: child),
+          child: AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : tokens.motion.normal,
+            child: child,
+          ),
         ),
       ],
     );
   }
 
   void _selectChild(int index) {
+    _selectionVersion++;
     setState(() => _activeChildIndex = index);
-    ParentChildSelectionService.saveIndex(_children, index);
+    unawaited(ParentChildSelectionService.saveIndex(_children, index));
   }
 
   @override
@@ -347,11 +496,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
             DateTime.now().difference(_lastRefreshAt!) >=
                 _autoRefreshInterval)) {
       unawaited(
-        _loadDashboardData(
-          forceRefresh: true,
-          showSpinner: false,
-          includeFeedPosts: false,
-        ),
+        _loadDashboardData(showSpinner: false, includeFeedPosts: false),
       );
     }
   }
@@ -359,6 +504,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _api.removeListener(_onScopeChanged);
     _autoRefreshTimer?.cancel();
     _realtimeSubscription?.dispose();
     super.dispose();
@@ -470,24 +616,52 @@ class _HeaderStudentAvatar extends StatelessWidget {
   }
 }
 
+class _ParentDashboardSkeleton extends StatelessWidget {
+  const _ParentDashboardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Loading parent dashboard',
+      liveRegion: true,
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LoadingSkeletonWidget(width: 160, height: 22),
+          SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: LoadingSkeletonWidget(height: 88)),
+              SizedBox(width: 8),
+              Expanded(child: LoadingSkeletonWidget(height: 88)),
+            ],
+          ),
+          SizedBox(height: 16),
+          LoadingSkeletonWidget(height: 88),
+        ],
+      ),
+    );
+  }
+}
+
 class _ParentFeedView extends StatelessWidget {
   final List<Map<String, dynamic>> children;
   final Map<String, dynamic> dashboard;
   final int activeChildIndex;
-  final ValueChanged<int> onChildSelected;
   final List<dynamic> eventPosts;
   final String? feedError;
   final bool feedStale;
+  final bool feedLoading;
   final VoidCallback onFeedRetry;
 
   const _ParentFeedView({
     required this.children,
     required this.dashboard,
     required this.activeChildIndex,
-    required this.onChildSelected,
     required this.eventPosts,
     this.feedError,
     this.feedStale = false,
+    required this.feedLoading,
     required this.onFeedRetry,
   });
 
@@ -498,48 +672,57 @@ class _ParentFeedView extends StatelessWidget {
     final activeChild = children[activeChildIndex];
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        StaggeredFadeIn(
-          children: [
-            const TodaysHighlightsCard(role: 'parent'),
-            SizedBox(height: tokens.spacing.lg),
-            // ── Section header ──────────────────────────────────────────
-            _SectionHeader(
-              label: 'School Feed',
-              icon: Icons.campaign_rounded,
-              color: parentColor,
-            ),
-            SizedBox(height: tokens.spacing.sm),
-            if (feedStale || feedError != null)
-              SchoolFeedStatusNotice(
-                accentColor: parentColor,
-                isStale: feedStale,
-                errorMessage: feedError,
-                onRetry: onFeedRetry,
-              ),
-            // ── Auto-scrolling carousel ──────────────────────────────────
-            _SchoolFeedCarousel(eventPosts: eventPosts),
-            SizedBox(height: tokens.spacing.lg),
-            // ── Summary stats ────────────────────────────────────────────
-            _SectionHeader(
-              label: "Child's Overview",
-              icon: Icons.bar_chart_rounded,
-              color: parentColor,
-            ),
-            SizedBox(height: tokens.spacing.sm),
-            _ParentSummaryGrid(dashboard: dashboard, child: activeChild),
-            SizedBox(height: tokens.spacing.lg),
-            // ── Quick-access cards ───────────────────────────────────────
-            _SectionHeader(
-              label: 'Quick Access',
-              icon: Icons.grid_view_rounded,
-              color: parentColor,
-            ),
-            SizedBox(height: tokens.spacing.sm),
-            const _ParentQuickAccessRow(),
-          ],
+        _SectionHeader(
+          label: '${_childName(activeChild)}’s overview',
+          icon: Icons.bar_chart_rounded,
+          color: parentColor,
         ),
+        SizedBox(height: tokens.spacing.sm),
+        _ParentSummaryGrid(dashboard: dashboard, child: activeChild),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(
+            onPressed: () => SchoolDeskNavigation.push(
+              context,
+              AppRoutes.parentPaymentHistory,
+            ),
+            icon: const Icon(Icons.receipt_long_rounded),
+            label: const Text('Payments and receipts'),
+          ),
+        ),
+        SizedBox(height: tokens.spacing.md),
+        const ParentHighlightsPanel(),
+        SizedBox(height: tokens.spacing.lg),
+        _SectionHeader(
+          label: 'School Feed',
+          icon: Icons.campaign_rounded,
+          color: parentColor,
+        ),
+        SizedBox(height: tokens.spacing.sm),
+        if (feedStale || feedError != null)
+          SchoolFeedStatusNotice(
+            accentColor: parentColor,
+            isStale: feedStale,
+            errorMessage: feedError,
+            onRetry: onFeedRetry,
+          ),
+        if (feedLoading && eventPosts.isEmpty)
+          Semantics(
+            label: 'Loading school updates',
+            child: const LoadingSkeletonWidget(height: 168),
+          )
+        else if (eventPosts.isNotEmpty || feedError == null)
+          _SchoolFeedCarousel(eventPosts: eventPosts),
+        SizedBox(height: tokens.spacing.lg),
+        _SectionHeader(
+          label: 'Quick Access',
+          icon: Icons.grid_view_rounded,
+          color: parentColor,
+        ),
+        SizedBox(height: tokens.spacing.sm),
+        const _ParentQuickAccessRow(),
       ],
     );
   }
@@ -576,10 +759,12 @@ class _SectionHeader extends StatelessWidget {
         const SizedBox(width: 8),
         Icon(icon, size: 18, color: color),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
+        Expanded(
+          child: Text(
+            label,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ],
@@ -1399,7 +1584,7 @@ class _ParentSummaryGrid extends StatelessWidget {
       ),
       _StatCard(
         icon: Icons.assignment_turned_in_rounded,
-        label: 'Dairy Due',
+        label: 'Diary due',
         value: _metricNumber(child['homework_due']),
         gradientColors: const [Color(0xFF7C3AED), Color(0xFFA78BFA)],
         route: AppRoutes.parentHomework,
@@ -1422,7 +1607,12 @@ class _ParentSummaryGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const spacing = 8.0;
-        final columns = constraints.maxWidth >= 700 ? 4 : 2;
+        final scaledLabel = MediaQuery.textScalerOf(context).scale(14);
+        final columns = scaledLabel > 21 && constraints.maxWidth < 550
+            ? 1
+            : constraints.maxWidth >= 700
+            ? 4
+            : 2;
         final width =
             (constraints.maxWidth - (spacing * (columns - 1))) / columns;
         return Wrap(
@@ -1551,7 +1741,7 @@ class _ParentQuickAccessRow extends StatelessWidget {
       color: Color(0xFF0F766E),
     ),
     _QuickAction(
-      label: 'Dairy',
+      label: 'Diary',
       icon: Icons.assignment_rounded,
       asset: SchoolDeskUiIllustrations.homework,
       route: AppRoutes.parentHomework,
