@@ -1,24 +1,23 @@
-name: Deploy SchoolDesk payment backend
+name: Deploy SchoolDesk full backend
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "supabase/functions/api/handlers/fees.ts"
-      - "supabase/migrations/20261115062654_atomic_parent_payment_request_decisions.sql"
-      - "scripts/deploy-vps-payment-backend.sh"
-      - ".github/workflows/deploy-schooldesk-payment-backend.yml"
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type DEPLOY to promote the full backend to production"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: schooldesk-payment-backend-production
+  group: schooldesk-full-backend-production
   cancel-in-progress: false
 
 jobs:
   deploy:
+    if: ${{ inputs.confirmation == 'DEPLOY' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -37,14 +36,14 @@ jobs:
           printf '%s\n' "$VPS_KNOWN_HOSTS" > "$RUNNER_TEMP/schooldesk-ssh/known_hosts"
           chmod 600 "$RUNNER_TEMP/schooldesk-ssh/id_ed25519" "$RUNNER_TEMP/schooldesk-ssh/known_hosts"
 
-      - name: Promote reviewed payment backend
+      - name: Promote reviewed full backend
         env:
           SCHOOLDESK_VPS_SSH_TARGET: ${{ secrets.SCHOOLDESK_VPS_SSH_TARGET }}
           SCHOOLDESK_SSH_KEY: ${{ runner.temp }}/schooldesk-ssh/id_ed25519
           SCHOOLDESK_SSH_KNOWN_HOSTS: ${{ runner.temp }}/schooldesk-ssh/known_hosts
         run: |
           test -n "$SCHOOLDESK_VPS_SSH_TARGET"
-          scripts/deploy-vps-payment-backend.sh
+          scripts/deploy-vps-backend.sh
 
       - name: Verify production API health
         env:
