@@ -2,12 +2,14 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { PublicPage } from "@/components/public-site";
 import { defaultWebsiteCopy, getPublicWebsite } from "@/lib/public-website";
+import { publicMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Our Mission", description: "Learn how Arish Ville Preschool nurtures joyful discovery, kind confidence, and a strong partnership with families.", openGraph: { title: "Our Mission | Arish Ville Preschool", url: "/our-mission" }, alternates: { canonical: "/our-mission" } };
+const description = "Learn how Arish Ville Preschool nurtures joyful discovery, kind confidence, and a strong partnership with families in Miyapur, Hyderabad.";
+export const metadata: Metadata = publicMetadata({ title: "Our Mission", description, path: "/our-mission", keywords: ["Arish Ville mission", "play-based preschool values"] });
 
 export default async function MissionPage() {
   const content = (await getPublicWebsite()).content ?? {};
-  return <PublicPage>
+  return <PublicPage schema={{ name: "Our Mission at Arish Ville Preschool", description, path: "/our-mission" }}>
     <section className="page-hero"><p className="eyebrow">Our purpose</p><h1>{content.mission_title || defaultWebsiteCopy.mission_title}</h1><p>{content.mission_body || defaultWebsiteCopy.mission_body}</p></section>
     <section className="content-section values-grid">
       <article><span>01</span><h2>Joyful discovery</h2><p>Children learn best when they are free to wonder, play, and ask questions in a safe, welcoming environment.</p></article>

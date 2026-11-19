@@ -9,12 +9,16 @@ Deno.test("website public route is explicit and uses the website selection flag"
   assertMatch(source, /eq\("is_published", true\)/);
   assertMatch(source, /eq\("public_gallery_visible", true\)/);
   assertMatch(source, /school-public-media/);
+  assertMatch(source, /promotePublicEventMedia/);
+  assertMatch(source, /cacheControl: "31536000"/);
+  assertMatch(source, /never falls back to a short-lived private signed URL/);
+  assert(!source.includes("signedPrivateFileUrl(svc, storedMedia"));
   assert(!source.includes('.from("school-assets")'));
 });
 
 Deno.test("school leaders can manage branch website content", async () => {
   const source = await read("supabase/functions/api/handlers/website.ts");
-  assertMatch(source, /\["principal", "coordinator"\]/);
+  assertMatch(source, /"principal",\s*"coordinator",\s*"super_admin"/);
   assertMatch(source, /if \(!isLeader\(user\)\)/);
   const migration = await read("supabase/migrations/20260720090000_school_website_content.sql");
   assertMatch(migration, /website_content_principal_write/);

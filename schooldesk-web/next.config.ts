@@ -43,9 +43,33 @@ const securityHeaders = [
   { key: "Content-Security-Policy", value: csp },
 ];
 
+const configuredMediaOrigins = (process.env.SCHOOLDESK_MEDIA_CSP_ORIGINS ?? "")
+  .split(/\s+/)
+  .map((value) => value.trim())
+  .filter(Boolean)
+  .flatMap((value) => {
+    try {
+      const url = new URL(value);
+      if (!["http:", "https:"].includes(url.protocol)) return [];
+      return [{
+        protocol: url.protocol.slice(0, -1) as "http" | "https",
+        hostname: url.hostname,
+        ...(url.port ? { port: url.port } : {}),
+        pathname: "/**",
+      }];
+    } catch {
+      return [];
+    }
+  });
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  images: { remotePatterns: [{ protocol: "https", hostname: "api.arishville.com", pathname: "/storage/v1/object/**" }] },
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "api.arishville.com", pathname: "/storage/v1/object/**" },
+      ...configuredMediaOrigins,
+    ],
+  },
   output: "standalone",
   turbopack: { root: process.cwd() },
   async headers() {

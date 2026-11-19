@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { absoluteUrl, siteAliases, siteDescription, siteName, siteUrl } from "@/lib/site";
+import { publicKeywords } from "@/lib/seo";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   applicationName: siteName,
   title: { default: siteName, template: `%s | ${siteName}` },
   description: siteDescription,
-  keywords: [...siteAliases, "Arish Ville Preschool", "preschool in Miyapur", "daycare in Miyapur", "nursery school in Hyderabad", "playgroup", "PP1", "PP2"],
+  keywords: publicKeywords,
   alternates: { canonical: "/" },
   icons: { icon: "/icon.svg", apple: "/branding/arishville-logo.png" },
   openGraph: { type: "website", locale: "en_IN", url: "/", siteName, title: siteName, description: siteDescription, images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Arish Ville Preschool" }] },
@@ -16,6 +17,6 @@ export const metadata: Metadata = {
 };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const schoolSchema = { "@context": "https://schema.org", "@type": "Preschool", "@id": absoluteUrl("/#school"), name: siteName, alternateName: siteAliases, description: siteDescription, url: absoluteUrl("/"), logo: absoluteUrl("/branding/arishville-logo.png"), slogan: "Learn Today, Lead Tomorrow.", address: { "@type": "PostalAddress", streetAddress: "Plot No. 29, 1-42, PE/29, Chiranjeevi Nagar, Pragathi Enclave", addressLocality: "Miyapur, Hyderabad", addressRegion: "Telangana", postalCode: "500049", addressCountry: "IN" }, areaServed: ["Miyapur", "Hyderabad", "Telangana"] };
-  const websiteSchema = { "@context": "https://schema.org", "@type": "WebSite", name: siteName, alternateName: siteAliases, url: absoluteUrl("/") };
+  const websiteSchema = { "@context": "https://schema.org", "@type": "WebSite", "@id": `${absoluteUrl("/")}#website`, name: siteName, alternateName: siteAliases, url: absoluteUrl("/"), publisher: { "@id": `${absoluteUrl("/")}#school` } };
   return <html lang="en" data-scroll-behavior="smooth"><body><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify([schoolSchema, websiteSchema]) }}/>{children}</body></html>;
 }
