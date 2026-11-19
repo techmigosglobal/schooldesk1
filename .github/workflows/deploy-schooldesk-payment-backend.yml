@@ -1,0 +1,54 @@
+name: Deploy SchoolDesk payment backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/api/handlers/fees.ts"
+      - "supabase/migrations/20261115062654_atomic_parent_payment_request_decisions.sql"
+      - "scripts/deploy-vps-payment-backend.sh"
+      - ".github/workflows/deploy-schooldesk-payment-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schooldesk-payment-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@v4
+
+      - name: Configure pinned SSH access
+        env:
+          VPS_SSH_KEY: ${{ secrets.SCHOOLDESK_VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.SCHOOLDESK_VPS_KNOWN_HOSTS }}
+        run: |
+          test -n "$VPS_SSH_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 700 "$RUNNER_TEMP/schooldesk-ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$RUNNER_TEMP/schooldesk-ssh/id_ed25519"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$RUNNER_TEMP/schooldesk-ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/schooldesk-ssh/id_ed25519" "$RUNNER_TEMP/schooldesk-ssh/known_hosts"
+
+      - name: Promote reviewed payment backend
+        env:
+          SCHOOLDESK_VPS_SSH_TARGET: ${{ secrets.SCHOOLDESK_VPS_SSH_TARGET }}
+          SCHOOLDESK_SSH_KEY: ${{ runner.temp }}/schooldesk-ssh/id_ed25519
+          SCHOOLDESK_SSH_KNOWN_HOSTS: ${{ runner.temp }}/schooldesk-ssh/known_hosts
+        run: |
+          test -n "$SCHOOLDESK_VPS_SSH_TARGET"
+          scripts/deploy-vps-payment-backend.sh
+
+      - name: Verify production API health
+        env:
+          VPS_API_BASE_URL: ${{ secrets.SCHOOLDESK_VPS_API_BASE_URL }}
+        run: |
+          test -n "$VPS_API_BASE_URL"
+          curl --fail --silent --show-error --max-time 20 "$VPS_API_BASE_URL/health" >/dev/null
