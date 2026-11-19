@@ -49,6 +49,11 @@ jobs:
       - name: Verify production API health
         env:
           VPS_API_BASE_URL: ${{ secrets.SCHOOLDESK_VPS_API_BASE_URL }}
+          VPS_ANON_KEY: ${{ secrets.SCHOOLDESK_VPS_ANON_KEY }}
         run: |
           test -n "$VPS_API_BASE_URL"
-          curl --fail --silent --show-error --max-time 20 "$VPS_API_BASE_URL/health" >/dev/null
+          test -n "$VPS_ANON_KEY"
+          curl --fail --silent --show-error --max-time 20 \
+            -H "apikey: $VPS_ANON_KEY" \
+            -H "Authorization: Bearer $VPS_ANON_KEY" \
+            "$VPS_API_BASE_URL/health" >/dev/null
