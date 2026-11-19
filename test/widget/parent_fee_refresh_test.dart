@@ -23,6 +23,7 @@ class _Fees implements ParentFeePaymentRepository {
   Future<List<Map<String, dynamic>>> loadStudentFees(
     String studentId, {
     int? refreshNonce,
+    void Function(CacheMetadata)? onCacheMetadata,
   }) async {
     reads++;
     final pending = blocked;
@@ -121,7 +122,7 @@ void main() {
     (tester) async {
       final repo = _Fees()..submitted = true;
       await mount(tester, repo);
-      expect(find.text('Awaiting verification'), findsWidgets);
+      expect(find.text('Under review'), findsWidgets);
       expect(find.textContaining('Pay Now'), findsNothing);
       expect(find.text('₹100'), findsWidgets);
       await tester.pumpWidget(const SizedBox());

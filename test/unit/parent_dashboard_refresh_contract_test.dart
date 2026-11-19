@@ -10,8 +10,9 @@ void main() {
 
     expect(source, contains('bool includeFeedPosts = true'));
     expect(source, contains('includeFeedPosts: false'));
-    expect(source, contains('final feedItems = snapshot.feed == null'));
-    expect(source, contains('snapshot.feedIsStale'));
+    expect(source, contains('onFeedRetry: _loadFeed'));
+    expect(source, contains('await _showSnapshot(snapshot, scope)'));
+    expect(source, contains('_repository.loadFeed().timeout(_loadTimeout)'));
     expect(source, contains('.whereType<Map>()'));
   });
 }

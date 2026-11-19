@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/errors/exceptions.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
@@ -43,6 +46,10 @@ class _AdminPaymentRequestDecisionScreenState
   ApprovalRepository get _repository =>
       widget.repository ?? ApiApprovalRepository.legacyDefault;
 
+  final _api = BackendApiClient.instance;
+  late final int _scopeVersion;
+  bool get _scopeChanged => _scopeVersion != _api.sessionScopeVersion;
+
   final _remarksController = TextEditingController();
   String _decision = 'approved';
   RepositoryState<Object> _submitState = const RepositoryState.empty();
@@ -50,13 +57,33 @@ class _AdminPaymentRequestDecisionScreenState
   bool get _submitting => _submitState.isRefreshing;
 
   @override
+  void initState() {
+    super.initState();
+    _scopeVersion = _api.sessionScopeVersion;
+    _api.addListener(_onScopeChanged);
+  }
+
+  void _onScopeChanged() {
+    if (_scopeChanged) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _api.removeListener(_onScopeChanged);
     _remarksController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_scopeChanged) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Payment Decision')),
+        body: const Center(
+          child: Text('Reopen the payment request for your current branch.'),
+        ),
+      );
+    }
     final isDesktop = DesktopBreakpoints.isDesktopWidth(
       MediaQuery.sizeOf(context).width,
     );
@@ -276,7 +303,16 @@ class _AdminPaymentRequestDecisionScreenState
           if (_text(request['transaction_id']).isNotEmpty)
             _detailRow('Transaction', _text(request['transaction_id'])),
           if (_text(request['proof_url']).isNotEmpty) ...[
-            _detailRow('Proof upload', _text(request['proof_url'])),
+            _detailRow(
+              'Status',
+              FeePaymentRequestStatus.label(request['status']),
+            ),
+            _detailRow(
+              'Proof',
+              _text(request['proof_url']).isEmpty
+                  ? 'No attachment'
+                  : 'Attached',
+            ),
             const SizedBox(height: 10),
             _buildProofPreview(request['proof_url']),
           ],
@@ -360,17 +396,19 @@ class _AdminPaymentRequestDecisionScreenState
   }
 
   Future<void> _submit() async {
+    if (_submitting || _scopeChanged) return;
+    final decision = _decision;
     final requestID = _text(widget.args.request['id']);
     if (requestID.isEmpty) {
       _showError('Payment request ID is missing.');
       return;
     }
     final remarks = _remarksController.text.trim();
-    if (_decision == 'rejected' && remarks.length < 3) {
+    if (decision == 'rejected' && remarks.length < 3) {
       _showError('Enter a rejection reason.');
       return;
     }
-    if (_decision == 'clarification_required' && remarks.length < 3) {
+    if (decision == 'clarification_required' && remarks.length < 3) {
       _showError('Enter a clarification note.');
       return;
     }
@@ -384,30 +422,30 @@ class _AdminPaymentRequestDecisionScreenState
     try {
       await _repository.decidePayment(
         requestID,
-        status: _decision,
+        status: decision,
         adminRemarks: remarks,
       );
-      if (!mounted) return;
+      if (!mounted || _scopeChanged) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _decision == 'approved'
+            decision == 'approved'
                 ? 'Payment request approved.'
-                : _decision == 'clarification_required'
+                : decision == 'clarification_required'
                 ? 'Clarification requested from parent.'
                 : 'Payment request rejected.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
       );
-      if (_decision == 'approved' && mounted) {
+      if (decision == 'approved' && mounted) {
         await _showPaymentCompleted(widget.args.request);
-        if (mounted) Navigator.pop(context, true);
+        if (mounted && !_scopeChanged) Navigator.pop(context, true);
       } else {
         Navigator.pop(context, true);
       }
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!mounted || _scopeChanged) return;
       setState(() {
         _submitState = RepositoryState<Object>.error(
           data: const Object(),
@@ -415,7 +453,13 @@ class _AdminPaymentRequestDecisionScreenState
           error: error,
         );
       });
-      _showError(error.toString());
+      _showError(
+        error is NetworkException
+            ? 'Connect to the internet to record a decision. Your notes are still here.'
+            : error is ServerException && error.statusCode == 409
+            ? 'This request changed. Return to the list and refresh it.'
+            : error.toString(),
+      );
     }
   }
 
@@ -538,8 +582,8 @@ class _AdminPaymentRequestDecisionScreenState
 
   String _absoluteMediaUrl(String value) {
     final trimmed = value.trim();
-    final absolute = trimmed.startsWith('http://') ||
-            trimmed.startsWith('https://')
+    final absolute =
+        trimmed.startsWith('http://') || trimmed.startsWith('https://')
         ? trimmed
         : trimmed.startsWith('/')
         ? '${EnvConfig.apiOrigin}$trimmed'

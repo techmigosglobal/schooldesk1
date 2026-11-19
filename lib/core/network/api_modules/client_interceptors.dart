@@ -45,17 +45,23 @@ class _AuthInterceptor extends Interceptor {
 
   _AuthInterceptor(this._client);
 
+  DioException _scopeChanged(RequestOptions options) => DioException(
+    requestOptions: options,
+    type: DioExceptionType.cancel,
+    error: StateError('Your account changed. Please reopen this screen.'),
+  );
+
+  bool _isCurrentRead(RequestOptions options) =>
+      options.extra['schooldeskExpectedScopeVersion'] == null ||
+      options.extra['schooldeskExpectedScopeVersion'] ==
+          _client.sessionScopeVersion;
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final expectedScope = options.extra['schooldeskExpectedScope'];
-    if (expectedScope != null && expectedScope != _client.offlineAccountKey) {
-      handler.reject(
-        DioException(
-          requestOptions: options,
-          type: DioExceptionType.cancel,
-          error: StateError('Your account changed. Please reopen this screen.'),
-        ),
-      );
+    if (!_isCurrentRead(options) ||
+        (expectedScope != null && expectedScope != _client.offlineAccountKey)) {
+      handler.reject(_scopeChanged(options));
       return;
     }
     // Freeze account/branch/role scope at dispatch time. Responses that arrive
@@ -71,6 +77,27 @@ class _AuthInterceptor extends Interceptor {
       options.headers['Authorization'] = 'Bearer ${_client._authToken}';
     }
     handler.next(options);
+  }
+
+  @override
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
+    if (!_isCurrentRead(response.requestOptions)) {
+      handler.reject(_scopeChanged(response.requestOptions));
+      return;
+    }
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    if (!_isCurrentRead(err.requestOptions)) {
+      handler.reject(_scopeChanged(err.requestOptions));
+      return;
+    }
+    handler.next(err);
   }
 
   bool _isExternalSignedMedia(RequestOptions options) {
@@ -102,10 +129,16 @@ class _WriteCacheInvalidationInterceptor extends Interceptor {
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     final method = response.requestOptions.method.toUpperCase();
-    if (method == 'POST' ||
-        method == 'PUT' ||
-        method == 'PATCH' ||
-        method == 'DELETE') {
+    final path = response.requestOptions.path;
+    final backgroundWrite =
+        path == '/notifications/register-token' ||
+        path == '/notifications/revoke-token' ||
+        path == '/monitoring/error-events';
+    if (!backgroundWrite &&
+        (method == 'POST' ||
+            method == 'PUT' ||
+            method == 'PATCH' ||
+            method == 'DELETE')) {
       _client
           .invalidateCachedReads()
           .then((_) => handler.next(response))
@@ -124,6 +157,10 @@ class _LoggingInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     options.extra['requestStartedAt'] = DateTime.now().microsecondsSinceEpoch;
+    MobileLoadingTrace.mark(
+      'schooldesk.api_request',
+      arguments: {'method': options.method},
+    );
     if (EnvConfig.enableLogging) {
       developer.log(
         '[API] ${options.method} ${options.path}',

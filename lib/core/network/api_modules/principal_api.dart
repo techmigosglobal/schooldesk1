@@ -4,12 +4,15 @@ extension BackendPrincipalApi on BackendApiClient {
   Future<Map<String, dynamic>> getDashboard(
     String role, {
     bool forceRefresh = false,
+    bool refreshNetwork = false,
+    void Function(CacheMetadata)? onCacheMetadata,
   }) async {
     final safeRole = role.trim().toLowerCase();
     try {
       final cached = _cachedDashboards[safeRole];
-      if (cached != null && !forceRefresh) {
-        return Map<String, dynamic>.from(cached);
+      if (cached != null && !forceRefresh && !refreshNetwork) {
+        onCacheMetadata?.call(cached.metadata);
+        return Map<String, dynamic>.from(cached.data);
       }
       final response = await _get(
         '/dashboard/$safeRole',
@@ -23,7 +26,15 @@ extension BackendPrincipalApi on BackendApiClient {
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         final dashboard = Map<String, dynamic>.from(data['data'] as Map? ?? {});
-        _cachedDashboards[safeRole] = dashboard;
+        final source = cacheMetadataFromResponse(response);
+        final metadata = CacheMetadata(
+          isStale: source.isStale,
+          storedAt:
+              source.storedAt ??
+              (source.isStale ? null : DateTime.now().toUtc()),
+        );
+        _cachedDashboards[safeRole] = (data: dashboard, metadata: metadata);
+        onCacheMetadata?.call(metadata);
         return Map<String, dynamic>.from(dashboard);
       }
       throw ServerException(
@@ -32,6 +43,30 @@ extension BackendPrincipalApi on BackendApiClient {
     } on DioException catch (e) {
       throw _handleError(e);
     }
+  }
+
+  /// Reads the same scoped Drift entry used by the normal dashboard GET.
+  /// An intentional cache lookup does not imply loss of connectivity.
+  Future<({Map<String, dynamic> data, CacheMetadata metadata})?>
+  readCachedDashboard(String role) async {
+    if (!isAuthenticated || offlineAccountKey == 'anonymous') return null;
+    final version = sessionScopeVersion;
+    final safeRole = role.trim().toLowerCase();
+    final request = Options(
+      method: 'GET',
+      extra: {'schooldeskScope': offlineAccountKey},
+    ).compose(dio.options, '/dashboard/$safeRole');
+    final response = await offlineSync?.readCachedResponse(
+      request,
+      markOffline: false,
+    );
+    if (response == null || version != sessionScopeVersion) return null;
+    final envelope = _asMap(response.data);
+    if (envelope['success'] != true || envelope['data'] is! Map) return null;
+    return (
+      data: _asMap(envelope['data']),
+      metadata: cacheMetadataFromResponse(response),
+    );
   }
 
   Future<Map<String, dynamic>> getPrincipalClassesOverview({

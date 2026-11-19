@@ -121,6 +121,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
   Future<List<Map<String, dynamic>>> getParentStudentFees(
     String studentId, {
     int? refreshNonce,
+    void Function(CacheMetadata)? onCacheMetadata,
   }) async {
     try {
       final response = await _get(
@@ -131,6 +132,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
+        onCacheMetadata?.call(cacheMetadataFromResponse(response));
         return _asListMap(data['data']);
       }
       throw ServerException(
@@ -257,6 +259,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
     try {
       final response = await _get(
         '/fees/payment-config',
+        options: Options(headers: const {'Cache-Control': 'no-store'}),
         queryParameters: {
           if (invoiceId.trim().isNotEmpty) 'invoice_id': invoiceId.trim(),
           if (refreshNonce != null) 'refresh_nonce': refreshNonce,
@@ -314,6 +317,7 @@ extension BackendFeePaymentsApi on BackendApiClient {
       final response = await _get(
         '/fees/payment-requests',
         queryParameters: queryParams,
+        options: Options(headers: const {'Cache-Control': 'no-store'}),
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
@@ -420,7 +424,10 @@ extension BackendFeePaymentsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getPaymentConfigs() async {
     try {
-      final response = await _get('/fees/payment-configs');
+      final response = await _get(
+        '/fees/payment-configs',
+        options: Options(headers: const {'Cache-Control': 'no-store'}),
+      );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) return _asListMap(data['data']);
       throw ServerException(

@@ -12,6 +12,7 @@ import 'package:schooldesk1/core/network/models/backend_models.dart';
 import 'package:schooldesk1/features/communication/data/chat_models.dart';
 import 'package:schooldesk1/core/network/generated/schooldesk_api_models.dart';
 import 'package:schooldesk1/core/network/schooldesk_api.dart';
+import 'package:schooldesk1/core/services/mobile_loading_trace.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/image_upload_optimizer.dart';
@@ -136,7 +137,10 @@ class BackendApiClient extends ChangeNotifier {
   String? _activeBranchId;
   UserResponse? _cachedProfile;
   Map<String, dynamic>? _cachedCurrentSchool;
-  final Map<String, Map<String, dynamic>> _cachedDashboards = {};
+  final Map<String, ({Map<String, dynamic> data, CacheMetadata metadata})>
+  _cachedDashboards = {};
+  int _sessionScopeVersion = 0;
+  int get sessionScopeVersion => _sessionScopeVersion;
   UserResponse? get cachedProfile => _cachedProfile;
   String? get currentRoleName => _currentRoleName;
   String? get currentUserId => _currentUserId;
@@ -152,6 +156,11 @@ class BackendApiClient extends ChangeNotifier {
     final nextRole = normalized?.isEmpty == true ? null : normalized;
     if (_currentRoleName == nextRole) return;
     _currentRoleName = nextRole;
+    _sessionScopeVersion++;
+    _cachedProfile = null;
+    _cachedCurrentSchool = null;
+    _cachedDashboards.clear();
+    _clearCoalescedGets();
     notifyListeners();
   }
 
@@ -160,6 +169,7 @@ class BackendApiClient extends ChangeNotifier {
     final normalized = userId?.trim();
     final nextUserId = normalized?.isEmpty == true ? null : normalized;
     if (_currentUserId != nextUserId) {
+      _sessionScopeVersion++;
       _cachedProfile = null;
       _cachedCurrentSchool = null;
       _cachedDashboards.clear();
@@ -178,22 +188,28 @@ class BackendApiClient extends ChangeNotifier {
     final normalized = schoolId?.trim();
     final previousBranchId = _activeBranchId;
     _activeBranchId = normalized?.isEmpty == true ? null : normalized;
+    final branchChanged = previousBranchId != _activeBranchId;
+    if (branchChanged) {
+      _sessionScopeVersion++;
+      _cachedCurrentSchool = null;
+      _cachedDashboards.clear();
+      _clearCoalescedGets();
+    }
     if (_activeBranchId == null) {
       _dio.options.headers.remove('x-schooldesk-branch-id');
     } else {
       _dio.options.headers['x-schooldesk-branch-id'] = _activeBranchId;
-      await TokenStorageService.saveSchoolId(_activeBranchId!);
     }
-    _cachedCurrentSchool = null;
-    _cachedDashboards.clear();
-    _clearCoalescedGets();
+    final branchToSave = _activeBranchId;
     final nextScope = offlineAccountKey;
     if (previousScope != nextScope && previousScope != 'anonymous') {
       unawaited(SecureSelectiveMediaCache.clearAccount(previousScope));
     }
-    await invalidateCachedReads();
+    if (branchChanged) notifyListeners();
+    if (branchToSave != null) {
+      await TokenStorageService.saveSchoolId(branchToSave);
+    }
     unawaited(offlineSync?.syncNow() ?? Future<void>.value());
-    if (previousBranchId != _activeBranchId) notifyListeners();
   }
 
   /// Clears all account-scoped local state before another user can sign in.
@@ -214,6 +230,7 @@ class BackendApiClient extends ChangeNotifier {
         _currentUserId != null ||
         _activeBranchId != null;
     final previousScope = offlineAccountKey;
+    if (hadSession) _sessionScopeVersion++;
     _authToken = null;
     _currentRoleName = null;
     _currentUserId = null;

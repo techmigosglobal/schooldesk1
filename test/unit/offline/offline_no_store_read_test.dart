@@ -40,6 +40,8 @@ void main() {
       '/uploads',
       '/event-posts',
       '/payment-requests',
+      '/fees/payment-config',
+      '/fees/payment-configs',
       '/attendance/staff/qr-token',
       '/auth/login',
     ]) {

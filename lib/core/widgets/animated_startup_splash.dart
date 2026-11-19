@@ -4,7 +4,7 @@ class AnimatedStartupSplash extends StatefulWidget {
   const AnimatedStartupSplash({
     super.key,
     required this.child,
-    this.animationDuration = const Duration(milliseconds: 1550),
+    this.animationDuration = const Duration(milliseconds: 240),
   });
 
   static const overlayKey = ValueKey('animated-startup-splash-overlay');
@@ -84,6 +84,7 @@ class _AnimatedStartupSplashState extends State<AnimatedStartupSplash>
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return widget.child;
     return Stack(
       fit: StackFit.expand,
       children: [

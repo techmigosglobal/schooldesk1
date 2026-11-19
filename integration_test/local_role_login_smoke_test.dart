@@ -5,6 +5,8 @@ import 'package:schooldesk1/main.dart' as app;
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
+import 'package:schooldesk1/core/services/mobile_loading_trace.dart';
+import 'package:schooldesk1/core/widgets/role_home_ready.dart';
 import 'package:schooldesk1/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart';
 import 'package:schooldesk1/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart';
 import 'package:schooldesk1/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart';
@@ -71,6 +73,10 @@ void main() {
           expect(fields, findsNWidgets(2));
           await tester.enterText(fields.at(0), role.username);
           await tester.enterText(fields.at(1), role.password);
+          MobileLoadingTrace.mark(
+            'schooldesk.role_login_submit',
+            arguments: {'role': role.role.toLowerCase()},
+          );
           await tester.testTextInput.receiveAction(TextInputAction.done);
 
           await _pumpUntilRoleDashboard(tester, role);
@@ -144,13 +150,15 @@ Future<void> _pumpUntilRoleDashboard(
     await tester.pump(const Duration(milliseconds: 500));
     final api = BackendApiClient.instance;
     final expectedRole = role.role.toLowerCase();
+    final homeRole = expectedRole == 'admin' ? 'principal' : expectedRole;
     if (api.isAuthenticated &&
         api.currentRoleName?.toLowerCase() == expectedRole &&
-        find.byType(role.dashboardType).evaluate().isNotEmpty) {
+        find.byType(role.dashboardType).evaluate().isNotEmpty &&
+        find.byKey(RoleHomeReady.keyForRole(homeRole)).evaluate().isNotEmpty) {
       return;
     }
   }
-  fail('The ${role.role} session did not reach its dashboard widget.');
+  fail('The ${role.role} session did not render usable dashboard content.');
 }
 
 Future<void> _pumpUntilAnyText(WidgetTester tester, List<String> texts) async {

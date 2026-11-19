@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -71,6 +72,72 @@ void main() {
       api.cacheKeyForRequest(normalRequest),
     );
   });
+
+  test(
+    'dashboard revalidation coalesces without a cache-busting nonce',
+    () async {
+      final adapter = _CountingAdapter({
+        'GET /dashboard/parent': {
+          'success': true,
+          'data': {'children': []},
+        },
+      });
+      api.dio.httpClientAdapter = adapter;
+      api.setAuthToken('test-token');
+      api.setCurrentRole('parent');
+      api.setCurrentUserId('parent-user-1');
+
+      final refreshes = await Future.wait([
+        api.getDashboard('parent', refreshNetwork: true),
+        api.getDashboard('parent', refreshNetwork: true),
+      ]);
+
+      expect(refreshes, [
+        {'children': []},
+        {'children': []},
+      ]);
+      expect(adapter.requests, ['GET /dashboard/parent']);
+      expect(adapter.options.single.queryParameters, isEmpty);
+      expect(adapter.options.single.headers['Cache-Control'], isNull);
+    },
+  );
+
+  test(
+    'late dashboard response is discarded after an account round trip',
+    () async {
+      final adapter = _CountingAdapter({
+        'GET /dashboard/parent': {
+          'success': true,
+          'data': {
+            'children': ['old result'],
+          },
+        },
+      })..release = Completer<void>();
+      api.dio.httpClientAdapter = adapter;
+      api.setAuthToken('test-token');
+      api.setCurrentRole('parent');
+      api.setCurrentUserId('parent-user-1');
+
+      final first = api.getDashboard('parent');
+      final failure = expectLater(first, throwsA(isA<Exception>()));
+      await adapter.started.future;
+      api.setCurrentUserId('parent-user-2');
+      api.setCurrentUserId('parent-user-1');
+      adapter.release!.complete();
+      await failure;
+
+      adapter.routes['GET /dashboard/parent'] = {
+        'success': true,
+        'data': {
+          'children': ['current result'],
+        },
+      };
+      expect((await api.getDashboard('parent'))['children'], [
+        'current result',
+      ]);
+      expect(adapter.requests, hasLength(2));
+    },
+  );
 }
 
 class _CountingAdapter implements HttpClientAdapter {
@@ -78,6 +145,9 @@ class _CountingAdapter implements HttpClientAdapter {
 
   final Map<String, Map<String, dynamic>> routes;
   final List<String> requests = [];
+  final List<RequestOptions> options = [];
+  final started = Completer<void>();
+  Completer<void>? release;
 
   @override
   Future<ResponseBody> fetch(
@@ -87,6 +157,9 @@ class _CountingAdapter implements HttpClientAdapter {
   ) async {
     final key = '${options.method.toUpperCase()} ${options.path}';
     requests.add(key);
+    this.options.add(options);
+    if (!started.isCompleted) started.complete();
+    await release?.future;
     return ResponseBody.fromString(
       jsonEncode(routes[key]),
       200,

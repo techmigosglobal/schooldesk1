@@ -29,9 +29,22 @@ extension BackendRequestCoalescing on BackendApiClient {
                 ..sort((a, b) => a.key.compareTo(b.key)))
               .map((entry) => '${entry.key}=${entry.value}')
               .join('&');
-    final key =
-        '${currentUserId ?? ''}|${activeBranchId ?? ''}|$path?$query|'
-        '${options?.responseType}';
+    final requestScopeVersion = sessionScopeVersion;
+    final scopedOptions = (options ?? Options()).copyWith(
+      extra: {
+        ...?options?.extra,
+        'schooldeskExpectedScopeVersion': requestScopeVersion,
+      },
+    );
+    final key = '$requestScopeVersion|$path?$query|${options?.responseType}';
+    Future<Response<dynamic>> fetch() {
+      return dio.get<dynamic>(
+        path,
+        queryParameters: queryParameters,
+        options: scopedOptions,
+      );
+    }
+
     final inFlight = _inFlightGetsByClient.putIfAbsent(this, () => {});
     final recentResponses = _recentGetResponsesByClient.putIfAbsent(
       this,
@@ -45,13 +58,7 @@ extension BackendRequestCoalescing on BackendApiClient {
     // A caller asking for an intentional refresh must never inherit a request
     // or response that was started for a normal navigation read.
     if (noStore) {
-      return _getConcurrencyGate.run(
-        () => dio.get<dynamic>(
-          path,
-          queryParameters: queryParameters,
-          options: options,
-        ),
-      );
+      return _getConcurrencyGate.run(fetch);
     }
     final existing = inFlight[key];
     if (existing != null) return existing;
@@ -62,13 +69,7 @@ extension BackendRequestCoalescing on BackendApiClient {
       return Future<Response<dynamic>>.value(recent.response);
     }
 
-    final request = _getConcurrencyGate.run(
-      () => dio.get<dynamic>(
-        path,
-        queryParameters: queryParameters,
-        options: options,
-      ),
-    );
+    final request = _getConcurrencyGate.run(fetch);
     inFlight[key] = request;
     request.then<void>(
       (response) {

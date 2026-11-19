@@ -2,7 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
+import 'package:schooldesk1/core/widgets/erp_components.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/realtime_refresh_service.dart';
@@ -19,7 +24,6 @@ import 'package:schooldesk1/roles/parent/domain/parent_fee_payment_repository.da
 
 import 'package:schooldesk1/core/navigation/schooldesk_navigation.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
-import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 
 class ParentFeeHub extends StatefulWidget {
   final ParentFeePaymentRepository? repository;
@@ -36,6 +40,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       widget.repository ?? ApiParentFeePaymentRepository.legacyDefault;
 
   static const Duration _autoRefreshInterval = Duration(seconds: 120);
+  static const _loadTimeout = Duration(seconds: 8);
+  final _api = BackendApiClient.instance;
+  late int _scope;
   Future<void>? _refreshFuture;
   bool _refreshAgain = false;
   int _childGeneration = 0;
@@ -50,6 +57,18 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   List<Map<String, dynamic>> _childrenData = [];
   List<Map<String, dynamic>> _feeStructure = [];
   List<Map<String, dynamic>> _paymentHistory = [];
+  List<Map<String, dynamic>>? _invoiceRows;
+  List<Map<String, dynamic>> _paymentRequests = const [];
+  bool _proofLoading = false;
+  bool _proofCurrent = false;
+  bool _proofError = false;
+
+  bool get _canStartPayment => _proofCurrent && !_state.isOffline;
+  String get _activeChildId =>
+      _childrenData.isEmpty ? '' : _childId(_childrenData[_activeChildIndex]);
+
+  String _childId(Map<String, dynamic> child) =>
+      '${child['id'] ?? child['student_id'] ?? ''}'.trim();
   RepositoryState<Object> _state = const RepositoryState.loading();
 
   double get _pendingAmount => _feeStructure.fold(
@@ -76,22 +95,25 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   @override
   void initState() {
     super.initState();
+    _scope = _api.sessionScopeVersion;
+    _api.addListener(_onScopeChanged);
     WidgetsBinding.instance.addObserver(this);
-    _loadData(forceRefresh: true);
+    unawaited(_loadData());
     _realtimeSubscription = RealtimeRefreshService.instance.subscribe(
       channelName: 'parent-fees',
       modules: const {'fees'},
       onRefresh: () {
-        if (mounted) {
+        if (mounted && _isForeground) {
           unawaited(_loadData(forceRefresh: true, showSpinner: false));
         }
       },
     );
     unawaited(_bindFeeNotifications());
-    _autoRefreshTimer = Timer.periodic(
-      _autoRefreshInterval,
-      (_) => _loadData(forceRefresh: true, showSpinner: false),
-    );
+    _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) {
+      if (_isForeground) {
+        unawaited(_loadData(forceRefresh: true, showSpinner: false));
+      }
+    });
   }
 
   @override
@@ -104,6 +126,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _api.removeListener(_onScopeChanged);
     _autoRefreshTimer?.cancel();
     _realtimeSubscription?.dispose();
     _notificationService?.removeListener(_onNotificationsChanged);
@@ -131,16 +154,51 @@ class _ParentFeeHubState extends State<ParentFeeHub>
 
   void _onNotificationsChanged() {
     final service = _notificationService;
-    if (!mounted || service == null) return;
+    if (!mounted || !_isForeground || service == null) return;
     final signal = _feeNotificationSignal(service);
     if (signal == _lastNotificationSignal) return;
     _lastNotificationSignal = signal;
     unawaited(_loadData(forceRefresh: true, showSpinner: false));
   }
 
+  bool get _isForeground =>
+      WidgetsBinding.instance.lifecycleState == null ||
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  bool _isCurrent(int scope, int generation) =>
+      mounted &&
+      scope == _api.sessionScopeVersion &&
+      generation == _childGeneration;
+
+  void _onScopeChanged() {
+    if (_scope == _api.sessionScopeVersion) return;
+    _scope = _api.sessionScopeVersion;
+    _refreshFuture = null;
+    _refreshAgain = false;
+    _childGeneration++;
+    setState(() {
+      _childrenData = [];
+      _activeChildIndex = 0;
+      _clearChildData();
+    });
+    if (_api.currentRoleName == 'parent') unawaited(_loadData());
+  }
+
+  void _clearChildData() {
+    _invoiceRows = null;
+    _feeStructure = [];
+    _paymentHistory = [];
+    _paymentRequests = const [];
+    _proofLoading = false;
+    _proofCurrent = false;
+    _proofError = false;
+    _state = const RepositoryState.loading();
+  }
+
   Future<void> _loadData({
     bool forceRefresh = false,
     bool showSpinner = true,
+    bool reloadChildren = true,
   }) async {
     if (_refreshFuture != null) {
       _refreshAgain = true;
@@ -148,242 +206,312 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     }
     final completer = Completer<void>();
     _refreshFuture = completer.future;
+    final scope = _scope;
+    final generation = _childGeneration;
     try {
       do {
         _refreshAgain = false;
         await _performLoad(
+          scope: scope,
+          generation: generation,
           forceRefresh: forceRefresh,
           showSpinner: showSpinner,
+          reloadChildren: reloadChildren,
         );
-      } while (_refreshAgain && mounted);
+      } while (_isCurrent(scope, generation) && _refreshAgain);
     } finally {
-      _refreshFuture = null;
+      if (identical(_refreshFuture, completer.future)) _refreshFuture = null;
       completer.complete();
     }
   }
 
   Future<void> _performLoad({
+    required int scope,
+    required int generation,
     required bool forceRefresh,
     required bool showSpinner,
+    required bool reloadChildren,
   }) async {
-    final generation = _childGeneration;
-    final previous = _state.data;
+    final refreshNonce = forceRefresh
+        ? DateTime.now().millisecondsSinceEpoch
+        : null;
     if (showSpinner) {
       setState(() {
-        _state = RepositoryState.loading(
-          data: previous,
-          source: previous == null
-              ? RepositorySource.empty
-              : RepositorySource.cache,
-          isStale: previous != null,
-          isRefreshing: previous != null,
+        _state = _state.copyWith(
+          phase: RepositoryPhase.loading,
+          isRefreshing: _state.hasData,
+          error: null,
         );
       });
     }
     try {
-      final refreshNonce = forceRefresh
-          ? DateTime.now().millisecondsSinceEpoch
-          : null;
-      final children = await _repository.loadChildren(
-        refreshNonce: refreshNonce,
-      );
-      final selectedIndex = await ParentChildSelectionService.indexFor(
-        children,
-        fallback: _activeChildIndex,
-      );
-      if (!mounted || generation != _childGeneration) return;
-      _activeChildIndex = selectedIndex;
-      var feeList = <Map<String, dynamic>>[];
-      final historyList = <Map<String, dynamic>>[];
+      if (reloadChildren) {
+        final children = await _repository
+            .loadChildren(refreshNonce: refreshNonce)
+            .timeout(_loadTimeout);
+        if (!_isCurrent(scope, generation)) return;
+        final linked = children
+            .where((row) => _childId(row).isNotEmpty)
+            .toList();
+        final selectedIndex = await ParentChildSelectionService.indexFor(
+          linked,
+          fallback: _activeChildIndex,
+        );
+        if (!_isCurrent(scope, generation)) return;
+        final newId = linked.isEmpty ? '' : _childId(linked[selectedIndex]);
+        setState(() {
+          if (_activeChildId != newId) _clearChildData();
+          _childrenData = linked;
+          _activeChildIndex = selectedIndex;
+        });
+      }
+      if (_activeChildId.isEmpty) {
+        setState(() => _state = const RepositoryState.empty());
+        return;
+      }
+      final child = _childrenData[_activeChildIndex];
+      final studentId = _childId(child);
+      setState(() {
+        _proofCurrent = false;
+        _proofLoading = true;
+        _proofError = false;
+      });
+      // Each request updates its own surface. Proof status does not hold up a
+      // confirmed invoice balance, and payment actions wait for live status.
+      await Future.wait<void>([
+        _loadInvoices(scope, generation, studentId, child, refreshNonce),
+        _loadProofs(scope, generation, studentId, child),
+      ]);
+    } on Object catch (error) {
+      if (_isCurrent(scope, generation)) setState(() => _showFeeError(error));
+    }
+  }
 
-      if (children.isNotEmpty) {
-        final child = children[_activeChildIndex];
-        final studentId = (child['id'] ?? child['student_id'] ?? '').toString();
+  Future<void> _loadInvoices(
+    int scope,
+    int generation,
+    String studentId,
+    Map<String, dynamic> child,
+    int? refreshNonce,
+  ) async {
+    var cache = const CacheMetadata(isStale: false);
+    try {
+      final invoices = await _repository
+          .loadStudentFees(
+            studentId,
+            refreshNonce: refreshNonce,
+            onCacheMetadata: (metadata) => cache = metadata,
+          )
+          .timeout(_loadTimeout);
+      if (!_isCurrent(scope, generation) || studentId != _activeChildId) return;
+      setState(() {
+        _invoiceRows = invoices;
+        _applyFeeRows(child);
+        _state = RepositoryState(
+          data: const Object(),
+          source: cache.isStale
+              ? RepositorySource.cache
+              : RepositorySource.remote,
+          isStale: cache.isStale,
+          lastUpdated: cache.isStale ? cache.storedAt : DateTime.now().toUtc(),
+        );
+      });
+    } on Object catch (error) {
+      if (_isCurrent(scope, generation) && studentId == _activeChildId) {
+        setState(() => _showFeeError(error));
+      }
+    }
+  }
 
-        final feeRows = studentId.isEmpty
-            ? <Map<String, dynamic>>[]
-            : await _repository.loadStudentFees(
-                studentId,
-                refreshNonce: refreshNonce,
-              );
-        // The linked-child endpoint returns the invoices and their payments.
-        // Do not call /fees/invoices here: that is intentionally restricted to
-        // principal finance management.
-        final invoices = feeRows;
-        final paymentRequests = studentId.isEmpty
-            ? <Map<String, dynamic>>[]
-            : await _repository.loadPaymentRequests(studentId: studentId);
+  Future<void> _loadProofs(
+    int scope,
+    int generation,
+    String studentId,
+    Map<String, dynamic> child,
+  ) async {
+    try {
+      final requests = await _repository
+          .loadPaymentRequests(studentId: studentId)
+          .timeout(_loadTimeout);
+      if (!_isCurrent(scope, generation) || studentId != _activeChildId) return;
+      setState(() {
+        _paymentRequests = requests;
+        _proofCurrent = true;
+        _proofLoading = false;
+        _applyFeeRows(child);
+      });
+    } on Object {
+      if (!_isCurrent(scope, generation) || studentId != _activeChildId) return;
+      setState(() {
+        _paymentRequests = const [];
+        _proofError = true;
+        _proofLoading = false;
+        _applyFeeRows(child);
+      });
+    }
+  }
 
-        feeList = feeRows.map((inv) {
-          final balance =
-              (inv['balance_amount'] as num?)?.toDouble() ??
-              (inv['balance'] as num?)?.toDouble() ??
+  void _showFeeError(Object error) {
+    final previous = _state;
+    _state = previous.hasData
+        ? previous.copyWith(
+            phase: RepositoryPhase.ready,
+            isStale: true,
+            isRefreshing: false,
+            error: error,
+          )
+        : RepositoryState.error(error: error);
+  }
+
+  bool _isAwaitingReview(Object? status) =>
+      FeePaymentRequestStatus.isPrincipalPending(status) ||
+      FeePaymentRequestStatus.normalize(status) == 'pending_approval';
+
+  void _applyFeeRows(Map<String, dynamic> child) {
+    final invoices = _invoiceRows ?? const <Map<String, dynamic>>[];
+    final paymentRequests = _paymentRequests;
+    final historyList = <Map<String, dynamic>>[];
+    final feeList = invoices.map((inv) {
+      final balance =
+          (inv['balance_amount'] as num?)?.toDouble() ??
+          (inv['balance'] as num?)?.toDouble() ??
+          0.0;
+      final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
+      final total =
+          (inv['net_amount'] as num?)?.toDouble() ??
+          (inv['total_amount'] as num?)?.toDouble() ??
+          balance + paid;
+      final feeType = _text(inv['fee_type']);
+      final awaitingReview =
+          balance > 0 &&
+          paymentRequests.any(
+            (request) =>
+                '${request['invoice_id']}' == '${inv['id']}' &&
+                _isAwaitingReview(request['status']),
+          );
+      return {
+        'id': inv['id'],
+        'invoiceNumber': inv['invoice_number'] ?? '',
+        'component': _text(
+          inv['fee_item_name'],
+          fallback: _feeTypeLabel(feeType),
+        ),
+        'fee_type': feeType,
+        'amount': balance,
+        'paidAmount': paid,
+        'totalAmount': total,
+        'dueDate': (inv['due_date'] ?? '').toString(),
+        'status': awaitingReview
+            ? 'Awaiting verification'
+            : _statusFromFeeRow(inv),
+        'awaitingReview': awaitingReview,
+        'rejection_reason': inv['rejection_reason'],
+        'items': _invoiceItems(inv),
+        'student': inv['student'],
+      };
+    }).toList();
+
+    for (final inv in invoices) {
+      final payments = inv['payments'];
+      if (payments is List) {
+        for (final p in payments.whereType<Map>()) {
+          final payment = Map<String, dynamic>.from(p);
+          final paymentStatus = _text(
+            payment['status'],
+            fallback: 'completed',
+          ).toLowerCase();
+          if (!{'completed', 'approved', 'paid'}.contains(paymentStatus)) {
+            continue;
+          }
+          final amount =
+              (payment['amount'] as num?)?.toDouble() ??
+              (payment['amount_paid'] as num?)?.toDouble() ??
               0.0;
-          final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
-          final total =
-              (inv['net_amount'] as num?)?.toDouble() ??
-              (inv['total_amount'] as num?)?.toDouble() ??
-              balance + paid;
-          final feeType = _text(inv['fee_type']);
-          final awaitingReview =
-              balance > 0 &&
-              paymentRequests.any(
-                (request) =>
-                    '${request['invoice_id']}' == '${inv['id']}' &&
-                    const {
-                      'submitted',
-                      'pending_approval',
-                      'pending_verification',
-                    }.contains(_text(request['status']).toLowerCase()),
-              );
-          return {
-            'id': inv['id'],
-            'invoiceNumber': inv['invoice_number'] ?? '',
+          final receipt = payment['receipt'] is Map
+              ? Map<String, dynamic>.from(payment['receipt'] as Map)
+              : const <String, dynamic>{};
+          historyList.add({
+            'id': payment['id'] ?? '',
+            'invoiceId': inv['id'] ?? '',
             'component': _text(
               inv['fee_item_name'],
-              fallback: _feeTypeLabel(feeType),
+              fallback: 'Invoice ${inv['invoice_number'] ?? ''}',
             ),
-            'fee_type': feeType,
-            'amount': balance,
-            'paidAmount': paid,
-            'totalAmount': total,
-            'dueDate': (inv['due_date'] ?? '').toString(),
-            'status': awaitingReview
-                ? 'Awaiting verification'
-                : _statusFromFeeRow(inv),
-            'awaitingReview': awaitingReview,
-            'rejection_reason': inv['rejection_reason'],
-            'items': _invoiceItems(inv),
-            'student': inv['student'],
-          };
-        }).toList();
-
-        for (final inv in invoices) {
-          final payments = inv['payments'];
-          if (payments is List) {
-            for (final p in payments.whereType<Map>()) {
-              final payment = Map<String, dynamic>.from(p);
-              final paymentStatus = _text(
-                payment['status'],
-                fallback: 'completed',
-              ).toLowerCase();
-              if (!{'completed', 'approved', 'paid'}.contains(paymentStatus)) {
-                continue;
-              }
-              final amount =
-                  (payment['amount'] as num?)?.toDouble() ??
-                  (payment['amount_paid'] as num?)?.toDouble() ??
-                  0.0;
-              final receipt = payment['receipt'] is Map
-                  ? Map<String, dynamic>.from(payment['receipt'] as Map)
-                  : const <String, dynamic>{};
-              historyList.add({
-                'id': payment['id'] ?? '',
-                'invoiceId': inv['id'] ?? '',
-                'component': _text(
-                  inv['fee_item_name'],
-                  fallback: 'Invoice ${inv['invoice_number'] ?? ''}',
-                ),
-                'amount': amount,
-                'date': (payment['paid_at'] ?? payment['payment_date'] ?? '')
-                    .toString(),
-                'method':
-                    (payment['payment_method'] ?? payment['payment_mode'] ?? '')
-                        .toString(),
-                'receiptNo': _text(
-                  receipt['display_receipt_number'] ??
-                      receipt['receipt_number'] ??
-                      payment['receipt_number'] ??
-                      payment['reference_number'],
-                ),
-                'student': _studentName(child),
-                'class': _studentClass(child),
-                'rollNo': _studentRoll(child),
-                'parentName': '',
-                'status': 'Paid',
-                'rawStatus': paymentStatus,
-                'paymentRequest': {
-                  ...payment,
-                  'amount': amount,
-                  'payment_method':
-                      payment['payment_method'] ?? payment['payment_mode'],
-                  'payment_mode':
-                      payment['payment_method'] ?? payment['payment_mode'],
-                  'payment_date': payment['paid_at'] ?? payment['payment_date'],
-                  'transaction_ref':
-                      receipt['transaction_ref'] ?? payment['reference_number'],
-                  'receipt': receipt,
-                  'invoice': inv,
-                  'student': child,
-                },
-              });
-            }
-          }
-        }
-
-        for (final request in paymentRequests) {
-          final requestStatus = _text(request['status']).toLowerCase();
-          // Finalized payments come from the invoice's payments relation.
-          // Keep only actionable clarification requests in this hub so the
-          // parent can resubmit proof without duplicating receipt history.
-          if (requestStatus != 'clarification_required') continue;
-          final invoice = request['invoice'] is Map
-              ? Map<String, dynamic>.from(request['invoice'] as Map)
-              : invoices.firstWhere(
-                  (inv) => '${inv['id']}' == '${request['invoice_id']}',
-                  orElse: () => const <String, dynamic>{},
-                );
-          historyList.add({
-            'id': request['id'] ?? '',
-            'invoiceId': request['invoice_id'] ?? '',
-            'component':
-                'Invoice ${invoice['invoice_number'] ?? request['invoice_id'] ?? ''}',
-            'amount': (request['amount'] as num?)?.toDouble() ?? 0.0,
-            'date': (request['payment_date'] ?? request['created_at'] ?? '')
+            'amount': amount,
+            'date': (payment['paid_at'] ?? payment['payment_date'] ?? '')
                 .toString(),
             'method':
-                (request['payment_method'] ?? request['payment_mode'] ?? '')
+                (payment['payment_method'] ?? payment['payment_mode'] ?? '')
                     .toString(),
-            'receiptNo': (request['request_reference'] ?? '').toString(),
+            'receiptNo': _text(
+              receipt['display_receipt_number'] ??
+                  receipt['receipt_number'] ??
+                  payment['receipt_number'] ??
+                  payment['reference_number'],
+            ),
             'student': _studentName(child),
             'class': _studentClass(child),
             'rollNo': _studentRoll(child),
             'parentName': '',
-            'status': _paymentStatusLabel(request['status']),
-            'rawStatus': requestStatus,
-            'paymentRequest': Map<String, dynamic>.from(request),
+            'status': 'Paid',
+            'rawStatus': paymentStatus,
+            'paymentRequest': {
+              ...payment,
+              'amount': amount,
+              'payment_method':
+                  payment['payment_method'] ?? payment['payment_mode'],
+              'payment_mode':
+                  payment['payment_method'] ?? payment['payment_mode'],
+              'payment_date': payment['paid_at'] ?? payment['payment_date'],
+              'transaction_ref':
+                  receipt['transaction_ref'] ?? payment['reference_number'],
+              'receipt': receipt,
+              'invoice': inv,
+              'student': child,
+            },
           });
         }
-        historyList.sort(
-          (a, b) => (b['date'] ?? '').toString().compareTo(
-            (a['date'] ?? '').toString(),
-          ),
-        );
       }
+    }
 
-      if (!mounted || generation != _childGeneration) return;
-      setState(() {
-        _childrenData = children;
-        _feeStructure = feeList;
-        _paymentHistory = historyList;
-        _state = const RepositoryState(
-          data: Object(),
-          source: RepositorySource.remote,
-        );
-      });
-    } on Object catch (e) {
-      if (!mounted || generation != _childGeneration) return;
-      setState(() {
-        _state = previous == null
-            ? RepositoryState.error(error: e)
-            : RepositoryState(
-                data: previous,
-                source: RepositorySource.cache,
-                isStale: true,
-                error: e,
-              );
+    for (final request in paymentRequests) {
+      final requestStatus = _text(request['status']).toLowerCase();
+      // Finalized payments come from the invoice's payments relation.
+      // Keep only actionable clarification requests in this hub so the
+      // parent can resubmit proof without duplicating receipt history.
+      if (requestStatus != 'clarification_required') continue;
+      final invoice = request['invoice'] is Map
+          ? Map<String, dynamic>.from(request['invoice'] as Map)
+          : invoices.firstWhere(
+              (inv) => '${inv['id']}' == '${request['invoice_id']}',
+              orElse: () => const <String, dynamic>{},
+            );
+      historyList.add({
+        'id': request['id'] ?? '',
+        'invoiceId': request['invoice_id'] ?? '',
+        'component':
+            'Invoice ${invoice['invoice_number'] ?? request['invoice_id'] ?? ''}',
+        'amount': (request['amount'] as num?)?.toDouble() ?? 0.0,
+        'date': (request['payment_date'] ?? request['created_at'] ?? '')
+            .toString(),
+        'method': (request['payment_method'] ?? request['payment_mode'] ?? '')
+            .toString(),
+        'receiptNo': (request['request_reference'] ?? '').toString(),
+        'student': _studentName(child),
+        'class': _studentClass(child),
+        'rollNo': _studentRoll(child),
+        'parentName': '',
+        'status': _paymentStatusLabel(request['status']),
+        'rawStatus': requestStatus,
+        'paymentRequest': Map<String, dynamic>.from(request),
       });
     }
+    historyList.sort(
+      (a, b) =>
+          (b['date'] ?? '').toString().compareTo((a['date'] ?? '').toString()),
+    );
+    _feeStructure = feeList;
+    _paymentHistory = historyList;
   }
 
   @override
@@ -393,16 +521,16 @@ class _ParentFeeHubState extends State<ParentFeeHub>
       onDestinationSelected: (_) {},
     );
 
-    if (_state.isLoading && !_state.hasData) {
+    if (_childrenData.isEmpty && _state.isLoading) {
       return SchoolDeskModuleScaffold(
         title: 'My Fees',
         subtitle: 'Fee overview, balances, and payment history',
         drawer: drawer,
-        body: const Center(child: CircularProgressIndicator()),
+        body: const SchoolDeskPageSkeleton(cardCount: 2),
       );
     }
 
-    if ((_state.isError && !_state.hasData) || _childrenData.isEmpty) {
+    if (_childrenData.isEmpty) {
       return SchoolDeskModuleScaffold(
         title: 'My Fees',
         subtitle: 'Fee overview, balances, and payment history',
@@ -416,7 +544,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 Text(
                   _state.error == null
                       ? 'No linked students. Ask the school admin to link students to this parent account.'
-                      : 'Unable to load fee data: ${_state.error}',
+                      : 'Unable to load fee data. Check your connection and try again.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.ibmPlexSans(
                     color: context.appTheme.onSurface,
@@ -446,71 +574,88 @@ class _ParentFeeHubState extends State<ParentFeeHub>
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: SchoolDeskRepositoryStateView<Object>(
-        state: _state,
-        expandStaleContent: true,
-        onRetry: () => _loadData(forceRefresh: true),
-        data: (_) => DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFFF4FBF8), Color(0xFFF7F8FF)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF4FBF8), Color(0xFFF7F8FF)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
-          child: RefreshIndicator(
-            onRefresh: () => _loadData(forceRefresh: true, showSpinner: false),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 48),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildChildSelector(),
-                  const SizedBox(height: 12),
+        ),
+        child: RefreshIndicator(
+          onRefresh: () => _loadData(forceRefresh: true, showSpinner: false),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 48),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildChildSelector(),
+                const SizedBox(height: 12),
+                if (_invoiceRows == null && _state.isLoading)
+                  Semantics(
+                    label: 'Loading fee balance',
+                    child: const LoadingSkeletonWidget(height: 152),
+                  )
+                else if (_invoiceRows == null)
+                  SchoolDeskStatusPanel.error(
+                    title: 'Fee balance unavailable',
+                    message: 'Check your connection and try again.',
+                    onAction: () => _loadData(forceRefresh: true),
+                  )
+                else ...[
+                  if (_state.isOffline)
+                    SchoolDeskStatusPanel.stale(
+                      message: _state.lastUpdated == null
+                          ? 'Reconnect to act on the latest balance.'
+                          : 'Last updated ${DateFormat.MMMd().add_jm().format(_state.lastUpdated!.toLocal())}.',
+                      onAction: () => _loadData(forceRefresh: true),
+                    ),
                   _buildHeroBalanceCard(),
-                  if (clarification != null) ...[
-                    const SizedBox(height: 12),
-                    _buildActionBanner(clarification),
-                  ],
-                  const SizedBox(height: 16),
-                  _buildFeeSectionHeader(),
-                  const SizedBox(height: 8),
-                  if (_feeStructure.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: context.appTheme.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: context.appTheme.outlineVariant,
-                        ),
+                ],
+                const SizedBox(height: 12),
+                _buildProofStatus(),
+                if (clarification != null && _canStartPayment) ...[
+                  const SizedBox(height: 12),
+                  _buildActionBanner(clarification),
+                ],
+                const SizedBox(height: 16),
+                _buildFeeSectionHeader(),
+                const SizedBox(height: 8),
+                if (_invoiceRows != null && _feeStructure.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: context.appTheme.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: context.appTheme.outlineVariant,
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.receipt_long_rounded,
-                            color: context.appTheme.muted,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'No fee invoices published yet.',
-                              style: GoogleFonts.ibmPlexSans(
-                                fontSize: 14,
-                                color: context.appTheme.muted,
-                                fontWeight: FontWeight.w600,
-                              ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.receipt_long_rounded,
+                          color: context.appTheme.muted,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'No fee invoices published yet.',
+                            style: GoogleFonts.ibmPlexSans(
+                              fontSize: 14,
+                              color: context.appTheme.muted,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ],
-                      ),
-                    )
-                  else
-                    ..._feeStructure.map((fee) => _buildFeeItemCard(fee)),
-                ],
-              ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ..._feeStructure.map((fee) => _buildFeeItemCard(fee)),
+              ],
             ),
           ),
         ),
@@ -522,20 +667,44 @@ class _ParentFeeHubState extends State<ParentFeeHub>
     return ParentChildSelector(
       children: _childrenData,
       selectedIndex: _activeChildIndex,
-      isLoading: _state.isLoading,
       onSelected: (index) {
+        _childGeneration++;
+        _refreshFuture = null;
+        _refreshAgain = false;
         setState(() {
-          _childGeneration++;
           _activeChildIndex = index;
-          _state = RepositoryState.loading(
-            data: _state.data,
-            source: _state.source,
-            isRefreshing: true,
-          );
+          _clearChildData();
         });
-        ParentChildSelectionService.saveIndex(_childrenData, index);
-        _loadData(forceRefresh: true);
+        unawaited(ParentChildSelectionService.saveIndex(_childrenData, index));
+        unawaited(_loadData(reloadChildren: false));
       },
+    );
+  }
+
+  Widget _buildProofStatus() {
+    if (_proofLoading && !_proofCurrent) {
+      return const Text('Checking payment proof status…');
+    }
+    if (_proofError) {
+      return SchoolDeskStatusPanel.error(
+        title: 'Payment proof status unavailable',
+        message:
+            'Reconnect and retry before starting a payment or resubmitting proof.',
+        onAction: () => _loadData(forceRefresh: true, reloadChildren: false),
+      );
+    }
+    if (!_proofCurrent) return const SizedBox.shrink();
+    final latest = _paymentRequests
+        .where(
+          (request) =>
+              FeePaymentRequestStatus.isReviewRecord(request['status']),
+        )
+        .firstOrNull;
+    if (latest == null) return const SizedBox.shrink();
+    return ListTile(
+      leading: const Icon(Icons.fact_check_outlined),
+      title: const Text('Latest payment proof'),
+      subtitle: Text(_paymentStatusLabel(latest['status'])),
     );
   }
 
@@ -634,7 +803,8 @@ class _ParentFeeHubState extends State<ParentFeeHub>
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: nextFee['awaitingReview'] == true
+                onPressed:
+                    nextFee['awaitingReview'] == true || !_canStartPayment
                     ? null
                     : () => _openPaymentFlow(nextFee),
                 style: ElevatedButton.styleFrom(
@@ -648,7 +818,9 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                 ),
                 child: Text(
                   nextFee['awaitingReview'] == true
-                      ? 'Awaiting verification'
+                      ? 'Under review'
+                      : !_canStartPayment
+                      ? 'Payment requires a connection'
                       : 'Pay Now — ${_money(nextFee['amount'])}',
                   style: GoogleFonts.ibmPlexSans(
                     fontSize: 13,
@@ -942,10 +1114,12 @@ class _ParentFeeHubState extends State<ParentFeeHub>
           ],
           if (balance > 0) ...[
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                if (hasLinkedReceipt) ...[
+                if (hasLinkedReceipt)
                   OutlinedButton.icon(
                     onPressed: () => _openReceiptForFee(fee),
                     icon: const Icon(Icons.receipt_long, size: 14),
@@ -959,10 +1133,8 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                ],
                 ElevatedButton(
-                  onPressed: fee['awaitingReview'] == true
+                  onPressed: fee['awaitingReview'] == true || !_canStartPayment
                       ? null
                       : () => _openPaymentFlow(fee),
                   style: ElevatedButton.styleFrom(
@@ -977,21 +1149,16 @@ class _ParentFeeHubState extends State<ParentFeeHub>
                     ),
                     elevation: 0,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        fee['awaitingReview'] == true
-                            ? 'Awaiting verification'
-                            : 'Pay Now',
-                        style: GoogleFonts.ibmPlexSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.arrow_forward_rounded, size: 14),
-                    ],
+                  child: Text(
+                    fee['awaitingReview'] == true
+                        ? 'Under review'
+                        : !_canStartPayment
+                        ? 'Payment unavailable'
+                        : 'Pay Now',
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -1136,6 +1303,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   }
 
   Future<void> _openPaymentFlow(Map<String, dynamic> fee) async {
+    if (!_canStartPayment) return;
     final student = _childrenData.isEmpty
         ? null
         : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
@@ -1150,6 +1318,7 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   }
 
   Future<void> _openClarificationResubmit(Map<String, dynamic> payment) async {
+    if (!_canStartPayment) return;
     final invoiceId = _text(payment['invoiceId']);
     final fee = _feeStructure.firstWhere(
       (row) => _text(row['id']) == invoiceId,
@@ -1313,16 +1482,18 @@ class _ParentFeeHubState extends State<ParentFeeHub>
   String _money(double amount) => '₹${amount.toStringAsFixed(0)}';
 
   String _paymentStatusLabel(dynamic raw) {
+    if (_isAwaitingReview(raw)) return 'Under review';
     switch ('${raw ?? ''}'.toLowerCase()) {
       case 'initiated':
       case 'payment_app_opened':
         return 'Initiated';
       case 'pending_verification':
       case 'submitted':
-        return 'Pending Verification';
+        return 'Under review';
       case 'clarification_required':
-        return 'Clarification Required';
+        return 'Action needed';
       case 'approved':
+        return 'Approved';
       case 'completed':
       case 'paid':
         return 'Paid';

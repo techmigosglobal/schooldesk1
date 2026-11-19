@@ -17,17 +17,17 @@ class ApiParentFeePaymentRepository implements ParentFeePaymentRepository {
   Future<List<Map<String, dynamic>>> loadStudentFees(
     String studentId, {
     int? refreshNonce,
+    void Function(CacheMetadata)? onCacheMetadata,
   }) {
     return _api.getParentStudentFees(
       studentId,
       refreshNonce: refreshNonce,
+      onCacheMetadata: onCacheMetadata,
     );
   }
 
   @override
-  Future<List<Map<String, dynamic>>> loadPaymentRequests({
-    String? studentId,
-  }) {
+  Future<List<Map<String, dynamic>>> loadPaymentRequests({String? studentId}) {
     return _api.getParentPaymentRequests(studentId: studentId);
   }
 
@@ -46,10 +46,7 @@ class ApiParentFeePaymentRepository implements ParentFeePaymentRepository {
   Future<Map<String, dynamic>> loadPaymentConfig({
     required String invoiceId,
     int? refreshNonce,
-  }) => _api.getPaymentConfig(
-    invoiceId: invoiceId,
-    refreshNonce: refreshNonce,
-  );
+  }) => _api.getPaymentConfig(invoiceId: invoiceId, refreshNonce: refreshNonce);
 
   @override
   Future<Map<String, dynamic>> submitPaymentProof({

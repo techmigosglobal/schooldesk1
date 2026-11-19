@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -44,57 +45,80 @@ class _Dashboard implements LeadershipDashboardRepository {
   int loads = 0;
   bool fail = false;
   String logo = '';
+  LeadershipDashboardCriticalSnapshot? cached;
+  Completer<Result<LeadershipDashboardIdentity>>? identityGate;
+  Completer<Result<LeadershipDashboardCriticalSnapshot>>? criticalGate;
+  @override
+  Future<LeadershipDashboardCriticalSnapshot?> readCachedDashboard({
+    required String role,
+  }) async => cached;
+
   @override
   Future<Result<LeadershipDashboardCriticalSnapshot>> loadCritical({
     required String role,
   }) async {
     loads++;
-    return Result.ok(
+    final gate = criticalGate;
+    if (gate != null) return gate.future;
+    return const Result.ok(
       LeadershipDashboardCriticalSnapshot(
         dashboard: {
-          'metrics': {'active_unassigned_students': 2},
+          'pending_fee_balance': 2400,
+          'metrics': {
+            'active_unassigned_students': 2,
+            'pending_fee_requests': 1,
+          },
         },
-        school: {
-          'id': 'school-a',
-          'name': 'Arishville',
-          'school_type': 'Preschool',
-          'principal_name': 'Principal',
-          'logo_url': logo,
-        },
-        profile: UserResponse.fromJson({'name': 'Shilpa', 'id': 'qa'}),
       ),
     );
   }
 
   @override
+  Future<Result<LeadershipDashboardIdentity>> loadIdentity() async {
+    final gate = identityGate;
+    if (gate != null) return gate.future;
+    return Result.ok((
+      school: {
+        'id': 'school-a',
+        'name': 'Arishville',
+        'school_type': 'Preschool',
+        'principal_name': 'Principal',
+        'logo_url': logo,
+      },
+      profile: UserResponse.fromJson({'name': 'Shilpa', 'id': 'qa'}),
+    ));
+  }
+
+  @override
+  Future<Result<Map<String, int>>> loadAttention() async {
+    if (fail) {
+      return const Result.err(ServerFailure(message: 'Guidance unavailable'));
+    }
+    return const Result.ok({'event': 2, 'leave': 3, 'account': 1, 'fee': 0});
+  }
+
+  @override
+  Future<Result<Map<String, dynamic>>> loadStaffAttendance() async =>
+      const Result.ok({});
+
+  @override
+  Future<Result<List<Map<String, dynamic>>>> loadNotifications() async =>
+      const Result.ok([]);
+
+  int setupLoads = 0;
+
+  @override
   Future<Result<LeadershipDashboardOptionalSnapshot>> loadOptional({
     required String role,
-    required Map<String, dynamic> dashboard,
   }) async {
-    if (fail)
-      return const Result.err(ServerFailure(message: 'Guidance unavailable'));
+    setupLoads++;
     return const Result.ok(
       LeadershipDashboardOptionalSnapshot(
         academicYears: [],
         grades: [],
         sections: [],
         subjects: [],
-        staff: PaginatedList<StaffModel>(
-          data: [],
-          total: 0,
-          page: 1,
-          pageSize: 1,
-        ),
-        students: PaginatedList<StudentModel>(
-          data: [],
-          total: 0,
-          page: 1,
-          pageSize: 1,
-        ),
         feeStructures: [],
-        notifications: [],
-        staffAttendanceSummary: {},
-        attentionCounts: {'event': 2, 'leave': 3, 'account': 1, 'fee': 0},
       ),
     );
   }
@@ -104,13 +128,14 @@ Future<void> _open(
   WidgetTester tester,
   _Dashboard repository, {
   bool dark = false,
+  String role = 'principal',
   GlobalKey? capture,
 }) async {
   GoogleFonts.config.allowRuntimeFetching = false;
   SharedPreferences.setMockInitialValues({});
   BackendApiClient.instance.dio.interceptors.clear();
   BackendApiClient.instance.dio.httpClientAdapter = _EmptyReads();
-  BackendApiClient.instance.setCurrentRole('principal');
+  BackendApiClient.instance.setCurrentRole(role);
   tester.view.physicalSize = const Size(360, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -171,6 +196,64 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('summary actions render before branch identity arrives', (
+    tester,
+  ) async {
+    final repository = _Dashboard()
+      ..identityGate = Completer<Result<LeadershipDashboardIdentity>>();
+    await _open(tester, repository);
+    expect(
+      find.byKey(const ValueKey('role-home-ready-principal')),
+      findsOneWidget,
+    );
+    expect(find.text('Review payment proofs'), findsOneWidget);
+    expect(find.text('1 request awaiting verification'), findsOneWidget);
+    expect(find.text('₹2,400 outstanding'), findsOneWidget);
+    expect(find.text('Open reports'), findsOneWidget);
+    expect(repository.setupLoads, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('opens saved summary while a refresh is pending', (tester) async {
+    final repository = _Dashboard()
+      ..criticalGate = Completer<Result<LeadershipDashboardCriticalSnapshot>>()
+      ..cached = LeadershipDashboardCriticalSnapshot(
+        dashboard: const {
+          'metrics': {'pending_fee_requests': 2},
+        },
+        cacheMetadata: CacheMetadata(
+          isStale: true,
+          storedAt: DateTime.utc(2026, 1, 15, 9),
+        ),
+      );
+    await _open(tester, repository);
+    expect(
+      find.textContaining('Showing saved dashboard data. Updated'),
+      findsOneWidget,
+    );
+    expect(find.text('2 requests awaiting verification'), findsOneWidget);
+    repository.criticalGate!.complete(
+      const Result.err(ServerFailure(message: 'Connection unavailable')),
+    );
+    await tester.pump();
+    expect(find.text('2 requests awaiting verification'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Coordinator gets reports without finance shortcuts', (
+    tester,
+  ) async {
+    await _open(tester, _Dashboard(), role: 'coordinator');
+    expect(
+      find.byKey(const ValueKey('role-home-ready-coordinator')),
+      findsOneWidget,
+    );
+    expect(find.text('Open reports'), findsOneWidget);
+    expect(find.text('Review payment proofs'), findsNothing);
+    expect(find.text('Fee summary'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final dark in [false, true]) {
     testWidgets(
       'all missing setup and action groups appear in ${dark ? 'dark' : 'light'} dashboard',
@@ -186,6 +269,18 @@ void main() {
         expect(find.text('2 · School posts awaiting review'), findsOneWidget);
         expect(find.text('3 · Staff leave requests'), findsOneWidget);
         expect(find.text('0 · Fee requests'), findsNothing);
+        expect(repository.setupLoads, 0);
+        final setup = find.text('Show school setup checklist');
+        await tester.scrollUntilVisible(
+          setup,
+          450,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await Scrollable.ensureVisible(tester.element(setup), alignment: 0.5);
+        await tester.pumpAndSettle();
+        await tester.tap(setup);
+        await tester.pumpAndSettle();
+        expect(repository.setupLoads, 1);
         await tester.scrollUntilVisible(
           find.text('School Setup Progress'),
           450,
@@ -262,9 +357,10 @@ void main() {
       );
       expect(find.text('Needs attention'), findsNothing);
       expect(find.text('School Setup Progress'), findsNothing);
-      expect(find.text('Recommended: add your school logo'), findsNothing);
+      expect(repository.setupLoads, 0);
       expect(find.text('Retry'), findsWidgets);
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     },
   );
 }

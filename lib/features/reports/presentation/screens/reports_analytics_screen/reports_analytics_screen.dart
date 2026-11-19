@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
-import 'package:schooldesk1/core/network/models/backend_models.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/repositories/repository_state.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
@@ -12,6 +14,7 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/repository_state_view.dart';
 import 'package:schooldesk1/roles/principal/data/api_principal_reports_repository.dart';
 import 'package:schooldesk1/roles/principal/domain/principal_reports_repository.dart';
@@ -27,6 +30,18 @@ class ReportsAnalyticsScreen extends StatefulWidget {
 
 class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     with SingleTickerProviderStateMixin {
+  final _api = BackendApiClient.instance;
+  late final int _scopeVersion;
+  int _loadGeneration = 0;
+  bool _loadingScope = false;
+  bool _staffLoading = false;
+  bool _staffReady = false;
+  bool _staffError = false;
+
+  bool get _scopeChanged => _api.sessionScopeVersion != _scopeVersion;
+  bool _isCurrent(int generation) =>
+      mounted && !_scopeChanged && generation == _loadGeneration;
+
   int _selectedDrawerIndex = PrincipalNav.reports;
   late TabController _tabController;
 
@@ -35,10 +50,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   int _totalStudents = 0;
   int _totalStaff = 0;
   int _onLeaveCount = 0;
-  String _schoolName = AppConstants.schoolName;
-  String _schoolAddress = AppConstants.schoolAddress;
+  String _schoolName = '';
+  String _schoolAddress = '';
+  String _schoolLogoUrl = '';
   String _academicYearLabel = AppConstants.academicYear;
-  Uint8List? _schoolLogo;
   List<Map<String, dynamic>> _feeInvoices = [];
   List<Map<String, dynamic>> _attendanceRows = [];
   List<Map<String, dynamic>> _staffRows = [];
@@ -51,17 +66,35 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   PrincipalReportsRepository get _repository =>
       widget.repository ?? ApiPrincipalReportsRepository.legacyDefault;
 
-  bool get _isCoordinator =>
-      RoleAccessService.currentRoleName == 'coordinator';
+  bool get _isCoordinator => RoleAccessService.currentRoleName == 'coordinator';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _isCoordinator ? 3 : 4, vsync: this);
+    _scopeVersion = _api.sessionScopeVersion;
+    _api.addListener(_onScopeChanged);
+    _tabController = TabController(length: _isCoordinator ? 3 : 4, vsync: this)
+      ..addListener(_onTabChanged);
     _loadData();
   }
 
+  void _onScopeChanged() {
+    if (_scopeChanged) setState(() {});
+  }
+
+  void _onTabChanged() {
+    if (_tabController.index == _tabController.length - 1 && _state.hasData) {
+      unawaited(_loadStaffDetails(_loadGeneration));
+    }
+  }
+
   Future<void> _loadData() async {
+    if (_scopeChanged || _exportingReport != null) return;
+    final generation = ++_loadGeneration;
+    _staffLoading = false;
+    _staffReady = false;
+    _staffError = false;
+    _loadingScope = false;
     final previous = _state;
     if (mounted) {
       setState(() {
@@ -90,10 +123,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
       final attendanceRows = snapshot.attendance;
       final complaintRows = snapshot.complaints;
       final years = snapshot.academicYears;
-      final school = await _safeSchool();
-      final staffAttendance = await _safeStaffAttendance();
-      final staffSummary = await _safeStaffSummary();
-      final staffOnLeaveIds = await _safeStaffOnLeaveIds();
 
       var billed = 0.0;
       var collected = 0.0;
@@ -106,14 +135,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         final status = _text(year['status']).toLowerCase();
         return year['is_current'] == true || status == 'active';
       }).toList();
-      final schoolName = _text(
-        school['name'],
-        fallback: AppConstants.schoolName,
-      );
-      final address = _buildSchoolAddress(school);
-      final logo = await _networkImageBytes(_text(school['logo_url']));
-
-      if (!mounted) return;
+      if (!_isCurrent(generation)) return;
       setState(() {
         _totalBilled = billed;
         _totalCollected = collected;
@@ -123,33 +145,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         _staffRows = staffRows;
         _attendanceRows = attendanceRows;
         _complaintRows = complaintRows;
-        _staffAttendance = staffAttendance;
-        _staffOnLeaveIds = staffOnLeaveIds;
-        _schoolName = schoolName;
-        _schoolAddress = address.isEmpty ? AppConstants.schoolAddress : address;
-        _schoolLogo = logo;
         _academicYearLabel = currentYear.isEmpty
             ? AppConstants.academicYear
             : _text(
                 currentYear.first['year_label'] ?? currentYear.first['name'],
                 fallback: AppConstants.academicYear,
               );
-        _onLeaveCount = staffOnLeaveIds.isEmpty
-            ? _staffLeaveCount(staffSummary)
-            : staffOnLeaveIds
-                  .where(
-                    (staffId) => !staffAttendance.any(
-                      (row) => row.staffId == staffId && row.checkedIn,
-                    ),
-                  )
-                  .length;
         _state = const RepositoryState<Object>(
           data: Object(),
           source: RepositorySource.remote,
         );
       });
+      unawaited(_loadReportScope(generation));
+      _onTabChanged();
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!_isCurrent(generation)) return;
       setState(() {
         _state = previous.hasData
             ? RepositoryState<Object>(
@@ -164,70 +174,100 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     }
   }
 
-  Future<Map<String, dynamic>> _safeSchool() async {
-    try {
-      return (await _repository.loadSchool()).dataOrNull ?? const {};
-    } on Object {
-      return const {};
-    }
+  Future<void> _loadReportScope(int generation) async {
+    if (!_isCurrent(generation) || _loadingScope) return;
+    setState(() => _loadingScope = true);
+    final result = await _repository.loadSchool();
+    if (!_isCurrent(generation)) return;
+    setState(() {
+      _loadingScope = false;
+      final school = result.dataOrNull;
+      _schoolName = school == null ? '' : _text(school['name']);
+      _schoolAddress = school == null ? '' : _buildSchoolAddress(school);
+      _schoolLogoUrl = school == null ? '' : _text(school['logo_url']);
+    });
   }
 
-  Future<List<StaffAttendanceModel>> _safeStaffAttendance() async {
-    try {
-      return (await _repository.loadStaffAttendance(
-            date: _dateKey(DateTime.now()),
-          )).dataOrNull ??
-          const [];
-    } on Object {
-      return const [];
+  Future<void> _loadStaffDetails(int generation) async {
+    if (!_isCurrent(generation) || _staffLoading || _staffReady) return;
+    setState(() {
+      _staffLoading = true;
+      _staffError = false;
+    });
+    final today = DateUtils.dateOnly(DateTime.now());
+    final attendance = _repository.loadStaffAttendance(date: _dateKey(today));
+    final summary = _repository.loadStaffDailySummary(date: _dateKey(today));
+    final leave = _repository.loadApprovedLeaveApplications();
+    final records = await attendance;
+    final counts = await summary;
+    final applications = await leave;
+    if (!_isCurrent(generation)) return;
+    if (records.isFailure || counts.isFailure || applications.isFailure) {
+      setState(() {
+        _staffLoading = false;
+        _staffError = true;
+      });
+      return;
     }
-  }
-
-  Future<Map<String, dynamic>> _safeStaffSummary() async {
-    try {
-      return (await _repository.loadStaffDailySummary(
-            date: _dateKey(DateTime.now()),
-          )).dataOrNull ??
-          const {};
-    } on Object {
-      return const {};
-    }
-  }
-
-  Future<Set<String>> _safeStaffOnLeaveIds() async {
-    try {
-      final today = DateUtils.dateOnly(DateTime.now());
-      final applications =
-          (await _repository.loadApprovedLeaveApplications()).dataOrNull ??
-          const [];
-      return applications
-          .where((application) {
-            final from = DateTime.tryParse(application.fromDate);
-            final to = DateTime.tryParse(application.toDate);
-            if (from == null || to == null) return false;
-            final firstDay = DateUtils.dateOnly(from.toLocal());
-            final lastDay = DateUtils.dateOnly(to.toLocal());
-            return !today.isBefore(firstDay) && !today.isAfter(lastDay);
-          })
-          .map((application) => application.staffId)
-          .toSet();
-    } on Object {
-      return const {};
-    }
+    final staffAttendance = records.dataOrNull!;
+    final staffOnLeaveIds = applications.dataOrNull!
+        .where((application) {
+          final from = DateTime.tryParse(application.fromDate);
+          final to = DateTime.tryParse(application.toDate);
+          if (from == null || to == null) return false;
+          final firstDay = DateUtils.dateOnly(from.toLocal());
+          final lastDay = DateUtils.dateOnly(to.toLocal());
+          return !today.isBefore(firstDay) && !today.isAfter(lastDay);
+        })
+        .map((application) => application.staffId)
+        .toSet();
+    setState(() {
+      _staffLoading = false;
+      _staffReady = true;
+      _staffAttendance = staffAttendance;
+      _staffOnLeaveIds = staffOnLeaveIds;
+      _onLeaveCount = staffOnLeaveIds.isEmpty
+          ? _staffLeaveCount(counts.dataOrNull!)
+          : staffOnLeaveIds
+                .where(
+                  (staffId) => !staffAttendance.any(
+                    (row) => row.staffId == staffId && row.checkedIn,
+                  ),
+                )
+                .length;
+    });
   }
 
   @override
   void dispose() {
+    _api.removeListener(_onScopeChanged);
     _tabController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_scopeChanged) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Reports')),
+        body: const Center(
+          child: Text('Reopen Reports for your current branch.'),
+        ),
+      );
+    }
     return SchoolDeskModuleScaffold(
       title: 'Reports',
-      subtitle:
-          'Review school-wide operational reports and export-ready insights',
+      subtitle: _schoolName.isNotEmpty
+          ? '$_schoolName · $_academicYearLabel'
+          : 'Report scope: current branch',
+      actions: [
+        if (_state.hasData && !_loadingScope && _schoolName.isEmpty)
+          IconButton(
+            tooltip: 'Retry loading report scope',
+            onPressed: () => _loadReportScope(_loadGeneration),
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+      ],
       drawer: PrincipalDrawer(
         selectedIndex: _selectedDrawerIndex,
         onDestinationSelected: (index) =>
@@ -652,6 +692,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   }
 
   Widget _buildStaffTab() {
+    if (_staffError) {
+      return SchoolDeskStatusPanel.error(
+        title: 'Staff report unavailable',
+        message: 'Refresh to load staff attendance and leave records.',
+        onAction: () => _loadStaffDetails(_loadGeneration),
+      );
+    }
+    if (!_staffReady) return const Center(child: CircularProgressIndicator());
     final present = _staffPresentCount;
     final absent = (_totalStaff - present - _onLeaveCount).clamp(
       0,
@@ -1062,17 +1110,31 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
 
   Future<void> _showExportDialog({required String reportTitle}) async {
     if (_isCoordinator && reportTitle.toLowerCase().contains('fee')) return;
-    if (_exportingReport != null) return;
+    if (_exportingReport != null || _scopeChanged) return;
+    if (_schoolName.isEmpty || _loadingScope || _state.isStale) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Refresh the current branch before exporting.'),
+        ),
+      );
+      return;
+    }
+    if (reportTitle.toLowerCase().contains('staff') && !_staffReady) return;
+    final generatedAt = DateTime.now();
     setState(() => _exportingReport = reportTitle);
     try {
-      await _generateAndPreviewReport(reportTitle: reportTitle);
-      await _recordSupportedBackendExport(reportTitle);
-      if (!mounted) return;
+      await _generateAndPreviewReport(
+        reportTitle: reportTitle,
+        generatedAt: generatedAt,
+      );
+      if (!mounted || _scopeChanged) return;
+      await _recordSupportedBackendExport(reportTitle, generatedAt);
+      if (!mounted || _scopeChanged) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('$reportTitle PDF is ready.')));
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!mounted || _scopeChanged) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to generate $reportTitle: $error'),
@@ -1084,7 +1146,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     }
   }
 
-  Future<void> _recordSupportedBackendExport(String reportTitle) async {
+  Future<void> _recordSupportedBackendExport(
+    String reportTitle,
+    DateTime generatedAt,
+  ) async {
     final lower = reportTitle.toLowerCase();
     if (_isCoordinator && lower.contains('fee')) return;
     if (lower.contains('staff')) return;
@@ -1095,7 +1160,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         reportType: 'attendance',
         format: 'pdf',
         scope: 'principal_reports',
-        parameters: {'month': _dateKey(DateTime.now())},
+        parameters: {'month': _dateKey(generatedAt)},
       );
       if (result.isFailure) {
         throw StateError(
@@ -1119,7 +1184,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     }
   }
 
-  Future<void> _generateAndPreviewReport({required String reportTitle}) async {
+  Future<void> _generateAndPreviewReport({
+    required String reportTitle,
+    required DateTime generatedAt,
+  }) async {
     final lower = reportTitle.toLowerCase();
     if (_isCoordinator && lower.contains('fee')) return;
     final isStaffReport = lower.contains('staff');
@@ -1263,22 +1331,24 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
 
     final period = lower.contains('fee')
         ? _academicYearLabel
-        : DateFormat('MMMM yyyy').format(DateTime.now());
+        : DateFormat('MMMM yyyy').format(generatedAt);
+    final schoolLogo = await _networkImageBytes(_schoolLogoUrl);
+    if (!mounted || _scopeChanged) return;
     final bytes = await pdfService.generateStructuredReport(
       reportTitle: reportTitle,
       period: period,
       scope: '$_schoolName · branch-scoped report',
       schoolName: _schoolName,
       schoolAddress: _schoolAddress,
-      schoolLogo: _schoolLogo,
+      schoolLogo: schoolLogo,
       metrics: metrics,
       tables: tables,
     );
-    if (!mounted) return;
+    if (!mounted || _scopeChanged) return;
     await pdfService.previewDocument(
       context,
       bytes,
-      '${reportTitle.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}_${_dateKey(DateTime.now())}.pdf',
+      '${reportTitle.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}_${_dateKey(generatedAt)}.pdf',
     );
   }
 

@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/widgets/role_home_ready.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/app/providers/app_providers.dart';
 import 'package:schooldesk1/core/network/models/backend_models.dart';
@@ -48,10 +49,6 @@ class _StaffQrAttendancePanelState
   void initState() {
     super.initState();
     unawaited(_load());
-    _pollingTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _pollRecentScans(),
-    );
   }
 
   @override
@@ -84,7 +81,13 @@ class _StaffQrAttendancePanelState
         _refreshing = false;
       });
       _startLiveTicker();
-      unawaited(_loadRecentScans());
+      if (_pollingTimer == null) {
+        unawaited(_loadRecentScans());
+        _pollingTimer = Timer.periodic(
+          const Duration(seconds: 5),
+          (_) => _pollRecentScans(),
+        );
+      }
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -250,7 +253,7 @@ class _StaffQrAttendancePanelState
             : LayoutBuilder(
                 builder: (context, constraints) {
                   final wide = constraints.maxWidth >= 720 && !widget.compact;
-                  final qr = _QrBlock(
+                  final qrBlock = _QrBlock(
                     token: _token,
                     secondsLeft: _secondsLeft,
                     refreshing: _refreshing,
@@ -260,6 +263,9 @@ class _StaffQrAttendancePanelState
                     exportingLog: _exportingLog,
                     onExport: _exportDailyQrLog,
                   );
+                  final qr = _token != null
+                      ? RoleHomeReady(role: 'kiosk', child: qrBlock)
+                      : qrBlock;
                   final status = _StaffQrStatusBlock(
                     presentCount: presentCount,
                     recent: _recent.take(5).toList(),

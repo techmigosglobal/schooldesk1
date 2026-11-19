@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/errors/exceptions.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/fee_payment_request_status.dart';
 import 'package:schooldesk1/core/utils/media_url.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -23,13 +25,20 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   AdminFeesRepository get _repository =>
       widget.repository ?? ApiAdminFeesRepository.legacyDefault;
 
-  RepositoryState<Object> _state = const RepositoryState.loading();
+  final _api = BackendApiClient.instance;
+  late final int _scopeVersion;
+  int _requestGeneration = 0;
+  RepositoryState<PaginatedList<Map<String, dynamic>>> _state =
+      const RepositoryState.loading();
   bool _loadingMore = false;
-  bool _hasMore = false;
-  int _page = 1;
-  int _totalRequests = 0;
+  bool _reloading = false;
   String _statusFilter = 'pending';
-  List<Map<String, dynamic>> _requests = [];
+
+  bool get _scopeChanged => _scopeVersion != _api.sessionScopeVersion;
+  bool get _hasMore => _state.data?.hasMore ?? false;
+  int get _page => _state.data?.page ?? 1;
+  int get _totalRequests => _state.data?.total ?? 0;
+  List<Map<String, dynamic>> get _requests => _state.data?.data ?? const [];
 
   final Map<String, TextEditingController> _remarksControllers = {};
   final Map<String, bool> _submittingMap = {};
@@ -39,21 +48,32 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   @override
   void initState() {
     super.initState();
+    _scopeVersion = _api.sessionScopeVersion;
+    _api.addListener(_onScopeChanged);
     _loadRequests();
   }
 
   @override
   void dispose() {
+    _api.removeListener(_onScopeChanged);
     for (final ctrl in _remarksControllers.values) {
       ctrl.dispose();
     }
     super.dispose();
   }
 
+  void _onScopeChanged() {
+    if (_scopeChanged) setState(() {});
+  }
+
   Future<void> _loadRequests({
     bool showSpinner = true,
     bool resetPage = true,
   }) async {
+    if (_scopeChanged || (!resetPage && (_loadingMore || _reloading))) return;
+    final generation = ++_requestGeneration;
+    final filter = _statusFilter;
+    _reloading = resetPage;
     if (showSpinner) {
       final previous = _state.data;
       setState(() {
@@ -72,14 +92,14 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
     }
     try {
       final response = await _repository.loadParentPaymentRequestsPage(
-        status: _statusFilter == 'all' ? null : _statusFilter,
+        status: filter == 'all' ? null : filter,
         page: resetPage ? 1 : _page + 1,
         pageSize: 20,
       );
       final rows = response.data
           .where((row) => FeePaymentRequestStatus.isReviewRecord(row['status']))
           .toList();
-      if (!mounted) return;
+      if (!mounted || _scopeChanged || generation != _requestGeneration) return;
       final existingIds = _requests.map((row) => '${row['id'] ?? ''}').toSet();
       final additions = resetPage
           ? rows
@@ -95,20 +115,29 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
       }
 
       setState(() {
-        _requests = resetPage ? rows : [..._requests, ...additions];
-        _page = response.page;
-        _totalRequests = response.total;
-        _hasMore = response.hasMore;
-        _state = const RepositoryState(
-          data: Object(),
+        _state = RepositoryState(
+          data: PaginatedList(
+            data: resetPage ? rows : [..._requests, ...additions],
+            page: response.page,
+            total: response.total,
+            pageSize: response.pageSize,
+          ),
           source: RepositorySource.remote,
+          lastUpdated: DateTime.now().toUtc(),
         );
+        _reloading = false;
         _loadingMore = false;
       });
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!mounted || _scopeChanged || generation != _requestGeneration) return;
       setState(() {
-        _state = RepositoryState.error(error: error, data: _state.data);
+        _state = RepositoryState.error(
+          error: error,
+          data: _state.data,
+          isStale: _state.hasData,
+          lastUpdated: _state.lastUpdated,
+        );
+        _reloading = false;
         _loadingMore = false;
       });
     }
@@ -131,6 +160,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
 
   Future<void> _submitDecision(Map<String, dynamic> request) async {
     final id = '${request['id'] ?? ''}';
+    if (id.isEmpty || _scopeChanged || _submittingMap[id] == true) return;
     final decision = _decisionMap[id] ?? 'approved';
     final remarks = _remarksControllers[id]?.text.trim() ?? '';
 
@@ -151,7 +181,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         status: decision,
         adminRemarks: remarks,
       );
-      if (!mounted) return;
+      if (!mounted || _scopeChanged) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -167,15 +197,21 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
       _remarksControllers[id]?.clear();
       await _loadRequests(showSpinner: false);
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || _scopeChanged) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Submit failed: $e'),
+          content: Text(
+            e is NetworkException
+                ? 'Connect to the internet to record a decision. Your notes are still here.'
+                : e is ServerException && e.statusCode == 409
+                ? 'This request changed. Refresh before reviewing it again.'
+                : 'Unable to record the decision. Check the request and retry.',
+          ),
           backgroundColor: context.appTheme.error,
         ),
       );
     } finally {
-      if (mounted) {
+      if (mounted && !_scopeChanged) {
         setState(() => _submittingMap[id] = false);
       }
     }
@@ -183,6 +219,14 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
 
   @override
   Widget build(BuildContext context) {
+    if (_scopeChanged) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Payment Requests')),
+        body: const Center(
+          child: Text('Reopen Payment Requests for your current branch.'),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: context.appTheme.surface,
       appBar: AppBar(
@@ -202,35 +246,38 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         ],
       ),
       body: SafeArea(
-        child: SchoolDeskRepositoryStateView<Object>(
-          state: _state,
-          onRetry: () => _loadRequests(),
-          data: (_) => Column(
-            children: [
-              _buildSummaryCards(),
-              _buildFilterChips(),
-              const Divider(height: 1),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () => _loadRequests(showSpinner: false),
-                  child: _visibleRequests.isEmpty
-                      ? _buildEmptyState()
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount:
-                              _visibleRequests.length + (_hasMore ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (index == _visibleRequests.length) {
-                              return _buildLoadMoreButton();
-                            }
-                            return _buildRequestCard(_visibleRequests[index]);
-                          },
-                        ),
-                ),
+        child:
+            SchoolDeskRepositoryStateView<PaginatedList<Map<String, dynamic>>>(
+              state: _state,
+              onRetry: () => _loadRequests(),
+              data: (_) => Column(
+                children: [
+                  _buildSummaryCards(),
+                  _buildFilterChips(),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: () => _loadRequests(showSpinner: false),
+                      child: _visibleRequests.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount:
+                                  _visibleRequests.length + (_hasMore ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == _visibleRequests.length) {
+                                  return _buildLoadMoreButton();
+                                }
+                                return _buildRequestCard(
+                                  _visibleRequests[index],
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
       ),
     );
   }
@@ -344,7 +391,11 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                 fontWeight: FontWeight.w700,
               ),
               onSelected: (_) {
-                setState(() => _statusFilter = f.$1);
+                if (_statusFilter == f.$1) return;
+                setState(() {
+                  _statusFilter = f.$1;
+                  _state = const RepositoryState.loading();
+                });
                 _loadRequests();
               },
             ),
@@ -424,7 +475,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
     final parentName = '${parent['name'] ?? parent['email'] ?? ''}'.trim();
     final invoiceNumber = '${invoice['invoice_number'] ?? ''}';
-    final amount = (r['amount'] as num?)?.toDouble() ?? 0.0;
+    final amount = num.tryParse(_text(r['amount']));
     final dateStr = _formatDate(_text(r['payment_date']));
     final method = _text(
       r['payment_method'] ?? r['payment_mode'],
@@ -501,7 +552,10 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
             const SizedBox(height: 8),
             _infoRow('Parent', parentName),
             _infoRow('Invoice', invoiceNumber),
-            _infoRow('Amount', '₹${amount.toStringAsFixed(0)}'),
+            _infoRow(
+              'Amount',
+              amount == null ? 'Unavailable' : '₹${amount.toStringAsFixed(2)}',
+            ),
             _infoRow('Paid On', dateStr),
             _infoRow('Mode / Ref', '$method (Ref: $ref)'),
             if (utr.isNotEmpty) _infoRow('UTR Reference', utr),
@@ -509,40 +563,15 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
             if (adminRemarks.isNotEmpty)
               _infoRow('Reviewer Remarks', adminRemarks),
 
-            if (proofUrl.isNotEmpty) ...[
-              const Divider(height: 24),
-              Text(
-                'Payment Receipt Screenshot',
-                style: GoogleFonts.ibmPlexSans(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: context.appTheme.muted,
-                ),
-              ),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: () => _showFullImage(proofUrl),
-                child: Container(
-                  height: 120,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: context.appTheme.outlineVariant),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.network(
-                    _absoluteMediaUrl(proofUrl),
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: context.appTheme.surfaceVariant,
-                      child: const Center(
-                        child: Icon(Icons.broken_image_rounded, size: 24),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            const SizedBox(height: 8),
+            if (proofUrl.isNotEmpty)
+              OutlinedButton.icon(
+                icon: const Icon(Icons.receipt_long_outlined),
+                label: const Text('View payment proof'),
+                onPressed: () => _showFullImage(proofUrl),
+              )
+            else
+              const Text('No payment proof attached'),
 
             if (isPending) ...[
               const Divider(height: 24),
@@ -587,7 +616,9 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: isSubmitting ? null : () => _submitDecision(r),
+                  onPressed: isSubmitting || _reloading || _state.isStale
+                      ? null
+                      : () => _submitDecision(r),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: activeDecision == 'approved'
                         ? Colors.green

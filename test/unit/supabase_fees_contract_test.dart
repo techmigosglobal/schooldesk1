@@ -7,15 +7,14 @@ void main() {
     final source = File(
       'supabase/functions/api/handlers/fees.ts',
     ).readAsStringSync();
-    expect(
-      source,
-      contains('!isReviewablePaymentRequestStatus(existing.status)'),
-    );
+    final migration = File(
+      'supabase/migrations/20261115062654_atomic_parent_payment_request_decisions.sql',
+    ).readAsStringSync();
     final statusesStart = source.indexOf(
       'const reviewablePaymentRequestStatuses',
     );
     final statusesEnd = source.indexOf(
-      'function isReviewablePaymentRequestStatus',
+      'function isEditablePaymentProof',
     );
     expect(statusesStart, isNonNegative);
     expect(statusesEnd, greaterThan(statusesStart));
@@ -30,6 +29,12 @@ void main() {
     }
     expect(statuses, isNot(contains('"initiated"')));
     expect(statuses, isNot(contains('"clarification_required"')));
+    expect(
+      migration,
+      contains(
+        "v_request.status not in ('pending', 'submitted', 'pending_verification', 'resubmitted')",
+      ),
+    );
   });
 
   test('legacy pending RPC compatibility preserves terminal exclusions', () {
@@ -417,12 +422,15 @@ void main() {
           ? source.substring(start, end)
           : source;
 
-      expect(section, contains('svc.rpc("record_fee_payment"'));
-      expect(source, contains('record_fee_payment'));
-      expect(section, contains('ensureReceiptSnapshot'));
-      expect(section, contains('isReviewablePaymentRequestStatus'));
-      expect(section, contains('admin_remarks: body.admin_remarks'));
+      final migration = File(
+        'supabase/migrations/20261115062654_atomic_parent_payment_request_decisions.sql',
+      ).readAsStringSync();
+      expect(section, contains('"decide_parent_payment_request"'));
+      expect(section, contains('p_admin_remarks: adminRemarks'));
+      expect(section, contains('!decision.replayed && parentUserId'));
       expect(section, isNot(contains('remarks: body.remarks')));
+      expect(migration, contains('from public.record_fee_payment('));
+      expect(migration, contains('r.document_snapshot_id is not null'));
     },
   );
 
