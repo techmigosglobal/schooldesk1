@@ -26,6 +26,7 @@ import {
 } from "./utils";
 import { Dialog } from "./Dialog";
 import { StudentDialog } from "./StudentDialog";
+import { StudentIdCardModal } from "./StudentIdCardModal";
 
 type StudentDialogState = {
   open: boolean;
@@ -122,6 +123,8 @@ export function StudentDirectory({
   const [page, setPage] = usePortalState("students.page", 1);
   const [dialog, setDialog] = useState<StudentDialogState>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
+  const [idCardStudent, setIdCardStudent] = useState<Row | null>(null);
+  const [schoolInfo, setSchoolInfo] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
   usePortalGuard(false, deleting);
 
@@ -129,8 +132,12 @@ export function StudentDirectory({
     if (!manual) setLoading(true);
     setError("");
     try {
-      const payload = await apiAll("students?page=1&page_size=100");
+      const [payload, schoolRes] = await Promise.all([
+        apiAll("students?page=1&page_size=100"),
+        api("schools/current").catch(() => ({})),
+      ]);
       setStudents(rowsFrom(payload));
+      setSchoolInfo((schoolRes as Row) || null);
     } catch (event) {
       setError(event instanceof Error ? event.message : "Unable to load the student directory");
     } finally {
@@ -290,7 +297,13 @@ export function StudentDirectory({
                       <td className="actions-cell">
                         <button className="icon-button" title="View student profile" onClick={() => void openStudent(student, true)} disabled={loadingStudent} aria-busy={loadingStudent}>{loadingStudent ? <span className="activity-spinner" aria-hidden="true" /> : <Eye size={15} />}<span>View</span></button>
                         <button className="icon-button" title="Edit student" onClick={() => void openStudent(student, false)} disabled={loadingStudent} aria-busy={loadingStudent}>{loadingStudent ? <span className="activity-spinner" aria-hidden="true" /> : <Pencil size={15} />}<span>Edit</span></button>
-                        <RecordActions label={`More actions for ${displayName(student)}`} actions={[{ label: "Delete student", danger: true, onSelect: () => setDeleteTarget(student) }]} />
+                        <RecordActions
+                          label={`More actions for ${displayName(student)}`}
+                          actions={[
+                            { label: "Print Student ID Card", onSelect: () => setIdCardStudent(student) },
+                            { label: "Delete student", danger: true, onSelect: () => setDeleteTarget(student) },
+                          ]}
+                        />
                       </td>
                     </tr>
                   );
@@ -307,6 +320,13 @@ export function StudentDirectory({
       </div>
 
       {dialog.open && <StudentDialog row={dialog.row} readOnly={dialog.readOnly} onClose={() => setDialog({ open: false })} onSaved={() => { onSaved(); onNotify(dialog.row ? "Student profile updated." : "Student registered."); void load(true); }} />}
+      {idCardStudent && (
+        <StudentIdCardModal
+          student={idCardStudent}
+          school={schoolInfo ?? undefined}
+          onClose={() => setIdCardStudent(null)}
+        />
+      )}
       {deleteTarget && (
         <Dialog kicker="Permanent action" title="Delete this student?" onClose={() => !deleting && setDeleteTarget(null)}>
           <div className="student-delete-dialog">

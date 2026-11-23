@@ -9,6 +9,72 @@
 .ops-portal .ops-content { width:100%; min-width:0; box-sizing:border-box; }
 .ops-portal :is(button,a,select,input,textarea):focus-visible { outline:3px solid #1a6dab; outline-offset:3px; }
 .ops-portal .side-nav button { min-height:44px; }
+.ops-portal .ops-nav-section { margin-bottom: 0.5rem; }
+.ops-portal .ops-nav-section:last-child { margin-bottom: 0; }
+.ops-portal .ops-nav-section-title {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.48);
+  padding: 0.45rem 0.65rem 0.2rem;
+  user-select: none;
+}
+.ops-portal .ops-nav-section-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0.45rem 0.35rem;
+}
+.ops-topbar-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  border: 1px solid #d4e3eb;
+  background: #fff;
+  color: #193f5c;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.ops-topbar-bell:hover {
+  background: #f0f7fc;
+  border-color: #0e5ea8;
+  color: #0e5ea8;
+}
+.ops-topbar-bell-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: #d93838;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(217, 56, 56, 0.4);
+}
+.ops-sidebar-nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: #e63946;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 850;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .ops-portal .branch-select select { max-width:190px; }
 .ops-portal .portal-main { min-width:0; }
 @media (min-width:1100px) and (max-width:1440px) {
@@ -23,3 +89,24 @@
  .ops-portal .ops-role-chip { margin-bottom:.65rem; }
  .ops-portal .ops-sidebar .side-nav button { padding:.6rem .78rem; }
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .printable-student-id-card,
+  .printable-student-id-card * {
+    visibility: visible;
+  }
+  .printable-student-id-card {
+    position: fixed !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    box-shadow: none !important;
+    border: 1px solid #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+

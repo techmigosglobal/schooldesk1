@@ -6,6 +6,12 @@ import {
   UserCog,
   Building2,
   CalendarClock,
+  CalendarDays,
+  CheckSquare,
+  ClipboardCheck,
+  CircleAlert,
+  Globe2,
+  Megaphone,
   MessageSquareMore,
   WalletCards,
   ChartNoAxesCombined,
@@ -144,17 +150,59 @@ export interface FeeState {
   config: Row;
 }
 
+export interface NavSection {
+  title: string;
+  moduleIds: readonly string[];
+}
+
+export const navSections: NavSection[] = [
+  {
+    title: "Overview",
+    moduleIds: ["overview", "school_profile"],
+  },
+  {
+    title: "Daily Oversight",
+    moduleIds: ["approvals", "attendance", "students", "parents", "teachers", "admission_inquiries"],
+  },
+  {
+    title: "Academics & Scheduling",
+    moduleIds: ["classes", "timetable", "calendar"],
+  },
+  {
+    title: "Finance & Governance",
+    moduleIds: ["fees"],
+  },
+  {
+    title: "Communications & Issues",
+    moduleIds: ["notices", "issues"],
+  },
+  {
+    title: "Records & Reports",
+    moduleIds: ["reports"],
+  },
+  {
+    title: "Public Website CMS",
+    moduleIds: ["website"],
+  },
+];
+
 export const navMeta: Record<string, { icon: ComponentType<any>; label: string }> = {
   overview: { icon: LayoutDashboard, label: "Overview" },
+  school_profile: { icon: Building2, label: "School Profile" },
+  approvals: { icon: CheckSquare, label: "Approval Center" },
+  attendance: { icon: ClipboardCheck, label: "Attendance" },
   students: { icon: GraduationCap, label: "Students" },
   parents: { icon: HeartHandshake, label: "Parent accounts" },
   teachers: { icon: UserCog, label: "Teachers & staff" },
+  admission_inquiries: { icon: MessageSquareMore, label: "Admission inquiries" },
   classes: { icon: Building2, label: "Classes & subjects" },
   timetable: { icon: CalendarClock, label: "Timetables" },
+  calendar: { icon: CalendarDays, label: "Academic Calendar" },
   fees: { icon: WalletCards, label: "Fees" },
   reports: { icon: ChartNoAxesCombined, label: "Reports" },
-  admission_inquiries: { icon: MessageSquareMore, label: "Admission inquiries" },
-  website: { icon: Images, label: "Public Website" },
+  notices: { icon: Megaphone, label: "School Notices" },
+  issues: { icon: CircleAlert, label: "Complaints & Issues" },
+  website: { icon: Globe2, label: "Public Website CMS" },
 };
 
 export const modules: Module[] = [

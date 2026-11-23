@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import type { PortalRole } from "@/lib/roles";
 import { visibleModules } from "@/lib/roles";
-import { modules, navMeta, type Row } from "@/components/portal/types";
+import { modules, navMeta, navSections, type Row } from "@/components/portal/types";
 import type { ToastItem } from "@/components/portal/Toast";
 import { ToastContainer } from "@/components/portal/Toast";
 import { PortalPageHeader } from "@/components/portal/PortalPageHeader";
@@ -14,8 +14,14 @@ import { FeesWorkspace } from "@/components/portal/FeesWorkspace";
 import { WebsiteManager } from "@/components/portal/WebsiteManager";
 import { AdmissionInquiriesWorkspace } from "@/components/portal/AdmissionInquiriesWorkspace";
 import { ReportsWorkspace } from "@/components/portal/ReportsWorkspace";
+import { ApprovalsWorkspace } from "@/components/portal/ApprovalsWorkspace";
+import { AttendanceWorkspace } from "@/components/portal/AttendanceWorkspace";
+import { SchoolProfileWorkspace } from "@/components/portal/SchoolProfileWorkspace";
+import { CalendarWorkspace } from "@/components/portal/CalendarWorkspace";
+import { NoticesWorkspace } from "@/components/portal/NoticesWorkspace";
+import { IssuesWorkspace } from "@/components/portal/IssuesWorkspace";
 import { PortalErrorBoundary } from "@/components/error-boundary";
-import { ChevronLeft, ChevronRight, Search } from "@/lib/lucide-react";
+import { BellRing, ChevronLeft, ChevronRight, Search } from "@/lib/lucide-react";
 import { QuickSearchModal } from "@/components/portal/QuickSearchModal";
 import { LoadingIndicator, PortalModuleSkeleton } from "@/components/loading-skeletons";
 import { PortalStateProvider, usePortalNavigation, clearPortalViewStorage, clearSavedFormMarkers } from "@/components/portal/PortalStateProvider";
@@ -33,6 +39,7 @@ function PortalWorkspace({ role, initialBranchId = "", initialSchoolName = "Assi
   const [searchRecord, setSearchRecord] = useState<Row | undefined>();
   const [createToken, setCreateToken] = useState(0);
   const [dashboardRefresh, setDashboardRefresh] = useState(0);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [quickSearchOpen, setQuickSearchOpen] = useState(false);
@@ -57,6 +64,21 @@ function PortalWorkspace({ role, initialBranchId = "", initialSchoolName = "Assi
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (role === "principal" && !branchSelected) return;
+    fetch("/api/backend/approvals/feed?status=pending&page_size=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((payload) => {
+        const metaCount = payload?.meta?.pending_count;
+        if (typeof metaCount === "number") {
+          setPendingApprovalsCount(metaCount);
+        } else if (Array.isArray(payload?.data)) {
+          setPendingApprovalsCount(payload.data.length);
+        }
+      })
+      .catch(() => {});
+  }, [dashboardRefresh, role, branchSelected, activeBranch]);
 
   useEffect(() => {
     if (role !== "principal") return;
@@ -167,22 +189,40 @@ function PortalWorkspace({ role, initialBranchId = "", initialSchoolName = "Assi
         {!collapsed && <p className="ops-role-chip">{roleLabel}</p>}
 
         <nav className="side-nav" aria-label="Portal navigation">
-          {nav.map((id) => {
-            const meta = navMeta[id];
-            if (!meta) return null;
-            const Icon = meta.icon;
-            const label = meta.label;
+          {navSections.map((section, sIdx) => {
+            const visibleItems = section.moduleIds.filter((id) => nav.includes(id as any));
+            if (visibleItems.length === 0) return null;
+
             return (
-              <button
-                key={id}
-                onClick={() => navigate(id)}
-                aria-current={active === id ? "page" : undefined}
-                className={active === id ? "active" : ""}
-                title={label}
-              >
-                {typeof Icon === "function" ? <Icon size={17} /> : <span aria-hidden>•</span>}
-                {!collapsed && <span>{label}</span>}
-              </button>
+              <div key={section.title} className="ops-nav-section">
+                {!collapsed ? (
+                  <div className="ops-nav-section-title">{section.title}</div>
+                ) : sIdx > 0 ? (
+                  <div className="ops-nav-section-divider" />
+                ) : null}
+                {visibleItems.map((id) => {
+                  const meta = navMeta[id];
+                  if (!meta) return null;
+                  const Icon = meta.icon;
+                  const label = meta.label;
+                  const hasBadge = id === "approvals" && pendingApprovalsCount > 0;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => navigate(id)}
+                      aria-current={active === id ? "page" : undefined}
+                      className={active === id ? "active" : ""}
+                      title={label}
+                    >
+                      {typeof Icon === "function" ? <Icon size={17} /> : <span aria-hidden>•</span>}
+                      {!collapsed && <span>{label}</span>}
+                      {!collapsed && hasBadge && (
+                        <span className="ops-sidebar-nav-badge">{pendingApprovalsCount}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
@@ -199,6 +239,20 @@ function PortalWorkspace({ role, initialBranchId = "", initialSchoolName = "Assi
         <header className="portal-topbar ops-topbar">
           <PortalPageHeader role={role} title={navMeta[active]?.label ?? "Overview"} />
           <div className="ops-topbar-actions">
+            <button
+              type="button"
+              className="ops-topbar-bell"
+              onClick={() => navigate("approvals")}
+              title={`Approval Center (${pendingApprovalsCount} pending)`}
+              aria-label={`Approval Center (${pendingApprovalsCount} pending)`}
+            >
+              <BellRing size={17} />
+              {pendingApprovalsCount > 0 && (
+                <span className="ops-topbar-bell-badge">
+                  {pendingApprovalsCount > 99 ? "99+" : pendingApprovalsCount}
+                </span>
+              )}
+            </button>
             {role === "principal" && branches.length > 0 && (
               <label className="branch-select">
                 <span className="sr-only">Active branch</span>
@@ -258,12 +312,24 @@ function PortalWorkspace({ role, initialBranchId = "", initialSchoolName = "Assi
                 onCreate={createInModule}
                 refreshNonce={dashboardRefresh}
               />
+            ) : active === "approvals" ? (
+              <ApprovalsWorkspace role={role} onNotify={notify} />
+            ) : active === "attendance" ? (
+              <AttendanceWorkspace role={role} onNotify={notify} />
+            ) : active === "school_profile" ? (
+              <SchoolProfileWorkspace role={role} onNotify={notify} />
+            ) : active === "calendar" ? (
+              <CalendarWorkspace role={role} onNotify={notify} />
+            ) : active === "notices" ? (
+              <NoticesWorkspace role={role} onNotify={notify} />
+            ) : active === "issues" ? (
+              <IssuesWorkspace role={role} onNotify={notify} />
             ) : active === "reports" ? (
               <ReportsWorkspace role={role} onNotify={notify} />
             ) : active === "website" ? (
               <WebsiteManager onNotify={notify} />
             ) : active === "admission_inquiries" ? (
-              <AdmissionInquiriesWorkspace />
+              <AdmissionInquiriesWorkspace onNavigateToStudents={() => navigate("students")} />
             ) : active === "fees" && role === "principal" ? (
               <FeesWorkspace onNotify={notify} initialRecord={searchRecord} />
             ) : selected ? (

@@ -66,7 +66,7 @@ test("web login and portal client keep only leadership wording and modules", () 
   const portal = source("../components/portal-client.tsx");
   expect(login).toContain("SchoolDesk leadership access");
   expect(login).not.toContain("Staff login");
-  expect(portal).not.toContain("AttendanceWorkspace");
+  expect(portal).toContain("AttendanceWorkspace");
   expect(portal).not.toContain("CommunicationsWorkspace");
 });
 

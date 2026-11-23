@@ -3,9 +3,15 @@ import { visibleModules, type PortalRole } from "./roles";
 export type PortalTarget = { module: string; tab?: string; sectionId?: string };
 const tabs: Record<string, readonly string[]> = {
   fees: ["main", "collections", "requests", "structures", "concessions", "reports"],
-  website: ["gallery", "copy", "ticker"],
+  website: ["gallery", "hero", "copy", "ticker"],
   classes: ["classes", "subjects"],
   reports: ["academic", "finance"],
+  approvals: ["all", "payments", "staff_leaves", "student_leaves", "posts", "reopens"],
+  attendance: ["daily", "absentees", "staff", "reopen"],
+  school_profile: ["details", "branding", "branches"],
+  calendar: ["calendar", "holidays", "events"],
+  issues: ["open", "investigating", "resolved"],
+  notices: ["all", "drafts", "create"],
 };
 export function parsePortalTarget(search: string, role: PortalRole): PortalTarget {
   const params = new URLSearchParams(search);

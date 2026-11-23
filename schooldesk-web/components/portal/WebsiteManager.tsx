@@ -30,13 +30,13 @@ function fileValidationMessage(file: File) {
 }
 
 export function WebsiteManager({ onNotify }: { onNotify: (message: string) => void }) {
-  const [tab, setTab] = usePortalTab<"gallery" | "copy" | "ticker">("website", "gallery");
+  const [tab, setTab] = usePortalTab<"gallery" | "hero" | "copy" | "ticker">("website", "gallery");
   const [content, setContent] = useState<Row>({});
   const [gallery, setGallery] = useState<Row[]>([]);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadPending, setLoadPending] = useState(false);
-  const [loaded, setLoaded] = useState({ gallery: false, copy: false });
+  const [loaded, setLoaded] = useState({ gallery: false, hero: false, copy: false });
   const [uploading, setUploading] = useState(false);
   const [operation, setOperation] = useState("");
   const [search, setSearch] = usePortalState("website.search", "");
@@ -58,10 +58,14 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
     if (!manual) setLoading(true);
     try {
       if (tab === "ticker") return;
-      if (tab === "copy") {
-        const website = await api("website/content");
+      if (tab === "copy" || tab === "hero") {
+        const [website, media] = await Promise.all([
+          api("website/content"),
+          tab === "hero" ? api("website/gallery").catch(() => []) : Promise.resolve([]),
+        ]);
         if (version !== loadVersion.current) return;
         setContent((website as Row) || {});
+        if (tab === "hero") setGallery(rowsFrom(media));
         setCopyDirty(false);
         setCopyVersion((value) => value + 1);
       } else {
@@ -86,7 +90,7 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
     setPreview(null);
     setPreviewFileUrl("");
     setPreviewFileType("");
-    if (tab !== "copy") setCopyDirty(false);
+    if (tab !== "copy" && tab !== "hero") setCopyDirty(false);
     if (tab !== "ticker") void load();
     return () => { loadVersion.current += 1; };
   }, [load, tab]);
@@ -246,7 +250,12 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
 
   return <section className="ops-module gallery-workspace">
     {notice && !uploadOpen && <div className="ops-inline-error"><CircleAlert size={16} />{notice}</div>}
-    <div className="media-tabs" role="tablist"><button role="tab" aria-selected={tab === "gallery"} className={tab === "gallery" ? "active" : ""} onClick={() => setTab("gallery")}>Media library</button><button role="tab" aria-selected={tab === "copy"} className={tab === "copy" ? "active" : ""} onClick={() => setTab("copy")}>Homepage copy</button><button role="tab" aria-selected={tab === "ticker"} className={tab === "ticker" ? "active" : ""} onClick={() => setTab("ticker")}>News ticker</button></div>
+    <div className="media-tabs" role="tablist">
+      <button role="tab" aria-selected={tab === "gallery"} className={tab === "gallery" ? "active" : ""} onClick={() => setTab("gallery")}>Media library</button>
+      <button role="tab" aria-selected={tab === "hero"} className={tab === "hero" ? "active" : ""} onClick={() => setTab("hero")}>Hero banners</button>
+      <button role="tab" aria-selected={tab === "copy"} className={tab === "copy" ? "active" : ""} onClick={() => setTab("copy")}>Homepage copy</button>
+      <button role="tab" aria-selected={tab === "ticker"} className={tab === "ticker" ? "active" : ""} onClick={() => setTab("ticker")}>News ticker</button>
+    </div>
     {loading && tab !== "ticker" ? <PortalModuleSkeleton variant="split" label="Loading website and media settings" /> : tab !== "ticker" && !loaded[tab] ? <p className="ops-empty">Website content is unavailable. Use Refresh to try again.</p> : tab === "gallery" ? <div className="media-library-layout">
       <section className="surface media-library-panel">
         <div className="media-library-toolbar"><div><h2>Media library</h2><p className="media-scope-note">Photos can appear on the public website; videos stay in this library. These controls do not change in-app visibility.</p></div><div className="media-library-tools"><label className="media-search"><span className="sr-only">Search media</span><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search media" /></label><button className="primary-button" type="button" onClick={() => { setNotice(""); setUploadOpen(true); }}><Plus size={16} />Upload media</button></div></div>
@@ -280,6 +289,129 @@ export function WebsiteManager({ onNotify }: { onNotify: (message: string) => vo
           </article>;
         })}</div> : <p className="ops-empty">No media matches the current search and filter.</p>}
         {visibleGallery.length > pageSize && <div className="ops-pagination"><button className="secondary-button" type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)}>Previous</button><span>Page {page} of {totalPages} · {visibleGallery.length} matching items</span><button className="secondary-button" type="button" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>Next</button></div>}
+      </section>
+    </div> : tab === "hero" ? <div className="media-hero-layout" style={{ display: "grid", gap: "1.5rem" }}>
+      <section className="surface media-copy-panel" style={{ padding: "1.5rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
+          <div>
+            <h2 style={{ margin: 0 }}>Homepage Hero Banners &amp; Slides</h2>
+            <p style={{ margin: "0.25rem 0 0", color: "var(--ops-muted)", fontSize: "0.85rem" }}>
+              Configure the prominent headline, value proposition, and background visual slides that introduce the school to prospective families.
+            </p>
+          </div>
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="secondary-button"
+            style={{ fontSize: "0.85rem", display: "inline-flex", alignItems: "center", gap: "0.4rem", textDecoration: "none", padding: "0.4rem 0.75rem" }}
+          >
+            <Eye size={14} /> View Live Website ↗
+          </a>
+        </div>
+
+        {/* Live Hero Banner Visual Preview Card */}
+        <div
+          style={{
+            position: "relative",
+            minHeight: "200px",
+            borderRadius: "8px",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, #0e5ea8 0%, #1e293b 100%)",
+            color: "#ffffff",
+            padding: "2rem",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            marginBottom: "1.5rem",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          }}
+        >
+          <div style={{ maxWidth: "600px", zIndex: 2 }}>
+            <span style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "1px", background: "rgba(255,255,255,0.2)", padding: "0.2rem 0.6rem", borderRadius: "4px", display: "inline-block", marginBottom: "0.75rem" }}>
+              Live Hero Preview
+            </span>
+            <h1 style={{ fontSize: "1.6rem", fontWeight: 800, margin: "0 0 0.5rem", color: "#ffffff", lineHeight: 1.2 }}>
+              {stringValue(content.hero_title) || "A place to learn, belong, and grow."}
+            </h1>
+            <p style={{ fontSize: "0.95rem", opacity: 0.9, margin: "0 0 1.25rem", lineHeight: 1.5 }}>
+              {stringValue(content.hero_body) || "Where curiosity is nurtured, values are lived, and every child is encouraged to shine."}
+            </p>
+            <div style={{ display: "inline-flex", gap: "0.75rem" }}>
+              <span style={{ background: "#f59e0b", color: "#000", fontWeight: 700, padding: "0.4rem 0.9rem", borderRadius: "6px", fontSize: "0.85rem" }}>
+                Schedule a Visit
+              </span>
+              <span style={{ border: "1px solid rgba(255,255,255,0.4)", color: "#fff", fontWeight: 600, padding: "0.4rem 0.9rem", borderRadius: "6px", fontSize: "0.85rem" }}>
+                Explore Programs
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Hero Copy Form */}
+        <form
+          key={`hero-${copyVersion}`}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const fd = new FormData(event.currentTarget);
+            fd.set("mission_title", stringValue(content.mission_title) || "Our Mission");
+            fd.set("mission_body", stringValue(content.mission_body) || "We help every learner build knowledge, character, and confidence for a changing world.");
+            void saveContent(fd, event.currentTarget);
+          }}
+          className="ops-detail-form"
+          aria-busy={operation === "copy"}
+          onChange={() => setCopyDirty(true)}
+        >
+          <fieldset disabled={operation === "copy" || loadPending} className="ops-detail-form" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+            <label className="field">
+              Hero Headline
+              <input name="hero_title" required defaultValue={stringValue(content.hero_title)} placeholder="e.g. A place to learn, belong, and grow." />
+            </label>
+            <label className="field">
+              Hero Sub-headline / Description
+              <textarea name="hero_body" rows={3} required defaultValue={stringValue(content.hero_body)} placeholder="Where curiosity is nurtured, values are lived..." />
+            </label>
+            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+              <button className="primary-button" type="submit" disabled={operation === "copy"} aria-busy={operation === "copy"}>
+                {operation === "copy" ? <LoadingIndicator label="Publishing…" compact announce={false} /> : "Publish Hero Headline"}
+              </button>
+              <button className="secondary-button" type="button" onClick={() => { setNotice(""); setUploadOpen(true); }}>
+                <Plus size={16} /> Upload New Hero Slide
+              </button>
+            </div>
+          </fieldset>
+        </form>
+      </section>
+
+      {/* Featured Slides Selection */}
+      <section className="surface" style={{ padding: "1.5rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Homepage Carousel Slides</h3>
+            <p style={{ margin: "0.25rem 0 0", color: "var(--ops-muted)", fontSize: "0.85rem" }}>
+              Photos published in your media library automatically populate the rotating homepage banner. Toggle visibility or adjust order below.
+            </p>
+          </div>
+          <button className="secondary-button" type="button" onClick={() => setTab("gallery")}>
+            Manage All Gallery Media ({gallery.length}) →
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "1rem" }}>
+          {gallery.filter((g) => !isVideo(g) && g.is_published !== false).slice(0, 8).map((item) => (
+            <div key={stringValue(item.id)} style={{ border: "1px solid var(--ops-border, #e2e8f0)", borderRadius: "6px", overflow: "hidden", background: "var(--ops-surface-subtle, #f8fafc)" }}>
+              <img src={mediaUrl(item)} alt={stringValue(item.alt_text) || "Slide"} style={{ width: "100%", height: "120px", objectFit: "cover" }} />
+              <div style={{ padding: "0.6rem" }}>
+                <div style={{ fontWeight: 600, fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {stringValue(item.title) || "Untitled Slide"}
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "var(--ops-muted)", marginTop: "0.2rem" }}>
+                  Order: {Number(item.sort_order || 0)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
     </div> : tab === "copy" ? <section className="surface media-copy-panel"><h2>Homepage copy</h2><p>These changes are validated by the backend and revalidated for public visitors.</p><form key={copyVersion} onSubmit={(event) => { event.preventDefault(); void saveContent(new FormData(event.currentTarget), event.currentTarget); }} className="ops-detail-form" aria-busy={operation === "copy"} onChange={() => setCopyDirty(true)}><fieldset disabled={operation === "copy" || loadPending} className="ops-detail-form" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}><label className="field">Hero title<input name="hero_title" required defaultValue={stringValue(content.hero_title)} /></label><label className="field">Hero description<textarea name="hero_body" rows={3} required defaultValue={stringValue(content.hero_body)} /></label><label className="field">Mission title<input name="mission_title" required defaultValue={stringValue(content.mission_title)} /></label><label className="field">Mission statement<textarea name="mission_body" rows={3} required defaultValue={stringValue(content.mission_body)} /></label><button className="primary-button" type="submit" disabled={operation === "copy"} aria-busy={operation === "copy"}>{operation === "copy" ? <LoadingIndicator label="Publishing…" compact announce={false} /> : "Publish website copy"}</button></fieldset></form></section> : <TickerManager onNotify={onNotify} compact />}
     {uploadOpen && <Dialog kicker="Media library" title="Upload approved media" onClose={closeUpload}>
