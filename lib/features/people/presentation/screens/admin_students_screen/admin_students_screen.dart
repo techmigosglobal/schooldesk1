@@ -328,6 +328,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
 
   List<Map<String, dynamic>> get _filtered {
     return _students.where((s) {
+      if (s['status'] == 'inactive') return false;
       final matchSearch =
           s['name'].toString().toLowerCase().contains(_search.toLowerCase()) ||
           s['id'].toString().toLowerCase().contains(_search.toLowerCase()) ||
@@ -720,6 +721,11 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
         await _repository.deleteStudent(
           (s['id'] ?? '').toString(),
         );
+        if (mounted) {
+          setState(() {
+            _snapshot?.students.removeWhere((row) => row['id'] == s['id']);
+          });
+        }
       } else {
         await _requestStudentApproval(
           action: 'delete',

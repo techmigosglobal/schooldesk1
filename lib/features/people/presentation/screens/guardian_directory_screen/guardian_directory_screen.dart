@@ -63,6 +63,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   int _currentPage = 0;
   int _queryGeneration = 0;
   Timer? _searchDebounce;
+  late final TextEditingController _searchController = TextEditingController();
 
   bool get _isAdminOwner => widget.ownerRole.toLowerCase() == 'admin';
   bool get _selectionMode => _selectedGuardianIds.isNotEmpty;
@@ -79,6 +80,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -137,15 +139,12 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         } else {
           _allGuardians.addAll(uniqueEntries);
         }
-        _filteredGuardians
-          ..clear()
-          ..addAll(_allGuardians);
         if (resetPage) {
           _guardianRows = guardianRows;
         } else {
           _guardianRows = [..._guardianRows, ...guardianRows];
         }
-        _displayedGuardians = List<GuardianDirectoryEntry>.from(_allGuardians);
+        _applyLocalFilter();
         _currentPage = response.page;
         _hasMore = response.hasMore && response.data.isNotEmpty;
         _loadingMore = false;
@@ -285,6 +284,38 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       canPickup: false,
       isPrimary: false,
     );
+  }
+
+  void _applyLocalFilter() {
+    final query = _searchQuery.trim().toLowerCase();
+    final filtered = _allGuardians.where((guardian) {
+      if (_selectedStatus != 'All' &&
+          guardian.statusLabel.toLowerCase() != _selectedStatus.toLowerCase()) {
+        return false;
+      }
+      if (_selectedRelationship != 'All' &&
+          guardian.relationship.toLowerCase() !=
+              _selectedRelationship.toLowerCase()) {
+        return false;
+      }
+      if (query.isNotEmpty) {
+        final matches = guardian.name.toLowerCase().contains(query) ||
+            guardian.phone.toLowerCase().contains(query) ||
+            guardian.email.toLowerCase().contains(query) ||
+            guardian.username.toLowerCase().contains(query) ||
+            guardian.linkedStudents.any(
+              (s) => s.studentName.toLowerCase().contains(query),
+            );
+        if (!matches) return false;
+      }
+      return true;
+    }).toList();
+    setState(() {
+      _displayedGuardians = filtered;
+      _filteredGuardians
+        ..clear()
+        ..addAll(filtered);
+    });
   }
 
   void _queueServerRefresh() {
@@ -568,8 +599,15 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         children: [
           _SearchBox(
             hint: 'Search parents or students...',
+            controller: _searchController,
+            onClear: () {
+              _searchQuery = '';
+              _applyLocalFilter();
+              _queueServerRefresh();
+            },
             onChanged: (value) {
               _searchQuery = value;
+              _applyLocalFilter();
               _queueServerRefresh();
             },
           ),
@@ -2211,9 +2249,16 @@ class _GuardianDetailPage extends StatelessWidget {
 
 class _SearchBox extends StatelessWidget {
   final String hint;
+  final TextEditingController? controller;
   final ValueChanged<String> onChanged;
+  final VoidCallback? onClear;
 
-  const _SearchBox({required this.hint, required this.onChanged});
+  const _SearchBox({
+    required this.hint,
+    this.controller,
+    required this.onChanged,
+    this.onClear,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2231,6 +2276,7 @@ class _SearchBox extends StatelessWidget {
         ],
       ),
       child: TextField(
+        controller: controller,
         onChanged: onChanged,
         textInputAction: TextInputAction.search,
         style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w600),
@@ -2246,6 +2292,20 @@ class _SearchBox extends StatelessWidget {
             color: Color(0xFF6E7D88),
             size: 24,
           ),
+          suffixIcon: (controller != null && controller!.text.isNotEmpty)
+              ? IconButton(
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: Color(0xFF6E7D88),
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    controller!.clear();
+                    onChanged('');
+                    onClear?.call();
+                  },
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 15),
         ),

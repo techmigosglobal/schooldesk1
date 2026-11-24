@@ -1312,12 +1312,64 @@ export async function handleStudents(
   }
 
   if (id && method === "DELETE") {
-    const { error } = await svc.from("students").delete().eq("id", id).eq(
-      "school_id",
-      school,
-    );
-    if (error) return fail(error.message);
-    return ok({ success: true });
+    const { data: existingStudent, error: fetchError } = await svc
+      .from("students")
+      .select("id, status, current_section_id")
+      .eq("id", id)
+      .eq("school_id", school)
+      .maybeSingle();
+    if (fetchError) return fail(fetchError.message);
+    if (!existingStudent) return fail("student not found", 404);
+
+    const isPermanent = url.searchParams.get("permanent") === "true";
+    if (isPermanent) {
+      const { error } = await svc
+        .from("students")
+        .delete()
+        .eq("id", id)
+        .eq("school_id", school);
+      if (error) return fail(error.message);
+      return ok({ success: true, mode: "deleted" });
+    }
+
+    // Attempt clean delete first (for newly created or test records with no foreign key dependencies)
+    const { error: deleteError } = await svc
+      .from("students")
+      .delete()
+      .eq("id", id)
+      .eq("school_id", school);
+    if (!deleteError) {
+      return ok({ success: true, mode: "deleted" });
+    }
+
+    // Historical records exist (fee invoices, snapshots, attendance, enrollments, etc.).
+    // Gracefully soft-delete: deactivate student status, unassign current section, and mark active enrollments inactive.
+    const { error: updateError } = await svc
+      .from("students")
+      .update({
+        status: "inactive",
+        current_section_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("school_id", school);
+    if (updateError) return fail(updateError.message);
+
+    await svc
+      .from("enrollments")
+      .update({
+        status: "inactive",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("student_id", id)
+      .eq("school_id", school)
+      .eq("status", "active");
+
+    return ok({
+      success: true,
+      mode: "deactivated",
+      message: "Student moved to inactive records",
+    });
   }
 
   return fail("not found", 404);

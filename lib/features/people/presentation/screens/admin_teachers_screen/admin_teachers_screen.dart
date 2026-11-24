@@ -46,6 +46,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
   RepositoryState<_AdminTeachersSnapshot> _state =
       const RepositoryState.loading();
   Timer? _searchDebounce;
+  late final TextEditingController _searchController = TextEditingController();
 
   _AdminTeachersSnapshot? get _snapshot => _state.data;
   List<Map<String, dynamic>> get _teachers => _snapshot?.teachers ?? const [];
@@ -164,6 +165,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
   void dispose() {
     _tabController.dispose();
     _searchDebounce?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -230,10 +232,20 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
               color: context.appTheme.surface,
               padding: const EdgeInsets.all(12),
               child: TextField(
+                controller: _searchController,
                 onChanged: _scheduleSearch,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Search teachers...',
-                  prefixIcon: Icon(Icons.search_rounded, size: 18),
+                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            _scheduleSearch('');
+                          },
+                        )
+                      : null,
                 ),
               ),
             ),

@@ -52,37 +52,47 @@ class SchoolDeskRepositoryStateView<T> extends StatelessWidget {
     }
 
     final content = data(value);
-    if (!state.isOffline && !state.isRefreshing) return content;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
+      fit: StackFit.passthrough,
       children: [
-        if (state.isRefreshing) const LinearProgressIndicator(minHeight: 2),
+        content,
+        if (state.isRefreshing)
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
         if (state.isOffline && !state.isRefreshing)
-          Material(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.history_rounded, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      state.error == null
-                          ? 'Showing saved data. Reconnecting…'
-                          : 'Refresh failed. Saved data remains visible.',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Material(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history_rounded, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        state.error == null
+                            ? 'Showing saved data. Reconnecting…'
+                            : 'Refresh failed. Saved data remains visible.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  TextButton(onPressed: onRetry, child: const Text('Retry')),
-                ],
+                    TextButton(onPressed: onRetry, child: const Text('Retry')),
+                  ],
+                ),
               ),
             ),
           ),
-        if (expandStaleContent) Expanded(child: content) else content,
       ],
     );
   }

@@ -175,6 +175,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   int _currentPage = 0;
   int _queryGeneration = 0;
   Timer? _searchDebounce;
+  late final TextEditingController _searchController = TextEditingController();
 
   StudentOversightRepository get _repository =>
       widget.repository ?? ApiStudentOversightRepository.legacyDefault;
@@ -204,6 +205,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -357,10 +359,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         } else {
           _allStudents.addAll(uniqueLoaded);
         }
-        _filteredStudents
-          ..clear()
-          ..addAll(_allStudents);
-        _displayedStudents = List<StudentModel>.from(_allStudents);
+        _applyLocalFilter();
         _currentPage = response.page;
         _hasMore = response.hasMore && response.data.isNotEmpty;
         _loadingMore = false;
@@ -406,6 +405,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   String? _serverStatusFilter() {
     switch (_selectedStatus.trim().toLowerCase()) {
       case 'active':
+      case 'all':
         return 'active';
       case 'inactive':
         return 'inactive';
@@ -414,8 +414,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       case 'transfer':
       case 'transferred':
         return 'transfer';
-      default:
+      case 'all_statuses':
         return null;
+      default:
+        return 'active';
     }
   }
 
@@ -666,6 +668,37 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 
+  void _applyLocalFilter() {
+    final query = _searchQuery.trim().toLowerCase();
+    final filtered = _allStudents.where((student) {
+      final status = student.status.trim().toLowerCase();
+      if (_selectedStatus == 'All' || _selectedStatus.toLowerCase() == 'active') {
+        if (status == 'inactive') return false;
+      } else if (_selectedStatus.toLowerCase() != 'all_statuses' &&
+          status != _selectedStatus.toLowerCase()) {
+        return false;
+      }
+      if (_selectedClass != 'All' && student.classSection != _selectedClass) {
+        return false;
+      }
+      if (query.isNotEmpty) {
+        final matches = student.name.toLowerCase().contains(query) ||
+            student.rollNumber.toLowerCase().contains(query) ||
+            student.systemId.toLowerCase().contains(query) ||
+            student.guardianName.toLowerCase().contains(query) ||
+            student.classSection.toLowerCase().contains(query);
+        if (!matches) return false;
+      }
+      return true;
+    }).toList();
+    setState(() {
+      _displayedStudents = filtered;
+      _filteredStudents
+        ..clear()
+        ..addAll(filtered);
+    });
+  }
+
   void _queueServerRefresh() {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 300), () {
@@ -736,13 +769,15 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       try {
         await _repository.deleteStudent(student.id);
         removed++;
+        _allStudents.removeWhere((s) => s.id == student.id);
       } on Object {
         failures.add(student.name);
       }
     }
     if (!mounted) return;
     _selectedStudentIds.clear();
-    await _loadData();
+    _applyLocalFilter();
+    await _loadData(resetPage: true, loadMetadata: true);
     if (!mounted) return;
     final message = failures.isEmpty
         ? '$removed student${removed == 1 ? '' : 's'} removed'
@@ -982,8 +1017,15 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             ),
           _SearchBox(
             hint: 'Search students...',
+            controller: _searchController,
+            onClear: () {
+              _searchQuery = '';
+              _applyLocalFilter();
+              _queueServerRefresh();
+            },
             onChanged: (value) {
               _searchQuery = value;
+              _applyLocalFilter();
               _queueServerRefresh();
             },
           ),
@@ -1580,6 +1622,8 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
     try {
       await _repository.deleteStudent(student.id);
+      _allStudents.removeWhere((s) => s.id == student.id);
+      _applyLocalFilter();
       return true;
     } on Object catch (error) {
       if (detailContext.mounted) {
@@ -2091,9 +2135,16 @@ class _Initials extends StatelessWidget {
 
 class _SearchBox extends StatelessWidget {
   final String hint;
+  final TextEditingController? controller;
   final ValueChanged<String> onChanged;
+  final VoidCallback? onClear;
 
-  const _SearchBox({required this.hint, required this.onChanged});
+  const _SearchBox({
+    required this.hint,
+    this.controller,
+    required this.onChanged,
+    this.onClear,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2111,6 +2162,7 @@ class _SearchBox extends StatelessWidget {
         ],
       ),
       child: TextField(
+        controller: controller,
         onChanged: onChanged,
         textInputAction: TextInputAction.search,
         style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w600),
@@ -2126,6 +2178,20 @@ class _SearchBox extends StatelessWidget {
             color: Color(0xFF6E7D88),
             size: 24,
           ),
+          suffixIcon: (controller != null && controller!.text.isNotEmpty)
+              ? IconButton(
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: Color(0xFF6E7D88),
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    controller!.clear();
+                    onChanged('');
+                    onClear?.call();
+                  },
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 15),
         ),

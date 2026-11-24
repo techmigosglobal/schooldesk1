@@ -211,6 +211,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   int _currentPage = 0;
   int _queryGeneration = 0;
   Timer? _searchDebounce;
+  late final TextEditingController _searchController = TextEditingController();
 
   bool get _isAdminOwner => widget.ownerRole.toLowerCase() == 'admin';
   bool get _selectionMode => _selectedStaffIds.isNotEmpty;
@@ -225,6 +226,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -313,10 +315,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         } else {
           _allStaff.addAll(uniqueStaff);
         }
-        _filteredStaff
-          ..clear()
-          ..addAll(_allStaff);
-        _displayedStaff = List<StaffModel>.from(_allStaff);
+        _applyLocalFilter();
         if (loadSupportData) {
           _grades = supportData.grades;
           _sections = supportData.sections;
@@ -604,6 +603,36 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     if (parts.isEmpty) return 'NA';
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+  }
+
+  void _applyLocalFilter() {
+    final query = _searchQuery.trim().toLowerCase();
+    final filtered = _allStaff.where((staff) {
+      if (_selectedDesignation != 'All' &&
+          staff.designation.toLowerCase() != _selectedDesignation.toLowerCase()) {
+        return false;
+      }
+      if (_selectedStatus != 'All' &&
+          staff.status.toLowerCase() != _selectedStatus.toLowerCase()) {
+        return false;
+      }
+      if (query.isNotEmpty) {
+        final matches = staff.name.toLowerCase().contains(query) ||
+            staff.email.toLowerCase().contains(query) ||
+            staff.phone.toLowerCase().contains(query) ||
+            staff.designation.toLowerCase().contains(query) ||
+            staff.employeeId.toLowerCase().contains(query) ||
+            staff.subjects.any((s) => s.toLowerCase().contains(query));
+        if (!matches) return false;
+      }
+      return true;
+    }).toList();
+    setState(() {
+      _displayedStaff = filtered;
+      _filteredStaff
+        ..clear()
+        ..addAll(filtered);
+    });
   }
 
   void _queueServerRefresh() {
@@ -915,8 +944,15 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         children: [
           _SearchBox(
             hint: 'Search staff...',
+            controller: _searchController,
+            onClear: () {
+              _searchQuery = '';
+              _applyLocalFilter();
+              _queueServerRefresh();
+            },
             onChanged: (value) {
               _searchQuery = value;
+              _applyLocalFilter();
               _queueServerRefresh();
             },
           ),
@@ -1761,9 +1797,16 @@ class _TeacherStatusBadge extends StatelessWidget {
 
 class _SearchBox extends StatelessWidget {
   final String hint;
+  final TextEditingController? controller;
   final ValueChanged<String> onChanged;
+  final VoidCallback? onClear;
 
-  const _SearchBox({required this.hint, required this.onChanged});
+  const _SearchBox({
+    required this.hint,
+    this.controller,
+    required this.onChanged,
+    this.onClear,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1781,6 +1824,7 @@ class _SearchBox extends StatelessWidget {
         ],
       ),
       child: TextField(
+        controller: controller,
         onChanged: onChanged,
         textInputAction: TextInputAction.search,
         style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w600),
@@ -1796,6 +1840,20 @@ class _SearchBox extends StatelessWidget {
             color: Color(0xFF6E7D88),
             size: 24,
           ),
+          suffixIcon: (controller != null && controller!.text.isNotEmpty)
+              ? IconButton(
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: Color(0xFF6E7D88),
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    controller!.clear();
+                    onChanged('');
+                    onClear?.call();
+                  },
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 15),
         ),

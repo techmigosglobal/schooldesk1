@@ -376,7 +376,7 @@ class SchoolDeskTextField extends StatelessWidget {
   }
 }
 
-class SchoolDeskSearchBar extends StatelessWidget {
+class SchoolDeskSearchBar extends StatefulWidget {
   final String label;
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
@@ -393,26 +393,72 @@ class SchoolDeskSearchBar extends StatelessWidget {
   });
 
   @override
+  State<SchoolDeskSearchBar> createState() => _SchoolDeskSearchBarState();
+}
+
+class _SchoolDeskSearchBarState extends State<SchoolDeskSearchBar> {
+  TextEditingController? _internalController;
+
+  TextEditingController get _effectiveController =>
+      widget.controller ?? (_internalController ??= TextEditingController());
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.controller == null) {
+      _internalController = TextEditingController();
+    }
+  }
+
+  @override
+  void didUpdateWidget(SchoolDeskSearchBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller == null && _internalController == null) {
+      _internalController = TextEditingController();
+    } else if (widget.controller != null && _internalController != null) {
+      _internalController!.dispose();
+      _internalController = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _internalController?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).schoolDesk;
+    final controller = _effectiveController;
     return ConstrainedBox(
       constraints: BoxConstraints(minHeight: tokens.sizing.searchBarHeight),
-      child: TextField(
-        controller: controller,
-        autofocus: autofocus,
-        onChanged: onChanged,
-        textInputAction: TextInputAction.search,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: const Icon(Icons.search_rounded, size: 20),
-          suffixIcon: onClear == null
-              ? null
-              : IconButton(
-                  tooltip: 'Clear search',
-                  onPressed: onClear,
-                  icon: const Icon(Icons.close_rounded),
-                ),
-        ),
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          final hasText = controller.text.isNotEmpty;
+          return TextField(
+            controller: controller,
+            autofocus: widget.autofocus,
+            onChanged: widget.onChanged,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              labelText: widget.label,
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: (widget.onClear != null || hasText)
+                  ? IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: () {
+                        controller.clear();
+                        widget.onChanged?.call('');
+                        widget.onClear?.call();
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    )
+                  : null,
+            ),
+          );
+        },
       ),
     );
   }
